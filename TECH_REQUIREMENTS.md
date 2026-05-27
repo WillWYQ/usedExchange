@@ -79,15 +79,19 @@ pnpm add -D @vercel/blob
 pnpm add -D @aws-sdk/client-s3
 ```
 
+### 2.4 Image Storage — Vercel devDependency Note
+
+> ⚠️ `@vercel/blob`, `@aws-sdk/client-s3`, and `tsx` are listed as **devDependencies**. Vercel installs devDependencies by default during the build step. If you have customised the install command (e.g., `pnpm install --prod`), the `prebuild` script will fail. Ensure Vercel's install command does **not** skip devDependencies.
+
 ### 2.5 Optional / Future Dependencies
 
-These are not installed in v1 but are the designated choices when the extension points in DESIGN.md §17 are implemented:
+These are not installed in v1 but are the designated choices when the extension points in DESIGN.md §18 are implemented:
 
-| Package | Feature |
-|---|---|
-| `fuse.js` | Client-side search |
-| `next-sitemap` | Sitemap + robots.txt generation |
-| `sharp` | Local image optimisation in static mode |
+| Package | Feature | Extension point |
+|---|---|---|
+| `fuse.js` | Client-side search | Build-time index from `loadCategories()` |
+| `next-sitemap` | Sitemap + robots.txt generation | `postbuild` script |
+| `sharp` | Pre-upload image resizing/optimisation | Optional `preprocess` step in `scripts/sync-images.ts --mode upload` before CDN upload |
 
 ---
 
@@ -204,12 +208,14 @@ export default nextConfig;
       "@/*": ["./*"]                     // alias: @/content/config → ./content/config
     }
   },
-  // content/ must be explicitly included so content/config.ts is type-checked.
-  // Next.js default include patterns may not cover it.
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", "content/**/*.ts"],
+  // "**/*.ts" already covers content/config.ts; the explicit entry below is
+  // retained as documentation to make the inclusion of content/ intentional and visible.
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules"]
 }
 ```
+
+> `.env.local` is covered by the existing `.env.*` pattern in `.gitignore`. No separate entry is needed, but do not add any credential files manually.
 
 `noUncheckedIndexedAccess` is required — the loader indexes into arrays from directory reads, and this catches unsafe accesses at compile time.
 
@@ -243,9 +249,10 @@ function withDefaults<T>(partial: Partial<T>, defaults: T): T {
 | `status` | If not a valid enum value → default `"available"` |
 | `condition` | If not a valid enum value → default `"good"` |
 | `price.tiers` | If not an array → treat as `[]` |
-| Any number field | If NaN or negative → `null` |
+| Any number field | If absent → Zod default (`null` for most number fields; `1` for `quantity`). If present but NaN or non-numeric → `null`. If negative → `null`. Zero (`0`) is a valid value and is NOT converted to `null` (e.g., `age_years: 0` = brand new, `original_price: 0` = gifted). |
+| `price.currency` | If absent → falls back to `siteConfig.currency`. Item-level `price.currency` takes precedence over site-level config. |
 | Any URL field | If fails URL parse → `""` (not rendered) |
-| `listed_date` / `sold_date` | If not ISO 8601 → `null`; sold retention treats `null` as "keep" |
+| `listed_date` / `sold_date` | If not ISO 8601 → `null`; sold retention: `null sold_date` → falls back to `listed_date` for the formula (consistent with DESIGN.md §5 field defaults). If `listed_date` is also null, the item is treated as "keep" (never expires). |
 
 ---
 
@@ -328,11 +335,12 @@ All modes always copy `content/contact/**` → `public/contact/` as a final step
 
 #### `dev-sync` mode (`pnpm dev`)
 
-1. Scan `content/items/**` for image files
-2. Copy each to `public/items/{same relative path}` (incremental: skip if `mtime + size` unchanged)
-3. Copy `content/contact/**` → `public/contact/`
-4. Log: `[dev-sync] copied N images to public/items/, M contact files to public/contact/`
-5. Do NOT upload to cloud. Do NOT write manifest.
+1. Check if `content/items/` exists; if not, log `[dev-sync] content/items/ not found — skipping image copy` and continue (graceful, no crash)
+2. Scan `content/items/**` for image files
+3. Copy each to `public/items/{same relative path}` (incremental: skip if `mtime + size` unchanged)
+4. Copy `content/contact/**` → `public/contact/`
+5. Log: `[dev-sync] copied N images to public/items/, M contact files to public/contact/` (or `0 images` if empty)
+6. Do NOT upload to cloud. Do NOT write manifest.
 
 #### `build-check` mode (`pnpm build` prebuild — runs on Vercel or locally)
 
@@ -342,6 +350,7 @@ All modes always copy `content/contact/**` → `public/contact/` as a final step
      - Photos may be present locally (self-hosted static build on the seller's machine)
      - Act as `dev-sync`: copy `content/items/**` images → `public/items/`
      - Do NOT check or write a manifest
+     - **Ignore any existing `lib/generated/image-manifest.json`** — the loader falls through to `/items/{key}` local paths when provider is `"local"`. A stale CDN manifest from a previous cloud provider must not be used.
      - Log: `[build-check] local provider — copied N images to public/items/`
      - Exit 0
    - If provider is `"vercel-blob"` or `"cloudflare-r2"`:
@@ -417,10 +426,13 @@ export async function loadItem(
   itemSlug: string
 ): Promise<Item | null>
 
-// Returns all items across all categories (used for home page "Recently Listed").
-// Applies the SAME visibility filters as loadItemsByCategory():
+// Returns items for home page "Recently Listed".
+// Applies MORE RESTRICTIVE filters than loadItemsByCategory():
+//   - status === "available" ONLY (not reserved, pending, or sold-within-retention)
 //   - excludes status === "draft"
-//   - excludes sold items past soldItemRetentionDays
+//   - excludes sold items (all sold items, regardless of retention window)
+// Results sorted by listedDate descending, limited to siteConfig.recentlyListedCount.
+// If zero items match, returns [] (caller hides the section when empty).
 export async function loadAllItems(): Promise<Item[]>
 ```
 
@@ -492,8 +504,8 @@ type Props = {
 Props:
 ```ts
 type ContactSectionProps = {
-  preferredPayment: string[];
-  contactNote: string;
+  preferredPayment: string[];   // item-level; pass [] from footer
+  contactNote: string;          // item-level; pass "" from footer
   // platforms come from siteConfig — no need to pass per item
 };
 ```
@@ -501,6 +513,9 @@ type ContactSectionProps = {
 Behaviour:
 - If `siteConfig.contact.reveal_behavior === "click"`: renders a "Show contact info" button; platforms revealed on click; state managed with `useState`
 - If `reveal_behavior === "always"`: renders platforms immediately
+- `preferredPayment` block is not rendered when the array is empty
+- `contactNote` block is not rendered when the string is empty or whitespace-only
+- **Footer usage:** Pass `preferredPayment={[]}` and `contactNote=""`. The component renders only the platform buttons with no payment or note blocks — no separate footer-specific component is needed.
 
 ### `PlatformButton`
 
@@ -608,13 +623,23 @@ No IE support. CSS Grid and `aspect-ratio` are used freely.
 ```json
 {
   "rules": {
-    "no-console": ["warn", { "allow": ["warn", "error"] }],
+    "no-console": ["warn", { "allow": ["warn", "error", "log"] }],
     "@typescript-eslint/no-explicit-any": "error",
     "@typescript-eslint/no-unused-vars": "error",
     "import/no-default-export": "off"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["scripts/**/*.ts"],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ]
 }
 ```
+
+> The `scripts/` override disables `no-console` for build scripts entirely. The sync script uses `console.log` extensively for progress output — these are intentional, not debug statements.
 
 `prettier.config.js`:
 
@@ -820,8 +845,9 @@ type Props = {
 
 **Rendered states:**
 
-| Geo state | UI shown |
+| Geo state / source | UI shown |
 |---|---|
+| `idle` | Identical to `pending` — the hook immediately transitions from `idle` → `pending` in the same `useEffect` call; `idle` should never be visibly distinct, but implementers must handle it to avoid a flash of unstyled content |
 | `pending` | `"🔍 Detecting your location…"` with skeleton price placeholders |
 | `granted`, source = `detected` | `"📍 ~{N} mi from {label} — prices shown for your distance"` + "Change" link |
 | source = `manual` | `"📍 {N} mi (manually set)"` + "Reset to detected" link |
@@ -836,8 +862,11 @@ type Props = {
 ### `PricingTable` Component Specification
 
 ```tsx
-// components/item/PricingTable.tsx  — server component (no interaction state needed here;
-// the expand/collapse toggle is handled by a thin client wrapper: PricingTableToggle.tsx)
+// components/item/PricingTable.tsx
+// Presentational component — has no hooks, no "use client" directive.
+// Always rendered inside PricingSection (a client component) in practice,
+// because it renders PricingTableToggle (a client component) as a child.
+// The expand/collapse toggle is a separate client component: PricingTableToggle.tsx
 
 type Props = {
   price: Price;
@@ -845,6 +874,18 @@ type Props = {
   negotiable: boolean;
 };
 ```
+
+**Initial SSG state:** The static page shell (`app/[category]/[item]/page.tsx`) calls:
+```ts
+import { resolveItemPrice } from "@/lib/utils/pricing";
+// resolveItemPrice is in lib/utils/pricing.ts — no "use client" → safe in server component
+const initialResolvedTier = resolveItemPrice(item.price, { source: "fallback" });
+```
+Then passes `initialResolvedTier` as a prop to `PricingSection`:
+```tsx
+<PricingSection price={item.price} initialResolvedTier={initialResolvedTier} negotiable={item.price.negotiable} />
+```
+`PricingSection` uses `initialResolvedTier` as its `useState` initial value, ensuring the static HTML always shows the highest price tier — never a blank. After hydration and geo resolution, `PricingSection` re-renders with the correct tier.
 
 **Rendering contract:**
 
@@ -878,7 +919,9 @@ function pricePassesFilter(item: Item, resolved: ResolvedDistance, [min, max]: [
 }
 ```
 
-The slider's initial `max` is set to the highest resolved price across all items in the current category (recalculated when `resolveDistanceMi` changes).
+The slider's initial `max` is set to the highest resolved price across all items in the current category (recalculated when `resolveDistanceMi` changes). The slider is **hidden** when no items in the category have defined price tiers.
+
+`resolveItemPrice` is imported from `lib/utils/pricing.ts` — see DESIGN.md §17.
 
 ### `"use client"` component list (updated)
 
@@ -886,19 +929,23 @@ The slider's initial `max` is set to the highest resolved price across all items
 |---|---|
 | `RecentlyListedSection` | Owns geo + distance state for home page |
 | `ItemGrid` | Owns distance state for category page; re-renders on distance change |
+| `PricingSection` | Owns geo + distance state for item detail page; wraps LocationPriceBar + PricingTable |
 | `ItemGallery` | Photo carousel interaction |
 | `LocationPriceBar` | Geolocation API + user input |
 | `PricingTableToggle` | Expand/collapse state for tier list |
 | `FilterBar` | Client-side filter state |
 | `ContactSection` | Click-to-reveal toggle |
+| `PlatformButton` | Receives `onClick` function prop (state setter from `ContactSection`) — function props are not serialisable across the server/client boundary |
 | `QRModal` | Modal open/close state |
+
+> **`PricingTable` reclassification note:** `PricingTable` is NOT in this list. It was previously documented as a server component but was reclassified to a **presentational component** (no `"use client"`, no hooks). It renders `PricingTableToggle` (a client component) as a child, so in practice it always runs in a client subtree. The server-side page (`page.tsx`) calls `resolveItemPrice` as a pure function for the SSG initial render and passes the result as `initialResolvedTier` prop to `PricingSection`, not directly to `PricingTable`.
 
 ### Security & Privacy
 
 | Concern | Mitigation |
 |---|---|
 | Visitor coordinates sent to server | **Impossible** — site is fully static; no server functions receive data |
-| Coordinates persisted without consent | `useState` only; cleared on page close. No `localStorage` or cookies |
+| Coordinates persisted without consent | `useState` only in v1; cleared on page close. No `localStorage` or cookies. A `sessionStorage` cache is listed in DESIGN.md §18 Extensibility as a future opt-in — it must be gated behind user consent or an explicit config flag when implemented. |
 | Seller coordinates exposed | Intentional and documented in DESIGN.md §17; seller should use a nearby landmark |
 | HTTPS requirement for Geolocation API | Next.js on Vercel serves HTTPS by default; self-hosted must configure TLS |
 
