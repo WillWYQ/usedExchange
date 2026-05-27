@@ -1,6 +1,6 @@
 # UsedExchange — Technical Requirements
 
-**Version:** 0.6.0  
+**Version:** 0.7.0  
 **Date:** 2026-05-27  
 **Companion:** DESIGN.md v0.7.0
 
@@ -114,6 +114,7 @@ All content configuration lives in `content/config.ts` (TypeScript, type-checked
 | `CF_R2_SECRET_ACCESS_KEY` | **Yes** | `imageStorage.provider === "cloudflare-r2"` | R2 API token secret. |
 | `CF_R2_BUCKET` | **Yes** | `imageStorage.provider === "cloudflare-r2"` | R2 bucket name. |
 | `CF_R2_PUBLIC_URL` | **Yes** | `imageStorage.provider === "cloudflare-r2"` | Public base URL for the R2 bucket (custom domain or `r2.dev` URL). Used to construct image URLs in the manifest. |
+
 
 The app **must build and serve correctly with zero `.env` file** when `imageStorage.provider === "local"`.
 
@@ -1475,6 +1476,116 @@ A separate file at the project root written entirely in plain English for non-te
 7. **Who to call** — if something breaks, contact the CS student who set this up
 
 No code, no git commands, no terminal jargon in the guide. All actions reference only `content/` folder operations or pre-built scripts invoked by name.
+
+---
+
+## 23. AI Skill Files — Technical Specification
+
+See DESIGN.md §20 for the design rationale, seller workflows, and compatibility table. This section covers the skill file format and required content.
+
+**No SDK, no API keys, no extra dependencies.** The seller uses their existing AI coding tool (Claude Code, Cursor, etc.).
+
+---
+
+### 23.1 Skill File Structure
+
+Both skill files live in `.claude/skills/` and follow this template:
+
+```markdown
+# Skill: <name>
+<!-- One-line description shown in Claude Code skill list -->
+
+## Context
+<!-- Brief summary of the project structure the AI needs to know -->
+<!-- Include: content/ folder layout, item.json field list, content/config.ts structure -->
+
+## Instructions
+<!-- Step-by-step numbered list of what the AI should do -->
+<!-- Be explicit: which files to read, which to write, what to confirm with the user -->
+
+## Schema Reference
+<!-- Paste the full item.json schema from DESIGN.md §5 -->
+<!-- Paste the full SiteConfig type from DESIGN.md §13 -->
+
+## Output Specification
+<!-- Exact file paths to write, field defaults for anything not determinable -->
+<!-- Constraints: status always "draft", reserved_for never populated -->
+
+## Examples
+<!-- 1–2 sample input/output pairs -->
+```
+
+### 23.2 `update-items.md` — Required Content
+
+The skill file must include:
+
+| Section | Content |
+|---|---|
+| Trigger | "When invoked, scan `content/items/` for folders with photos but no item.json, or item.json with status: draft" |
+| Vision instructions | "For each qualifying folder: look at all images in the folder; read any `.txt`, `.md`, `.yaml`, or `.json` file present (description file)" |
+| Field extraction | Full table from DESIGN.md §20 — what can be extracted from photos at each confidence level |
+| Merge rules | Description file values override vision output for any field they specify |
+| Output rules | Write to `content/items/<category>/<name>/item.json`; always set `status: "draft"`; never set `reserved_for` |
+| Confirmation | Show proposed JSON to user and ask for confirm / edit / skip before writing |
+| Scope | Accept natural language scope from user ("just electronics", "the iphone folder", "everything") |
+| Fallback | If photos are unclear, prefer empty string over a guess for brand/model fields |
+
+### 23.3 `setup-wizard.md` — Required Content
+
+The skill file must include:
+
+| Section | Content |
+|---|---|
+| Trigger | "Ask the user questions to build content/config.ts from scratch" |
+| Question sequence | All 8 question groups from DESIGN.md §20 in order |
+| Location handling | "When user gives a location description, use your knowledge to suggest lat/lng coordinates; show them to the user for confirmation" |
+| Tagline guidance | Examples of tone-matched taglines (see DESIGN.md §20 Personality Calibration table) |
+| Config template | Full `content/config.ts` template with all fields, types, and comments (from DESIGN.md §13) |
+| Category scaffold | After generating config.ts, create `content/items/<category>/_category.json` for each selected item type |
+| Output rules | Write only to `content/config.ts` and `content/items/*/` — never touch app code |
+| Idempotency instruction | "If content/config.ts already exists, read it first and pre-fill answers with current values; ask user to confirm or change each" |
+
+### 23.4 `.claude/` Directory and CLAUDE.md
+
+The `.claude/` directory also contains a `CLAUDE.md` project file. Claude Code reads this automatically on startup and gives the AI assistant context about the project without the seller needing to explain it.
+
+**`CLAUDE.md` must include:**
+- Project summary (what the project is, who the seller is)
+- The `content/` folder rule (AI must never modify files outside `content/`)
+- A summary of common seller tasks and which skill to use
+- Links to `DESIGN.md` sections for deeper context when needed
+
+```
+.claude/
+├── CLAUDE.md          ← loaded automatically by Claude Code; project context
+└── skills/
+    ├── update-items.md
+    └── setup-wizard.md
+```
+
+### 23.5 No Dependencies Added
+
+| What was removed | Why |
+|---|---|
+| `@anthropic-ai/sdk` | Not needed — AI tool provides its own API access |
+| `ANTHROPIC_API_KEY` env var | Not needed — seller's AI subscription handles auth |
+| `scripts/agents/` directory | Replaced by `.claude/skills/` instruction files |
+| `pnpm agent:*` scripts | Replaced by `/skill-name` in Claude Code or natural language |
+
+The only new project artifact is the `.claude/` directory containing Markdown files.
+
+### 23.6 Graceful Degradation
+
+If the seller has no AI coding tool:
+- `pnpm create-item <category>/<name>` creates a template `item.json` manually (Phase 3)
+- `pnpm create-template` creates a `_template.json` they can copy and fill in
+- The skill files serve as reference documentation even without an AI tool
+
+### 23.7 `content/` Rule — Enforced in Skill Files
+
+Both skill files include an explicit instruction:
+
+> **Do not modify any files outside the `content/` directory. Do not edit `app/`, `components/`, `lib/`, `scripts/`, or any configuration files. Your output is limited to: `content/config.ts`, `content/items/*/item.json`, and `content/items/*/_category.json`.**
 
 ---
 

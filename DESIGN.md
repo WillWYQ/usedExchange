@@ -922,6 +922,25 @@ export const siteConfig: SiteConfig = {
 
 ## 14. Build Pipeline
 
+Three flows the seller interacts with, plus the platform build.
+
+```
+── INITIAL SETUP (run once, first time only) ────────────────────────────────
+Open your AI coding tool (Claude Code, Cursor, etc.) in the project directory
+  /setup   (or describe the task in natural language)
+  AI asks questions → generates content/config.ts + category scaffolding
+  Requires: any AI coding tool (Claude Code subscription, Cursor, etc.)
+
+── ADDING NEW ITEMS (run whenever new photos are dropped in) ────────────────
+Drop photos into content/items/<category>/<item-name>/
+Add an optional description file (notes.txt, info.yaml, etc.)
+Open your AI coding tool in the project directory
+  /update-items   (or "generate item.json for my new items")
+  AI reads photos + description → generates item.json per folder
+  Seller confirms before saving
+  Requires: any AI coding tool with vision capability
+```
+
 Two distinct flows: **seller-side upload** (local machine) and **platform build** (Vercel/CI).
 
 ```
@@ -1062,11 +1081,16 @@ usedExchange/
 │   └── config/
 │       └── types.ts               ← SiteConfig TypeScript type (not edited by sellers)
 │
+├── .claude/                       ← Claude Code project configuration
+│   └── skills/                    ← AI skill files (see §20); work with Claude Code + other AI tools
+│       ├── update-items.md        ← Skill: generate item.json from photos + description file
+│       └── setup-wizard.md        ← Skill: interactive site config setup wizard
+│
 ├── scripts/
 │   ├── sync-images.ts             ← image upload pipeline (3 modes)
 │   ├── setup-ui.sh                ← one-time developer setup: installs all Aceternity components
-│   ├── create-item.ts             ← pnpm create-item <category>/<name> → creates content/items folder
-│   └── create-template.ts         ← pnpm create-template [category] → creates _template.json
+│   ├── create-item.ts             ← pnpm create-item <category>/<name>
+│   └── create-template.ts         ← pnpm create-template [category]
 │
 ├── next-sitemap.config.js         ← sitemap config (reads siteConfig.baseUrl)
 ├── SETUP_GUIDE.md                 ← non-technical user guide (content/ folder operations only)
@@ -1450,6 +1474,211 @@ The following were previously listed as future features. Those now in v1 have be
 | RSS feed | Generate `feed.xml` in postbuild from `loadAllItems()`; link in `<head>` |
 | Seller dashboard (local GUI) | Local-only Next.js dev-mode route or Electron app that reads/writes `content/`; key unlock for non-technical users |
 | Multi-seller support | Requires full architecture redesign; each seller gets a namespaced `content/` folder |
+
+---
+
+## 20. AI-Powered Content Generation — Skill-Based Approach
+
+Two AI-assisted workflows are provided as **Claude Code skills** (see `.claude/skills/`). The seller uses whatever AI coding tool they already have — Claude Code, Cursor, GitHub Copilot, or any capable assistant. **No additional API keys, environment variables, or package installation is required.** The seller just opens their AI tool in the project directory and invokes the skill.
+
+### Design Principle
+
+> The skills are **instruction files, not code**. They tell the AI assistant what the project structure looks like, what files to read, and exactly what to generate. The AI does the work using its own built-in capabilities and the user's existing subscription.
+
+This approach:
+- Requires zero extra setup for the seller
+- Works with any AI coding assistant that can read files and write JSON
+- Degrades gracefully: if the seller has no AI tool, they use `pnpm create-item` instead
+- Adds no dependencies to `package.json`
+- Introduces no API key management
+
+### Skill Files
+
+Two skill files ship with the project:
+
+```
+.claude/
+└── skills/
+    ├── update-items.md    ← Skill: generate item.json from photos + description
+    └── setup-wizard.md    ← Skill: interactive site config setup
+```
+
+These follow the standard Claude Code skill format and are invokable via `/update-items` and `/setup` in Claude Code. Other AI tools can read them directly as prompt instructions.
+
+---
+
+### Skill 1 — Item JSON Generator
+
+**Invocation:** `/update-items` in Claude Code, or paste the skill file content into any AI assistant.
+
+**What the seller does:**
+
+The seller drops photos into an item folder (and optionally a description file), then runs this agent. The agent uses Claude's vision capability to analyse the photos, reads any description file, and generates a complete `item.json` — then asks the seller to confirm before saving.
+
+```
+1. Create content/items/<category>/<item-name>/
+2. Drop in photos (cover.jpg, photo1.jpg, ...)
+3. Optionally add a description file (any text format — see below)
+4. Open Claude Code (or similar AI tool) in the project
+5. Type: /update-items    (or describe the task in natural language)
+6. Review the proposed item.json shown by the AI
+7. Confirm → AI writes item.json to the folder
+8. pnpm upload-images    ← upload photos to CDN as usual
+```
+
+#### Trigger Conditions
+
+The agent processes a folder when ANY of the following are true:
+- Images are present but no `item.json` exists
+- `item.json` exists with `status: "draft"`
+- A description file is newer than the existing `item.json` (re-generate with updated info)
+- The seller explicitly targets a specific folder by telling the AI: "just update the electronics/iphone-14 folder"
+
+#### Description File
+
+Place any text-based file in the item folder alongside the photos. The agent detects and reads any of:
+
+| Format | Example filename | Content style |
+|---|---|---|
+| Plain text | `notes.txt`, `description.txt` | Freeform notes — "Bought from Amazon 2024, barely used, charger included" |
+| Markdown | `README.md`, `notes.md` | Structured or freeform Markdown |
+| YAML | `info.yaml`, `info.yml` | Key-value pairs matching item.json field names |
+| Partial JSON | `info.json` | A partial `item.json` — agent merges with vision output |
+
+If no description file is found, the agent works from photos alone.
+
+**Example `notes.txt`:**
+```
+Bought from Best Buy in Spring 2023 for $89.
+Used for one semester. Textbook is CS101 at State University.
+Minor pen marks on a few pages.
+Willing to take $30.
+```
+
+**Example `info.yaml`:**
+```yaml
+original_source: Best Buy
+original_price: 89
+course: CS101
+edition: 3rd Edition
+condition: fair
+min_acceptable_offer: 25
+```
+
+#### What the Vision Model Extracts
+
+| Field | Source | Confidence |
+|---|---|---|
+| `name` | Folder name (humanised) + photo text recognition | High |
+| `description` | Vision analysis + description file | Medium–High |
+| `condition` | Visual inspection of photos | Medium |
+| `brand` | Logo/label recognition in photos | Medium |
+| `model` | Model number visible in photos | Medium |
+| `color` | Visual | High |
+| `dimensions` | Estimated from scale references in photos | Low (flagged as estimate) |
+| `tags` | Item type inference | Medium |
+| `course` / `isbn` | Text recognition on textbooks | High when visible |
+
+Fields the agent **cannot** determine from photos (left as defaults or asked interactively):
+- `price.tiers` — agent suggests based on category norms but asks seller to confirm
+- `pickup_windows` — always asks
+- `preferred_payment` — pulled from `siteConfig` defaults
+- `listed_date` — set to today
+
+#### Interactive Confirmation Flow
+
+```
+Agent: 📦 Analysing 3 photos in content/items/electronics/iphone-14...
+
+  Proposed item.json:
+  ┌─────────────────────────────────────────────────────────┐
+  │ name:        iPhone 14 Pro (Space Black, 256 GB)        │
+  │ condition:   good                                       │
+  │ brand:       Apple                                      │
+  │ model:       iPhone 14 Pro                              │
+  │ color:       Space Black                                │
+  │ description: Used iPhone 14 Pro in good condition.      │
+  │              Minor scratches on the back. Screen is     │
+  │              pristine. Includes original charger.       │
+  │ tags:        [electronics, phone, apple, iphone]        │
+  │ price.tiers: [Pickup $420, Shipping $450] (suggested)   │
+  │ status:      draft                                      │
+  └─────────────────────────────────────────────────────────┘
+
+  [C] Confirm and save    [E] Edit in $EDITOR    [S] Skip    [Q] Quit
+```
+
+The AI saves with `status: "draft"` unless the seller explicitly asks for `"available"`. This prevents accidental publishing.
+
+The AI can process one folder, one category, or all qualifying folders in a single session — the seller describes the scope in natural language ("update all my electronics items" / "just do the iphone folder").
+
+---
+
+### Skill 2 — Site Setup Wizard
+
+**Invocation:** `/setup` in Claude Code, or describe the task: "Help me set up my UsedExchange config file."
+
+**What the seller does:**
+```
+1. Open Claude Code (or similar) in the project directory
+2. Type: /setup   (or "help me set up content/config.ts")
+3. Answer the AI's questions in the chat
+4. AI writes content/config.ts and the initial category scaffold
+```
+
+The AI asks about 8 areas and generates the complete config:
+
+| Area | Questions | Output |
+|---|---|---|
+| Identity | Store name, tagline style | `name`, `tagline` |
+| Location | Freeform place description → AI looks up lat/lng | `location.*` |
+| Item types | What will you sell? | Category `_category.json` files |
+| Contact | Which platforms + usernames | `contact.platforms[]` |
+| Pricing | Firm vs negotiable; currency | `currency`, seller notes |
+| Distance tiers | Campus-local / city-wide / pickup-only | Reference for item.json tiers |
+| Visual style | Background + card effect | `ui.background`, `ui.itemCard` |
+| Language | Locale selection | `i18n.locale` |
+
+The AI reads the seller's writing style and suggests a matching tagline (examples: "Good stuff finding new homes 📦" for casual tone; "Pre-owned. Priced fairly." for minimalist tone). The seller can accept or override.
+
+**Re-running:** The seller can ask "update just my contact info in the config" or "change my background effect" — the AI reads the existing `content/config.ts`, makes the targeted change, and leaves everything else intact.
+
+---
+
+### Skill File Format
+
+Each skill file is a Markdown document stored in `.claude/skills/`. It contains:
+1. **Trigger description** — what the skill does (shown in Claude Code's skill list)
+2. **Context** — a summary of the project structure relevant to the task
+3. **Step-by-step instructions** — exactly what the AI should do
+4. **Schema reference** — the full `item.json` field list and `content/config.ts` structure
+5. **Output specification** — what files to write and in what format
+6. **Examples** — sample input → output pairs
+
+The skill files are human-readable. A seller who opens them in a text editor will understand what the AI is being asked to do. They can also be used verbatim as a prompt in any AI chat interface (ChatGPT, Claude.ai, etc.) — paste the skill file content and attach the photos.
+
+### File Location
+
+```
+.claude/
+└── skills/
+    ├── update-items.md    ← describes how to generate item.json from photos
+    └── setup-wizard.md    ← describes how to generate content/config.ts
+```
+
+### Compatibility
+
+| AI Tool | How to use |
+|---|---|
+| **Claude Code** | `/update-items` or `/setup` — skills are loaded automatically from `.claude/skills/` |
+| **Cursor** | Open skill file → Cmd+L → paste into chat alongside photos |
+| **GitHub Copilot (chat)** | Open skill file → paste as context → attach photos |
+| **Claude.ai** | Paste skill file content + upload photos → ask AI to follow the instructions |
+| **Any capable AI** | Paste skill file + describe what you want; the instructions are self-contained |
+
+### `content/` Rule — Maintained
+
+Both skills instruct the AI to write ONLY to `content/config.ts`, `content/items/*/item.json`, and `content/items/*/_category.json`. No app code is touched. The AI is explicitly instructed not to modify any files outside `content/`.
 
 ---
 

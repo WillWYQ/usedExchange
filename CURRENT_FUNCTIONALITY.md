@@ -222,6 +222,48 @@ Site header + "Page not found" + link home.
 
 ---
 
+## AI-Powered Content Generation Agents
+
+Two Claude-powered scripts eliminate manual JSON editing. Both require `ANTHROPIC_API_KEY` in `.env.local` and write only to `content/`.
+
+### Agent 1 — Site Setup Wizard (`pnpm agent:setup`)
+
+Run **once** during initial project setup. A conversational agent asks about:
+- Store name and location (lat/lng resolved automatically from a place description)
+- Item types being sold (creates category scaffold)
+- Contact platforms (Discord, Venmo, Zelle, Instagram, etc.)
+- Pricing style (firm vs negotiable; currency)
+- Visual preferences (background, card effects)
+- Language/locale
+
+Generates a complete `content/config.ts` and the initial `content/items/<category>/_category.json` files. Detects seller personality from their answers and writes a matching tagline. Can be re-run with flags (`--contact`, `--ui`, `--force`) to update specific sections.
+
+### Agent 2 — Item JSON Generator (`pnpm agent:update-items`)
+
+Drop photos into any item folder (and optionally a description file), then run this agent. It:
+1. Scans `content/items/` for folders with photos but no `item.json`, or with `status: "draft"`
+2. For each qualifying folder: reads photos via Claude vision API + reads any description file
+3. Extracts: name, description, condition, brand, model, colour, tags, textbook fields (ISBN, course, edition)
+4. Shows a preview in the terminal for the seller to confirm, edit, or skip
+5. Saves `item.json` with `status: "draft"` (seller changes to `"available"` when ready)
+
+**Supported description file formats:** `.txt`, `.md`, `.yaml`, `.json` — any text file in the item folder alongside the photos.
+
+**Description file example (`notes.txt`):**
+```
+Bought from Best Buy 2023, used one semester.
+CS101 textbook, 3rd edition. Minor pen marks.
+Asking $30.
+```
+
+**Cost:** ~$0.01–0.05 per item (Claude Sonnet). Configurable model in the script.
+
+**Trigger:** runs on items where folder has images + (no item.json OR item.json is draft OR description file is newer than item.json).
+
+**After the agent:** run `pnpm upload-images` to upload photos to CDN as usual.
+
+---
+
 ## Full-Text Search
 
 Built at compile time using `fuse.js`. Searches across: name, description, brand, model, tags, course, ISBN, edition. Enabled via `siteConfig.search.enabled: true`. Search bar lives in `SiteHeader` and shows inline results as the user types.

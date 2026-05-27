@@ -25,10 +25,11 @@
 | 11 | UI Slot Adapters (wiring) | 1 | 1, 8, 9 |
 | 12 | SEO, A11y & Security Hardening | 1 | 11 |
 | 13 | Deployment | 1 | 4, 12 |
-| **Total** | | **~18 days** | |
+| 14 | AI Agents (Setup Wizard + Item Generator) | 2 | 3 |
+| **Total** | | **~20 days** | |
 
 **Critical path:** 0 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 11 → 12 → 13  
-**Parallelisable:** Phase 1 ∥ Phase 2; Phase 4 ∥ Phase 3; Phase 10 ∥ Phase 7
+**Parallelisable:** Phase 1 ∥ Phase 2; Phase 4 ∥ Phase 3; Phase 10 ∥ Phase 7; Phase 14 ∥ Phases 5–13
 
 ---
 
@@ -407,6 +408,55 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 
 ---
 
+## Phase 14 — AI Skill Files (Setup Wizard + Item Generator)
+**Goal:** Both Claude Code skills are complete, tested, and ship with the project. A seller using Claude Code (or any capable AI tool) can run `/setup` and `/update-items` to generate `content/config.ts` and `item.json` files without editing any code.
+
+**No API keys, no new dependencies, no custom scripts.** The deliverable is two Markdown instruction files.
+
+**Can be developed in parallel with Phases 5–13.**
+
+### Dependencies
+- Phase 3 (Content Schema) must be done — skills reference the full `item.json` schema and must stay in sync with it
+- Phase 2 (Type System & Config) must be done — skills reference `content/config.ts` field names and types
+
+### Tasks
+
+#### 14a — Project CLAUDE.md
+- [ ] Create `.claude/CLAUDE.md` with project context: what the project is, the `content/` folder rule, common seller tasks, pointers to relevant DESIGN.md sections
+- [ ] Test: open Claude Code in project directory; confirm AI has correct project context without further explanation
+
+#### 14b — `update-items.md` Skill
+- [ ] Create `.claude/skills/update-items.md`
+- [ ] Include: trigger description, vision instructions for photo analysis, description file format support (`.txt`, `.md`, `.yaml`, `.json`), field extraction table (with confidence levels), merge rules (description overrides vision), output spec (`status: "draft"`, `reserved_for` never set), confirmation flow, scope instructions (natural language targets)
+- [ ] Include full `item.json` schema from DESIGN.md §5 as a reference block
+- [ ] Test with Claude Code: create a test item folder with 2 photos + notes.txt → invoke skill → verify generated JSON validates against Zod schema
+- [ ] Test scope targeting: "just update the electronics folder"
+- [ ] Test with no description file (photos only)
+- [ ] Test with partial `info.yaml` (description file with some fields set)
+
+#### 14c — `setup-wizard.md` Skill
+- [ ] Create `.claude/skills/setup-wizard.md`
+- [ ] Include: all 8 question groups, location resolution instructions (AI uses knowledge to suggest lat/lng, shows for confirmation), personality calibration examples, category scaffold instructions, idempotency instructions (read existing config before asking)
+- [ ] Include full `content/config.ts` template from DESIGN.md §13 as the output reference
+- [ ] Test with Claude Code: run `/setup` from scratch → verify generated `content/config.ts` compiles (`pnpm type-check`)
+- [ ] Test idempotency: run again after config exists → verify AI reads existing values and pre-fills
+- [ ] Test partial re-run: "just update my contact info"
+
+#### 14d — Validation & Documentation
+- [ ] Add a "Verify skill output" step to `SETUP_GUIDE.md`: after running `/update-items`, run `pnpm type-check` to confirm generated JSON is valid
+- [ ] Test both skills in at least one non-Claude AI tool (Cursor or GitHub Copilot) to verify compatibility
+- [ ] Confirm `content/` rule: AI never modifies any file outside `content/`
+
+### Acceptance Criteria
+- `/update-items` in Claude Code → generates valid `item.json`; Zod schema validates it
+- `/setup` in Claude Code → `content/config.ts` generated; `pnpm type-check` passes
+- Both skills work in at least one other AI tool (Cursor / GitHub Copilot)
+- No new npm dependencies added
+- No API keys required
+- No files written outside `content/`
+
+---
+
 ## Risk Register
 
 | Risk | Likelihood | Impact | Mitigation |
@@ -418,6 +468,10 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 | Some Aceternity components require additional peer dependencies (e.g. `three.js` for 3D Globe) | Low | Medium | Only install dependencies actually needed by the 25 selected components; verify `pnpm type-check` after `setup-ui` |
 | Item photos exceed Vercel Blob free tier (500 MB) | Low (early) | Medium | Track Blob usage in Vercel Dashboard; upgrade plan or migrate to Cloudflare R2 (config switch = one line) |
 | Haversine distance off for non-US locations | Low | Low | Formula is standard WGS84; unit test with known city pairs before shipping |
+| AI misidentifies item or hallucinates brand/model in skill output | Medium | Low | Skill always instructs the AI to show a confirmation preview; `status: "draft"` until seller confirms; empty string preferred over guessing |
+| Skill file format incompatible with a specific AI tool | Medium | Low | Skill files are plain Markdown — universally compatible; test with Claude Code + one other tool before shipping |
+| Generated `content/config.ts` has TypeScript errors | Low | Medium | Skill instructs AI to verify against the type definition; seller runs `pnpm type-check` as the final gate |
+| Seller has no AI coding tool | Low | Low | `pnpm create-item` and `pnpm create-template` provide a non-AI fallback; skill files also work as a copy-paste prompt in Claude.ai |
 
 ---
 
@@ -431,8 +485,9 @@ A phase is **done** when:
 5. Changes are committed to git with Conventional Commit message
 
 The project is **ready for v1 launch** when:
-1. All 13 phases are done
-2. At least one complete real listing (item.json + photos) exists
+1. All 14 phases are done (Phase 14 may ship slightly after Phases 0–13 if agents are delayed)
+2. AI skill `/setup` generates a valid `content/config.ts` — `pnpm type-check` passes (Phase 14)
+3. At least one complete real listing (generated via AI skill `/update-items`) exists
 3. Site is live and passing Lighthouse ≥ 80/90
 4. Seller has successfully completed the full workflow: add item → upload photos → commit → push → verify live
 
