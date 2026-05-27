@@ -37,10 +37,20 @@ pnpm-debug.log*
 dist/
 build/
 .next/
+out/
 .nuxt/
 .cache/
 coverage/
 *.tsbuildinfo
+
+# ── Image storage (generated at build time) ───────────────────────────────────
+# Local image copies (populated by prebuild when imageStorage.provider === "local")
+public/items/
+public/contact/
+# Image URL manifest — regenerated on every build from items/ + cloud provider
+lib/generated/
+# Incremental upload checksum cache — build-machine local, not needed in git
+.image-cache/
 
 # ── Editor / IDE ──────────────────────────────────────────────────────────────
 .vscode/settings.json
