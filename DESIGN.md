@@ -1,7 +1,7 @@
 # UsedExchange — Project Design Document
 
-**Version:** 0.3.0  
-**Date:** 2026-05-26  
+**Version:** 0.4.0  
+**Date:** 2026-05-27  
 **Status:** Decisions Resolved — Ready for Implementation
 
 ---
@@ -51,7 +51,7 @@ The UI is built on [Aceternity UI](https://ui.aceternity.com) (React + Tailwind 
 
 ### Deployment Modes
 
-The app supports two modes toggled by a single config value in `site.config.ts`:
+The app supports two modes toggled by a single config value in `content/config.ts`:
 
 | Mode | `deploymentMode` | Next.js config | Image strategy |
 |---|---|---|---|
@@ -70,124 +70,192 @@ The naive solution (copy images into `public/` at build time) breaks on Vercel. 
 
 #### Design Principle
 
-The seller's workflow is **never changed**:
-1. Put photos in the item folder → done.
+**Item photos are local-only source files — not committed to git.**
 
-The build script detects the configured provider, uploads new/changed images automatically, writes a URL manifest, and the deployment stays small. Switching providers requires one line in `site.config.ts` and one env var.
+Committing photos would: (a) make every `git push` slow as photo collections grow, and (b) still not solve the 100 MB deployment limit since photos would eventually exceed it in the repo too. Instead:
+
+- **JSON metadata files** stay in git — they're tiny text files, the inventory catalogue.
+- **Photos** stay on the seller's machine and are uploaded directly to cloud storage by a single command.
+- **The image manifest** (`lib/generated/image-manifest.json`) is committed — it maps each photo to its CDN URL. This is the only artifact Vercel needs to build the site.
+- **QR code images** live in `content/contact/` (git-tracked, tiny < 50 KB). The sync script copies them to `public/contact/` so Next.js can serve them.
+
+**All seller-managed files live in one folder: `content/`.** App code never needs to be touched for routine listing updates, config changes, or adding new categories.
+
+#### Seller Workflow
+
+```
+Adding a new item:
+  1. Create content/items/category/my-item/  with item.json + photos
+  2. pnpm upload-images              uploads photos → CDN, updates manifest
+  3. git add content/items/my-item/item.json lib/generated/image-manifest.json
+  4. git push                        Vercel builds instantly; images already on CDN
+
+Updating photos:
+  1. Replace / add photos in content/items/category/my-item/
+  2. pnpm upload-images              detects changed checksums, re-uploads only changed files
+  3. git add lib/generated/image-manifest.json && git push
+
+Code-only change (no photo edits):
+  1. Edit content/items/**/item.json  or  content/config.ts
+  2. git add ... && git push         Vercel builds; manifest unchanged, no uploads needed
+```
 
 #### Image Storage Tiers
 
 | `imageStorage.provider` | Best for | Deployment size | Seller effort |
 |---|---|---|---|
-| `"local"` | Local dev / self-hosted (no size limit) | Images included | None |
-| `"vercel-blob"` *(recommended for Vercel Hobby)* | Vercel Hobby, Vercel Pro | Images excluded (served from Blob CDN) | Add 1 env var once |
-| `"cloudflare-r2"` | Self-hosted, large collections, zero egress cost | Images excluded (served from R2 CDN) | Add 4 env vars once |
+| `"local"` | Local dev preview / self-hosted with no size limit | Images included in output | None |
+| `"vercel-blob"` *(recommended for Vercel Hobby)* | Vercel Hobby, Vercel Pro | Images excluded — served from Blob CDN | 1 env var, once |
+| `"cloudflare-r2"` | Self-hosted or large collections — zero egress cost | Images excluded — served from R2 CDN | 4 env vars, once |
 
 #### How It Works
 
 ```
-pnpm build (on Vercel or locally)
+LOCAL MACHINE — pnpm upload-images
   │
-  └── prebuild: scripts/sync-images.ts
-        │
-        ├── Scans items/**  for all image files
-        │
-        ├── [provider: "local"]
-        │     └── Copy to public/items/...  (deployment includes images)
-        │
-        ├── [provider: "vercel-blob"]
-        │     ├── Compare SHA-256 of each file vs. .image-cache/checksums.json
-        │     ├── Upload new/changed files via @vercel/blob SDK
-        │     └── Record returned CDN URLs
-        │
-        └── [provider: "cloudflare-r2"]
-              ├── Compare SHA-256 vs. .image-cache/checksums.json
-              ├── Upload via @aws-sdk/client-s3 (R2 is S3-compatible)
-              └── Record returned CDN URLs
-        │
-        └── Write lib/generated/image-manifest.json
-              { "houseware/ikea-desk-lamp/cover.jpg": "https://cdn.example/cover.jpg", … }
-        └── Write .image-cache/checksums.json  (gitignored — skips re-upload of unchanged files)
+  ├── Scans content/items/**  for image files (gitignored; present on seller's machine only)
+  ├── Loads .image-cache/checksums.json
+  │
+  ├── [provider: "vercel-blob"]
+  │     ├── SHA-256 compare → skip unchanged files
+  │     ├── Upload new/changed files via @vercel/blob SDK
+  │     └── Record CDN URLs
+  │
+  ├── [provider: "cloudflare-r2"]
+  │     ├── SHA-256 compare → skip unchanged
+  │     ├── Upload via @aws-sdk/client-s3 (R2 is S3-compatible)
+  │     └── Record CDN URLs
+  │
+  ├── Copy content/contact/** → public/contact/  (QR images; small, always local)
+  ├── Write lib/generated/image-manifest.json  ← COMMITTED to git
+  │     { "houseware/ikea-desk-lamp/cover.jpg": "https://cdn.example/cover.jpg", … }
+  ├── Write .image-cache/checksums.json        ← gitignored (local speed cache)
+  │
+  └── ⚠️  Print BACKUP REMINDER  (see §3 Backup Policy)
+
+VERCEL BUILD — pnpm build (no photos present; reads committed manifest)
+  │
+  ├── prebuild: scripts/sync-images.ts
+  │     ├── No image files in content/items/ (gitignored — not on Vercel's runner)
+  │     ├── Manifest already committed → reads existing manifest, no uploads
+  │     ├── content/contact/** present (git-tracked) → copies to public/contact/
+  │     └── Logs: "manifest present (N entries) — skipping upload"
+  │
+  └── next build
+        loader.ts reads manifest → resolves all image URLs to CDN
+        All pages statically generated with correct CDN image URLs
+
+LOCAL DEV — pnpm dev
+  │
+  ├── sync-images.ts  (always runs in "local" mode, regardless of provider config)
+  │     content/items/ photos → copied to public/items/
+  │     content/contact/    → copied to public/contact/
+  │
+  └── next dev  — images served from public/items/ and public/contact/
 ```
 
 #### Image URL Resolution (in `lib/content/loader.ts`)
 
 ```
-For each image file found in an item folder:
-  key  = "{categorySlug}/{itemSlug}/{filename}"
-  url  = manifest[key]           // CDN URL if provider uploaded it
-       ?? "/items/{key}"         // local public path fallback (dev mode / "local" provider)
+For each image filename found in a content/items/ folder:
+  key = "{categorySlug}/{itemSlug}/{filename}"
+  url = manifest[key]       // CDN URL (from committed manifest)
+      ?? "/items/{key}"     // local fallback for dev / "local" provider
 ```
 
-This means local development works without any credentials: the sync script copies to
-`public/items/`, the manifest maps to local paths, and everything renders normally.
+On Vercel, `manifest[key]` is always populated (the manifest is committed). The fallback path is only used in local dev before `pnpm upload-images` has been run for that image.
 
 #### Incremental Uploads
 
-The `.image-cache/checksums.json` file stores `{ relativePath: sha256 }` for every
-previously uploaded image. On the next build, only files whose checksum changed (or
-new files with no entry) are uploaded. This keeps Vercel build times fast even as the
-collection grows.
+`.image-cache/checksums.json` stores `{ relativePath: sha256 }` for every previously uploaded image. On the next `pnpm upload-images`, only changed or new files are re-uploaded. The cache lives on the seller's machine only (gitignored). It can be deleted at any time — all images are simply re-uploaded on the next run.
 
-`.image-cache/` is **gitignored** — it is a build-machine cache. On a fresh Vercel build
-runner (which has no cache), all images are re-uploaded. This is safe because cloud
-providers are idempotent (overwriting an existing file with identical content is free).
-To persist the upload cache across Vercel builds, configure Vercel's build cache to
-include `.image-cache/` (optional optimisation, not required for correctness).
+#### Backup Policy
+
+> ⚠️ **The seller is responsible for backing up their `content/` folder (specifically the photos).**
+>
+> Photos are **not in git** (gitignored) and cloud storage (Blob/R2) is a **delivery layer, not a backup**. Cloud storage can be accidentally wiped. The script prints a reminder after every upload:
+>
+> ```
+> ╔══════════════════════════════════════════════════════════════╗
+> ║  ⚠️   BACKUP REMINDER                                         ║
+> ║                                                              ║
+> ║  Your item photos are NOT tracked by git.                    ║
+> ║  Cloud storage (Vercel Blob / R2) is a delivery layer,       ║
+> ║  NOT a backup — it can be accidentally wiped.                ║
+> ║                                                              ║
+> ║  Please ensure your  content/  folder is backed up to:       ║
+> ║    • External hard drive or Time Machine                     ║
+> ║    • iCloud Drive / Google Drive / Dropbox                   ║
+> ║                                                              ║
+> ║  Next steps:                                                 ║
+> ║    git add lib/generated/image-manifest.json                 ║
+> ║    git add content/**/*.json                                 ║
+> ║    git commit -m "chore: update listings"                    ║
+> ╚══════════════════════════════════════════════════════════════╝
+> ```
 
 #### What Stays in Git
 
 | Content | Git-tracked? | Reason |
 |---|---|---|
-| `items/**/*.json` | Yes | Source of truth for metadata |
-| `items/**/*.jpg/png/…` | Yes | Source of truth for images; git is the backup |
-| `lib/generated/image-manifest.json` | **No** (gitignored) | Regenerated every build |
-| `.image-cache/checksums.json` | **No** (gitignored) | Build machine cache |
-| `public/items/` | **No** (gitignored) | Generated by build script |
-
-> **Git repo size note:** Keeping photos in git is intentional — it gives the seller a
-> single backup location and a clear source of truth. For a typical personal resale
-> site (< 500 photos, < 500 MB), GitHub handles this comfortably. If the repo grows
-> beyond ~1 GB, consider enabling Git LFS for image extensions (one-time
-> `.gitattributes` change, no seller workflow change).
+| `content/**/*.json` | **Yes** | Inventory metadata and config; tiny text files |
+| `content/config.ts` | **Yes** | Site configuration |
+| `content/contact/*.png` | **Yes** | QR code images; tiny, rarely change |
+| `content/items/**/*.jpg/png/…` | **No** — local only | Large; slow to push; uploaded to CDN separately |
+| `lib/generated/image-manifest.json` | **Yes** | CDN URL map; Vercel needs this to build |
+| `.image-cache/checksums.json` | **No** — local only | Speed cache for incremental uploads |
+| `public/items/` | **No** — generated | Populated by local dev sync only |
+| `public/contact/` | **No** — generated | Copied from `content/contact/` by sync script |
 
 ---
 
 ## 4. File System Content Model
 
+> **Rule: everything the seller ever touches lives inside `content/`.
+> Nothing else in the project needs to be opened for routine operations.**
+
 ```
-items/                              ← content root (git-tracked alongside code)
-├── houseware/                      ← category folder (created by seller)
-│   ├── _category.json              ← optional category metadata
-│   ├── ikea-desk-lamp/             ← individual item folder
-│   │   ├── item.json               ← item metadata (name is the only required field)
-│   │   ├── cover.jpg               ← pinned thumbnail (optional naming convention)
-│   │   ├── photo1.jpg              ← additional gallery images
-│   │   └── photo2.png
-│   └── cast-iron-pan/
-│       ├── item.json
-│       └── pan.jpg
-├── electronics/
-│   ├── _category.json
-│   └── iphone-14-pro/
-│       ├── item.json
-│       ├── front.jpg
-│       └── back.jpg
-└── contact/                        ← seller-managed contact assets
-    └── wechat-qr.png               ← QR code images for platforms without profile URLs
+content/                            ← ★ THE ONLY FOLDER SELLERS NEED TO TOUCH
+│
+├── config.ts                       ← ✓ git-tracked  Site name, URL, contact, pricing defaults
+│
+├── items/                          ← ✓ JSON git-tracked  ✗ Photos gitignored (local + CDN)
+│   │
+│   ├── houseware/                  ← category folder (created by seller, any name)
+│   │   ├── _category.json          ← ✓ optional category display name, icon, sort order
+│   │   ├── ikea-desk-lamp/         ← individual item folder (any name → becomes URL slug)
+│   │   │   ├── item.json           ← ✓ REQUIRED — item name, price, description, status…
+│   │   │   ├── cover.jpg           ← ✗ gitignored — pinned thumbnail (optional convention)
+│   │   │   ├── photo1.jpg          ← ✗ gitignored — additional gallery images
+│   │   │   └── photo2.png          ← ✗ gitignored
+│   │   └── cast-iron-pan/
+│   │       ├── item.json           ← ✓ git-tracked
+│   │       └── pan.jpg             ← ✗ gitignored
+│   │
+│   └── electronics/
+│       ├── _category.json          ← ✓ git-tracked
+│       └── iphone-14-pro/
+│           ├── item.json           ← ✓ git-tracked
+│           ├── front.jpg           ← ✗ gitignored
+│           └── back.jpg            ← ✗ gitignored
+│
+└── contact/                        ← ✓ git-tracked  QR code images (tiny, < 50 KB each)
+    └── wechat-qr.png               ← committed; sync script copies → public/contact/
 ```
 
 ### Folder & File Rules
 
 | Rule | Detail |
 |---|---|
-| Category slug | Folder name; auto-capitalised, hyphens → spaces for display |
-| Item slug | Folder name; becomes the URL segment |
-| Gallery images | All `.jpg .jpeg .png .webp .gif` files in the item folder |
-| Thumbnail | File named `cover.*` takes priority; otherwise first alphabetically |
+| Content root | `content/` — only directory sellers need to know about |
+| Config file | `content/config.ts` — site-wide settings (name, URL, contact platforms, etc.) |
+| Category slug | Category folder name under `content/items/`; auto-capitalised, hyphens → spaces |
+| Item slug | Item folder name; becomes the URL path segment |
+| Gallery images | All `.jpg .jpeg .png .webp .gif` in an item folder — gitignored; local + CDN |
+| Thumbnail | File named `cover.*` is pinned as thumbnail; otherwise first image alphabetically |
 | Other files | Silently ignored (no crash) |
-| Reserved prefix | Folders/files beginning with `_` are metadata, never treated as items/categories |
-| `contact/` folder | Reserved at root of `items/`; holds QR code images |
+| Reserved prefix | Folders/files starting with `_` are metadata — never treated as items/categories |
+| QR code images | Place in `content/contact/`; git-tracked; sync script copies to `public/contact/` |
 
 ---
 
@@ -313,7 +381,7 @@ Only `name` is required. Every other field is optional; the build applies safe d
 
 ## 7. Contact Platform Configuration
 
-Configured in `site.config.ts`. Supports two platform types:
+Configured in `content/config.ts`. Supports two platform types:
 
 **Link-based platforms** — rendered as icon + label button that reveals a URL on click.
 
@@ -367,7 +435,7 @@ All link-based platforms open in `target="_blank" rel="noopener noreferrer"`.
 ## 8. Sold Item Retention
 
 ```ts
-// site.config.ts
+// content/config.ts
 soldItemRetentionDays: 3,   // default; set to 0 to keep forever, -1 to hide immediately
 ```
 
@@ -397,7 +465,7 @@ All routes are statically generated at build time. No `/sold` archive page in v1
 
 ### 10.1 Home Page (`/`)
 
-- **Hero** — site name, tagline, CTA button (configurable in `site.config.ts`)
+- **Hero** — site name, tagline, CTA button (configurable in `content/config.ts`)
 - **Category grid** — one card per non-empty category; shows icon, display name, available item count, cover image background
 - **Recently Listed** — last N available items sorted by `listed_date` (configurable, default 6)
 - **Footer** — contact platform links, last-build timestamp, site name
@@ -425,16 +493,20 @@ All routes are statically generated at build time. No `/sold` archive page in v1
 ## 11. Data Loading Architecture
 
 ```
-items/  (file system, build-time only)
+content/  (file system, build-time only)
   │
   ├── scripts/sync-images.ts
-  │     ├── [local provider]    → copies to public/items/
-  │     ├── [vercel-blob]       → uploads to Blob CDN
-  │     └── [cloudflare-r2]    → uploads to R2 CDN
+  │     ├── [local provider]    → copies content/items/ → public/items/
+  │     │                          copies content/contact/ → public/contact/
+  │     ├── [vercel-blob]       → uploads content/items/ photos to Blob CDN
+  │     │                          copies content/contact/ → public/contact/
+  │     └── [cloudflare-r2]    → uploads content/items/ photos to R2 CDN
+  │                                copies content/contact/ → public/contact/
   │     └── writes lib/generated/image-manifest.json
   │
   ▼
 lib/content/loader.ts
+  ├── root = content/items/
   ├── reads lib/generated/image-manifest.json   (CDN URLs or local paths)
   ├── loadCategories()              → Category[]
   ├── loadItemsByCategory(slug)     → Item[]
@@ -503,7 +575,9 @@ components/
 
 ---
 
-## 13. Configuration — `site.config.ts`
+## 13. Configuration — `content/config.ts`
+
+This file lives inside `content/` alongside the items and QR codes. It is the only TypeScript file sellers ever edit. App code imports it as `import { siteConfig } from "@/content/config"`.
 
 ```ts
 import type { SiteConfig } from "@/lib/config/types";
@@ -561,37 +635,50 @@ export const siteConfig: SiteConfig = {
 
 ## 14. Build Pipeline
 
+Two distinct flows: **seller-side upload** (local machine) and **platform build** (Vercel/CI).
+
 ```
+── SELLER'S MACHINE ─────────────────────────────────────────────────────────
+pnpm upload-images          (run after adding/changing photos)
+  │
+  ├── Scans content/items/**/*.{jpg,jpeg,png,webp,gif}  (present locally, gitignored)
+  ├── Copies content/contact/** → public/contact/
+  ├── Loads .image-cache/checksums.json
+  ├── Uploads new/changed files to configured provider (Blob / R2)
+  ├── Writes lib/generated/image-manifest.json  ← commit this
+  ├── Writes .image-cache/checksums.json        ← do not commit
+  └── ⚠️  Prints BACKUP REMINDER
+
+Then:
+  git add content/**/*.json lib/generated/image-manifest.json
+  git push
+
+── VERCEL BUILD ─────────────────────────────────────────────────────────────
 pnpm build
   │
   ├── [prebuild]  scripts/sync-images.ts
-  │     │
-  │     ├── Scans items/**/*.{jpg,jpeg,png,webp,gif}
-  │     ├── Loads .image-cache/checksums.json  (skips unchanged files)
-  │     │
-  │     ├── [provider: "local"]
-  │     │     └── Copies to public/items/**
-  │     │
-  │     ├── [provider: "vercel-blob"]
-  │     │     └── Uploads new/changed files via @vercel/blob
-  │     │         (reads BLOB_READ_WRITE_TOKEN from env)
-  │     │
-  │     └── [provider: "cloudflare-r2"]
-  │           └── Uploads new/changed files via @aws-sdk/client-s3
-  │               (reads CF_R2_* env vars)
-  │
-  │     Writes lib/generated/image-manifest.json  ← URL map for loader
-  │     Writes .image-cache/checksums.json        ← incremental cache
-  │     Logs: provider=X, uploaded N, skipped M (unchanged)
+  │     ├── No image files in items/ (gitignored — not present on Vercel's runner)
+  │     ├── Reads existing lib/generated/image-manifest.json  (committed)
+  │     └── No uploads needed; logs: "manifest present, skipping upload"
   │
   ├── next build
-  │     loader.ts reads image-manifest.json to resolve all image URLs
-  │     generateStaticParams runs for /[category] and /[category]/[item]
+  │     loader.ts reads manifest → all image URLs resolve to CDN
+  │     generateStaticParams runs for all non-draft, non-expired items
   │     All pages rendered to static HTML + JSON
   │     If deploymentMode === "static": output: 'export' → out/
   │
   └── [postbuild] (optional)
         next-sitemap → sitemap.xml + robots.txt
+
+── LOCAL DEV ────────────────────────────────────────────────────────────────
+pnpm dev
+  │
+  ├── sync-images.ts  (always runs in "local" mode regardless of provider config)
+  │     Photos present on seller's machine → copied to public/items/
+  │     Falls back gracefully if items/ has no images
+  │
+  └── next dev --turbo
+        Images served from public/items/ (local copies)
 ```
 
 ---
@@ -612,17 +699,31 @@ pnpm build
 
 ```
 usedExchange/
-├── items/                         ← content root (seller-managed, git-tracked)
-│   └── contact/                   ← QR code images (git-tracked)
+│
+├── content/                       ← ★ SELLER-MANAGED — only folder sellers ever touch
+│   ├── config.ts                  ← ✓ git-tracked  Site name, URL, contact, storage config
+│   ├── items/                     ← ✓ JSON tracked  ✗ Images gitignored
+│   │   ├── houseware/
+│   │   │   ├── _category.json     ← ✓ git-tracked
+│   │   │   └── ikea-desk-lamp/
+│   │   │       ├── item.json      ← ✓ git-tracked
+│   │   │       ├── cover.jpg      ← ✗ gitignored (local + CDN only)
+│   │   │       └── photo1.jpg     ← ✗ gitignored (local + CDN only)
+│   │   └── electronics/ …
+│   └── contact/                   ← ✓ git-tracked  QR code images (tiny, < 50 KB)
+│       └── wechat-qr.png
 │
 ├── public/
-│   └── items/                     ← GITIGNORED; generated by prebuild (local provider only)
+│   ├── contact/                   ← ✗ gitignored; copied from content/contact/ by sync
+│   └── items/                     ← ✗ gitignored; copied from content/items/ by pnpm dev
 │
-├── .image-cache/                  ← GITIGNORED; incremental upload checksum cache
+├── .image-cache/                  ← ✗ gitignored; incremental upload speed cache
 │   └── checksums.json
 │
+│   ── APP CODE (sellers never need to edit below this line) ──────────────────
+│
 ├── app/
-│   ├── layout.tsx                 ← root layout + global metadata
+│   ├── layout.tsx
 │   ├── page.tsx                   ← home
 │   ├── [category]/
 │   │   ├── page.tsx
@@ -634,29 +735,28 @@ usedExchange/
 │
 ├── lib/
 │   ├── content/
-│   │   ├── loader.ts
+│   │   ├── loader.ts              ← reads content/items/; resolves image URLs via manifest
 │   │   ├── schema.ts
 │   │   └── types.ts
 │   ├── images/
 │   │   ├── adapter.ts             ← ImageStorageAdapter interface
-│   │   ├── local.ts               ← "local" provider implementation
-│   │   ├── vercel-blob.ts         ← "vercel-blob" provider implementation
-│   │   └── cloudflare-r2.ts       ← "cloudflare-r2" provider implementation
+│   │   ├── local.ts               ← "local" provider
+│   │   ├── vercel-blob.ts         ← "vercel-blob" provider
+│   │   └── cloudflare-r2.ts       ← "cloudflare-r2" provider
 │   ├── generated/
-│   │   └── image-manifest.json    ← GITIGNORED; written by prebuild, read by loader
+│   │   └── image-manifest.json    ← ✓ git-tracked; written by pnpm upload-images
 │   └── config/
-│       └── types.ts               ← SiteConfig TypeScript type
+│       └── types.ts               ← SiteConfig TypeScript type (not edited by sellers)
 │
 ├── scripts/
-│   └── sync-images.ts             ← reads siteConfig.imageStorage, dispatches to adapter
+│   └── sync-images.ts
 │
-├── site.config.ts                 ← seller-facing configuration
 ├── tailwind.config.ts
-├── next.config.ts                 ← reads deploymentMode + imageStorage for remote patterns
+├── next.config.ts                 ← imports content/config.ts for deploymentMode
 ├── tsconfig.json
 ├── package.json
-├── DESIGN.md                      ← this file
-└── TECH_REQUIREMENTS.md           ← detailed technical spec
+├── DESIGN.md
+└── TECH_REQUIREMENTS.md
 ```
 
 ---
@@ -669,7 +769,7 @@ usedExchange/
 | Contact form / enquiry | Serverless function; `ContactSection` has a reserved slot |
 | Analytics | Script tag in `SiteHeader.tsx`; no other changes |
 | Dark mode | `tailwind darkMode: 'class'` + toggle in `SiteHeader`; Aceternity components inherit |
-| i18n | `site.config.ts` string keys; item JSON can carry `name_zh`, `description_zh`, etc. |
+| i18n | `content/config.ts` string keys; item JSON can carry `name_zh`, `description_zh`, etc. |
 | Sitemap / RSS | `next-sitemap`; all static routes already known at build |
 | Draft preview | Next.js middleware on `/preview/[category]/[item]`; reads `status: "draft"` items |
 | Tag filtering | Tags already stored; add tag index to loader + filter UI |

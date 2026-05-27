@@ -43,13 +43,29 @@ out/
 coverage/
 *.tsbuildinfo
 
-# ── Image storage (generated at build time) ───────────────────────────────────
-# Local image copies (populated by prebuild when imageStorage.provider === "local")
+# ── Item photos (local + CDN only — do NOT commit to git) ────────────────────
+# All seller-managed files live in content/.
+# Upload photos to CDN with: pnpm upload-images
+# Keep a personal backup of your content/ folder (external drive / cloud backup).
+# content/**/*.json and content/config.ts ARE committed.
+# content/contact/ (QR codes) IS committed — it's tiny.
+# lib/generated/image-manifest.json IS committed.
+content/items/**/*.jpg
+content/items/**/*.jpeg
+content/items/**/*.png
+content/items/**/*.webp
+content/items/**/*.gif
+content/items/**/*.JPG
+content/items/**/*.JPEG
+content/items/**/*.PNG
+content/items/**/*.WEBP
+content/items/**/*.GIF
+
+# ── Generated public asset copies (populated at build/dev time) ──────────────
 public/items/
 public/contact/
-# Image URL manifest — regenerated on every build from items/ + cloud provider
-lib/generated/
-# Incremental upload checksum cache — build-machine local, not needed in git
+
+# ── Incremental upload cache (seller's machine only) ─────────────────────────
 .image-cache/
 
 # ── Editor / IDE ──────────────────────────────────────────────────────────────
