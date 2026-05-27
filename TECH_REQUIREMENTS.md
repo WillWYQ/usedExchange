@@ -776,7 +776,7 @@ navigator.geolocation.getCurrentPosition(
 
 ```ts
 // lib/utils/haversine.ts — pure function, zero dependencies
-export function haversinemiles(
+export function haversineInMiles(
   lat1: number, lng1: number,
   lat2: number, lng2: number
 ): number {
@@ -884,9 +884,11 @@ The slider's initial `max` is set to the highest resolved price across all items
 
 | Component | Reason |
 |---|---|
-| `ItemGrid` | Owns distance state; re-renders on distance change |
+| `RecentlyListedSection` | Owns geo + distance state for home page |
+| `ItemGrid` | Owns distance state for category page; re-renders on distance change |
 | `ItemGallery` | Photo carousel interaction |
 | `LocationPriceBar` | Geolocation API + user input |
+| `PricingTableToggle` | Expand/collapse state for tier list |
 | `FilterBar` | Client-side filter state |
 | `ContactSection` | Click-to-reveal toggle |
 | `QRModal` | Modal open/close state |

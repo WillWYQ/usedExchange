@@ -21,7 +21,7 @@ The UI is built on [Aceternity UI](https://ui.aceternity.com) (React + Tailwind 
 - Build-time static generation; output hostable on Vercel Hobby or any static host
 - Modularised deployment adapter: Vercel-optimised by default, self-host ready via config switch
 - Graceful schema degradation: missing optional JSON fields never crash the build or the page
-- Distance-tiered pricing per item
+- Distance-tiered pricing per item with automatic visitor-location detection (browser Geolocation API, client-side only)
 - Photo gallery per item, sourced from the item folder
 - Rich, privacy-respecting contact section with social platform links and QR code support
 - Clean, extensible codebase designed for second development
@@ -479,7 +479,7 @@ All routes are statically generated at build time. No `/sold` archive page in v1
 - **Hero** — site name, tagline, CTA button (configurable in `content/config.ts`)
 - **Category grid** — one card per **visible** category. A category is visible if it contains at least one item with status `available`, `reserved`, or `pending` (i.e. categories containing only `sold`, `draft`, or expired items are hidden from the home page)
 - Each category card shows: icon, display name, count of available items, cover image of the first available item
-- **Recently Listed** — last N `available` items sorted by `listed_date` descending (configurable, default 6). Each card shows the **location-resolved price** (see §10.2 and §18)
+- **Recently Listed** — last N `available` items sorted by `listed_date` descending (configurable, default 6). Each card shows the **location-resolved price**. This section is wrapped in a `RecentlyListedSection` client component that owns its own `useGeolocation()` + `useDistancePricing()` state, identical in pattern to `ItemGrid` on category pages (see §17 State Architecture and §18 Geolocation note below).
 - **Footer** — contact platform links, last-build timestamp, site name
 - **OG metadata**: `og:title` = site name; `og:description` = `meta.description` from config; `og:image` = cover image of the first available item across all categories (or site logo if no items)
 
@@ -566,6 +566,9 @@ components/
 │   ├── SiteFooter.tsx
 │   └── Breadcrumb.tsx
 │
+├── home/
+│   └── RecentlyListedSection.tsx  ← client component; owns geo+distance state for home page cards
+│
 ├── category/
 │   ├── CategoryCard.tsx
 │   └── CategoryGrid.tsx
@@ -574,7 +577,8 @@ components/
 │   ├── ItemCard.tsx               ← receives resolvedPrice prop (computed by parent)
 │   ├── ItemGrid.tsx               ← client component; holds distance state, passes to cards
 │   ├── ItemGallery.tsx            ← photo carousel (client component)
-│   ├── PricingTable.tsx           ← shows resolved tier only by default; "View all" expands full list
+│   ├── PricingTable.tsx           ← server component; renders resolved tier row + passes tiers to toggle
+│   ├── PricingTableToggle.tsx     ← client component; owns expand/collapse state; shows full tier list
 │   ├── MetadataTable.tsx
 │   ├── StatusBadge.tsx
 │   └── ConditionBadge.tsx
@@ -600,7 +604,7 @@ components/
 ### Component Rules
 - `ui/` — Aceternity originals; extend by wrapping, never modifying in place
 - Prop types derived from `lib/content/types.ts`; no raw JSON objects passed to components
-- `"use client"` only on: `ItemGrid`, `ItemGallery`, `FilterBar`, `ContactSection`, `QRModal`, `LocationPriceBar`
+- `"use client"` only on: `ItemGrid`, `ItemGallery`, `FilterBar`, `ContactSection`, `QRModal`, `LocationPriceBar`, `PricingTableToggle`
 - All other components are React Server Components
 - Visitor coordinates are **never passed outside the browser** — all distance math runs in `useDistancePricing.ts`
 
@@ -787,6 +791,8 @@ usedExchange/
 │   │   ├── local.ts               ← "local" provider
 │   │   ├── vercel-blob.ts         ← "vercel-blob" provider
 │   │   └── cloudflare-r2.ts       ← "cloudflare-r2" provider
+│   ├── utils/
+│   │   └── haversine.ts           ← pure haversineInMiles() distance function; zero deps
 │   ├── generated/
 │   │   └── image-manifest.json    ← ✓ git-tracked; written by pnpm upload-images
 │   └── config/
@@ -854,6 +860,11 @@ resolveDistanceMi = D         →  find the first tier where:
                                     (miles_min ?? 0) ≤ D ≤ (miles_max ?? Infinity)
                                   if no tier matches D, use the nearest tier by miles_max
                                   if price.tiers is empty → show "Contact for price"
+```
+
+> **Distance unit:** All `miles_min`, `miles_max` values in `item.json` and all runtime distance calculations are in **miles**. This is a fixed v1 constraint. A km toggle is listed in §18 Extensibility Register.
+
+`resolveItemPrice` is a pure function (no hooks, no side effects, fully testable). It is exported from `useDistancePricing.ts` and imported by both `ItemCard` and `PricingTable`.
 
 ### Price Tier Display Rule
 
@@ -865,9 +876,6 @@ Only the resolved tier is shown by default. All other tiers are hidden.
 | Item detail page pricing table | Resolved tier row only | Yes — "View all pricing tiers ▼" collapsed toggle |
 
 The expand toggle is always present on the item detail page regardless of geo state (granted, denied, or manual). When expanded, all tiers are listed with the resolved tier visually highlighted (bold or accent colour). Collapsing returns to single-row view.
-```
-
-This function lives in `useDistancePricing.ts` and is pure (no side effects, fully testable).
 
 ### State Architecture
 
@@ -881,6 +889,10 @@ ItemGrid (client component, owns: resolveDistanceMi, setResolveDistanceMi)
 ```
 
 On the item detail page, the same pattern applies with a local `useState` in the page's client wrapper.
+
+On the home page, `RecentlyListedSection` owns an independent instance of the same state.
+
+> **Per-page state note:** Geolocation state is `useState` only — it does not persist across Next.js page navigations. Navigating Home → Category → Item Detail fires `useGeolocation()` on each mount. The browser returns from its permission cache instantly (within `maximumAge: 300_000 ms`), so there is no visible delay after the first resolution. This is the intended behaviour; no cross-page state persistence is needed or implemented.
 
 ### Privacy Guarantee
 
@@ -925,7 +937,10 @@ export function useDistancePricing(
 
 #### `resolveItemPrice(price, resolved)`
 ```ts
-// Pure function. No hooks. Used inside ItemCard and PricingTable.
+// Pure function. No hooks. No side effects.
+// File: components/pricing/useDistancePricing.ts (exported alongside the hook)
+// Imported by: ItemCard (card price display) and PricingTable (tier row rendering)
+// Internally calls haversineInMiles() from lib/utils/haversine.ts
 // Returns the applicable PriceTier, or null if no tiers defined.
 export function resolveItemPrice(
   price: Price,
