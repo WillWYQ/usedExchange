@@ -1,6 +1,6 @@
 # UsedExchange — Project Design Document
 
-**Version:** 0.4.0  
+**Version:** 0.5.0  
 **Date:** 2026-05-27  
 **Status:** Decisions Resolved — Ready for Implementation
 
@@ -31,6 +31,8 @@ The UI is built on [Aceternity UI](https://ui.aceternity.com) (React + Tailwind 
 - Buyer-facing checkout or payment processing
 - User authentication or seller dashboard
 - Full-text search (client-side filtering only)
+- Server-side geolocation or IP-lookup — visitor distance is calculated entirely in the browser; no coordinates leave the device
+- Multi-seller or concurrent write support — this is a **single-seller design**. The manifest and config files are owned by one person. Running `pnpm upload-images` concurrently from two machines is undefined behavior; the last writer wins.
 
 ---
 
@@ -324,7 +326,11 @@ Only `name` is required. Every other field is optional; the build applies safe d
   // ── Categorisation ────────────────────────────────────────────────────────
   "tags": ["lighting", "smart-home"],         // string[]; default []
   "category_override": "",
-  // ^ if non-empty, overrides the folder-derived category slug for display purposes
+  // ^ DISPLAY-ONLY override. If non-empty, replaces the folder-derived category name
+  //   in breadcrumbs, item cards, and metadata — but does NOT change the URL or which
+  //   category page the item appears on (that is always determined by folder location).
+  //   Use case: rename a category without moving files, e.g. folder is "misc" but you
+  //   want the item to show as belonging to "Kitchen & Home".
 
   // ── SEO ───────────────────────────────────────────────────────────────────
   "meta_description": ""
@@ -405,7 +411,10 @@ contact: {
     { type: "linkedin",  value: "in/your-name" },
     { type: "youtube",   value: "@your_channel" },
 
-    // QR-based: qr_image path relative to /public
+    // QR-based: qr_image is the SERVED PUBLIC URL (not the source file path).
+    // Source file lives at: content/contact/wechat-qr.png  (git-tracked)
+    // Sync script copies it to: public/contact/wechat-qr.png
+    // Config value is the resulting public URL: /contact/wechat-qr.png
     { type: "wechat",    qr_image: "/contact/wechat-qr.png",   label: "WeChat" },
     // Any future platform without a web profile URL follows the same pattern:
     { type: "line",      qr_image: "/contact/line-qr.png",     label: "LINE" },
@@ -459,6 +468,8 @@ Items past retention are excluded from all pages and `generateStaticParams` enti
 
 All routes are statically generated at build time. No `/sold` archive page in v1 (sold items stay visible on category pages with a "SOLD" overlay until retention expires).
 
+`app/not-found.tsx` renders a 404 page with the site header, a "Page not found" message, and a link back to the home page. It is shown when a user navigates to any URL that was not generated at build time (e.g. a deleted item's former URL).
+
 ---
 
 ## 10. Page Specifications
@@ -466,16 +477,28 @@ All routes are statically generated at build time. No `/sold` archive page in v1
 ### 10.1 Home Page (`/`)
 
 - **Hero** — site name, tagline, CTA button (configurable in `content/config.ts`)
-- **Category grid** — one card per non-empty category; shows icon, display name, available item count, cover image background
-- **Recently Listed** — last N available items sorted by `listed_date` (configurable, default 6)
+- **Category grid** — one card per **visible** category. A category is visible if it contains at least one item with status `available`, `reserved`, or `pending` (i.e. categories containing only `sold`, `draft`, or expired items are hidden from the home page)
+- Each category card shows: icon, display name, count of available items, cover image of the first available item
+- **Recently Listed** — last N `available` items sorted by `listed_date` descending (configurable, default 6). Each card shows the **location-resolved price** (see §10.2 and §18)
 - **Footer** — contact platform links, last-build timestamp, site name
+- **OG metadata**: `og:title` = site name; `og:description` = `meta.description` from config; `og:image` = cover image of the first available item across all categories (or site logo if no items)
 
 ### 10.2 Category Page (`/[category]`)
 
 - Category title, icon, description
-- **Filter bar** (client-side): condition chips, price range slider, status toggle (hide sold)
-- **Item grid**: card per item — cover photo, name, condition badge, status badge, lowest price tier
-- Sold items: rendered with "SOLD" overlay, not hidden (until retention expires)
+- **Location price bar** (client component, appears above filter bar):
+  - On page load, browser requests Geolocation API permission
+  - Permission **granted** → calculates distance from visitor to seller (haversine formula, client-side only) → resolves applicable price tier → shows `📍 ~12 mi from seller — prices shown for this distance`
+  - Permission **denied / unavailable** → falls back to highest price tier → shows `📍 Location unavailable — showing maximum prices`
+  - In both cases, a **"Change distance"** control allows the visitor to type a custom distance in miles, overriding the auto-detected value. Changing it immediately recalculates all displayed prices.
+  - The resolved distance is stored in component state; it is never sent to any server
+- **Filter bar** (client-side):
+  - **Condition chips**: multi-select; values are the enum set (`new`, `like-new`, `good`, `fair`, `for-parts`); all selected by default
+  - **Price range slider**: operates on the **location-resolved price** for each item — i.e. the tier that matches the visitor's detected (or manually entered) distance. Items with no price tiers always pass the filter.
+  - **Status toggle**: hide/show sold items; default = sold items hidden
+- **Item grid**: card per item — cover photo, name, condition badge, status badge, **location-resolved price** (updates live when distance changes)
+- Sold items: rendered with "SOLD" overlay when visible; hidden by default behind status toggle
+- **OG metadata**: `og:title` = category display name; `og:image` = cover of first available item in category
 
 ### 10.3 Item Detail Page (`/[category]/[item]`)
 
@@ -483,10 +506,12 @@ All routes are statically generated at build time. No `/sold` archive page in v1
 - **Photo gallery** — carousel with thumbnail strip; Aceternity animated card
 - **Status + condition badges** — top-right of hero
 - **Name + description** (Markdown rendered)
-- **Pricing table** — one row per tier; "OBO" appended if `negotiable: true`; "Contact for price" if no tiers
+- **Pricing table** — shows **only the resolved tier** for the visitor's distance by default (one row); "OBO" appended if `negotiable: true`; "Contact for price" if no tiers defined. A collapsed **"View all pricing tiers ▼"** toggle beneath the row expands to show all tiers (with the resolved one highlighted). The toggle is collapsed by default in all states — whether location was granted, denied, or manually entered. This keeps the UI clean while preserving full pricing transparency on demand.
+- **Distance indicator** — same `LocationPriceBar` component as category page; shows detected distance and "Change distance" control
 - **Metadata table** — brand, model, dimensions, weight, original source (linked), original price
-- **Contact section** — platform buttons behind click-to-reveal (configurable); preferred payment methods; item-level `contact_note`
+- **Contact section** — platform buttons behind click-to-reveal (configurable); preferred payment methods; item-level `contact_note`. The same `ContactSection` component is reused in the site footer.
 - **Tags** — rendered as chips (click → future filter)
+- **OG metadata**: `og:title` = item name; `og:description` = `meta_description` (auto-generated from first 160 chars of description if empty); `og:image` = `coverImage` URL (CDN URL or local path)
 
 ---
 
@@ -546,10 +571,10 @@ components/
 │   └── CategoryGrid.tsx
 │
 ├── item/
-│   ├── ItemCard.tsx
-│   ├── ItemGrid.tsx
+│   ├── ItemCard.tsx               ← receives resolvedPrice prop (computed by parent)
+│   ├── ItemGrid.tsx               ← client component; holds distance state, passes to cards
 │   ├── ItemGallery.tsx            ← photo carousel (client component)
-│   ├── PricingTable.tsx
+│   ├── PricingTable.tsx           ← shows resolved tier only by default; "View all" expands full list
 │   ├── MetadataTable.tsx
 │   ├── StatusBadge.tsx
 │   └── ConditionBadge.tsx
@@ -559,8 +584,13 @@ components/
 │   ├── PlatformButton.tsx         ← single platform button (link or QR trigger)
 │   └── QRModal.tsx                ← modal with QR image (client component)
 │
+├── pricing/
+│   ├── LocationPriceBar.tsx       ← client component; permission request + distance display + override
+│   ├── useGeolocation.ts          ← hook: wraps navigator.geolocation, returns {lat, lng, status}
+│   └── useDistancePricing.ts      ← hook: (sellerCoords, visitorCoords | distanceMi) → resolvedTier
+│
 ├── filters/
-│   ├── FilterBar.tsx              ← client component
+│   ├── FilterBar.tsx              ← client component; receives resolvedDistanceMi as prop
 │   └── useFilters.ts
 │
 └── common/
@@ -570,8 +600,9 @@ components/
 ### Component Rules
 - `ui/` — Aceternity originals; extend by wrapping, never modifying in place
 - Prop types derived from `lib/content/types.ts`; no raw JSON objects passed to components
-- `"use client"` only on: `ItemGallery`, `FilterBar`, `ContactSection`, `QRModal`
+- `"use client"` only on: `ItemGrid`, `ItemGallery`, `FilterBar`, `ContactSection`, `QRModal`, `LocationPriceBar`
 - All other components are React Server Components
+- Visitor coordinates are **never passed outside the browser** — all distance math runs in `useDistancePricing.ts`
 
 ---
 
@@ -600,6 +631,17 @@ export const siteConfig: SiteConfig = {
     // "local"         → copy to public/items/ at build (good for local dev & self-hosted)
     // "vercel-blob"   → auto-upload to Vercel Blob CDN; set BLOB_READ_WRITE_TOKEN in Vercel
     // "cloudflare-r2" → auto-upload to Cloudflare R2; set CF_R2_* env vars
+  },
+
+  // ── Seller location (used for distance-based price tier resolution) ────────
+  // Find coordinates at maps.google.com → right-click → "What's here?"
+  // These coordinates are embedded in the static site at build time and are
+  // therefore publicly visible in the page source. Use a nearby landmark
+  // or intersection if you prefer not to expose your exact address.
+  location: {
+    lat: 37.7749,
+    lng: -122.4194,
+    label: "San Francisco, CA",              // shown in the distance indicator UI
   },
 
   // ── Content defaults ──────────────────────────────────────────────────────
@@ -656,10 +698,11 @@ Then:
 ── VERCEL BUILD ─────────────────────────────────────────────────────────────
 pnpm build
   │
-  ├── [prebuild]  scripts/sync-images.ts
-  │     ├── No image files in items/ (gitignored — not present on Vercel's runner)
+  ├── [prebuild]  scripts/sync-images.ts  (build-check mode)
+  │     ├── No image files in content/items/ (gitignored — not on Vercel's runner)
+  │     ├── content/contact/** present (git-tracked) → copies to public/contact/
   │     ├── Reads existing lib/generated/image-manifest.json  (committed)
-  │     └── No uploads needed; logs: "manifest present, skipping upload"
+  │     └── Logs: "manifest present (N entries) — skipping upload"
   │
   ├── next build
   │     loader.ts reads manifest → all image URLs resolve to CDN
@@ -674,11 +717,12 @@ pnpm build
 pnpm dev
   │
   ├── sync-images.ts  (always runs in "local" mode regardless of provider config)
-  │     Photos present on seller's machine → copied to public/items/
-  │     Falls back gracefully if items/ has no images
+  │     content/items/ photos → copied to public/items/
+  │     content/contact/ → copied to public/contact/
+  │     Falls back gracefully if content/items/ has no images
   │
   └── next dev --turbo
-        Images served from public/items/ (local copies)
+        Images served from public/items/ and public/contact/
 ```
 
 ---
@@ -761,7 +805,137 @@ usedExchange/
 
 ---
 
-## 17. Extensibility Register
+## 17. Geolocation & Distance Pricing Architecture
+
+### Definitions
+
+| Term | Meaning |
+|---|---|
+| **Seller** | The person who deploys this site. Configured once in `content/config.ts`. |
+| **Visitor** | Any person browsing the deployed site. Location is detected at runtime in their browser. |
+
+### Seller Location
+
+Stored in `content/config.ts` as `location: { lat, lng, label }`. Embedded into the static site at build time. Because it is part of the compiled output, it is **publicly visible in page source**. Sellers should use a nearby intersection or landmark rather than a precise home address if privacy is a concern.
+
+### Visitor Location Detection Flow
+
+```
+Visitor loads a category or item page
+  │
+  ├── Browser calls navigator.geolocation.getCurrentPosition()
+  │
+  ├── [Status: granted]
+  │     Visitor coordinates received (stays in browser memory only)
+  │     Haversine distance calculated: D = haversine(seller.lat, seller.lng, visitor.lat, visitor.lng)
+  │     → resolveDistanceMi = D  (in miles)
+  │
+  ├── [Status: denied | unavailable | timeout]
+  │     → resolveDistanceMi = Infinity  (triggers highest-price fallback)
+  │     UI shows: "Location unavailable — showing maximum prices"
+  │
+  └── [Status: pending]
+        UI shows: "Detecting your location…" with skeleton prices
+        Resolves to granted or denied path above
+
+Distance override (always available regardless of permission status):
+  Visitor clicks "Change distance" → types a number → resolveDistanceMi = entered value
+  All prices and filter bar recalculate immediately (state update in ItemGrid)
+```
+
+### Price Tier Resolution
+
+Given `resolveDistanceMi` and an item's `price.tiers` array:
+
+```
+resolveDistanceMi = Infinity  →  use tier with no miles_max (open-ended / shipping)
+                                  if no open-ended tier exists, use the tier with the highest amount
+resolveDistanceMi = D         →  find the first tier where:
+                                    (miles_min ?? 0) ≤ D ≤ (miles_max ?? Infinity)
+                                  if no tier matches D, use the nearest tier by miles_max
+                                  if price.tiers is empty → show "Contact for price"
+
+### Price Tier Display Rule
+
+Only the resolved tier is shown by default. All other tiers are hidden.
+
+| Context | Default display | Expand available? |
+|---|---|---|
+| Item card (category grid, home page) | Resolved tier price only | No — cards are too compact |
+| Item detail page pricing table | Resolved tier row only | Yes — "View all pricing tiers ▼" collapsed toggle |
+
+The expand toggle is always present on the item detail page regardless of geo state (granted, denied, or manual). When expanded, all tiers are listed with the resolved tier visually highlighted (bold or accent colour). Collapsing returns to single-row view.
+```
+
+This function lives in `useDistancePricing.ts` and is pure (no side effects, fully testable).
+
+### State Architecture
+
+Distance state is owned by `ItemGrid` (category page) and the item detail page wrapper. It is passed down as a prop to child components. `LocationPriceBar` is a controlled component — it reads and writes through a callback, never owning the state itself.
+
+```
+ItemGrid (client component, owns: resolveDistanceMi, setResolveDistanceMi)
+  ├── LocationPriceBar  ← reads resolveDistanceMi; calls setResolveDistanceMi on override
+  ├── FilterBar         ← receives resolveDistanceMi; uses it for price range slider basis
+  └── ItemCard[]        ← each receives resolvedPrice = resolvePrice(item.price, resolveDistanceMi)
+```
+
+On the item detail page, the same pattern applies with a local `useState` in the page's client wrapper.
+
+### Privacy Guarantee
+
+- Visitor coordinates are held in React component state (`useState`) only
+- They are never written to `localStorage`, `sessionStorage`, cookies, or any network request
+- The seller's coordinates (`content/config.ts`) are part of the static bundle and are intentionally public
+
+### Hook Specifications
+
+#### `useGeolocation()`
+```ts
+type GeolocationState =
+  | { status: "idle" }
+  | { status: "pending" }
+  | { status: "granted"; lat: number; lng: number }
+  | { status: "denied" }
+  | { status: "unavailable" };   // browser doesn't support API
+
+// Returns current geolocation state.
+// Triggers navigator.geolocation.getCurrentPosition() on first call.
+// Does NOT retry automatically on denial.
+export function useGeolocation(): GeolocationState;
+```
+
+#### `useDistancePricing(sellerLocation, geoState)`
+```ts
+type ResolvedDistance =
+  | { source: "detected"; miles: number }
+  | { source: "manual";   miles: number }
+  | { source: "fallback" };               // denied / unavailable → highest price
+
+// Returns current resolved distance and a setter for the manual override.
+// Automatically updates when geoState changes.
+export function useDistancePricing(
+  sellerLocation: { lat: number; lng: number },
+  geoState: GeolocationState
+): {
+  resolved: ResolvedDistance;
+  setManualMiles: (miles: number | null) => void;  // null = clear override, revert to detected/fallback
+};
+```
+
+#### `resolveItemPrice(price, resolved)`
+```ts
+// Pure function. No hooks. Used inside ItemCard and PricingTable.
+// Returns the applicable PriceTier, or null if no tiers defined.
+export function resolveItemPrice(
+  price: Price,
+  resolved: ResolvedDistance
+): PriceTier | null;
+```
+
+---
+
+## 18. Extensibility Register
 
 | Future feature | Designated extension point |
 |---|---|
@@ -773,6 +947,8 @@ usedExchange/
 | Sitemap / RSS | `next-sitemap`; all static routes already known at build |
 | Draft preview | Next.js middleware on `/preview/[category]/[item]`; reads `status: "draft"` items |
 | Tag filtering | Tags already stored; add tag index to loader + filter UI |
+| Distance unit toggle | Add `distanceUnit: "mi" \| "km"` to config; `useDistancePricing` converts before display |
+| Cached location | Store `resolveDistanceMi` in `sessionStorage` so it persists across page navigations within the same session (add as opt-in config flag) |
 
 ---
 

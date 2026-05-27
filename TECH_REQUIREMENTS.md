@@ -1,8 +1,8 @@
 # UsedExchange — Technical Requirements
 
-**Version:** 0.2.0  
-**Date:** 2026-05-26  
-**Companion:** DESIGN.md v0.3.0
+**Version:** 0.4.0  
+**Date:** 2026-05-27  
+**Companion:** DESIGN.md v0.5.0
 
 ---
 
@@ -201,9 +201,13 @@ export default nextConfig;
     "noUncheckedIndexedAccess": true,    // catches array[i] = undefined
     "noImplicitOverride": true,
     "paths": {
-      "@/*": ["./*"]                     // alias for clean imports
+      "@/*": ["./*"]                     // alias: @/content/config → ./content/config
     }
-  }
+  },
+  // content/ must be explicitly included so content/config.ts is type-checked.
+  // Next.js default include patterns may not cover it.
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", "content/**/*.ts"],
+  "exclude": ["node_modules"]
 }
 ```
 
@@ -312,12 +316,15 @@ All modes always copy `content/contact/**` → `public/contact/` as a final step
 3. Instantiate the selected adapter (`vercel-blob` or `cloudflare-r2`), pass saved checksums
 4. Scan `content/items/**` for image files (regex: `/\.(jpg|jpeg|png|webp|gif)$/i`)
 5. For each image: compute SHA-256; call `adapter.syncImage()` (skips unchanged); record CDN URL
-6. Copy `content/contact/**` → `public/contact/`
-7. Write `lib/generated/image-manifest.json` ← **this file must be committed to git**
-8. Write updated `.image-cache/checksums.json`
-9. Print summary: `[upload-images] provider=vercel-blob  uploaded=12  skipped=47  total=59`
-10. Print **BACKUP REMINDER** (see below)
-11. Exit code 1 on any unrecoverable error
+6. **Purge stale entries**: remove any manifest key whose source file no longer exists in `content/items/`. This handles deleted item folders — stale CDN URLs are dropped from the manifest so the loader never references them.
+7. Copy `content/contact/**` → `public/contact/`
+8. Write `lib/generated/image-manifest.json` ← **this file must be committed to git**
+9. Write updated `.image-cache/checksums.json`
+10. Print summary: `[upload-images] provider=vercel-blob  uploaded=12  skipped=47  purged=3  total=59`
+11. Print **BACKUP REMINDER** (see below)
+12. Exit code 1 on any unrecoverable error
+
+> **Note on orphaned CDN blobs:** Purging a manifest entry removes the URL reference but does **not** delete the file from Vercel Blob or R2. Orphaned blobs accumulate silently. Cloud storage (Blob/R2) is cheap enough that this is acceptable for v1; a future `pnpm clean-storage` command can reconcile the manifest against the CDN bucket.
 
 #### `dev-sync` mode (`pnpm dev`)
 
@@ -327,12 +334,23 @@ All modes always copy `content/contact/**` → `public/contact/` as a final step
 4. Log: `[dev-sync] copied N images to public/items/, M contact files to public/contact/`
 5. Do NOT upload to cloud. Do NOT write manifest.
 
-#### `build-check` mode (`pnpm build` prebuild — runs on Vercel)
+#### `build-check` mode (`pnpm build` prebuild — runs on Vercel or locally)
 
 1. Copy `content/contact/**` → `public/contact/` (git-tracked source, always present)
-2. Check if `lib/generated/image-manifest.json` exists
-3. If exists: log `[build-check] manifest found (N entries) — skipping upload` and exit 0
-4. If missing: log a **warning** (not error) `manifest not found — images will show as broken`; exit 0 (graceful degradation; does not halt the build)
+2. **Check provider:**
+   - If `imageStorage.provider === "local"`:
+     - Photos may be present locally (self-hosted static build on the seller's machine)
+     - Act as `dev-sync`: copy `content/items/**` images → `public/items/`
+     - Do NOT check or write a manifest
+     - Log: `[build-check] local provider — copied N images to public/items/`
+     - Exit 0
+   - If provider is `"vercel-blob"` or `"cloudflare-r2"`:
+     - Photos are NOT present (gitignored on Vercel's runner)
+     - Check if `lib/generated/image-manifest.json` exists
+     - If exists: log `[build-check] manifest found (N entries) — skipping upload` and exit 0
+     - If missing: log a **warning** (not error) `[build-check] WARNING: manifest not found — item images will show as broken`; exit 0 (graceful degradation; does not halt the build)
+
+> **Why `local` provider gets special handling in `build-check`:** The `local` provider never writes a manifest — it always relies on files being present in `public/items/`. On a local machine, photos are present during `pnpm build`, so they must be copied. On Vercel, `local` provider is inappropriate (photos are gitignored); sellers using Vercel should use `vercel-blob` or `cloudflare-r2`.
 
 ### Backup Reminder Output
 
@@ -399,7 +417,10 @@ export async function loadItem(
   itemSlug: string
 ): Promise<Item | null>
 
-// Returns all items across all categories (used for home page "Recently Listed")
+// Returns all items across all categories (used for home page "Recently Listed").
+// Applies the SAME visibility filters as loadItemsByCategory():
+//   - excludes status === "draft"
+//   - excludes sold items past soldItemRetentionDays
 export async function loadAllItems(): Promise<Item[]>
 ```
 
@@ -522,7 +543,7 @@ export async function generateStaticParams() {
 
 - `draft` items are excluded from params (no page generated)
 - `sold` items past retention are excluded from params (no page generated)
-- `generateMetadata` reads the item and returns Open Graph + Twitter card tags
+- `generateMetadata` reads the item and returns Open Graph + Twitter card tags including `og:image` (item `coverImage`)
 
 ---
 
@@ -686,7 +707,8 @@ out/
 - [ ] Set `NEXT_PUBLIC_SITE_URL` to production URL in Vercel Environment Variables
 - [ ] Confirm `baseUrl` in `content/config.ts` matches production URL
 - [ ] Custom domain: configure in Vercel Dashboard → Domains
-- [ ] Commit initial `lib/generated/image-manifest.json` (can be `{}` on first deploy; run `pnpm upload-images` to populate)
+- [ ] Run `pnpm upload-images` at least once (even with no photos) to create the initial `lib/generated/image-manifest.json`. The script creates the file with `{}` if `content/items/` has no images. Commit this file before first deploy.
+- [ ] **Vercel Blob storage note:** Blobs are permanent — they do not auto-expire. When items are deleted, `pnpm upload-images` purges their manifest entries but the actual blob files remain in storage. This is fine for v1 (storage cost is negligible). Use the Vercel Dashboard → Storage → Blob → browser to delete orphaned files manually if needed.
 
 **Adding or updating items (recurring seller workflow):**
 1. - [ ] Create/edit item folder + `item.json` in `content/items/`
@@ -704,6 +726,11 @@ out/
 **One-time setup:**
 - [ ] Create R2 bucket in Cloudflare Dashboard; enable public access or attach custom domain
 - [ ] Create R2 API token (Object Read & Write)
+- [ ] **Configure CORS on the R2 bucket** — without this, browsers will block image loads from your site domain. In Cloudflare Dashboard → R2 → bucket → Settings → CORS Policy, add:
+  ```json
+  [{ "AllowedOrigins": ["https://your-domain.com"], "AllowedMethods": ["GET"], "AllowedHeaders": ["*"] }]
+  ```
+  Use `["*"]` for `AllowedOrigins` during testing; restrict to your production domain before go-live.
 - [ ] Set `imageStorage.provider: "cloudflare-r2"` in `content/config.ts`
 - [ ] Add `CF_R2_ACCOUNT_ID`, `CF_R2_ACCESS_KEY_ID`, `CF_R2_SECRET_ACCESS_KEY`, `CF_R2_BUCKET`, `CF_R2_PUBLIC_URL` to Vercel Environment Variables
 - [ ] Add the same vars to local `.env.local` for `pnpm upload-images` to work locally
@@ -723,6 +750,155 @@ out/
 - [ ] Run `pnpm upload-images` locally → images go to CDN, manifest updated
 - [ ] Run `pnpm build` → `out/` contains only HTML/CSS/JS (tiny)
 - [ ] Deploy `out/` to static host; images served from CDN
+
+---
+
+## 20. Geolocation & Distance Pricing — Technical Specification
+
+See DESIGN.md §17 for the full architecture rationale. This section covers implementation details.
+
+### Browser API
+
+```ts
+// Wrapped by useGeolocation() hook — never call directly in components
+navigator.geolocation.getCurrentPosition(
+  (pos) => { /* granted: pos.coords.lat, pos.coords.lng */ },
+  (err) => { /* denied (err.code === 1) or unavailable (err.code === 2) or timeout (err.code === 3) */ },
+  { enableHighAccuracy: false, timeout: 8000, maximumAge: 300_000 }
+);
+```
+
+- `enableHighAccuracy: false` — sufficient for distance-to-city precision; avoids slow GPS warm-up on mobile
+- `timeout: 8000` — 8 s before falling back to highest price
+- `maximumAge: 300_000` — reuse cached position for up to 5 minutes; avoids re-prompting on page navigation
+
+### Haversine Distance Formula
+
+```ts
+// lib/utils/haversine.ts — pure function, zero dependencies
+export function haversinemiles(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number
+): number {
+  const R = 3958.8; // Earth radius in miles
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+```
+
+### `SiteConfig` — `location` field type
+
+```ts
+// lib/config/types.ts — addition
+location: {
+  lat: number;   // decimal degrees, WGS84
+  lng: number;   // decimal degrees, WGS84
+  label: string; // display string, e.g. "San Francisco, CA"
+};
+```
+
+`location` is **required** in `SiteConfig`. If a seller leaves it unconfigured, `next build` must fail with a clear TypeScript error (enforced by the type being non-optional with no default).
+
+### `LocationPriceBar` Component Specification
+
+```tsx
+// components/pricing/LocationPriceBar.tsx  — "use client"
+
+type Props = {
+  sellerLocation: { lat: number; lng: number; label: string };
+  resolvedMiles: number | null;           // null = pending
+  source: "detected" | "manual" | "fallback";
+  onOverride: (miles: number | null) => void;  // null = clear manual override
+};
+```
+
+**Rendered states:**
+
+| Geo state | UI shown |
+|---|---|
+| `pending` | `"🔍 Detecting your location…"` with skeleton price placeholders |
+| `granted`, source = `detected` | `"📍 ~{N} mi from {label} — prices shown for your distance"` + "Change" link |
+| source = `manual` | `"📍 {N} mi (manually set)"` + "Reset to detected" link |
+| source = `fallback` (denied/unavailable) | `"📍 Location unavailable — showing maximum prices"` + "Enter distance" link |
+
+**"Change distance" control:**
+- Clicking opens an inline number input (not a modal) in miles
+- Accepts positive integers only; rejects non-numeric input inline
+- Pressing Enter or clicking "Apply" calls `onOverride(enteredMiles)`
+- "Reset" clears the override (`onOverride(null)`) and re-shows detected or fallback value
+
+### `PricingTable` Component Specification
+
+```tsx
+// components/item/PricingTable.tsx  — server component (no interaction state needed here;
+// the expand/collapse toggle is handled by a thin client wrapper: PricingTableToggle.tsx)
+
+type Props = {
+  price: Price;
+  resolvedTier: PriceTier | null;   // null → show "Contact for price"
+  negotiable: boolean;
+};
+```
+
+**Rendering contract:**
+
+1. If `resolvedTier` is `null`: render a single "Contact for price" row. No expand toggle.
+2. Otherwise: render **one row** showing `resolvedTier.label` and `resolvedTier.amount` (with "OBO" if `negotiable`). Below it, render a `PricingTableToggle` client component.
+
+**`PricingTableToggle` (client component wrapper):**
+
+```tsx
+// components/item/PricingTableToggle.tsx  — "use client"
+// Receives all tiers + resolved tier index; manages open/closed state.
+// Collapsed: shows only the "View all pricing tiers ▼" button.
+// Expanded:  renders full tier list table; resolved tier row is visually accented
+//            (e.g. Tailwind ring or bold text); button changes to "Hide ▲".
+```
+
+- Toggle state is local (`useState`); default = `false` (collapsed)
+- The toggle is rendered on the item detail page only, never on item cards
+- Keyboard accessible: toggle button responds to Enter and Space
+
+### `useFilters.ts` — price range basis update
+
+The price range slider state is a `[min, max]` tuple operating on **resolved prices**:
+
+```ts
+// The filter function applied to each item:
+function pricePassesFilter(item: Item, resolved: ResolvedDistance, [min, max]: [number, number]): boolean {
+  const tier = resolveItemPrice(item.price, resolved);
+  if (tier === null) return true;   // no price defined → always show
+  return tier.amount >= min && tier.amount <= max;
+}
+```
+
+The slider's initial `max` is set to the highest resolved price across all items in the current category (recalculated when `resolveDistanceMi` changes).
+
+### `"use client"` component list (updated)
+
+| Component | Reason |
+|---|---|
+| `ItemGrid` | Owns distance state; re-renders on distance change |
+| `ItemGallery` | Photo carousel interaction |
+| `LocationPriceBar` | Geolocation API + user input |
+| `FilterBar` | Client-side filter state |
+| `ContactSection` | Click-to-reveal toggle |
+| `QRModal` | Modal open/close state |
+
+### Security & Privacy
+
+| Concern | Mitigation |
+|---|---|
+| Visitor coordinates sent to server | **Impossible** — site is fully static; no server functions receive data |
+| Coordinates persisted without consent | `useState` only; cleared on page close. No `localStorage` or cookies |
+| Seller coordinates exposed | Intentional and documented in DESIGN.md §17; seller should use a nearby landmark |
+| HTTPS requirement for Geolocation API | Next.js on Vercel serves HTTPS by default; self-hosted must configure TLS |
 
 ---
 
