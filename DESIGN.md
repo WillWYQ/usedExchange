@@ -1,6 +1,6 @@
 # UsedExchange — Project Design Document
 
-**Version:** 0.6.0  
+**Version:** 0.7.0  
 **Date:** 2026-05-27  
 **Status:** Decisions Resolved — Ready for Implementation
 
@@ -11,6 +11,41 @@
 UsedExchange is a statically-generated personal web storefront for listing second-hand items for sale. Content is managed entirely through the local file system — no database, no CMS. The seller adds a folder per item, drops in photos and a `item.json` metadata file, then triggers a build; the site regenerates automatically.
 
 The UI is built on [Aceternity UI](https://ui.aceternity.com) (React + Tailwind CSS) for a polished browsing experience. The architecture is modularised so any part — deployment target, image strategy, contact platforms — can be swapped without restructuring the codebase.
+
+### Target Users
+
+#### Primary — College Students with a CS Background
+The designed-for user. Comfortable with git, the terminal, JSON editing, and the GitHub → Vercel deployment workflow. They encounter this project as a practical, portfolio-worthy tool they can actually use.
+
+**Profile:**
+- Sells items common to student life: textbooks, electronics (GPU, keyboard, monitors, mechanical gear), dorm furniture, bikes, gaming equipment, academic software licenses
+- Operates in a tight geographic radius (campus + nearby neighbourhoods, typically 0–10 miles)
+- Contact preferences lean toward: **Discord** (primary for CS communities), Instagram, WhatsApp, WeChat (international students), Venmo/Zelle for payment
+- Selling rhythm is semester-driven — major sell-offs happen at the end of each semester (May and December)
+- Price-sensitive buyers in the same network; word-of-mouth and Discord server sharing are primary discovery channels
+- Already uses Vercel or GitHub for coursework; free Hobby plan is a natural fit
+- Comfortable running `pnpm upload-images` and `git push` as a workflow
+
+**What this means for the design:**
+- Git-based workflow is acceptable (not a barrier)
+- Terminal scripts (`pnpm mark-sold`, `pnpm inventory`) are welcome
+- Discord must be a supported contact platform
+- Default distance tiers should be short-range (pickup-first)
+- The `content/` single-folder rule protects non-code files from accidental breakage
+
+#### Potential — Non-CS Users Willing to Try
+A broader audience reachable once the project gains visibility (campus blog post, a friend's referral, a CS student setting it up for a parent or roommate). These users are not comfortable with code or the terminal.
+
+**Profile:**
+- Anyone wanting a personal, private alternative to Facebook Marketplace or OfferUp
+- Not comfortable with: JSON editing, git commands, terminal, Vercel dashboard
+- Need: a one-time setup done by the CS student friend, then only the `content/` folder touched going forward
+
+**What this means for the design:**
+- The `content/` single-folder rule is the core accessibility feature — everything they touch is in one place, no code required
+- CLI tools (`pnpm mark-sold`, etc.) lower the barrier further — no JSON editing for common operations
+- A future local seller dashboard (FEATURES_ROADMAP.md Tier 3) is the ultimate accessibility unlock for this segment
+- Documentation and error messages must assume zero terminal knowledge
 
 ---
 
@@ -29,10 +64,9 @@ The UI is built on [Aceternity UI](https://ui.aceternity.com) (React + Tailwind 
 
 ### Non-Goals (v1)
 - Real-time inventory updates without a rebuild
-- Buyer-facing checkout or payment processing
-- User authentication or seller dashboard
-- Full-text search (client-side filtering only)
-- Server-side geolocation or IP-lookup — not implemented in v1. Visitor distance is calculated entirely in the browser. The v1 site has no server functions that could receive visitor coordinates. (If a serverless contact form is added in a future version per §18 Extensibility, it must not accept or log visitor location data.)
+- Buyer-facing checkout or payment processing (Stripe payment *links* are supported as external links, not in-app checkout)
+- User authentication or seller dashboard UI
+- Server-side geolocation or IP-lookup — visitor distance is calculated entirely in the browser; no coordinates leave the device
 - Multi-seller or concurrent write support — this is a **single-seller design**. The manifest and config files are owned by one person. Running `pnpm upload-images` concurrently from two machines is undefined behavior; the last writer wins.
 
 ---
@@ -315,8 +349,9 @@ Only `name` is required. Every other field is optional; the build applies safe d
 
   // ── Categorisation ────────────────────────────────────────────────────────
   "tags": ["lighting", "smart-home"],
-  // ^ string[]; default []. In v1, tag chips are rendered as non-interactive <span>
-  //   elements (not buttons/links). Tag filtering is a future feature (see §18).
+  // ^ string[]; default []. Tags are indexed by the full-text search engine (fuse.js)
+  //   so buyers can find items by tag. Tag chips on item detail pages are non-interactive
+  //   <span> elements in v1 (dedicated tag filter page is a future feature).
   "category_override": "",
   // ^ DISPLAY-ONLY override. If non-empty, replaces the folder-derived category name
   //   in breadcrumbs and the item card's category label — but does NOT change:
@@ -327,8 +362,53 @@ Only `name` is required. Every other field is optional; the build applies safe d
   //   Use case: rename display label without moving files.
 
   // ── SEO ───────────────────────────────────────────────────────────────────
-  "meta_description": ""
+  "meta_description": "",
   // ^ if empty, auto-generated from first 160 chars of description
+
+  // ── Pricing signals ──────────────────────────────────────────────────────
+  "no_lowball": false,
+  // ^ shows "Firm Price" badge; supplements price.negotiable: false
+  "price_reduced": false,
+  // ^ shows "Price Reduced" chip on item card and detail page
+  "previous_lowest_price": null,
+  // ^ number; if price_reduced is true and this is set, shown struck-through beside current price
+  "min_acceptable_offer": null,
+  // ^ number; if set and price.negotiable is true, enables the "Make an Offer" button.
+  //   Offers below this threshold show a gentle rejection message client-side.
+
+  // ── Payment links ─────────────────────────────────────────────────────────
+  "stripe_payment_link": "",
+  // ^ Stripe Payment Link URL; shows "Pay Deposit" button on item detail page
+  "venmo_payment_request": "",
+  // ^ Optional: Venmo payment request URL for a specific amount.
+  //   Format: https://venmo.com/?txn=pay&recipients={username}&amount={price}&note={item.name}
+  //   If empty, falls back to the Venmo contact platform link (profile link).
+
+  // ── Logistics ────────────────────────────────────────────────────────────
+  "pickup_windows": [],
+  // ^ string[]; e.g. ["Weekday evenings 6–9pm", "Saturday 10am–2pm"]
+  "youtube_link": "",
+  // ^ demo video URL; shown as "Watch Demo" button on item detail page
+  "bundle_with": [],
+  // ^ string[]; slugs of items available as a bundle with this one.
+  //   e.g. ["electronics/keyboard"] — shown as "Also available as bundle" section
+
+  // ── Textbook-specific (all optional, gracefully ignored for non-textbooks) ─
+  "isbn": "",
+  // ^ ISBN-10 or ISBN-13; enables "Compare prices" link via bookfinder.com
+  "course": "",
+  // ^ e.g. "CS101", "MATH230" — shown as badge, searchable via full-text search
+  "edition": "",
+  // ^ e.g. "3rd Edition"
+  "semester_listed": "",
+  // ^ e.g. "Spring 2026" — helps buyer confirm the textbook is current edition
+
+  // ── Internationalisation ──────────────────────────────────────────────────
+  "name_zh": "",
+  // ^ Chinese display name; shown when siteConfig.i18n.locale === "zh"
+  "description_zh": ""
+  // ^ Chinese description; same condition.
+  // Pattern: name_{locale} and description_{locale} for any locale in siteConfig.i18n
 }
 ```
 
@@ -397,6 +477,10 @@ contact: {
   platforms: [
     // Link-based: value is the username/handle/phone/email
     { type: "email",     value: "you@example.com" },
+    { type: "discord",   value: "123456789012345678" },
+    // ^ Discord numeric user ID (18 digits). Find yours: Discord → Settings → Advanced → Developer Mode ON
+    //   → right-click your username → Copy User ID.
+    //   Opens a direct message link. Alternatively, use a server invite code for a trade server.
     { type: "facebook",  value: "your.username" },
     { type: "instagram", value: "your_handle" },
     { type: "snapchat",  value: "your_username" },
@@ -406,12 +490,23 @@ contact: {
     { type: "linkedin",  value: "in/your-name" },
     { type: "youtube",   value: "@your_channel" },
 
-    // QR-based: qr_image is the SERVED PUBLIC URL (not the source file path).
+    // ── Payment platforms ────────────────────────────────────────────────────
+    // Venmo — link-based (profile page) OR QR-based (payment code).
+    //   Choose one. Link-based is simpler; QR is preferred by buyers who want to
+    //   scan directly without knowing your username.
+    { type: "venmo",     value: "your_username" },                          // → venmo.com/u/{value}
+    // { type: "venmo", qr_image: "/contact/venmo-qr.png", label: "Venmo" }, // QR alternative
+
+    // Zelle — QR code ONLY (Zelle has no public profile URL).
+    //   Generate your Zelle QR code in your bank's app and save to content/contact/.
+    { type: "zelle",     qr_image: "/contact/zelle-qr.png",   label: "Zelle" },
+
+    // ── QR-based social platforms ─────────────────────────────────────────
+    // qr_image is the SERVED PUBLIC URL (not the source file path).
     // Source file lives at: content/contact/wechat-qr.png  (git-tracked)
     // Sync script copies it to: public/contact/wechat-qr.png
     // Config value is the resulting public URL: /contact/wechat-qr.png
     { type: "wechat",    qr_image: "/contact/wechat-qr.png",   label: "WeChat" },
-    // Any future platform without a web profile URL follows the same pattern:
     { type: "line",      qr_image: "/contact/line-qr.png",     label: "LINE" },
   ],
 }
@@ -422,6 +517,7 @@ contact: {
 | `type` | URL pattern |
 |---|---|
 | `email` | `mailto:{value}` |
+| `discord` | `https://discord.com/users/{value}` — opens DM intent in browser or Discord app |
 | `facebook` | `https://facebook.com/{value}` |
 | `instagram` | `https://instagram.com/{value}` |
 | `snapchat` | `https://snapchat.com/add/{value}` |
@@ -430,9 +526,25 @@ contact: {
 | `tiktok` | `https://tiktok.com/{value}` |
 | `linkedin` | `https://linkedin.com/{value}` |
 | `youtube` | `https://youtube.com/{value}` |
-| `wechat` / `line` / QR type | Opens modal with `<img src={qr_image}>` |
+| `venmo` (link) | `https://venmo.com/u/{value}` |
+| `venmo` (QR) | Opens modal with `<img src={qr_image}>` |
+| `zelle` | QR modal only — no public profile URL; `qr_image` required |
+| `wechat` / `line` / any QR type | Opens modal with `<img src={qr_image}>` |
 
 All link-based platforms open in `target="_blank" rel="noopener noreferrer"`.
+
+### Pre-filled Contact Messages
+When a visitor clicks a link-based contact button, the message is automatically pre-filled with the item name and lowest available price, reducing friction for the buyer.
+
+| Platform | Pre-fill method |
+|---|---|
+| `whatsapp` | URL query param: `?text=Hi, I'm interested in your {name} ({price}). Is it still available?` |
+| `email` | `?subject=Inquiry: {name}&body=Hi, I'm interested in your {name} listed at {price}...` |
+| `discord` | Not supported (Discord deep-links don't accept pre-filled text) |
+| `venmo` (link) | `?txn=pay&audience=private&note={name}` appended to profile URL |
+| All others | No pre-fill (platform doesn't support deep-link pre-fill) |
+
+Pre-filling is applied at the `PlatformButton` callsite when an `item` prop is provided. The contact section on the item detail page always passes the current item; the footer ContactSection does not (no item context).
 
 ---
 
@@ -470,11 +582,13 @@ Items past retention are excluded from all pages and `generateStaticParams` enti
 
 ```
 /                              Home — category overview + recently listed
-/[category]                    Category page — item grid with filters
-/[category]/[item]             Item detail — gallery, pricing, metadata, contact
+/all                           Browse All — all available items, cross-category, with filter + sort
+/sold                          Sold Archive — all sold items regardless of retention window
+/[category]                    Category page — item grid with filter, sort, search
+/[category]/[item]             Item detail — gallery, pricing, metadata, contact, share
 ```
 
-All routes are statically generated at build time. No `/sold` archive page in v1 (sold items stay visible on category pages with a "SOLD" overlay until retention expires).
+All routes are statically generated at build time.
 
 `app/not-found.tsx` renders a 404 page with the site header, a "Page not found" message, and a link back to the home page. It is shown when a user navigates to any URL that was not generated at build time (e.g. a deleted item's former URL).
 
@@ -482,50 +596,78 @@ All routes are statically generated at build time. No `/sold` archive page in v1
 
 ## 10. Page Specifications
 
-### 10.1 Home Page (`/`)
+### Global — SiteHeader
+The site header appears on all pages and contains:
+- Site name / logo
+- **Search bar** (shown when `siteConfig.search.enabled === true`) — full-text fuse.js search; results appear inline as the user types; searches name, description, brand, model, tags, course
+- Navigation links (Home, Browse All if enabled)
 
+### 10.1 Home Page (`/`)
 - **Hero** — site name, tagline, CTA button (configurable in `content/config.ts`)
-- **Category grid** — one card per **visible** category. A category is visible if it contains at least one item with status `available`, `reserved`, or `pending`. Categories containing only `sold`, `draft`, or retention-expired items are hidden.
-- Each category card shows: icon, display name, **count of `available` items only** (does not include `reserved` or `pending`), cover image of the first `available` item
-- **Recently Listed** — last N items with status `available` only (not `reserved`, `pending`, or `sold`), sorted by `listed_date` descending (configurable, default 6). If fewer than N available items exist across all categories, all available items are shown. If zero available items exist, this section is hidden entirely. Each card shows the **location-resolved price** — during pending geo state, cards show the fallback (highest) tier price, identical to the SSG initial state (no skeleton on individual cards). This section is wrapped in a `RecentlyListedSection` client component that owns its own `useGeolocation()` + `useDistancePricing()` state. `LocationPriceBar` is **not** shown on the home page — prices update silently. See §17 State Architecture.
-- **OG image for home page:** Cover image of the item with the most recent `listed_date` among all available items. Tie-broken by category sort order, then item slug alphabetically. Falls back to site logo (`siteConfig.logo`) if no items exist.
+- **Category grid** — one card per visible category (visible = at least one `available`/`reserved`/`pending` item). Each card: icon, display name, count of `available` items only, cover image of first available item.
+- **Recently Listed** — last N `available` items sorted by `listed_date` desc (default 6). Zero items → section hidden. Each card shows location-resolved price. `LocationPriceBar` not shown — prices update silently. Wrapped in `RecentlyListedSection` client component.
+- **Recently Viewed** — horizontal strip of last 5 items the visitor viewed in this browser session (stored in `sessionStorage`); hidden if empty. Client component, zero server changes.
 - **Footer** — contact platform links, last-build timestamp, site name
-- **OG metadata**: `og:title` = site name; `og:description` = `meta.description` from config; `og:image` = cover image of the first available item across all categories (or site logo if no items)
+- **OG metadata** — `og:title` = site name; `og:image` = most recent available item's cover image (falls back to logo)
 
 ### 10.2 Category Page (`/[category]`)
-
 - Category title, icon, description
-- **Location price bar** (client component, appears above filter bar):
-  - On page load, browser requests Geolocation API permission
-  - Permission **granted** → calculates distance → shows `📍 ~{N} mi from {label} — prices shown for your distance` + "Change" link
-  - Permission **denied / unavailable** → falls back to highest price tier → shows `📍 Location unavailable — showing maximum prices` + "Enter distance" link
-  - In both states, a **"Change distance"** control allows the visitor to type a custom distance in miles; changing it immediately recalculates all displayed prices (state update in `ItemGrid`, the owner)
-  - The resolved distance is stored in `ItemGrid`'s state and passed to `LocationPriceBar` as a prop; it is never sent to any server
-- **Filter bar** (client-side):
-  - **Condition chips**: multi-select; values are the enum set (`new`, `like-new`, `good`, `fair`, `for-parts`); all selected by default
-  - **Price range slider**: operates on the **location-resolved price** for each item (the tier matching detected/entered distance). Items with no price tiers always pass the filter. During geo `pending` state, the slider initialises with min=0 and max=highest fallback-tier price across all items; when geo resolves the slider resets to the new resolved-price range. If no items in the category have defined tiers, the price slider is hidden.
-  - **Status toggle**: hide/show sold items; default = sold items hidden
-- **Item grid**: card per item — cover photo, name, condition badge, status badge, **location-resolved price** (updates live when distance changes). During geo `pending` state, cards show the fallback (highest) tier price — no skeleton spinners on individual card prices.
-- Sold items: rendered with "SOLD" overlay when visible; hidden by default behind status toggle
-- **OG metadata**: `og:title` = category display name; `og:image` = cover of first available item in category
+- **Location price bar** — `📍 ~{N} mi` or `📍 Location unavailable` + "Change distance" override; owned by `ItemGrid`
+- **Filter + sort bar** (client-side):
+  - **Condition chips** — multi-select, all selected by default
+  - **Sort select** — Price low→high · Price high→low · Date listed (newest) · Condition (new first); default = Date listed
+  - **Price range slider** — operates on location-resolved price; hidden when no items have tiers; resets when distance changes
+  - **Status toggle** — sold items hidden by default
+- **"Browse All" link** — prominent link to `/all` page
+- **Item grid** — cards with location-resolved prices, sort and filter applied client-side
+- **OG metadata** — `og:title` = category display name; `og:image` = cover of first available item
 
 ### 10.3 Item Detail Page (`/[category]/[item]`)
+- **Breadcrumb** — Home → Category → Item name
+- **Photo gallery** (controlled by `ui.gallery` slot)
+- **Freshness label** — "Listed 3 days ago" / "Listed today" derived from `listed_date`; shown near item name
+- **Status + condition badges** — `StatusBadge` and `ConditionBadge`; condition badge has a `?` tooltip (`ConditionGuide`) explaining each condition value
+- **Quantity badge** — "3 available" shown when `quantity > 1`
+- **Price signals** — "Price Reduced" chip when `price_reduced: true`; "Firm Price" badge when `no_lowball: true`; struck-through `previous_lowest_price` alongside current price when `price_reduced` is true
+- **Name + description** (GitHub-Flavoured Markdown rendered)
+- **Textbook section** (shown only when `isbn` or `course` is present):
+  - Course badge: "For CS101 · 3rd Edition"
+  - "Compare prices" link: `https://bookfinder.com/search/?isbn={isbn}` (hidden when isbn is empty)
+  - `semester_listed` shown if present
+- **YouTube demo** — "Watch Demo" button linking to `youtube_link` when present
+- **Pickup windows** — shown as a list when `pickup_windows` is non-empty ("Available: Weekday evenings, Saturday 10am–2pm")
+- **Pricing section** (`PricingSection` client component):
+  - `LocationPriceBar` (distance indicator + override)
+  - `PricingTable` (resolved tier by default; "View all" toggle expands full list)
+  - **"Make an Offer" button** — shown when `price.negotiable: true` AND `min_acceptable_offer` is set. Opens an inline form where the buyer types an amount, then pre-fills the contact platform message: "I'd like to offer $X for {name}." Offers below `min_acceptable_offer` show a gentle rejection message client-side without sending anything.
+  - **"Pay Deposit" button** — shown when `stripe_payment_link` is non-empty; opens Stripe link in new tab
+  - **Initial SSG state** — static HTML shows highest tier (`resolveItemPrice` called server-side as pure function → passed as `initialResolvedTier` to `PricingSection`)
+  - **Social media note** — crawlers always see highest tier price (intentional)
+- **Metadata table** — brand, model, age, dimensions, weight, colour, original source (linked), original price; null/empty fields hidden
+- **Contact section** — platform buttons with pre-filled messages; `preferred_payment` list; `contact_note`
+- **Tags** — non-interactive chips (searchable via fuse.js search)
+- **Share button** — native share (`navigator.share()`) on mobile; copy-link fallback on desktop; shows "Copied!" toast
+- **Recently Viewed** — records this item's slug to `sessionStorage` on page mount
+- **JSON-LD** — `<script type="application/ld+json">` with `@type: "Product"`, name, description, image, offers, brand; `BreadcrumbList` JSON-LD for breadcrumbs
+- **If sold** — "SOLD" banner top of page; contact CTA disabled; `sold_date` displayed
+- **OG metadata** — `og:title` = item name; `og:image` = coverImage; `og:type: "product"`
+- **Twitter card** — `twitter:card: "summary_large_image"`; `twitter:image` = coverImage
+- **Pinterest** — `product:price:amount` and `product:price:currency` meta tags (rich pin support)
 
-- **Breadcrumb**: Home → Category → Item name
-- **Photo gallery** — carousel with thumbnail strip; Aceternity animated card
-- **Status + condition badges** — top-right of hero
-- **Name + description** (Markdown rendered)
-- **Pricing section** (`PricingSection` client component — wraps the next two elements and owns geo+distance state):
-  - **Distance indicator** — `LocationPriceBar`; appears **above** the pricing table so the visitor sees the context (their distance) before the number. Shows detected distance and "Change distance" control.
-  - **Pricing table** — shows **only the resolved tier** for the visitor's distance (one row); "OBO" if `negotiable: true`; "Contact for price" if no tiers. A collapsed **"View all pricing tiers ▼"** toggle below the row expands the full tier list with the resolved row highlighted. **Toggle expand/collapse state is independent of distance changes**: changing the distance updates which tier is highlighted but does not collapse an already-expanded toggle. Toggle state is `useState` only and does not persist across navigations.
-  - **Initial SSG state (before JS loads):** The static HTML renders the **highest price tier** (`resolveItemPrice(item.price, { source: "fallback" })` — called as a pure function by the server page, not a hook). The result is passed as `initialResolvedTier` prop to `PricingSection`, which uses it as the `useState` initial value. After hydration, `PricingSection` re-renders with the geo-resolved tier. Progressive enhancement: never a blank or spinner in the pre-JS render.
-  - **Social media / crawler note:** Because static HTML always shows the highest tier, social previews (Open Graph, Twitter card) and search engine snippets always display the maximum price. Sellers with large tier spreads should be aware of this.
-- **If `item.status === "sold"`:** A prominent "SOLD" banner appears at the top of the page. The contact section CTA is disabled or hidden. `sold_date` is displayed if present. The page is still accessible via direct URL (within the retention window).
-- **Metadata table** — brand, model, dimensions, weight, original source (linked), original price
-- **Contact section** — platform buttons behind click-to-reveal (configurable); preferred payment methods; item-level `contact_note`. There is no separate "Contact Seller" anchor button near the pricing area in v1 — the section is discovered by scrolling.
-- The same `ContactSection` component is reused in the site **footer**, where it receives `preferredPayment: []` and `contactNote: ""`. The component renders neither block when these are empty, so the footer shows only the platform buttons. No separate footer variant component is needed.
-- **Tags** — rendered as chips (click → future filter)
-- **OG metadata**: `og:title` = item name; `og:description` = `meta_description` (auto-generated from first 160 chars of description if empty); `og:image` = `coverImage` URL (CDN URL or local path)
+### 10.4 Browse All Page (`/all`)
+- All available items across all categories in one grid
+- Full filter + sort bar (same as category page)
+- `LocationPriceBar` + distance-resolved pricing
+- No category filter (shows all); condition, sort, price, status filters apply
+- "Items in: {category}" chip on each card (links to category page)
+
+### 10.5 Sold Items Archive (`/sold`)
+- All `sold` items regardless of retention window (never filtered by date)
+- Items sorted by `sold_date` descending; items without `sold_date` sorted by `listed_date`
+- No pricing shown (sold); no contact section
+- Shows: cover image, name, condition badge, sold date, category
+- Social proof for buyers: "look what sold recently"
+- No filter bar (read-only archive)
 
 ---
 
@@ -550,8 +692,11 @@ lib/content/loader.ts
   ├── loadCategories()              → Category[]       (used by all pages)
   ├── loadItemsByCategory(slug)     → Item[]           (used by category page)
   ├── loadItem(catSlug, itemSlug)   → Item | null      (used by item detail page)
-  └── loadAllItems()                → Item[]           (used by home page "Recently Listed";
-                                                        filters: available status only, no draft, no expired-sold)
+  ├── loadAllItems()                → Item[]           (used by home page "Recently Listed" + /all page;
+  │                                                     filters: available status only, no draft, no expired-sold)
+  ├── loadSoldItems()               → Item[]           (used by /sold archive page; all sold, no date filter)
+  └── buildSearchIndex()            → SearchIndex      (called at build time; serialised to
+                                                        lib/generated/search-index.json for fuse.js)
   │
   ▼
 lib/content/schema.ts              Zod schema; .safeParse() + default merge
@@ -591,16 +736,19 @@ components/
 │
 ├── item/
 │   ├── ItemCard.tsx               ← receives resolvedPrice prop (computed by parent)
-│   ├── ItemGrid.tsx               ← client component; holds distance state, passes to cards
-│   ├── ItemGallery.tsx            ← photo carousel (client component)
-│   ├── PricingSection.tsx         ← client component; owns geo+distance state for item detail page;
-│   │                                 renders LocationPriceBar + PricingTable for the item detail page
-│   ├── PricingTable.tsx           ← presentational component (usable in both server and client contexts);
-│   │                                 receives resolvedTier prop; renders resolved tier row + toggle
-│   ├── PricingTableToggle.tsx     ← client component; owns expand/collapse state; shows full tier list
+│   ├── ItemGrid.tsx               ← client; holds distance state, sort state
+│   ├── ItemGallery.tsx            ← photo carousel (client)
+│   ├── PricingSection.tsx         ← client; owns geo+distance state; LocationPriceBar + PricingTable
+│   ├── PricingTable.tsx           ← presentational; resolved tier row + toggle
+│   ├── PricingTableToggle.tsx     ← client; expand/collapse state
+│   ├── MakeOfferButton.tsx        ← client; inline offer form + pre-fill contact message
 │   ├── MetadataTable.tsx
 │   ├── StatusBadge.tsx
-│   └── ConditionBadge.tsx
+│   ├── ConditionBadge.tsx
+│   ├── ConditionGuide.tsx         ← client; tooltip/modal explaining each condition value
+│   ├── FreshnessLabel.tsx         ← "Listed 3 days ago" — pure, formatRelativeDate()
+│   ├── QuantityBadge.tsx          ← "3 available" when quantity > 1
+│   └── TextbookBadge.tsx          ← "For CS101 · 3rd Edition" + Compare Prices link
 │
 ├── contact/
 │   ├── ContactSection.tsx         ← reveal wrapper + platform list
@@ -613,17 +761,25 @@ components/
 │   └── useDistancePricing.ts      ← hook: (sellerCoords, visitorCoords | distanceMi) → resolvedTier
 │
 ├── filters/
-│   ├── FilterBar.tsx              ← client component; receives resolvedDistanceMi as prop
-│   └── useFilters.ts
+│   ├── FilterBar.tsx              ← client; condition chips, price slider, status toggle, sort select
+│   ├── SortSelect.tsx             ← client; sort by price/date/condition
+│   └── useFilters.ts              ← hook; manages all filter + sort state
 │
-├── ui-adapters/                   ← Aceternity slot adapters (see §19)
-│   ├── BackgroundEffect.tsx       ← site-wide background (wraps app layout)
-│   ├── ItemGridAdapter.tsx        ← category page item grid layout
-│   ├── GalleryAdapter.tsx         ← item detail photo gallery / carousel
-│   └── ItemCardAdapter.tsx        ← item card effect wrapper
+├── ui-adapters/                   ← Aceternity slot adapters (see §18)
+│   ├── BackgroundEffect.tsx
+│   ├── ItemGridAdapter.tsx
+│   ├── GalleryAdapter.tsx
+│   └── ItemCardAdapter.tsx
+│
+├── search/
+│   ├── SearchBar.tsx              ← client component; fuse.js input in SiteHeader
+│   └── useSearch.ts               ← hook: loads search-index.json, manages query + results
 │
 └── common/
-    └── AdaptiveImage.tsx          ← next/image vs <img> switch by deploymentMode
+    ├── AdaptiveImage.tsx          ← next/image vs <img> switch by deploymentMode
+    ├── ShareButton.tsx            ← client; navigator.share() + copy-link fallback
+    ├── JsonLd.tsx                 ← server component; renders <script type="application/ld+json">
+    └── RecentlyViewed.tsx         ← client; sessionStorage-based recently-viewed strip
 ```
 
 ### Component Rules
@@ -709,15 +865,55 @@ export const siteConfig: SiteConfig = {
   },
 
   // ── UI Component Slots ────────────────────────────────────────────────────
-  // Choose an Aceternity UI component for each visual slot.
-  // All supported options are pre-installed. Just change the value and rebuild.
-  // This is the ONLY change needed — no code editing required.
   // See DESIGN.md §18 for the full list of options per slot.
   ui: {
-    background: "none",         // site-wide background effect behind all pages
-    itemGrid:   "simple",       // category page item grid layout style
-    gallery:    "simple",       // item detail page photo gallery / carousel
-    itemCard:   "simple",       // item card hover / visual effect
+    background: "none",
+    itemGrid:   "simple",
+    gallery:    "simple",
+    itemCard:   "simple",
+  },
+
+  // ── Dark mode ─────────────────────────────────────────────────────────────
+  // "media"  → automatic — follows OS/browser dark/light preference (default)
+  //            No toggle needed; zero user action.
+  // "class"  → manual toggle via button in SiteHeader (future extension)
+  darkMode: "media" as const,
+
+  // ── Analytics ─────────────────────────────────────────────────────────────
+  analytics: {
+    vercel:        true,   // Vercel Analytics (free on Hobby plan)
+    speedInsights: true,   // Vercel Speed Insights (Core Web Vitals, free)
+  },
+
+  // ── Full-text search ──────────────────────────────────────────────────────
+  search: {
+    enabled:     true,
+    placeholder: "Search items...",
+    // Fields indexed: name, description, brand, model, tags, course
+    // Index built at build time → lib/generated/search-index.json
+  },
+
+  // ── Sitemap ───────────────────────────────────────────────────────────────
+  sitemap: {
+    enabled: true,
+    // sitemap.xml and robots.txt generated via next-sitemap in postbuild step
+    // Uses siteConfig.baseUrl as the canonical base
+  },
+
+  // ── Internationalisation ──────────────────────────────────────────────────
+  // Single-locale per deployment: set locale, add name_{locale} / description_{locale}
+  // fields to item.json, and optionally override UI strings below.
+  i18n: {
+    locale: "en",    // active locale: "en" | "zh" | "es" | any ISO 639-1 code
+    strings: {
+      // Override any UI string. Leave "" to use the built-in English default.
+      heroTagline:     "",   // hero section tagline (falls back to siteConfig.tagline)
+      recentlyListed:  "",   // "Recently Listed" section heading
+      browseAll:       "",   // "Browse All" link label
+      makeOffer:       "",   // "Make an Offer" button label
+      contactSeller:   "",   // "Contact Seller" toggle label
+      soldBanner:      "",   // "SOLD" banner text on sold item pages
+    },
   },
 };
 ```
@@ -755,12 +951,13 @@ pnpm build
   │
   ├── next build
   │     loader.ts reads manifest → all image URLs resolve to CDN
+  │     buildSearchIndex() → lib/generated/search-index.json  (fuse.js index)
   │     generateStaticParams runs for all non-draft, non-expired items
   │     All pages rendered to static HTML + JSON
   │     If deploymentMode === "static": output: 'export' → out/
   │
-  └── [postbuild] (optional)
-        next-sitemap → sitemap.xml + robots.txt
+  └── [postbuild]
+        next-sitemap → sitemap.xml + robots.txt  (runs when siteConfig.sitemap.enabled)
 
 ── LOCAL BUILD (imageStorage.provider === "local", seller's machine) ─────────
 pnpm build
@@ -827,8 +1024,12 @@ usedExchange/
 │   ── APP CODE (sellers never need to edit below this line) ──────────────────
 │
 ├── app/
-│   ├── layout.tsx
+│   ├── layout.tsx                 ← BackgroundEffect, Analytics, SpeedInsights wrappers
 │   ├── page.tsx                   ← home
+│   ├── all/
+│   │   └── page.tsx               ← Browse All cross-category page
+│   ├── sold/
+│   │   └── page.tsx               ← Sold Items Archive
 │   ├── [category]/
 │   │   ├── page.tsx
 │   │   └── [item]/
@@ -848,16 +1049,27 @@ usedExchange/
 │   │   ├── vercel-blob.ts         ← "vercel-blob" provider
 │   │   └── cloudflare-r2.ts       ← "cloudflare-r2" provider
 │   ├── utils/
-│   │   ├── haversine.ts           ← pure haversineInMiles() distance function; zero deps
-│   │   └── pricing.ts             ← pure resolveItemPrice() function; importable by server components
+│   │   ├── haversine.ts           ← pure haversineInMiles()
+│   │   ├── pricing.ts             ← pure resolveItemPrice(); importable by server components
+│   │   ├── date.ts                ← formatRelativeDate(isoString): "Listed 3 days ago"
+│   │   ├── jsonld.ts              ← buildProductJsonLd(item), buildBreadcrumbJsonLd(crumbs)
+│   │   └── i18n.ts                ← getLocalizedField(item, "name", locale): name_zh ?? name
+│   ├── search/
+│   │   └── index.ts               ← buildSearchIndex(): returns Fuse-compatible item index
 │   ├── generated/
-│   │   └── image-manifest.json    ← ✓ git-tracked; written by pnpm upload-images
+│   │   ├── image-manifest.json    ← ✓ git-tracked; written by pnpm upload-images
+│   │   └── search-index.json      ← ✗ gitignored; written by next build; consumed by SearchBar
 │   └── config/
 │       └── types.ts               ← SiteConfig TypeScript type (not edited by sellers)
 │
 ├── scripts/
-│   ├── sync-images.ts
-│   └── setup-ui.sh                ← one-time developer setup: installs all Aceternity UI components
+│   ├── sync-images.ts             ← image upload pipeline (3 modes)
+│   ├── setup-ui.sh                ← one-time developer setup: installs all Aceternity components
+│   ├── create-item.ts             ← pnpm create-item <category>/<name> → creates content/items folder
+│   └── create-template.ts         ← pnpm create-template [category] → creates _template.json
+│
+├── next-sitemap.config.js         ← sitemap config (reads siteConfig.baseUrl)
+├── SETUP_GUIDE.md                 ← non-technical user guide (content/ folder operations only)
 │
 ├── lib/
 │   └── ui/
@@ -1220,22 +1432,24 @@ The site **never crashes at runtime** due to a UI configuration value.
 
 ## 19. Extensibility Register
 
+The following were previously listed as future features. Those now in v1 have been removed. Only genuinely future items remain.
+
 | Future feature | Designated extension point |
 |---|---|
-| Client-side search | `fuse.js`; index JSON built from `loadCategories()` at build time, embedded in page |
 | Contact form / enquiry | Serverless function; `ContactSection` has a reserved slot |
-| Analytics | Script tag in `SiteHeader.tsx`; no other changes |
-| Dark mode | `tailwind darkMode: 'class'` + toggle in `SiteHeader`; Aceternity components inherit |
-| i18n | `content/config.ts` string keys; item JSON can carry `name_zh`, `description_zh`, etc. |
-| Sitemap / RSS | `next-sitemap`; all static routes already known at build |
+| Manual dark mode toggle | Change `darkMode: "media"` → `"class"` in config; add toggle button to `SiteHeader` |
+| Tag filter page | `/tags/{tag}` route + tag index in loader; tags are already stored and indexed by search |
 | Draft preview | Next.js middleware on `/preview/[category]/[item]`; reads `status: "draft"` items |
-| Tag filtering | Tags already stored; add tag index to loader + filter UI |
-| Distance unit toggle | Add `distanceUnit: "mi" \| "km"` to config; `useDistancePricing` converts before display |
-| Cached location | Store `resolveDistanceMi` in `sessionStorage` to persist across page navigations within the same session. Add as opt-in config flag (`cacheLocationInSession: true`). Must be gated behind user consent or explicit config opt-in — not on by default. |
-| Local image optimisation | Add `sharp` as a devDependency; run a pre-build image resizing step that processes photos in `content/items/` before the sync script uploads them. Extension point: add an optional `preprocess` step to the `upload` mode in `scripts/sync-images.ts`. |
-| `pnpm clean-storage` | Script to reconcile orphaned CDN blobs (present in Blob/R2 but absent from manifest) and delete them. Requires provider-specific list+delete API calls. |
-| Add new UI component option (developer) | (1) Install Aceternity component via `npx shadcn@latest add ...`; (2) add import + map entry to the relevant adapter in `components/ui-adapters/`; (3) add the value to the TypeScript union in `lib/ui/types.ts`; (4) document in DESIGN.md §18 table; (5) add install command to `scripts/setup-ui.sh` so future projects get it automatically |
-| Add new UI slot entirely (developer) | (1) Add config key to `UIConfig` in `lib/ui/types.ts`; (2) create new adapter in `components/ui-adapters/`; (3) insert adapter in the appropriate page component; (4) document in DESIGN.md §18 |
+| Distance unit toggle (mi ↔ km) | Add `distanceUnit: "mi" \| "km"` to `siteConfig.i18n`; `useDistancePricing` converts |
+| Cached location across navigations | `sessionStorage` opt-in behind `siteConfig.cacheLocationInSession: true`; consent-gated |
+| Local image optimisation | Add `sharp` devDependency; add `preprocess` step to `scripts/sync-images.ts --mode upload` |
+| `pnpm clean-storage` | Script to reconcile orphaned CDN blobs vs manifest; requires provider list+delete API |
+| Add new UI component option | Install via `npx shadcn@latest add ...`; add import + entry to adapter; add value to `lib/ui/types.ts`; update `scripts/setup-ui.sh` |
+| Add new UI slot | Add key to `UIConfig`; create new adapter in `components/ui-adapters/`; document in §18 |
+| Multi-language routing | Deploy separate instances per locale (e.g. `zh.domain.com`); each has its own config + locale set |
+| RSS feed | Generate `feed.xml` in postbuild from `loadAllItems()`; link in `<head>` |
+| Seller dashboard (local GUI) | Local-only Next.js dev-mode route or Electron app that reads/writes `content/`; key unlock for non-technical users |
+| Multi-seller support | Requires full architecture redesign; each seller gets a namespaced `content/` folder |
 
 ---
 

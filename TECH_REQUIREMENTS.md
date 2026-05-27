@@ -1,8 +1,8 @@
 # UsedExchange — Technical Requirements
 
-**Version:** 0.5.0  
+**Version:** 0.6.0  
 **Date:** 2026-05-27  
-**Companion:** DESIGN.md v0.6.0
+**Companion:** DESIGN.md v0.7.0
 
 ---
 
@@ -31,6 +31,9 @@
 | `remark-gfm` | `^4.0.0` | GitHub-flavoured Markdown tables + strikethrough |
 | `clsx` | `^2.1.0` | Conditional class merging |
 | `tailwind-merge` | `^2.3.0` | Tailwind class deduplication (used in `cn()` util) |
+| `fuse.js` | `^7.0.0` | Client-side full-text search; index built at build time |
+| `@vercel/analytics` | `^1.3.0` | Vercel Analytics (enabled when `siteConfig.analytics.vercel`) |
+| `@vercel/speed-insights` | `^1.0.0` | Vercel Speed Insights / Core Web Vitals |
 
 ### 2.2 Aceternity UI Peer Requirements
 
@@ -59,7 +62,8 @@ Aceternity components are installed individually via their CLI. The following pa
 | `eslint-config-next` | `^15.0.0` | Next.js ESLint preset |
 | `prettier` | `^3.3.0` | Code formatting |
 | `prettier-plugin-tailwindcss` | `^0.6.0` | Sorts Tailwind classes automatically |
-| `tsx` | `^4.15.0` | Runs `scripts/sync-images.ts` without a separate compile step |
+| `tsx` | `^4.15.0` | Runs `scripts/sync-images.ts` and other scripts without a separate compile step |
+| `next-sitemap` | `^4.2.0` | Generates `sitemap.xml` + `robots.txt` in `postbuild` |
 
 ### 2.4 Image Storage Provider Dependencies
 
@@ -87,13 +91,11 @@ pnpm add -D @aws-sdk/client-s3
 
 ### 2.5 Optional / Future Dependencies
 
-These are not installed in v1 but are the designated choices when the extension points in DESIGN.md §18 are implemented:
+These are not installed in v1 but are the designated choices when the extension points in DESIGN.md §19 are implemented:
 
 | Package | Feature | Extension point |
 |---|---|---|
-| `fuse.js` | Client-side search | Build-time index from `loadCategories()` |
-| `next-sitemap` | Sitemap + robots.txt generation | `postbuild` script |
-| `sharp` | Pre-upload image resizing/optimisation | Optional `preprocess` step in `scripts/sync-images.ts --mode upload` before CDN upload |
+| `sharp` | Pre-upload image resizing/optimisation | Optional `preprocess` step in `scripts/sync-images.ts --mode upload` |
 
 ---
 
@@ -329,9 +331,14 @@ All modes always copy `content/contact/**` → `public/contact/` as a final step
 7. Copy `content/contact/**` → `public/contact/`
 8. Write `lib/generated/image-manifest.json` ← **this file must be committed to git**
 9. Write updated `.image-cache/checksums.json`
-10. Print summary: `[upload-images] provider=vercel-blob  uploaded=12  skipped=47  purged=3  total=59`
-11. Print **BACKUP REMINDER** (see below)
-12. Exit code 1 on any unrecoverable error
+10. **Photo quality check** (advisory warnings, never blocks upload):
+    - Any image < 800px wide → warn "cover.jpg in {item} may appear blurry"
+    - Any image > 8 MB → warn "{filename} is large; consider resizing before upload"
+    - Item folder has images but none named `cover.*` → warn "No cover.* found in {item}; first alphabetical image used"
+    - Item folder in content/items/ has no images at all → warn "No images found for {item}"
+11. Print summary: `[upload-images] provider=vercel-blob  uploaded=12  skipped=47  purged=3  total=59  warnings=2`
+12. Print **BACKUP REMINDER** (see below)
+13. Exit code 1 on any unrecoverable error
 
 > **Note on orphaned CDN blobs:** Purging a manifest entry removes the URL reference but does **not** delete the file from Vercel Blob or R2. Orphaned blobs accumulate silently. Cloud storage (Blob/R2) is cheap enough that this is acceptable for v1; a future `pnpm clean-storage` command can reconcile the manifest against the CDN bucket.
 
@@ -391,14 +398,18 @@ Printed to stdout after every successful `upload` run:
 ```json
 {
   "scripts": {
-    "setup-ui":      "bash scripts/setup-ui.sh",
-    "upload-images": "tsx scripts/sync-images.ts --mode upload",
-    "prebuild":      "tsx scripts/sync-images.ts --mode build-check",
-    "build":         "next build",
-    "dev":           "tsx scripts/sync-images.ts --mode dev-sync && next dev --turbo",
-    "type-check":    "tsc --noEmit",
-    "lint":          "eslint . --max-warnings 0",
-    "format":        "prettier --write ."
+    "setup-ui":        "bash scripts/setup-ui.sh",
+    "upload-images":   "tsx scripts/sync-images.ts --mode upload",
+    "create-item":     "tsx scripts/create-item.ts",
+    "create-template": "tsx scripts/create-template.ts",
+    "new":             "tsx scripts/create-item.ts",
+    "prebuild":        "tsx scripts/sync-images.ts --mode build-check",
+    "build":           "next build",
+    "postbuild":       "next-sitemap",
+    "dev":             "tsx scripts/sync-images.ts --mode dev-sync && next dev --turbo",
+    "type-check":      "tsc --noEmit",
+    "lint":            "eslint . --max-warnings 0",
+    "format":          "prettier --write ."
   }
 }
 ```
@@ -429,14 +440,22 @@ export async function loadItem(
   itemSlug: string
 ): Promise<Item | null>
 
-// Returns items for home page "Recently Listed".
+// Returns items for home page "Recently Listed" and /all page.
 // Applies MORE RESTRICTIVE filters than loadItemsByCategory():
-//   - status === "available" ONLY (not reserved, pending, or sold-within-retention)
-//   - excludes status === "draft"
-//   - excludes sold items (all sold items, regardless of retention window)
+//   - status === "available" ONLY
+//   - excludes draft, sold, and expired-sold items
 // Results sorted by listedDate descending, limited to siteConfig.recentlyListedCount.
-// If zero items match, returns [] (caller hides the section when empty).
 export async function loadAllItems(): Promise<Item[]>
+
+// Returns ALL sold items for the /sold archive page.
+// No retention filter — shows every item that ever had status "sold".
+// Sorted by soldDate descending (falls back to listedDate if soldDate absent).
+export async function loadSoldItems(): Promise<Item[]>
+
+// Builds the fuse.js search index from all available items.
+// Called during next build; result serialised to lib/generated/search-index.json.
+// Fields indexed: name, description, brand, model, tags, course, isbn, edition.
+export async function buildSearchIndex(): Promise<SearchIndexEntry[]>
 ```
 
 ### Item object shape (abbreviated — see `lib/content/types.ts` for full definition)
@@ -524,6 +543,14 @@ Behaviour:
 
 - Link-based: `<a href={constructUrl(platform)} target="_blank" rel="noopener noreferrer">`
 - QR-based: `<button onClick={() => setModalOpen(true)}>`
+
+**`constructUrl` — Discord special handling:**
+
+Discord `value` can be either:
+- An 18-digit numeric user ID → `https://discord.com/users/{value}` (direct message link)
+- A server invite code (e.g. `abc123`) → `https://discord.gg/{value}` (server invite)
+
+Detection: if `value` matches `/^\d{17,19}$/` treat as user ID; otherwise treat as server invite code.
 
 ### `QRModal` (client component)
 
@@ -1190,6 +1217,264 @@ type Props = {
 | `"wobble-card"` | `<WobbleCard containerClassName="col-span-1">{children}</WobbleCard>` |
 | `"direction-aware-hover"` | `<DirectionAwareHover imageUrl={item.coverImage ?? ""}>` — children rendered as hover overlay; cover image is the card face. Style children for dark backgrounds. |
 | `"glare-card"` | `<GlareCard>{children}</GlareCard>` |
+
+---
+
+## 22. Additional v1 Feature Specifications
+
+---
+
+### 22.1 Full-Text Search
+
+**Dependencies:** `fuse.js ^7.0.0`
+
+**Build-time index generation** (`lib/search/index.ts`):
+```ts
+export type SearchIndexEntry = {
+  slug: string;          // "{categorySlug}/{itemSlug}"
+  href: string;          // "/houseware/ikea-lamp"
+  name: string;
+  description: string;
+  brand: string;
+  model: string;
+  tags: string[];
+  course: string;        // textbook field
+  isbn: string;
+  coverImage: string | null;
+};
+
+export async function buildSearchIndex(): Promise<SearchIndexEntry[]>
+```
+
+The index is written to `lib/generated/search-index.json` during `next build`. It is gitignored (regenerated on every build; not committed).
+
+**`SearchBar` component** (`components/search/SearchBar.tsx` — client):
+- Loaded lazily via `next/dynamic` with `{ ssr: false }` to avoid hydration mismatch
+- On mount, fetches `/search-index.json` (Next.js serves it from `public/` — the build copies it there during generation)
+- Initialises fuse.js with keys: `["name", "description", "brand", "model", "tags", "course", "isbn"]`
+- Shows results inline as the user types (debounced 150 ms)
+- Results show: item cover image, name, category, price badge
+- Clicking a result navigates to the item detail page
+- Shown in `SiteHeader` when `siteConfig.search.enabled === true`
+
+---
+
+### 22.2 Dark Mode (Auto — System Preference)
+
+**Tailwind configuration:**
+```ts
+// tailwind.config.ts
+export default {
+  darkMode: "media",   // follows prefers-color-scheme media query automatically
+  // ...
+}
+```
+
+- No toggle needed; no user action required; no JavaScript involved
+- All Tailwind `dark:` variant classes respond to OS/browser preference
+- Aceternity components support dark mode via their own `dark:` classes
+- `siteConfig.darkMode` is typed `"media" | "class"`. The `"class"` variant is a future extension (requires toggle button in SiteHeader + persisted preference)
+
+---
+
+### 22.3 Seller CLI Tools
+
+All scripts write ONLY to `content/` — sellers never touch any other directory.
+
+#### `pnpm create-item <category>/<name>` (`scripts/create-item.ts`)
+
+1. Validates that `<category>` matches an existing folder in `content/items/` (or creates it with a warning)
+2. Creates `content/items/<category>/<name>/` folder
+3. Copies `content/items/<category>/_template.json` if it exists; otherwise copies `content/items/_template.json`; otherwise uses the built-in default template
+4. Renames the copy to `item.json`; substitutes `{name}` placeholder with the humanised item name
+5. Opens `item.json` in `$EDITOR` if set; otherwise prints: "Created content/items/<category>/<name>/item.json — edit it now."
+6. Exits 0
+
+#### `pnpm create-template [category]` (`scripts/create-template.ts`)
+
+1. If `[category]` provided: creates `content/items/<category>/_template.json`
+2. Without argument: creates `content/items/_template.json` (global default)
+3. Template is a full `item.json` with all fields present as descriptive placeholder strings
+4. Prints instructions on how to use the template
+
+#### `pnpm new <category>/<name>` — shorthand alias for `create-item`
+
+**Template format** (`_template.json`):
+```jsonc
+{
+  "name": "ITEM_NAME",
+  "description": "Describe the item condition and what's included.",
+  "condition": "good",
+  "price": {
+    "tiers": [
+      { "label": "Pickup", "miles_max": 5, "amount": 0 }
+    ],
+    "negotiable": false
+  },
+  "status": "draft",
+  "tags": []
+}
+```
+
+---
+
+### 22.4 JSON-LD Structured Data
+
+**`lib/utils/jsonld.ts`** (server-safe, no `"use client"`):
+```ts
+export function buildProductJsonLd(item: Item, baseUrl: string): object
+export function buildBreadcrumbJsonLd(crumbs: { name: string; href: string }[]): object
+```
+
+**`components/common/JsonLd.tsx`** (server component):
+```tsx
+type Props = { data: object };
+// Renders: <script type="application/ld+json">{JSON.stringify(data)}</script>
+```
+
+Both are injected into `app/[category]/[item]/page.tsx` via `generateMetadata` return or as direct component renders.
+
+---
+
+### 22.5 Open Graph, Twitter Card, Pinterest Rich Pin
+
+All added in `generateMetadata` for item detail pages:
+
+```ts
+// Twitter card
+"twitter:card": "summary_large_image"
+"twitter:title": item.name
+"twitter:description": item.metaDescription
+"twitter:image": item.coverImage
+
+// Pinterest rich pin
+"og:type": "product"
+"product:price:amount": highestTierPrice (string)
+"product:price:currency": item.price.currency
+```
+
+---
+
+### 22.6 Vercel Analytics + Speed Insights
+
+```tsx
+// app/layout.tsx — only rendered when config flags are true:
+{siteConfig.analytics.vercel       && <Analytics />}
+{siteConfig.analytics.speedInsights && <SpeedInsights />}
+```
+
+- `<Analytics />` from `@vercel/analytics/react`
+- `<SpeedInsights />` from `@vercel/speed-insights/next`
+- Both are no-ops in non-Vercel environments (graceful degradation)
+- Free on Vercel Hobby plan
+
+---
+
+### 22.7 Sitemap
+
+`next-sitemap.config.js` at project root:
+```js
+/** @type {import('next-sitemap').IConfig} */
+module.exports = {
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || require('./content/config').siteConfig.baseUrl,
+  generateRobotsTxt: true,
+  exclude: ['/preview/*'],
+};
+```
+
+`postbuild` script runs `next-sitemap` → generates `public/sitemap.xml` + `public/robots.txt`.
+
+The sitemap only generates when `siteConfig.sitemap.enabled === true`. The `postbuild` script checks this before running.
+
+---
+
+### 22.8 Internationalisation (i18n)
+
+**Design:** Single-locale per deployment. No routing changes; the active locale is set by `siteConfig.i18n.locale`.
+
+**`lib/utils/i18n.ts`**:
+```ts
+// Returns the localised field value, falling back to the English default.
+// Example: getLocalizedField(item, "name", "zh") → item.name_zh ?? item.name
+export function getLocalizedField(
+  item: Record<string, unknown>,
+  field: string,    // e.g. "name", "description"
+  locale: string    // e.g. "zh", "es"
+): string
+
+// Returns a UI string from siteConfig.i18n.strings, falling back to the built-in English default.
+export function t(key: keyof UIStrings): string
+```
+
+All item-rendering components call `getLocalizedField` instead of accessing `item.name` directly. The locale comes from `siteConfig.i18n.locale` (static at build time).
+
+---
+
+### 22.9 Payment Platforms — Venmo & Zelle
+
+Both follow the existing contact platform architecture (DESIGN.md §7).
+
+**Venmo (link-based):**
+- `type: "venmo"`, `value: "username"` → renders `<a href="https://venmo.com/u/{value}">Venmo</a>`
+- Pre-filled payment request: when item context available, append `?txn=pay&audience=private&note={encodedItemName}`
+
+**Venmo (QR-based):**
+- `type: "venmo"`, `qr_image: "/contact/venmo-qr.png"` → QR modal (same as WeChat)
+
+**Zelle (QR-only):**
+- `type: "zelle"`, `qr_image: "/contact/zelle-qr.png"` → QR modal
+- Zelle has no public profile URL; QR code is the only shareable format
+- Seller generates their Zelle QR code in their bank app and saves it to `content/contact/zelle-qr.png`
+
+**`constructUrl` additions:**
+```ts
+case "venmo":
+  if (platform.qr_image) return null;  // QR type, handled by QRModal
+  const base = `https://venmo.com/u/${platform.value}`;
+  return item ? `${base}?txn=pay&audience=private&note=${encodeURIComponent(item.name)}` : base;
+
+case "zelle":
+  return null;  // always QR type; no link URL
+```
+
+---
+
+### 22.10 Share Button
+
+**`components/common/ShareButton.tsx`** (client):
+```tsx
+// On click:
+// 1. Try navigator.share({ title: item.name, text: item.metaDescription, url: window.location.href })
+// 2. If share API not available: navigator.clipboard.writeText(url) → show "Copied!" toast (2s)
+// Shows a share icon button. On item detail pages only.
+```
+
+---
+
+### 22.11 `formatRelativeDate` Utility
+
+**`lib/utils/date.ts`**:
+```ts
+export function formatRelativeDate(isoDate: string | null): string
+// Returns: "Today" | "Yesterday" | "3 days ago" | "2 weeks ago" | "1 month ago" | ""
+// Returns "" when isoDate is null/invalid (graceful; caller hides the element)
+```
+
+---
+
+### 22.12 SETUP_GUIDE.md
+
+A separate file at the project root written entirely in plain English for non-technical users. It covers:
+
+1. **Adding a new item** — create a folder, fill in `item.json`, add photos, run `pnpm upload-images`
+2. **Marking an item sold** — `pnpm mark-sold category/item-name` (no JSON editing)
+3. **Creating a new item from template** — `pnpm new category/item-name`
+4. **Changing prices** — edit `amount` in `item.json` price tiers
+5. **Uploading new photos** — add to the item folder, run `pnpm upload-images`
+6. **What to back up** — the entire `content/` folder to an external drive or cloud backup
+7. **Who to call** — if something breaks, contact the CS student who set this up
+
+No code, no git commands, no terminal jargon in the guide. All actions reference only `content/` folder operations or pre-built scripts invoked by name.
 
 ---
 
