@@ -1,8 +1,8 @@
 # UsedExchange — Technical Requirements
 
-**Version:** 0.4.0  
+**Version:** 0.5.0  
 **Date:** 2026-05-27  
-**Companion:** DESIGN.md v0.5.0
+**Companion:** DESIGN.md v0.6.0
 
 ---
 
@@ -42,6 +42,8 @@ Aceternity components are installed individually via their CLI. The following pa
 | `@tabler/icons-react` | `^3.0.0` | Icon set used by contact platform buttons |
 
 > Aceternity components are copied into `components/ui/` at install time. They are treated as source files — do not install Aceternity as a package dependency.
+>
+> Each UI slot adapter (`components/ui-adapters/`) only imports the Aceternity components the seller has explicitly installed and registered. Only install the components you actually configure. See DESIGN.md §19 for the full slot ↔ component registry and install commands.
 
 ### 2.3 Development Dependencies
 
@@ -389,6 +391,7 @@ Printed to stdout after every successful `upload` run:
 ```json
 {
   "scripts": {
+    "setup-ui":      "bash scripts/setup-ui.sh",
     "upload-images": "tsx scripts/sync-images.ts --mode upload",
     "prebuild":      "tsx scripts/sync-images.ts --mode build-check",
     "build":         "next build",
@@ -725,6 +728,7 @@ out/
 ### Vercel Hobby — Vercel Blob (recommended path)
 
 **One-time setup (do once, then forget):**
+- [ ] Run `pnpm setup-ui` to install all supported Aceternity UI components into `components/ui/`. Commit the resulting files. This only needs to be done once per developer machine; subsequent clones get the components from git.
 - [ ] Connect GitHub repo to Vercel project
 - [ ] Set `deploymentMode: "vercel"` and `imageStorage.provider: "vercel-blob"` in `content/config.ts`
 - [ ] Vercel Dashboard → Storage → Create Blob store → copy `BLOB_READ_WRITE_TOKEN`
@@ -948,6 +952,244 @@ The slider's initial `max` is set to the highest resolved price across all items
 | Coordinates persisted without consent | `useState` only in v1; cleared on page close. No `localStorage` or cookies. A `sessionStorage` cache is listed in DESIGN.md §18 Extensibility as a future opt-in — it must be gated behind user consent or an explicit config flag when implemented. |
 | Seller coordinates exposed | Intentional and documented in DESIGN.md §17; seller should use a nearby landmark |
 | HTTPS requirement for Geolocation API | Next.js on Vercel serves HTTPS by default; self-hosted must configure TLS |
+
+---
+
+## 21. UI Component Adapter Specification
+
+See DESIGN.md §18 for the design rationale, slot tables, and the core principle (seller only touches `content/`). This section covers the setup script, TypeScript types, adapter props, and data normalisation specs.
+
+---
+
+### Setup Script — `scripts/setup-ui.sh`
+
+Run once by a developer after initial clone. Installs all 25 supported Aceternity components. The resulting files in `components/ui/` must be committed to git — after that, sellers never run any install commands.
+
+```bash
+#!/usr/bin/env bash
+# scripts/setup-ui.sh
+# Run once: pnpm setup-ui
+# Commits the results to git so sellers never need to run this.
+
+set -e
+echo "Installing all supported Aceternity UI components..."
+
+# ── Background slot ───────────────────────────────────────────────────────────
+npx shadcn@latest add @aceternity/aurora-background
+npx shadcn@latest add @aceternity/background-beams-demo
+npx shadcn@latest add @aceternity/background-beams-with-collision
+npx shadcn@latest add @aceternity/background-gradient-animation
+npx shadcn@latest add @aceternity/background-boxes-demo
+npx shadcn@latest add @aceternity/wavy-background
+npx shadcn@latest add @aceternity/vortex
+npx shadcn@latest add @aceternity/shooting-stars-and-stars-background-demo
+npx shadcn@latest add @aceternity/meteors
+npx shadcn@latest add @aceternity/grid-background-demo
+npx shadcn@latest add @aceternity/background-lines
+npx shadcn@latest add @aceternity/spotlight
+npx shadcn@latest add @aceternity/spotlight-new
+
+# ── Item Grid slot ────────────────────────────────────────────────────────────
+npx shadcn@latest add @aceternity/bento-grid
+npx shadcn@latest add @aceternity/layout-grid
+npx shadcn@latest add @aceternity/focus-cards
+
+# ── Gallery slot ──────────────────────────────────────────────────────────────
+npx shadcn@latest add @aceternity/apple-cards-carousel-demo
+npx shadcn@latest add @aceternity/images-slider
+npx shadcn@latest add @aceternity/carousel
+npx shadcn@latest add @aceternity/parallax-scroll parallax-scroll-2
+
+# ── Item Card slot ────────────────────────────────────────────────────────────
+npx shadcn@latest add @aceternity/card-hover-effect
+npx shadcn@latest add @aceternity/card-spotlight
+npx shadcn@latest add @aceternity/3d-card
+npx shadcn@latest add @aceternity/evervault-card
+npx shadcn@latest add @aceternity/wobble-card
+npx shadcn@latest add @aceternity/direction-aware-hover
+npx shadcn@latest add @aceternity/glare-card
+
+echo "Done. Commit the components/ui/ files to git."
+echo "Sellers can now use any ui.* option in content/config.ts without further setup."
+```
+
+Add to `package.json`:
+```json
+"setup-ui": "bash scripts/setup-ui.sh"
+```
+
+---
+
+### TypeScript Types — `lib/ui/types.ts`
+
+```ts
+export type BackgroundOption =
+  | "none"
+  | "aurora"
+  | "background-beams"
+  | "background-beams-collision"
+  | "background-gradient-animation"
+  | "background-boxes"
+  | "wavy"
+  | "vortex"
+  | "shooting-stars"
+  | "meteors"
+  | "grid-and-dot"
+  | "background-lines"
+  | "spotlight"
+  | "spotlight-new";
+
+export type ItemGridOption =
+  | "simple"
+  | "bento-grid"
+  | "layout-grid"
+  | "focus-cards";
+
+export type GalleryOption =
+  | "simple"
+  | "apple-cards-carousel"
+  | "images-slider"
+  | "carousel"
+  | "parallax-scroll";
+
+export type ItemCardOption =
+  | "simple"
+  | "card-hover-effect"
+  | "card-spotlight"
+  | "3d-card"
+  | "evervault-card"
+  | "wobble-card"
+  | "direction-aware-hover"
+  | "glare-card";
+
+export type UIConfig = {
+  background: BackgroundOption;
+  itemGrid:   ItemGridOption;
+  gallery:    GalleryOption;
+  itemCard:   ItemCardOption;
+};
+```
+
+Added to `SiteConfig` in `lib/config/types.ts`:
+```ts
+import type { UIConfig } from "@/lib/ui/types";
+export type SiteConfig = {
+  // ... existing fields ...
+  ui: UIConfig;
+};
+```
+
+---
+
+### Adapter Pattern — All Four Adapters
+
+All adapters follow identical structure. They are **pre-wired with every supported option** and must not be edited by sellers. The full import list is committed after `pnpm setup-ui` runs.
+
+```tsx
+// ⚠️  DO NOT EDIT — change ui.* values in content/config.ts only
+"use client";   // on adapters that wrap client-side Aceternity components
+
+import { siteConfig } from "@/content/config";
+
+// All components pre-installed via pnpm setup-ui and committed to components/ui/
+import { AuroraBackground }             from "@/components/ui/aurora-background";
+import { BackgroundBeams }              from "@/components/ui/background-beams";
+// ... (all imports for the slot)
+
+const COMPONENTS = {
+  "aurora":            AuroraBackground,
+  "background-beams":  BackgroundBeams,
+  // ... all entries
+} as const;
+
+// The adapter reads config, selects component, normalises props, renders.
+// Falls back to built-in simple/none implementation for "simple", "none", or unknown values.
+```
+
+---
+
+### Adapter 1 — `BackgroundEffect.tsx`
+
+**Props:** `{ children: React.ReactNode }`
+**Placement:** `app/layout.tsx` wraps `{children}` with `<BackgroundEffect>`.
+
+**Normalisation per component:**
+
+| Component | Required wrapper shape |
+|---|---|
+| `AuroraBackground` | `<AuroraBackground className="min-h-screen">{children}</AuroraBackground>` |
+| `BackgroundBeams` | `<BackgroundBeams>{children}</BackgroundBeams>` — full-screen by default |
+| `WavyBackground` | `<WavyBackground className="flex flex-col">{children}</WavyBackground>` |
+| `Vortex` | `<Vortex particleCount={200} rangeY={800} baseHue={220}>{children}</Vortex>` — sensible defaults |
+| All others | `<Component>{children}</Component>` |
+
+---
+
+### Adapter 2 — `ItemGridAdapter.tsx`
+
+```tsx
+type Props = {
+  items: Item[];
+  resolved: ResolvedDistance;
+  renderCard: (item: Item, index: number) => React.ReactNode;  // render prop
+};
+```
+
+**Normalisation per component:**
+
+| Component | Data mapping |
+|---|---|
+| `"simple"` | `<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">` + `renderCard()` calls |
+| `"bento-grid"` | Maps items → `BentoGridItem[]`: `{ title: item.name, description: item.description, header: <img coverImage>, className: pattern (first item "md:col-span-2") }` |
+| `"layout-grid"` | Maps items → `{ id, content: renderCard(), className, thumbnail: item.coverImage }` |
+| `"focus-cards"` | Maps items → `{ title: item.name, src: item.coverImage ?? "" }`; `renderCard` overlaid via `absolute inset-0` |
+
+---
+
+### Adapter 3 — `GalleryAdapter.tsx`
+
+```tsx
+type Props = {
+  images: string[];        // all image URLs
+  coverImage: string | null;
+  itemName: string;        // for alt text and carousel labels
+};
+```
+
+**Normalisation per component:**
+
+| Component | Data mapping |
+|---|---|
+| `"simple"` | Large main image + scrollable thumbnail strip; click thumbnail swaps main image |
+| `"apple-cards-carousel"` | Maps images → `Card[]`: `{ category: itemName, title: "Photo N", src: url, content: <img> }` |
+| `"images-slider"` | Passes `images` array directly |
+| `"carousel"` | Wraps each image in `<CarouselItem><img /></CarouselItem>` |
+| `"parallax-scroll"` | Splits images: even indices → first column, odd → second column |
+
+---
+
+### Adapter 4 — `ItemCardAdapter.tsx`
+
+```tsx
+type Props = {
+  item: Item;
+  resolvedPrice: PriceTier | null;
+  children: React.ReactNode;  // standard ItemCard content: image, name, badges, price
+};
+```
+
+**Normalisation per component:**
+
+| Component | Wrapping |
+|---|---|
+| `"simple"` | `<div className="rounded-xl border bg-card shadow-sm overflow-hidden">` |
+| `"card-hover-effect"` | `<CardContainer><CardBody>{children}</CardBody></CardContainer>` |
+| `"card-spotlight"` | `<CardSpotlight>{children}</CardSpotlight>` |
+| `"3d-card"` | `<CardContainer><CardBody>{children}</CardBody></CardContainer>` — add `perspective-1000` class to parent |
+| `"evervault-card"` | `<EvervaultCard text={item.name}>{children}</EvervaultCard>` |
+| `"wobble-card"` | `<WobbleCard containerClassName="col-span-1">{children}</WobbleCard>` |
+| `"direction-aware-hover"` | `<DirectionAwareHover imageUrl={item.coverImage ?? ""}>` — children rendered as hover overlay; cover image is the card face. Style children for dark backgrounds. |
+| `"glare-card"` | `<GlareCard>{children}</GlareCard>` |
 
 ---
 

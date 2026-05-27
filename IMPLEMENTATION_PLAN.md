@@ -1,0 +1,470 @@
+# UsedExchange — Implementation Plan
+
+**Version:** 1.0  
+**Date:** 2026-05-27  
+**Based on:** DESIGN.md v0.6.0 · TECH_REQUIREMENTS.md v0.5.0  
+**Assumption:** Single developer; primary target = Vercel Hobby + Vercel Blob
+
+---
+
+## Summary
+
+| Phase | Name | Est. Days | Depends On |
+|---|---|---|---|
+| 0 | Project Bootstrap | 1 | — |
+| 1 | Aceternity UI Setup | 1 | 0 |
+| 2 | Type System & Config | 1 | 0 |
+| 3 | Content Schema & Loader | 2 | 2 |
+| 4 | Image Pipeline | 2 | 2 |
+| 5 | Common Components | 1 | 1, 3 |
+| 6 | Home Page | 1.5 | 5 |
+| 7 | Geolocation & Pricing System | 2 | 3 |
+| 8 | Category Page | 1.5 | 6, 7 |
+| 9 | Item Detail Page | 2 | 6, 7, 10 |
+| 10 | Contact System | 1 | 5 |
+| 11 | UI Slot Adapters (wiring) | 1 | 1, 8, 9 |
+| 12 | SEO, A11y & Security Hardening | 1 | 11 |
+| 13 | Deployment | 1 | 4, 12 |
+| **Total** | | **~18 days** | |
+
+**Critical path:** 0 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 11 → 12 → 13  
+**Parallelisable:** Phase 1 ∥ Phase 2; Phase 4 ∥ Phase 3; Phase 10 ∥ Phase 7
+
+---
+
+## Phase 0 — Project Bootstrap
+**Goal:** A clean, runnable Next.js 15 repo with all tooling configured. `pnpm dev` starts without errors (blank page is fine).
+
+### Tasks
+- [ ] `pnpm create next-app@latest usedExchange --typescript --tailwind --app --use-pnpm`
+- [ ] Remove all Next.js boilerplate content from `app/`
+- [ ] Configure `tailwind.config.ts` for Tailwind v4 and `@tailwindcss/typography`
+- [ ] Configure `tsconfig.json` per TECH_REQUIREMENTS.md §5 (strict, noUncheckedIndexedAccess, `@/*` alias, correct include)
+- [ ] Configure `next.config.ts` skeleton (no Aceternity remotePatterns yet — added in Phase 1)
+- [ ] Configure ESLint per TECH_REQUIREMENTS.md §16 (including `scripts/` override for no-console)
+- [ ] Configure Prettier per TECH_REQUIREMENTS.md §16
+- [ ] Verify `.gitignore` matches TECH_REQUIREMENTS.md §18 (content/items images, public/items/, public/contact/, lib/generated/, .image-cache/)
+- [ ] Install production deps: `next react react-dom zod react-markdown remark-gfm clsx tailwind-merge framer-motion @tabler/icons-react`
+- [ ] Install dev deps: `typescript @types/node @types/react @types/react-dom tailwindcss @tailwindcss/typography eslint eslint-config-next prettier prettier-plugin-tailwindcss tsx`
+- [ ] Create full directory skeleton (all folders from DESIGN.md §16, empty `.gitkeep` where needed)
+- [ ] Create `content/` folder with placeholder `config.ts` and sample `items/` structure
+- [ ] Verify `pnpm dev` starts without TypeScript or lint errors
+
+### Acceptance Criteria
+- `pnpm dev` → blank page, no console errors
+- `pnpm type-check` → 0 errors
+- `pnpm lint` → 0 warnings
+
+---
+
+## Phase 1 — Aceternity UI Setup
+**Goal:** All 25 supported Aceternity components installed in `components/ui/` and committed to git. Can be run in parallel with Phase 2.
+
+### Tasks
+- [ ] Write `scripts/setup-ui.sh` with all 25 install commands (TECH_REQUIREMENTS.md §21)
+- [ ] Add `"setup-ui": "bash scripts/setup-ui.sh"` to `package.json`
+- [ ] Run `pnpm setup-ui` (requires internet, ~5 min)
+- [ ] Resolve any dependency conflicts from Aceternity installs (peer dep warnings)
+- [ ] Commit all generated `components/ui/*.tsx` files
+- [ ] Verify `pnpm type-check` still passes after installs
+
+### Acceptance Criteria
+- `components/ui/` contains all 25 component files
+- `pnpm type-check` → 0 errors
+- No Aceternity import errors at build time
+
+### Notes
+- Run only once per machine; subsequent clones get these files from git
+- Some Aceternity components may bring in additional peer dependencies (e.g. `three`, `d3`) — install only what the component truly requires, not the full peer list
+
+---
+
+## Phase 2 — Type System & Config
+**Goal:** All TypeScript types, `SiteConfig`, and `content/config.ts` defined. No implementation yet — just the type contracts every subsequent phase depends on.
+
+### Tasks
+- [ ] Write `lib/ui/types.ts` — `BackgroundOption`, `ItemGridOption`, `GalleryOption`, `ItemCardOption`, `UIConfig` (TECH_REQUIREMENTS.md §21)
+- [ ] Write `lib/config/types.ts` — `SiteConfig` type (all fields from DESIGN.md §13; includes `UIConfig`)
+- [ ] Write `content/config.ts` — fully populated starter config with all fields, comments, sensible defaults (DESIGN.md §13)
+- [ ] Write `lib/content/types.ts` — `Item`, `Category`, `Price`, `PriceTier`, `Condition`, `Status`, `Dimensions`, `Weight`, `ResolvedDistance`, `GeolocationState` (TECH_REQUIREMENTS.md §8, §20)
+- [ ] Verify `pnpm type-check` passes (types self-consistent)
+
+### Acceptance Criteria
+- All types compile with 0 errors
+- `content/config.ts` imports and exports `siteConfig` without errors
+- No `any` types
+
+---
+
+## Phase 3 — Content Schema & Loader
+**Goal:** The data layer is complete. `loadCategories()`, `loadItemsByCategory()`, `loadItem()`, `loadAllItems()` all work against real `content/items/` folders. **This is the single most important phase — all pages depend on it.**
+
+### Tasks
+
+#### 3a — Zod Schema (`lib/content/schema.ts`)
+- [ ] Write `itemJsonSchema` — Zod schema for `item.json` with all defaults per TECH_REQUIREMENTS.md §6 (safe defaults, `.safeParse()` contract)
+- [ ] Write `categoryJsonSchema` — Zod schema for `_category.json`
+- [ ] Implement `withDefaults<T>()` helper per TECH_REQUIREMENTS.md §6.2
+- [ ] Unit-test edge cases: missing `name` (skip item), invalid enum (default to valid), null number (→ null), zero number (→ 0, not null), negative number (→ null), invalid ISO date (→ null)
+
+#### 3b — Pure Utilities (`lib/utils/`)
+- [ ] Write `lib/utils/haversine.ts` — `haversineInMiles(lat1, lng1, lat2, lng2)` (TECH_REQUIREMENTS.md §20)
+- [ ] Write `lib/utils/pricing.ts` — `resolveItemPrice(price, resolved)` pure function (DESIGN.md §17; importable by server components)
+- [ ] Test `haversineInMiles` against known coordinates
+- [ ] Test `resolveItemPrice` for all branches: Infinity, exact match, gap, empty tiers, open-ended tier
+
+#### 3c — Loader (`lib/content/loader.ts`)
+- [ ] Implement `loadCategories()` — reads `content/items/`, parses `_category.json`, applies sort logic (DESIGN.md §6), excludes `_`-prefixed folders
+- [ ] Implement `loadItemsByCategory()` — reads item folders, applies visibility rules (draft excluded, sold+retention check), reads manifest for image URLs
+- [ ] Implement `loadItem()` — returns `null` if missing, never throws
+- [ ] Implement `loadAllItems()` — `available` status only; sorted by `listedDate` desc; capped at `recentlyListedCount`
+- [ ] Image URL resolution: `manifest[key] ?? "/items/{key}"` fallback (DESIGN.md §11)
+- [ ] Image sorting: case-insensitive ascending, explicit sort (DESIGN.md §4)
+- [ ] Verify `reserved_for` field is never included in returned `Item` type
+
+#### 3d — Seed Data
+- [ ] Create 2 sample categories (`content/items/houseware/`, `content/items/electronics/`)
+- [ ] Create 3–4 sample `item.json` files covering all status values and edge cases
+- [ ] Create `lib/generated/image-manifest.json` with `{}` (empty starter)
+- [ ] Verify loader returns correct data for sample items
+
+### Acceptance Criteria
+- All 4 loader functions return typed data from sample `content/items/`
+- Missing `item.json` → `loadItem()` returns `null`, no throw
+- Invalid field values → defaults applied, no crash
+- `reserved_for` not present in any returned `Item` object
+- All unit tests pass
+
+### References
+DESIGN.md §4, §5, §6, §8, §11 · TECH_REQUIREMENTS.md §6, §7, §8
+
+---
+
+## Phase 4 — Image Pipeline
+**Goal:** `pnpm dev` shows images from `content/items/`. `pnpm upload-images` successfully uploads to Vercel Blob and writes a manifest. Can be developed in parallel with Phase 3.
+
+### Tasks
+
+#### 4a — Adapter Interface
+- [ ] Write `lib/images/adapter.ts` — `ImageStorageAdapter` interface (TECH_REQUIREMENTS.md §7)
+
+#### 4b — Provider Implementations
+- [ ] Write `lib/images/local.ts` — copies to `public/items/`, returns `/items/{key}`, skips unchanged
+- [ ] Write `lib/images/vercel-blob.ts` — SHA-256 compare, `@vercel/blob put()`, returns CDN URL; clear error if `BLOB_READ_WRITE_TOKEN` missing
+- [ ] Write `lib/images/cloudflare-r2.ts` — SHA-256 compare, `@aws-sdk/client-s3 PutObjectCommand`, returns CDN URL; clear error if CF_R2_* missing
+- [ ] Install provider devDeps: `pnpm add -D @vercel/blob` (for vercel-blob provider)
+
+#### 4c — Sync Script (`scripts/sync-images.ts`)
+- [ ] Implement `--mode upload`: scan, SHA-256, upload new/changed, purge stale manifest entries, copy contact/, write manifest, write checksum cache, print backup reminder (TECH_REQUIREMENTS.md §7)
+- [ ] Implement `--mode dev-sync`: copy to `public/items/`, copy contact/, graceful if `content/items/` missing
+- [ ] Implement `--mode build-check`: local provider → copy locally; cloud provider → verify manifest exists, warn if missing; always copy contact/
+- [ ] Update `next.config.ts` to add Vercel Blob / R2 remote patterns (TECH_REQUIREMENTS.md §4)
+
+#### 4d — Integration Test
+- [ ] `pnpm dev` → sample images appear at `/items/houseware/item/cover.jpg`
+- [ ] `pnpm upload-images` with `BLOB_READ_WRITE_TOKEN` set → manifest written, CDN URLs in manifest
+- [ ] `pnpm build` on Vercel-like environment (no local images) → manifest read, build succeeds
+
+### Acceptance Criteria
+- Local dev: images served from `public/items/`
+- Upload run: `lib/generated/image-manifest.json` written with valid CDN URLs
+- Build-check with cloud provider: reads manifest, does not attempt upload
+- Deleted item folder: manifest entry purged on next upload run
+- Exit code 1 on any unrecoverable error
+
+### References
+DESIGN.md §3, §14 · TECH_REQUIREMENTS.md §7
+
+---
+
+## Phase 5 — Common Components
+**Goal:** All shared presentational components are ready. No pages yet.
+
+### Tasks
+- [ ] `components/common/AdaptiveImage.tsx` — `next/image` vs `<img>` based on `deploymentMode` (TECH_REQUIREMENTS.md §9)
+- [ ] `components/layout/SiteHeader.tsx` — site name/logo, navigation placeholder
+- [ ] `components/layout/SiteFooter.tsx` — site name, last-build timestamp, ContactSection slot
+- [ ] `components/layout/Breadcrumb.tsx` — Home → Category → Item, correct hrefs
+- [ ] `components/item/StatusBadge.tsx` — colour-coded label, must not rely on colour alone (text label required)
+- [ ] `components/item/ConditionBadge.tsx` — same constraint
+- [ ] `components/item/MetadataTable.tsx` — renders brand, model, dimensions, weight, original source (linked), original price; hides any null/empty fields
+
+### Acceptance Criteria
+- All components render without runtime errors with real `Item` data
+- `AdaptiveImage` uses `<Image>` in vercel mode; `<img>` in static mode
+- All interactive elements have `focus-visible:ring` classes
+- Badges display text label (not colour only)
+
+---
+
+## Phase 6 — Home Page
+**Goal:** `/` renders fully with hero, category grid, and recently listed section. Categories and items load from `content/`.
+
+### Tasks
+- [ ] `components/category/CategoryCard.tsx` — icon, display name, available item count, cover image background
+- [ ] `components/category/CategoryGrid.tsx` — responsive grid of `CategoryCard`
+- [ ] `components/item/ItemCard.tsx` — cover photo, name, condition badge, status badge, price prop (receives resolved price from parent)
+- [ ] `components/home/RecentlyListedSection.tsx` (client component) — owns `useGeolocation()` + `useDistancePricing()` state; renders item cards with resolved prices; no `LocationPriceBar` (prices update silently)
+- [ ] `app/layout.tsx` — root layout, `BackgroundEffect` wrapper, `SiteHeader`, `SiteFooter`, global font/metadata
+- [ ] `app/page.tsx` — hero, `CategoryGrid`, `RecentlyListedSection`
+- [ ] OG metadata for home page (DESIGN.md §10.1: most recent available item's cover as og:image)
+
+### Acceptance Criteria
+- Home page renders with real content from `content/items/`
+- Category cards show correct available item counts
+- Recently Listed shows max `recentlyListedCount` items, `available` status only
+- Zero available items → Recently Listed section hidden
+- `pnpm type-check` → 0 errors
+
+---
+
+## Phase 7 — Geolocation & Pricing System
+**Goal:** The full geolocation + distance-pricing stack works in isolation. Tested with `pnpm dev` before wiring into pages.
+
+### Tasks
+
+#### 7a — Hooks
+- [ ] `components/pricing/useGeolocation.ts` — `idle → pending → granted/denied/unavailable`; `idle` treated same as `pending` in all rendering (DESIGN.md §17)
+- [ ] `components/pricing/useDistancePricing.ts` — returns `{ source: "fallback" }` for `idle`/`pending`; exports `setManualMiles`; exports `resolveItemPrice` re-export for callsite convenience
+- [ ] Verify `useDistancePricing` with `{ source: "fallback" }` → calls `resolveItemPrice` with fallback → highest tier
+
+#### 7b — LocationPriceBar
+- [ ] `components/pricing/LocationPriceBar.tsx` (client) — all 4 rendered states (idle/pending, granted-detected, manual, fallback); inline distance input; accessible (Enter/Space on toggle)
+- [ ] Test all states by temporarily forcing each `geoState` value in dev
+
+#### 7c — PricingTable & Toggle
+- [ ] `components/item/PricingTable.tsx` — presentational; renders resolved tier row + `PricingTableToggle`; "Contact for price" if no tiers
+- [ ] `components/item/PricingTableToggle.tsx` (client) — expand/collapse; visually accents resolved tier row; keyboard accessible; state persists through distance changes
+
+#### 7d — PricingSection & FilterBar
+- [ ] `components/item/PricingSection.tsx` (client) — owns geo+distance state for item detail; renders `LocationPriceBar` above `PricingTable`; accepts `initialResolvedTier` for SSG initial render
+- [ ] `components/filters/useFilters.ts` — condition chips, price range slider (`[min, max]` on resolved prices), status toggle; slider hidden when no items have tiers; slider resets on distance change
+- [ ] `components/filters/FilterBar.tsx` (client) — renders useFilters controls; receives `resolvedDistanceMi` prop; passes `Infinity` from parent when source = fallback
+
+### Acceptance Criteria
+- Permission granted → correct distance displayed; card prices update
+- Permission denied → fallback prices shown; "Enter distance" link visible
+- Manual distance entry → prices recalculate immediately
+- `idle`/`pending` → fallback prices shown; no flash of missing content
+- `resolveItemPrice` accessible from server component (no "use client" in `lib/utils/pricing.ts`)
+- `PricingTableToggle` expand/collapse works; toggle state survives distance change
+
+### References
+DESIGN.md §17 · TECH_REQUIREMENTS.md §20
+
+---
+
+## Phase 8 — Category Page
+**Goal:** `/[category]` renders with filter bar, item grid, and location-resolved prices.
+
+### Tasks
+- [ ] `components/item/ItemGrid.tsx` (client) — owns `resolvedDistance` state; renders `LocationPriceBar` + `FilterBar` + item cards; passes `resolvedDistanceMi={Infinity}` to FilterBar when fallback
+- [ ] `app/[category]/page.tsx` — `generateStaticParams` from `loadCategories()`; `generateMetadata` with OG; renders `ItemGrid` with items
+- [ ] Sold item overlay on item cards (status badge + dimming)
+- [ ] Empty category (all sold/draft) → 404 or redirect per DESIGN.md §15
+
+### Acceptance Criteria
+- All category routes statically generated at build time
+- Filter bar: condition chips, price slider, status toggle all work independently
+- Sold items show "SOLD" overlay but are present in grid (until retention expires)
+- `draft` items never render
+- `generateStaticParams` returns only valid category slugs
+
+---
+
+## Phase 9 — Item Detail Page
+**Goal:** `/[category]/[item]` renders with gallery, SSG pricing, contact section, and all metadata.
+
+### Tasks
+- [ ] `components/item/ItemGallery.tsx` (client) — simple default: large main image + thumbnail strip; click to swap (used by `GalleryAdapter` for `"simple"` config)
+- [ ] `app/[category]/[item]/page.tsx`:
+  - [ ] `generateStaticParams` from `loadCategories()` + `loadItemsByCategory()`
+  - [ ] `generateMetadata` — title, description, og:image, og:title, twitter card
+  - [ ] Server-side: calls `resolveItemPrice(item.price, { source: "fallback" })` for `initialResolvedTier`
+  - [ ] Renders: `Breadcrumb`, gallery, status+condition badges, name, description (react-markdown), `PricingSection`, `MetadataTable`, `ContactSection`, tags
+  - [ ] Sold item: "SOLD" banner prominent; contact section CTA disabled; `sold_date` shown if present
+- [ ] `app/not-found.tsx` — site header, "Page not found" message, link to home
+
+### Acceptance Criteria
+- All item detail routes statically generated
+- Static HTML shows highest tier price (no blank before JS)
+- After JS hydration, geo-resolved tier shown
+- Description renders Markdown correctly
+- `reserved_for` never appears in rendered HTML (confirm via browser source inspection)
+- `og:image` is the item's `coverImage` URL
+
+---
+
+## Phase 10 — Contact System
+**Goal:** Contact section renders correctly on item detail page and in footer. QR modal works.
+
+### Tasks
+- [ ] `components/contact/PlatformButton.tsx` (client) — link-based: `<a>` with correct URL per platform table (DESIGN.md §7); QR-based: `<button>` triggering modal
+- [ ] `components/contact/QRModal.tsx` (client) — `<dialog>`; closes on backdrop click + Escape; focus trapped inside while open; restores focus on close
+- [ ] `components/contact/ContactSection.tsx` (client) — `reveal_behavior: "click"` toggle; renders platform buttons; hides `preferredPayment`/`contactNote` blocks when empty; footer usage: pass `preferredPayment={[]}` and `contactNote=""`
+- [ ] Wire into item detail page and `SiteFooter`
+
+### Acceptance Criteria
+- All link platforms open in new tab with `rel="noopener noreferrer"`
+- WeChat/LINE QR modal opens, focuses, closes on Escape
+- `reveal_behavior: "always"` shows platforms immediately
+- `reveal_behavior: "click"` hides behind toggle
+- Footer shows only platform buttons (no payment/note section)
+
+---
+
+## Phase 11 — UI Slot Adapters (Wiring)
+**Goal:** All 4 adapter files fully wired. `content/config.ts` `ui.*` values drive the correct Aceternity component everywhere.
+
+### Dependencies: Phases 1, 8, 9 must be complete.
+
+### Tasks
+- [ ] `components/ui-adapters/BackgroundEffect.tsx` — all 13 background options pre-imported, full `COMPONENTS` map, `⚠️ DO NOT EDIT` header
+- [ ] `components/ui-adapters/ItemGridAdapter.tsx` — all 3 grid options + `"simple"` fallback, render prop interface, data normalisation per TECH_REQUIREMENTS.md §21
+- [ ] `components/ui-adapters/GalleryAdapter.tsx` — all 4 gallery options + `"simple"` fallback, data normalisation
+- [ ] `components/ui-adapters/ItemCardAdapter.tsx` — all 8 card options + `"simple"` fallback, children pass-through, data normalisation (direction-aware-hover note)
+- [ ] Wire `BackgroundEffect` into `app/layout.tsx`
+- [ ] Wire `ItemGridAdapter` into `components/item/ItemGrid.tsx` (replaces raw grid div)
+- [ ] Wire `GalleryAdapter` into item detail page (replaces `ItemGallery` directly)
+- [ ] Wire `ItemCardAdapter` into `ItemCard.tsx` as outermost wrapper
+- [ ] Test each slot by cycling through 2–3 values in `content/config.ts` and verifying no crashes
+
+### Acceptance Criteria
+- Changing `ui.background` in `content/config.ts` → correct Aceternity background renders after rebuild
+- Unknown config value → silent fallback to `"simple"`/`"none"` (no crash, no TypeScript error)
+- All adapter files begin with `⚠️ DO NOT EDIT` comment
+- `pnpm type-check` → 0 errors across all adapter files
+
+---
+
+## Phase 12 — SEO, Accessibility & Security Hardening
+**Goal:** Lighthouse ≥ 80 performance, ≥ 90 accessibility. All TECH_REQUIREMENTS.md §14 and §15 checks pass.
+
+### Tasks
+
+#### SEO
+- [ ] Verify every route has `<title>` and `<meta name="description">` populated
+- [ ] Verify OG tags on all 3 route types (home, category, item)
+- [ ] Verify `sitemap.xml` if `next-sitemap` is configured (optional v1 feature)
+
+#### Accessibility
+- [ ] All images have non-empty `alt` text — audit with axe or browser DevTools
+- [ ] All interactive elements have `focus-visible:ring` — tab-through pages
+- [ ] Colour contrast ≥ 4.5:1 for body text — use browser colour picker
+- [ ] `QRModal` focus trap verified — tab stays inside modal
+- [ ] Status/condition badges verified for text label (not colour only)
+
+#### Security
+- [ ] Grep rendered HTML for `reserved_for` → must not appear
+- [ ] Verify `meta_description` truncated to 160 chars
+- [ ] Verify `original_link` validated as URL (invalid → empty, no rendered link)
+- [ ] Verify `poweredByHeader: false` in `next.config.ts`
+- [ ] Verify all external links have `rel="noopener noreferrer"`
+
+#### Performance
+- [ ] Run Lighthouse mobile on category page → target ≥ 80
+- [ ] Check first-load JS bundle ≤ 150 KB gzipped
+- [ ] Verify no layout shift from geo-pending → geo-resolved price change
+
+### Acceptance Criteria
+- Lighthouse Performance ≥ 80 (mobile)
+- Lighthouse Accessibility ≥ 90
+- 0 occurrences of `reserved_for` in any rendered HTML
+- All external links: `target="_blank" rel="noopener noreferrer"`
+
+---
+
+## Phase 13 — Deployment
+**Goal:** Site is live on Vercel with custom domain (or `*.vercel.app`), images on Vercel Blob, and full seller workflow validated end-to-end.
+
+### Tasks
+
+#### One-time Setup
+- [ ] Create Vercel project, connect GitHub repo
+- [ ] Vercel Dashboard → Storage → Create Blob store → copy `BLOB_READ_WRITE_TOKEN`
+- [ ] Add `BLOB_READ_WRITE_TOKEN` to Vercel Environment Variables (all environments)
+- [ ] Add `NEXT_PUBLIC_SITE_URL` to Vercel Environment Variables
+- [ ] Configure `content/config.ts`: `deploymentMode: "vercel"`, `imageStorage.provider: "vercel-blob"`, correct `baseUrl`, seller `location` coordinates
+
+#### Initial Content & Deploy
+- [ ] Add real listing photos to `content/items/` folders
+- [ ] Run `pnpm upload-images` → verify Blob upload succeeds, manifest written
+- [ ] Commit `lib/generated/image-manifest.json` + `content/**/*.json`
+- [ ] Push to `main` → Vercel auto-build → verify build succeeds (green deploy)
+- [ ] Navigate to deployed URL → verify all pages, images, and pricing work
+
+#### Domain & Final Checks
+- [ ] Configure custom domain in Vercel Dashboard → Domains (if applicable)
+- [ ] Verify HTTPS (Geolocation API requires HTTPS — enforced by Vercel)
+- [ ] Run `pnpm upload-images` once more with any final photo edits
+- [ ] Verify seller workflow end-to-end: add item.json + photos → upload → commit → push → live
+
+### Acceptance Criteria
+- Site live at target URL (Vercel or custom domain)
+- All images served from Vercel Blob CDN (verify via DevTools Network tab → CDN URL)
+- Geolocation permission prompt appears on category + item pages
+- `pnpm upload-images` on seller's machine → item appears on live site after push
+
+---
+
+## Risk Register
+
+| Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|
+| Aceternity component API changes between CLI install and adapter code | Medium | Medium | Pin `@aceternity/*` to the version installed; commit `components/ui/` to git so versions are locked |
+| Vercel Blob token not available during local `pnpm upload-images` | Low | Low | Use `.env.local` for local uploads; clearly documented in TECH_REQUIREMENTS.md §3 |
+| `pnpm setup-ui` fails mid-run (network error) | Medium | Low | Script is idempotent; re-run from the failed component; partial installs don't break existing code |
+| Geolocation API blocked by browser settings or corporate proxy | Medium | Low | Fallback to highest tier is already implemented; buyer can always enter distance manually |
+| Some Aceternity components require additional peer dependencies (e.g. `three.js` for 3D Globe) | Low | Medium | Only install dependencies actually needed by the 25 selected components; verify `pnpm type-check` after `setup-ui` |
+| Item photos exceed Vercel Blob free tier (500 MB) | Low (early) | Medium | Track Blob usage in Vercel Dashboard; upgrade plan or migrate to Cloudflare R2 (config switch = one line) |
+| Haversine distance off for non-US locations | Low | Low | Formula is standard WGS84; unit test with known city pairs before shipping |
+
+---
+
+## Definition of Done (per phase)
+
+A phase is **done** when:
+1. All checkboxes are checked
+2. `pnpm type-check` → 0 errors
+3. `pnpm lint` → 0 warnings
+4. The phase's acceptance criteria are all met
+5. Changes are committed to git with Conventional Commit message
+
+The project is **ready for v1 launch** when:
+1. All 13 phases are done
+2. At least one complete real listing (item.json + photos) exists
+3. Site is live and passing Lighthouse ≥ 80/90
+4. Seller has successfully completed the full workflow: add item → upload photos → commit → push → verify live
+
+---
+
+## Developer Notes
+
+### Start here
+```bash
+git clone <repo>
+pnpm install
+pnpm setup-ui          # Phase 1 — install all Aceternity components
+pnpm dev               # Phase 0 verification — should start after Phase 0
+```
+
+### Key design document cross-references
+| Implementation question | Where to look |
+|---|---|
+| What fields does `item.json` have? | DESIGN.md §5 |
+| How does sold item retention work? | DESIGN.md §8 |
+| How does geo price resolution work? | DESIGN.md §17 |
+| Which component is a "use client"? | DESIGN.md §12, TECH_REQUIREMENTS.md §20 |
+| How does `resolveItemPrice` work? | DESIGN.md §17, TECH_REQUIREMENTS.md §20 |
+| How does PricingSection get its initial tier? | DESIGN.md §10.3, TECH_REQUIREMENTS.md §21 |
+| How do image adapters work? | DESIGN.md §3, TECH_REQUIREMENTS.md §7 |
+| What does `loadAllItems()` filter? | TECH_REQUIREMENTS.md §8 |
+| How are UI slots wired? | DESIGN.md §18, TECH_REQUIREMENTS.md §21 |
+| What's the deployment checklist? | TECH_REQUIREMENTS.md §19 |
+
+### Never violate these invariants
+1. `reserved_for` is never rendered on any page
+2. `content/config.ts` uses no Node.js APIs (it's in the browser bundle)
+3. `lib/utils/pricing.ts` has no `"use client"` (must be importable by server components)
+4. `components/ui-adapters/` files begin with `⚠️ DO NOT EDIT`
+5. Sellers never need to edit anything outside `content/`

@@ -1,6 +1,6 @@
 # UsedExchange — Project Design Document
 
-**Version:** 0.5.0  
+**Version:** 0.6.0  
 **Date:** 2026-05-27  
 **Status:** Decisions Resolved — Ready for Implementation
 
@@ -25,6 +25,7 @@ The UI is built on [Aceternity UI](https://ui.aceternity.com) (React + Tailwind 
 - Photo gallery per item, sourced from the item folder
 - Rich, privacy-respecting contact section with social platform links and QR code support
 - Clean, extensible codebase designed for second development
+- Configurable Aceternity UI visual components for four independent slots (background, item grid layout, photo gallery, item card effect) — swappable via a single config line per slot
 
 ### Non-Goals (v1)
 - Real-time inventory updates without a rebuild
@@ -615,6 +616,12 @@ components/
 │   ├── FilterBar.tsx              ← client component; receives resolvedDistanceMi as prop
 │   └── useFilters.ts
 │
+├── ui-adapters/                   ← Aceternity slot adapters (see §19)
+│   ├── BackgroundEffect.tsx       ← site-wide background (wraps app layout)
+│   ├── ItemGridAdapter.tsx        ← category page item grid layout
+│   ├── GalleryAdapter.tsx         ← item detail photo gallery / carousel
+│   └── ItemCardAdapter.tsx        ← item card effect wrapper
+│
 └── common/
     └── AdaptiveImage.tsx          ← next/image vs <img> switch by deploymentMode
 ```
@@ -699,6 +706,18 @@ export const siteConfig: SiteConfig = {
   meta: {
     description: "Personal second-hand marketplace.",
     twitterHandle: "",
+  },
+
+  // ── UI Component Slots ────────────────────────────────────────────────────
+  // Choose an Aceternity UI component for each visual slot.
+  // All supported options are pre-installed. Just change the value and rebuild.
+  // This is the ONLY change needed — no code editing required.
+  // See DESIGN.md §18 for the full list of options per slot.
+  ui: {
+    background: "none",         // site-wide background effect behind all pages
+    itemGrid:   "simple",       // category page item grid layout style
+    gallery:    "simple",       // item detail page photo gallery / carousel
+    itemCard:   "simple",       // item card hover / visual effect
   },
 };
 ```
@@ -837,7 +856,12 @@ usedExchange/
 │       └── types.ts               ← SiteConfig TypeScript type (not edited by sellers)
 │
 ├── scripts/
-│   └── sync-images.ts
+│   ├── sync-images.ts
+│   └── setup-ui.sh                ← one-time developer setup: installs all Aceternity UI components
+│
+├── lib/
+│   └── ui/
+│       └── types.ts               ← UIConfig TypeScript types (BackgroundOption, ItemGridOption, etc.)
 │
 ├── tailwind.config.ts
 ├── next.config.ts                 ← imports content/config.ts for deploymentMode
@@ -1015,7 +1039,186 @@ export function resolveItemPrice(
 
 ---
 
-## 18. Extensibility Register
+## 18. UI Component Configuration
+
+### Overview
+
+The site has **four visual slots** whose Aceternity UI component can be swapped with one line in `content/config.ts`. All slots fall back gracefully to a plain implementation if the component has not been installed.
+
+| Slot | Config key | Applied to | Default |
+|---|---|---|---|
+| Background | `ui.background` | Entire site — wraps `app/layout.tsx` | `"none"` |
+| Item Grid | `ui.itemGrid` | Category page item listing layout | `"simple"` |
+| Gallery | `ui.gallery` | Item detail page photo gallery / carousel | `"simple"` |
+| Item Card | `ui.itemCard` | Every item card (category grid + home Recently Listed) | `"simple"` |
+
+---
+
+### Slot 1 — Background (`ui.background`)
+
+Wraps the `<body>` in `app/layout.tsx`. The chosen component is rendered behind all page content.
+
+| Config value | Aceternity Component | Install command |
+|---|---|---|
+| `"none"` *(default)* | No background effect | — |
+| `"aurora"` | Aurora Background | `npx shadcn@latest add @aceternity/aurora-background` |
+| `"background-beams"` | Background Beams | `npx shadcn@latest add @aceternity/background-beams-demo` |
+| `"background-beams-collision"` | Background Beams With Collision | `npx shadcn@latest add @aceternity/background-beams-with-collision` |
+| `"background-gradient-animation"` | Background Gradient Animation | `npx shadcn@latest add @aceternity/background-gradient-animation` |
+| `"background-boxes"` | Background Boxes | `npx shadcn@latest add @aceternity/background-boxes-demo` |
+| `"wavy"` | Wavy Background | `npx shadcn@latest add @aceternity/wavy-background` |
+| `"vortex"` | Vortex | `npx shadcn@latest add @aceternity/vortex` |
+| `"shooting-stars"` | Shooting Stars & Stars Background | `npx shadcn@latest add @aceternity/shooting-stars-and-stars-background-demo` |
+| `"meteors"` | Meteors | `npx shadcn@latest add @aceternity/meteors` |
+| `"grid-and-dot"` | Grid and Dot Backgrounds | `npx shadcn@latest add @aceternity/grid-background-demo` |
+| `"background-lines"` | Background Lines | `npx shadcn@latest add @aceternity/background-lines` |
+| `"spotlight"` | Spotlight | `npx shadcn@latest add @aceternity/spotlight` |
+| `"spotlight-new"` | Spotlight New | `npx shadcn@latest add @aceternity/spotlight-new` |
+
+---
+
+### Slot 2 — Item Grid (`ui.itemGrid`)
+
+Controls the layout component used to display the item grid on category pages. Replaces the default CSS grid.
+
+| Config value | Aceternity Component | Character | Install command |
+|---|---|---|---|
+| `"simple"` *(default)* | Plain CSS grid (Tailwind) | Responsive 2–4 column grid | — |
+| `"bento-grid"` | Bento Grid | Masonry-style, variable-size cards | `npx shadcn@latest add @aceternity/bento-grid` |
+| `"layout-grid"` | Layout Grid | Image-focused grid with hover reveals | `npx shadcn@latest add @aceternity/layout-grid` |
+| `"focus-cards"` | Focus Cards | Hover dims other cards, focuses selected | `npx shadcn@latest add @aceternity/focus-cards` |
+
+---
+
+### Slot 3 — Gallery (`ui.gallery`)
+
+Controls the photo gallery / carousel on the item detail page. Replaces the default thumbnail strip.
+
+| Config value | Aceternity Component | Character | Install command |
+|---|---|---|---|
+| `"simple"` *(default)* | Static image strip with click-to-zoom | Minimal, fast | — |
+| `"apple-cards-carousel"` | Apple Cards Carousel | Horizontal scroll with 3-D depth | `npx shadcn@latest add @aceternity/apple-cards-carousel-demo` |
+| `"images-slider"` | Images Slider | Full-width crossfade slider | `npx shadcn@latest add @aceternity/images-slider` |
+| `"carousel"` | Carousel | Classic paginated carousel | `npx shadcn@latest add @aceternity/carousel` |
+| `"parallax-scroll"` | Parallax Scroll | Two-column staggered parallax grid | `npx shadcn@latest add @aceternity/parallax-scroll parallax-scroll-2` |
+
+---
+
+### Slot 4 — Item Card (`ui.itemCard`)
+
+Controls the hover / visual effect applied to every item card. The card content (image, name, price, badges) is always rendered by `ItemCard.tsx`; the adapter wraps it.
+
+| Config value | Aceternity Component | Character | Install command |
+|---|---|---|---|
+| `"simple"` *(default)* | Plain bordered card (Tailwind) | Clean, fast | — |
+| `"card-hover-effect"` | Card Hover Effect | Animated border glow on hover | `npx shadcn@latest add @aceternity/card-hover-effect` |
+| `"card-spotlight"` | Card Spotlight | Radial spotlight follows cursor | `npx shadcn@latest add @aceternity/card-spotlight` |
+| `"3d-card"` | 3D Card Effect | Perspective tilt on mouse move | `npx shadcn@latest add @aceternity/3d-card` |
+| `"evervault-card"` | Evervault Card | Encrypted-text noise on hover | `npx shadcn@latest add @aceternity/evervault-card` |
+| `"wobble-card"` | Wobble Card | Elastic wobble on hover | `npx shadcn@latest add @aceternity/wobble-card` |
+| `"direction-aware-hover"` | Direction Aware Hover | Slide-in overlay from mouse entry direction | `npx shadcn@latest add @aceternity/direction-aware-hover` |
+| `"glare-card"` | Glare Card | Glare reflection follows cursor | `npx shadcn@latest add @aceternity/glare-card` |
+
+---
+
+### Core Principle: Seller Only Touches `content/`
+
+> **The seller never edits any file outside `content/`.** Changing a UI component is a single config-value change in `content/config.ts`. No code editing, no CLI commands, no uncomment steps.
+
+To make this work, all 25 supported Aceternity components are **pre-installed once by the developer** during initial project setup and **committed to the repository**. The adapter files ship pre-configured with all imports active and all options wired. After that initial setup, no further developer intervention is needed for UI changes.
+
+---
+
+### One-Time Developer Setup
+
+Run once after cloning the repository (before first deployment):
+
+```bash
+pnpm setup-ui
+```
+
+This script installs all 25 supported Aceternity components into `components/ui/` in a single command (see TECH_REQUIREMENTS.md §21 for the full script). **Commit the resulting `components/ui/` files to git.** From that point on, the seller can use any config value from the tables above with no further setup.
+
+```
+After pnpm setup-ui + git commit:
+  components/ui/aurora-background.tsx     ← committed
+  components/ui/background-beams.tsx      ← committed
+  components/ui/bento-grid.tsx            ← committed
+  components/ui/apple-cards-carousel.tsx  ← committed
+  ... (all 25 components)
+
+Seller wants Aurora background:
+  content/config.ts  →  ui: { background: "aurora" }  ← ONLY change needed
+  pnpm dev  ✓  (or push → Vercel builds)
+```
+
+---
+
+### Adapter Architecture
+
+Each adapter file ships fully wired — all supported components pre-imported, all cases handled. **Adapter files are app code; sellers must never edit them.** They live in `components/ui-adapters/` (not in `content/`).
+
+```tsx
+// components/ui-adapters/BackgroundEffect.tsx
+// ⚠️  DO NOT EDIT — seller configuration goes in content/config.ts only
+"use client";
+
+import { siteConfig } from "@/content/config";
+
+// All supported components are pre-installed (pnpm setup-ui) and pre-imported.
+import { AuroraBackground }              from "@/components/ui/aurora-background";
+import { BackgroundBeams }               from "@/components/ui/background-beams";
+import { BackgroundBeamsWithCollision }  from "@/components/ui/background-beams-with-collision";
+import { BackgroundGradientAnimation }   from "@/components/ui/background-gradient-animation";
+import { BackgroundBoxes }               from "@/components/ui/background-boxes";
+import { WavyBackground }                from "@/components/ui/wavy-background";
+import { Vortex }                        from "@/components/ui/vortex";
+import { ShootingStars }                 from "@/components/ui/shooting-stars-and-stars-background";
+// ... all supported imports
+
+const COMPONENTS = {
+  "aurora":                        AuroraBackground,
+  "background-beams":              BackgroundBeams,
+  "background-beams-collision":    BackgroundBeamsWithCollision,
+  "background-gradient-animation": BackgroundGradientAnimation,
+  "background-boxes":              BackgroundBoxes,
+  "wavy":                          WavyBackground,
+  "vortex":                        Vortex,
+  "shooting-stars":                ShootingStars,
+  // ... all options
+} as const satisfies Partial<Record<string, React.ComponentType<{ children: React.ReactNode }>>>;
+
+export function BackgroundEffect({ children }: { children: React.ReactNode }) {
+  const { background } = siteConfig.ui;
+  if (background === "none") return <>{children}</>;
+  const Component = COMPONENTS[background as keyof typeof COMPONENTS];
+  if (!Component) return <>{children}</>;   // "none" or unknown value → no wrapper
+  return <Component>{children}</Component>;
+}
+```
+
+The same pattern applies to `ItemGridAdapter`, `GalleryAdapter`, and `ItemCardAdapter`. Each adapter:
+- Imports every supported Aceternity component for its slot
+- Maps every config value to the corresponding component
+- Falls back to the simple/none implementation for `"simple"`/`"none"` or any unknown value
+- Never crashes
+
+---
+
+### Graceful Degradation
+
+| Scenario | Behavior |
+|---|---|
+| `ui.background: "none"` | Children rendered with no wrapper — no background effect |
+| `ui.*: "simple"` | Built-in Tailwind implementation — no Aceternity component used |
+| Valid config value (e.g. `"aurora"`) | Corresponding pre-installed Aceternity component renders |
+| Unknown/future value not yet in COMPONENTS map | Silent fallback to `"none"` / `"simple"` |
+
+The site **never crashes at runtime** due to a UI configuration value.
+
+---
+
+## 19. Extensibility Register
 
 | Future feature | Designated extension point |
 |---|---|
@@ -1031,6 +1234,8 @@ export function resolveItemPrice(
 | Cached location | Store `resolveDistanceMi` in `sessionStorage` to persist across page navigations within the same session. Add as opt-in config flag (`cacheLocationInSession: true`). Must be gated behind user consent or explicit config opt-in — not on by default. |
 | Local image optimisation | Add `sharp` as a devDependency; run a pre-build image resizing step that processes photos in `content/items/` before the sync script uploads them. Extension point: add an optional `preprocess` step to the `upload` mode in `scripts/sync-images.ts`. |
 | `pnpm clean-storage` | Script to reconcile orphaned CDN blobs (present in Blob/R2 but absent from manifest) and delete them. Requires provider-specific list+delete API calls. |
+| Add new UI component option (developer) | (1) Install Aceternity component via `npx shadcn@latest add ...`; (2) add import + map entry to the relevant adapter in `components/ui-adapters/`; (3) add the value to the TypeScript union in `lib/ui/types.ts`; (4) document in DESIGN.md §18 table; (5) add install command to `scripts/setup-ui.sh` so future projects get it automatically |
+| Add new UI slot entirely (developer) | (1) Add config key to `UIConfig` in `lib/ui/types.ts`; (2) create new adapter in `components/ui-adapters/`; (3) insert adapter in the appropriate page component; (4) document in DESIGN.md §18 |
 
 ---
 
