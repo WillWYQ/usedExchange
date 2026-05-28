@@ -70,7 +70,8 @@ public/contact/
 
 # ── Generated build artifacts (rebuilt on every next build) ──────────────────
 # image-manifest.json is intentionally NOT listed here — it IS committed.
-lib/generated/search-index.json
+# search-index.json is written to public/ (not lib/generated/) so SearchBar can fetch it via HTTP.
+public/search-index.json
 
 # ── Editor / IDE ──────────────────────────────────────────────────────────────
 .vscode/settings.json

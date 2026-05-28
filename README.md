@@ -31,7 +31,7 @@ pnpm dev               # local preview — photos served from public/items/
 ```bash
 # Add a new item
 pnpm new electronics/iphone-14   # creates the folder + item.json template
-# drop photos into content/items/electronics/iphone-14/ mannually
+# drop photos into content/items/electronics/iphone-14/ manually
 pnpm upload-images               # uploads photos to CDN, updates manifest
 git add content/ lib/generated/image-manifest.json && git push
 # → Vercel builds automatically

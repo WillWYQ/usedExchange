@@ -123,7 +123,7 @@
 - [ ] Implement `loadItem()` — returns `null` if missing, never throws
 - [ ] Implement `loadAllItems()` — `available` status ONLY; sorted by `listedDate` desc; capped at `siteConfig.recentlyListedCount`. **Home page recently-listed strip only.** Do NOT use for the /all page (see Phase 8b).
 - [ ] Implement `loadSoldItems()` — returns ALL sold items regardless of `soldItemRetentionDays`; sorted by `soldDate` desc (falls back to `listedDate`); used by `/sold` archive page (TECH_REQUIREMENTS.md §8)
-- [ ] Write `lib/search/index.ts` — `buildSearchIndex()`: reads all available items, returns `SearchIndexEntry[]` with fields: `name`, `description`, `brand`, `model`, `tags`, `course`, `isbn`, `edition`; serialised to `lib/generated/search-index.json` during `next build` (TECH_REQUIREMENTS.md §22.1)
+- [ ] Write `lib/search/index.ts` — `buildSearchIndex()`: reads all available items, returns `SearchIndexEntry[]` with fields: `name`, `description`, `brand`, `model`, `tags`, `course`, `isbn`, `edition`; written to `public/search-index.json` during `next build` (NOT `lib/generated/`) so SearchBar can fetch it via HTTP (TECH_REQUIREMENTS.md §22.1)
 - [ ] Image URL resolution: `manifest[key] ?? "/items/{key}"` fallback (DESIGN.md §11)
 - [ ] Image sorting: `filenames.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))` — explicit sort, never rely on `readdir` order (DESIGN.md §4)
 - [ ] Verify `reserved_for` field is never included in returned `Item` type
@@ -297,6 +297,8 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 
 ## Phase 9 — Item Detail Page
 **Goal:** `/[category]/[item]` renders with gallery, SSG pricing, contact section, and all metadata.
+
+> **⚠️ Ordering note:** Phase 9 depends on Phase 10 (Contact System). Despite appearing first in this document, Phase 10 must be completed before Phase 9 can be wired together. Complete Phase 10 first, then return here.
 
 ### Tasks
 

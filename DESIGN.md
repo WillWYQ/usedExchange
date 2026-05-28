@@ -705,8 +705,9 @@ lib/content/loader.ts
   │                                                     NOT use this function — it aggregates
   │                                                     loadItemsByCategory() across all categories.)
   ├── loadSoldItems()               → Item[]           (used by /sold archive page; all sold, no date filter)
-  └── buildSearchIndex()            → SearchIndex      (called at build time; serialised to
-                                                        lib/generated/search-index.json for fuse.js)
+  └── buildSearchIndex()            → SearchIndex      (called at build time; written to
+                                                        public/search-index.json so SearchBar can
+                                                        fetch it via HTTP at runtime)
   │
   ▼
 lib/content/schema.ts              Zod schema; .safeParse() + default merge
@@ -906,7 +907,7 @@ export const siteConfig: SiteConfig = {
     enabled:     true,
     placeholder: "Search items...",
     // Fields indexed: name, description, brand, model, tags, course, isbn, edition
-    // Index built at build time → lib/generated/search-index.json
+    // Index built at build time → public/search-index.json (fetched by SearchBar via HTTP)
   },
 
   // ── Sitemap ───────────────────────────────────────────────────────────────
@@ -986,7 +987,7 @@ pnpm build
   │
   ├── next build
   │     loader.ts reads manifest → all image URLs resolve to CDN
-  │     buildSearchIndex() → lib/generated/search-index.json  (fuse.js index)
+  │     buildSearchIndex() → public/search-index.json  (fuse.js index; served statically; fetched by SearchBar)
   │     generateStaticParams runs for all non-draft, non-expired items
   │     All pages rendered to static HTML + JSON
   │     If deploymentMode === "static": output: 'export' → out/
@@ -1059,7 +1060,8 @@ usedExchange/
 │
 ├── public/
 │   ├── contact/                   ← ✗ gitignored; copied from content/contact/ by sync
-│   └── items/                     ← ✗ gitignored; copied from content/items/ by pnpm dev
+│   ├── items/                     ← ✗ gitignored; copied from content/items/ by pnpm dev
+│   └── search-index.json          ← ✗ gitignored; written by next build; fetched by SearchBar at runtime
 │
 ├── .image-cache/                  ← ✗ gitignored; incremental upload speed cache
 │   └── checksums.json
@@ -1100,8 +1102,7 @@ usedExchange/
 │   ├── search/
 │   │   └── index.ts               ← buildSearchIndex(): returns Fuse-compatible item index
 │   ├── generated/
-│   │   ├── image-manifest.json    ← ✓ git-tracked; written by pnpm upload-images
-│   │   └── search-index.json      ← ✗ gitignored; written by next build; consumed by SearchBar
+│   │   └── image-manifest.json    ← ✓ git-tracked; written by pnpm upload-images
 │   ├── config/
 │   │   └── types.ts               ← SiteConfig TypeScript type (not edited by sellers)
 │   └── ui/

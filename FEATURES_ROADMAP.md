@@ -84,7 +84,7 @@ When a visitor clicks a contact platform button, the outreach message is pre-fil
 
 ---
 
-### 1.2 Native Share + Copy Link
+### 1.3 Native Share + Copy Link
 **Effort:** XS · **Value:** ⭐⭐⭐
 
 A "Share" button on item detail pages.
@@ -96,7 +96,7 @@ A "Share" button on item detail pages.
 
 ---
 
-### 1.3 Sort Options on Category Page
+### 1.4 Sort Options on Category Page
 **Effort:** XS · **Value:** ⭐⭐⭐
 
 Sort the item grid by:
@@ -108,7 +108,7 @@ Client-side only, no rebuild. A dropdown in the filter bar.
 
 ---
 
-### 1.4 "Listed X days ago" Freshness Indicator
+### 1.5 "Listed X days ago" Freshness Indicator
 **Effort:** XS · **Value:** ⭐⭐
 
 Show how long an item has been listed on the item card and detail page. Derived from `listed_date`.  
@@ -118,7 +118,7 @@ Adds urgency and transparency without any schema changes.
 
 ---
 
-### 1.5 Condition Guide Tooltip 👤
+### 1.6 Condition Guide Tooltip 👤
 **Effort:** XS · **Value:** ⭐⭐
 
 A `?` icon next to the condition badge that opens a small tooltip or modal explaining what each condition value means:
@@ -132,7 +132,7 @@ Reduces buyer uncertainty. One shared `ConditionGuide` component.
 
 ---
 
-### 1.6 JSON-LD Structured Data (Product Schema)
+### 1.7 JSON-LD Structured Data (Product Schema)
 **Effort:** S · **Value:** ⭐⭐⭐
 
 Embed `<script type="application/ld+json">` on item detail pages with `@type: "Product"`. Google uses this to show rich snippets in search results (price, availability, rating slot).
@@ -145,14 +145,14 @@ Fields available from existing data: `name`, `description`, `image`, `offers.pri
 
 ---
 
-### 1.7 Quantity Indicator
+### 1.8 Quantity Indicator
 **Effort:** XS · **Value:** ⭐⭐
 
 The `quantity` field exists in `item.json` but is never displayed. Show "3 available" on item cards and detail pages when `quantity > 1`. Adds urgency for bulk listings.
 
 ---
 
-### 1.8 Vercel Analytics + Speed Insights
+### 1.9 Vercel Analytics + Speed Insights
 **Effort:** XS · **Value:** ⭐⭐
 
 One script component in `app/layout.tsx`. Free on Vercel Hobby. Shows:
@@ -164,7 +164,7 @@ No backend required. Privacy-friendly by default.
 
 ---
 
-### 1.9 PWA Web App Manifest
+### 1.10 PWA Web App Manifest
 **Effort:** XS · **Value:** ⭐⭐
 
 A `public/manifest.json` file makes the site installable as a home screen app on iPhone and Android. Includes:
@@ -177,7 +177,7 @@ No service worker needed for v1 — manifest alone enables installation.
 
 ---
 
-### 1.10 Schema Additions for Free (add in Phase 3) 🎓 👤
+### 1.11 Schema Additions for Free (add in Phase 3) 🎓 👤
 **Effort:** XS · **Value:** ⭐⭐⭐
 
 These fields cost nothing to add to `item.json` schema during Phase 3 (Content Schema). Retrofitting them later requires updating all existing `item.json` files.
@@ -201,7 +201,7 @@ All optional, all gracefully defaulted to empty/false.
 
 ---
 
-### 1.11 Semester-End Batch Actions 🎓
+### 1.12 Semester-End Batch Actions 🎓
 **Effort:** S · **Value:** ⭐⭐⭐
 
 CS students do most of their selling at the end of each semester. A single command to prepare for a sell-off:
@@ -524,7 +524,9 @@ Requires a serverless backend and persistent state (KV store).
 These fields are free to add during initial schema implementation (Phase 3). Retrofitting them later means editing every existing `item.json`.
 
 ```jsonc
-// Proposed additions to item.json schema — all optional, all gracefully defaulted
+// These fields are included in the v1 item.json schema (DESIGN.md §5).
+// Add them during Phase 3 (Content Schema) — retrofitting costs editing every existing item.json.
+// All optional, all gracefully defaulted.
 
 "stripe_payment_link": "",          // Stripe Payment Link for instant deposit
 "pickup_windows": [],               // ["Weekday evenings", "Saturdays 10am–2pm"]
@@ -533,8 +535,9 @@ These fields are free to add during initial schema implementation (Phase 3). Ret
 "price_reduced": false,             // "Price Reduced" chip
 "previous_lowest_price": null,      // for price-drop display
 "youtube_link": "",                 // demo video URL
-"scheduling_url": "",               // Calendly / Cal.com pickup scheduling link
 ```
+
+> **`scheduling_url` is NOT a v1 field.** It is listed as a v1.1 feature in §2.7 and the priority table. Do not add it to the Phase 3 schema.
 
 ---
 
