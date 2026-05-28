@@ -223,7 +223,7 @@ A single command handles the entire end-of-semester workflow in under 5 minutes.
 ## Tier 2 — Medium-Term Features
 *Meaningful improvements. Each standalone and independently shippable.*
 
-### 2.1 Client-Side Full-Text Search 🎓 👤
+### 2.1 Client-Side Full-Text Search 🎓 👤 ✅ Shipped in v1
 **Effort:** M · **Value:** ⭐⭐⭐
 
 `fuse.js` index built at build time from all item names, descriptions, brands, models, and tags. A search input in `SiteHeader` — results appear as the user types.
@@ -299,7 +299,7 @@ No backend. Eliminates back-and-forth messages to agree on a viewing time.
 
 ---
 
-### 2.8 "Make an Offer" Flow 🎓 👤
+### 2.8 "Make an Offer" Flow 🎓 👤 ✅ Shipped in v1
 **Effort:** S · **Value:** ⭐⭐
 
 When `price.negotiable: true`, show a "Send Offer" button on the item detail page. A small inline form asks for the buyer's offer amount, then opens the configured contact platform with a pre-filled message: `"I'd like to offer $X for {item.name}."`.
@@ -308,14 +308,14 @@ No backend required — the form just constructs a deep-link message.
 
 ---
 
-### 2.9 Recently Viewed Items
+### 2.9 Recently Viewed Items ✅ Shipped in v1
 **Effort:** S · **Value:** ⭐⭐
 
 Store the last 5 viewed item slugs in `sessionStorage`. Display a "Recently Viewed" row at the bottom of category and item detail pages. Zero server changes; one client component.
 
 ---
 
-### 2.10 Photo Quality Warnings
+### 2.10 Photo Quality Warnings ✅ Shipped in v1
 **Effort:** XS · **Value:** ⭐⭐
 
 During `pnpm upload-images`, warn (not block) if:
@@ -328,7 +328,7 @@ Advisory warnings only. Never blocks the upload or build.
 
 ---
 
-### 2.11 Sitemap
+### 2.11 Sitemap ✅ Shipped in v1
 **Effort:** XS · **Value:** ⭐⭐⭐
 
 `next-sitemap` generates `sitemap.xml` and `robots.txt` as a `postbuild` step. All static routes are already known at build time. Improves search engine crawlability significantly.
@@ -337,14 +337,14 @@ Already in the Extensibility Register.
 
 ---
 
-### 2.12 Sold Items Archive Page
+### 2.12 Sold Items Archive Page ✅ Shipped in v1
 **Effort:** S · **Value:** ⭐⭐
 
 A `/sold` route listing all items with `status: "sold"`, regardless of retention. Acts as a "gallery of past sales" — provides social proof and helps buyers gauge typical pricing. Items shown with "SOLD" badge and no price prominence.
 
 ---
 
-### 2.13 Twitter/X + Pinterest Rich Cards
+### 2.13 Twitter/X + Pinterest Rich Cards ✅ Shipped in v1
 **Effort:** XS · **Value:** ⭐⭐
 
 - **Twitter card:** `twitter:card: "summary_large_image"` using item cover image → item previews look professional when shared on Twitter/X
@@ -363,7 +363,7 @@ Already in the Extensibility Register.
 
 ---
 
-### 2.15 Textbook-Specific Fields & Category 🎓
+### 2.15 Textbook-Specific Fields & Category 🎓 ✅ Shipped in v1
 **Effort:** S · **Value:** ⭐⭐⭐
 
 CS students sell many textbooks. First-class textbook support makes the site significantly more useful for this user segment.
@@ -379,7 +379,7 @@ CS students sell many textbooks. First-class textbook support makes the site sig
 
 ---
 
-### 2.16 Non-Technical User Setup Guide 👤
+### 2.16 Non-Technical User Setup Guide 👤 ✅ Shipped in v1
 **Effort:** S · **Value:** ⭐⭐⭐
 
 A clear, illustrated `SETUP_GUIDE.md` written for the non-CS user who had the project set up by a friend. It covers only the `content/` folder and explains:
@@ -456,7 +456,7 @@ Add `price_reduced: true` and optional `previous_lowest_price` to `item.json`. S
 
 ---
 
-### 3.7 i18n — Multi-Language Support
+### 3.7 i18n — Multi-Language Support ✅ Shipped in v1
 **Effort:** L · **Value:** ⭐⭐
 
 Add language variants of text fields to `item.json` (`name_zh`, `description_zh`) and a `locale` config key. The site renders in the configured language, with automatic fallback to English if a field has no translation.

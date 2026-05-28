@@ -628,6 +628,7 @@ The site header appears on all pages and contains:
 - **"Browse All" link** — prominent link to `/all` page
 - **Item grid** — cards with location-resolved prices, sort and filter applied client-side
 - **OG metadata** — `og:title` = category display name; `og:image` = cover of first available item
+- **Empty category** — If all items in the category are `draft` or `sold` past retention, the route is still generated (`loadCategories()` returns all category folders regardless of item visibility). The page renders an empty item grid with a "No items currently available in this category" message. A category card on the home page is hidden only when no items of any non-`draft` status exist (see §15 home page rule); the category route itself is always present.
 
 ### 10.3 Item Detail Page (`/[category]/[item]`)
 - **Breadcrumb** — Home → Category → Item name
@@ -705,7 +706,7 @@ lib/content/loader.ts
   │                                                     NOT use this function — it aggregates
   │                                                     loadItemsByCategory() across all categories.)
   ├── loadSoldItems()               → Item[]           (used by /sold archive page; all sold, no date filter)
-  └── buildSearchIndex()            → SearchIndex      (called at build time; written to
+  └── buildSearchIndex()            → SearchIndexEntry[]  (called at build time; written to
                                                         public/search-index.json so SearchBar can
                                                         fetch it via HTTP at runtime)
   │
@@ -979,30 +980,38 @@ Then:
 ── VERCEL BUILD ─────────────────────────────────────────────────────────────
 pnpm build
   │
-  ├── [prebuild]  scripts/sync-images.ts  (build-check mode)
-  │     ├── No image files in content/items/ (gitignored — not on Vercel's runner)
-  │     ├── content/contact/** present (git-tracked) → copies to public/contact/
-  │     ├── Reads existing lib/generated/image-manifest.json  (committed)
-  │     └── Logs: "manifest present (N entries) — skipping upload"
+  ├── [prebuild]
+  │     ├── scripts/sync-images.ts  (build-check mode)
+  │     │     ├── No image files in content/items/ (gitignored — not on Vercel's runner)
+  │     │     ├── content/contact/** present (git-tracked) → copies to public/contact/
+  │     │     ├── Reads existing lib/generated/image-manifest.json  (committed)
+  │     │     └── Logs: "manifest present (N entries) — skipping upload"
+  │     │
+  │     └── scripts/build-search-index.ts
+  │           ├── Calls buildSearchIndex() from lib/search/index.ts
+  │           └── Writes public/search-index.json  (gitignored; fetched by SearchBar at runtime)
   │
   ├── next build
   │     loader.ts reads manifest → all image URLs resolve to CDN
-  │     buildSearchIndex() → public/search-index.json  (fuse.js index; served statically; fetched by SearchBar)
   │     generateStaticParams runs for all non-draft, non-expired items
   │     All pages rendered to static HTML + JSON
   │     If deploymentMode === "static": output: 'export' → out/
   │
-  └── [postbuild]
-        next-sitemap → sitemap.xml + robots.txt  (runs when siteConfig.sitemap.enabled)
+  └── [postbuild]  scripts/postbuild.ts
+        if siteConfig.sitemap.enabled → next-sitemap → sitemap.xml + robots.txt
+        if siteConfig.sitemap.enabled === false → skip (prints message, exits 0)
 
 ── LOCAL BUILD (imageStorage.provider === "local", seller's machine) ─────────
 pnpm build
   │
-  ├── [prebuild]  scripts/sync-images.ts  (build-check mode — local provider branch)
-  │     Photos present locally → copied to public/items/ (same as dev-sync)
-  │     content/contact/ → copied to public/contact/
-  │     Images are included in the built output (out/) — suitable for self-hosted servers
-  │     ⚠️  Do NOT use this mode on Vercel (photos are gitignored on Vercel's runner)
+  ├── [prebuild]
+  │     ├── scripts/sync-images.ts  (build-check mode — local provider branch)
+  │     │     Photos present locally → copied to public/items/ (same as dev-sync)
+  │     │     content/contact/ → copied to public/contact/
+  │     │     Images are included in the built output (out/) — suitable for self-hosted servers
+  │     │     ⚠️  Do NOT use this mode on Vercel (photos are gitignored on Vercel's runner)
+  │     │
+  │     └── scripts/build-search-index.ts → public/search-index.json
   │
   └── next build → out/ includes all images; deploy entire out/ to static host
 
@@ -1116,6 +1125,8 @@ usedExchange/
 │
 ├── scripts/
 │   ├── sync-images.ts             ← image upload pipeline (3 modes)
+│   ├── build-search-index.ts      ← prebuild step: calls buildSearchIndex(), writes public/search-index.json
+│   ├── postbuild.ts               ← postbuild step: runs next-sitemap only when siteConfig.sitemap.enabled
 │   ├── setup-ui.sh                ← one-time developer setup: installs all Aceternity components
 │   ├── create-item.ts             ← pnpm create-item <category>/<name>
 │   ├── mark-sold.ts               ← pnpm mark-sold <category>/<name>
@@ -1127,6 +1138,7 @@ usedExchange/
 ├── next.config.ts                 ← imports content/config.ts for deploymentMode
 ├── tsconfig.json
 ├── package.json
+├── README.md
 ├── DESIGN.md
 └── TECH_REQUIREMENTS.md
 ```
@@ -1385,7 +1397,7 @@ Controls the hover / visual effect applied to every item card. The card content 
 
 > **The seller never edits any file outside `content/`.** Changing a UI component is a single config-value change in `content/config.ts`. No code editing, no CLI commands, no uncomment steps.
 
-To make this work, all 25 supported Aceternity components are **pre-installed once by the developer** during initial project setup and **committed to the repository**. The adapter files ship pre-configured with all imports active and all options wired. After that initial setup, no further developer intervention is needed for UI changes.
+To make this work, all 27 supported Aceternity components are **pre-installed once by the developer** during initial project setup and **committed to the repository**. The adapter files ship pre-configured with all imports active and all options wired. After that initial setup, no further developer intervention is needed for UI changes.
 
 ---
 
@@ -1397,7 +1409,7 @@ Run once after cloning the repository (before first deployment):
 pnpm setup-ui
 ```
 
-This script installs all 25 supported Aceternity components into `components/ui/` in a single command (see TECH_REQUIREMENTS.md §21 for the full script). **Commit the resulting `components/ui/` files to git.** From that point on, the seller can use any config value from the tables above with no further setup.
+This script installs all 27 supported Aceternity components into `components/ui/` in a single command (see TECH_REQUIREMENTS.md §21 for the full script). **Commit the resulting `components/ui/` files to git.** From that point on, the seller can use any config value from the tables above with no further setup.
 
 ```
 After pnpm setup-ui + git commit:
@@ -1405,7 +1417,7 @@ After pnpm setup-ui + git commit:
   components/ui/background-beams.tsx      ← committed
   components/ui/bento-grid.tsx            ← committed
   components/ui/apple-cards-carousel.tsx  ← committed
-  ... (all 25 components)
+  ... (all 27 components)
 
 Seller wants Aurora background:
   content/config.ts  →  ui: { background: "aurora" }  ← ONLY change needed
@@ -1495,7 +1507,7 @@ The following were previously listed as future features. Those now in v1 have be
 | Add new UI component option | Install via `npx shadcn@latest add ...`; add import + entry to adapter; add value to `lib/ui/types.ts`; update `scripts/setup-ui.sh` |
 | Add new UI slot | Add key to `UIConfig`; create new adapter in `components/ui-adapters/`; document in §18 |
 | Multi-language routing | Deploy separate instances per locale (e.g. `zh.domain.com`); each has its own config + locale set |
-| RSS feed | Generate `feed.xml` in postbuild from `loadAllItems()`; link in `<head>` |
+| RSS feed | Generate `feed.xml` in postbuild by aggregating `loadItemsByCategory()` across all categories (do NOT use `loadAllItems()` — that function returns `available`-only items capped at `recentlyListedCount`); link in `<head>` |
 | Seller dashboard (local GUI) | Local-only Next.js dev-mode route or Electron app that reads/writes `content/`; key unlock for non-technical users |
 | Multi-seller support | Requires full architecture redesign; each seller gets a namespaced `content/` folder |
 

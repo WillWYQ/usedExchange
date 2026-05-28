@@ -405,9 +405,9 @@ Printed to stdout after every successful `upload` run:
     "create-template": "tsx scripts/create-template.ts",
     "new":             "tsx scripts/create-item.ts",
     "mark-sold":       "tsx scripts/mark-sold.ts",
-    "prebuild":        "tsx scripts/sync-images.ts --mode build-check",
+    "prebuild":        "tsx scripts/sync-images.ts --mode build-check && tsx scripts/build-search-index.ts",
     "build":           "next build",
-    "postbuild":       "next-sitemap",
+    "postbuild":       "tsx scripts/postbuild.ts",
     "dev":             "tsx scripts/sync-images.ts --mode dev-sync && next dev --turbo",
     "type-check":      "tsc --noEmit",
     "lint":            "eslint . --max-warnings 0",
@@ -420,8 +420,12 @@ Printed to stdout after every successful `upload` run:
 |---|---|---|
 | `pnpm upload-images` | After adding, replacing, or deleting photos | Seller, on their machine |
 | `pnpm mark-sold <cat>/<name>` | After an item sells — sets `status: "sold"` and `sold_date` | Seller, on their machine |
-| `pnpm build` | Deploy to production | Vercel (automatic on push) or seller |
-| `pnpm dev` | Local development preview | Seller, on their machine |
+| `pnpm build` | Deploy to production — runs `prebuild` (image sync + search index) then `next build` then `postbuild` (sitemap) | Vercel (automatic on push) or seller |
+| `pnpm dev` | Local development preview — note: `public/search-index.json` is NOT rebuilt on `pnpm dev`; run `pnpm build` once first to populate it | Seller, on their machine |
+
+> **`scripts/build-search-index.ts`** — called in the `prebuild` step (before `next build`). Imports `buildSearchIndex()` from `lib/search/index.ts`, writes the fuse.js search index to `public/search-index.json`, and exits 1 on error. Because it runs in `prebuild` (before `next build`), the index is ready when the `SearchBar` fetches it at runtime. `public/search-index.json` is gitignored — it is regenerated on every build.
+
+> **`scripts/postbuild.ts`** — called in the `postbuild` step (after `next build`). Reads `siteConfig.sitemap.enabled`; if true, runs `next-sitemap` to generate `public/sitemap.xml` and `public/robots.txt`; if false, prints a skip message and exits 0. This is the canonical implementation of "the postbuild script checks this before running" from §22.7.
 
 ---
 
@@ -1009,7 +1013,7 @@ See DESIGN.md §18 for the design rationale, slot tables, and the core principle
 
 ### Setup Script — `scripts/setup-ui.sh`
 
-Run once by a developer after initial clone. Installs all 25 supported Aceternity components. The resulting files in `components/ui/` must be committed to git — after that, sellers never run any install commands.
+Run once by a developer after initial clone. Installs all 27 supported Aceternity components (13 background + 3 grid + 4 gallery + 7 card). The resulting files in `components/ui/` must be committed to git — after that, sellers never run any install commands.
 
 ```bash
 #!/usr/bin/env bash
@@ -1408,15 +1412,41 @@ All added in `generateMetadata` for item detail pages:
 ```js
 /** @type {import('next-sitemap').IConfig} */
 module.exports = {
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || require('./content/config').siteConfig.baseUrl,
+  // NEXT_PUBLIC_SITE_URL is injected by scripts/postbuild.ts (falls back to siteConfig.baseUrl).
+  // Do NOT use require('./content/config') here — next-sitemap runs as a plain Node.js child process
+  // (not via tsx), so TypeScript files cannot be required directly.
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
   generateRobotsTxt: true,
   exclude: ['/preview/*'],
 };
 ```
 
-`postbuild` script runs `next-sitemap` → generates `public/sitemap.xml` + `public/robots.txt`.
+`scripts/postbuild.ts` (called by the `postbuild` npm lifecycle hook):
+```ts
+// scripts/postbuild.ts
+import { siteConfig } from "@/content/config";
+import { execSync } from "child_process";
 
-The sitemap only generates when `siteConfig.sitemap.enabled === true`. The `postbuild` script checks this before running.
+if (siteConfig.sitemap.enabled) {
+  console.log("[postbuild] generating sitemap...");
+  // Inject NEXT_PUBLIC_SITE_URL so next-sitemap.config.js can read it via process.env.
+  // next-sitemap runs as a plain Node.js child process (not tsx) and cannot require() TypeScript
+  // files, so we resolve the URL here (where tsx is active) and pass it via env.
+  execSync("next-sitemap", {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL ?? siteConfig.baseUrl,
+    },
+  });
+} else {
+  console.log("[postbuild] sitemap.enabled is false — skipping next-sitemap");
+}
+```
+
+`postbuild` runs `scripts/postbuild.ts` → conditionally generates `public/sitemap.xml` + `public/robots.txt`.
+
+The sitemap only generates when `siteConfig.sitemap.enabled === true`. The `postbuild` script checks this before running. This is the authoritative implementation of that conditional.
 
 ---
 

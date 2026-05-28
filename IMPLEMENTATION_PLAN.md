@@ -44,9 +44,9 @@
 - [ ] Configure `next.config.ts` skeleton (no Aceternity remotePatterns yet — added in Phase 1)
 - [ ] Configure ESLint per TECH_REQUIREMENTS.md §16 (including `scripts/` override for no-console)
 - [ ] Configure Prettier per TECH_REQUIREMENTS.md §16
-- [ ] Verify `.gitignore` matches TECH_REQUIREMENTS.md §18 (content/items images, public/items/, public/contact/, lib/generated/, .image-cache/)
-- [ ] Install production deps: `next react react-dom zod react-markdown remark-gfm clsx tailwind-merge framer-motion @tabler/icons-react`
-- [ ] Install dev deps: `typescript @types/node @types/react @types/react-dom tailwindcss @tailwindcss/typography eslint eslint-config-next prettier prettier-plugin-tailwindcss tsx`
+- [ ] Verify `.gitignore` matches TECH_REQUIREMENTS.md §18 (content/items images, public/items/, public/contact/, public/search-index.json, .image-cache/) — note: `lib/generated/image-manifest.json` is git-tracked and must NOT be gitignored
+- [ ] Install production deps: `next react react-dom zod react-markdown remark-gfm clsx tailwind-merge fuse.js @vercel/analytics @vercel/speed-insights framer-motion @tabler/icons-react`
+- [ ] Install dev deps: `typescript @types/node @types/react @types/react-dom tailwindcss @tailwindcss/typography eslint eslint-config-next prettier prettier-plugin-tailwindcss tsx next-sitemap`
 - [ ] Create full directory skeleton (all folders from DESIGN.md §16, empty `.gitkeep` where needed)
 - [ ] Create `content/` folder with placeholder `config.ts` and sample `items/` structure
 - [ ] Verify `pnpm dev` starts without TypeScript or lint errors
@@ -59,10 +59,10 @@
 ---
 
 ## Phase 1 — Aceternity UI Setup
-**Goal:** All 25 supported Aceternity components installed in `components/ui/` and committed to git. Can be run in parallel with Phase 2.
+**Goal:** All 27 supported Aceternity components installed in `components/ui/` and committed to git. Can be run in parallel with Phase 2.
 
 ### Tasks
-- [ ] Write `scripts/setup-ui.sh` with all 25 install commands (TECH_REQUIREMENTS.md §21)
+- [ ] Write `scripts/setup-ui.sh` with all 27 install commands (TECH_REQUIREMENTS.md §21)
 - [ ] Add `"setup-ui": "bash scripts/setup-ui.sh"` to `package.json`
 - [ ] Run `pnpm setup-ui` (requires internet, ~5 min)
 - [ ] Resolve any dependency conflicts from Aceternity installs (peer dep warnings)
@@ -70,7 +70,7 @@
 - [ ] Verify `pnpm type-check` still passes after installs
 
 ### Acceptance Criteria
-- `components/ui/` contains all 25 component files
+- `components/ui/` contains all 27 component files (13 background + 3 grid + 4 gallery + 7 card)
 - `pnpm type-check` → 0 errors
 - No Aceternity import errors at build time
 
@@ -123,7 +123,7 @@
 - [ ] Implement `loadItem()` — returns `null` if missing, never throws
 - [ ] Implement `loadAllItems()` — `available` status ONLY; sorted by `listedDate` desc; capped at `siteConfig.recentlyListedCount`. **Home page recently-listed strip only.** Do NOT use for the /all page (see Phase 8b).
 - [ ] Implement `loadSoldItems()` — returns ALL sold items regardless of `soldItemRetentionDays`; sorted by `soldDate` desc (falls back to `listedDate`); used by `/sold` archive page (TECH_REQUIREMENTS.md §8)
-- [ ] Write `lib/search/index.ts` — `buildSearchIndex()`: reads all available items, returns `SearchIndexEntry[]` with fields: `name`, `description`, `brand`, `model`, `tags`, `course`, `isbn`, `edition`; written to `public/search-index.json` during `next build` (NOT `lib/generated/`) so SearchBar can fetch it via HTTP (TECH_REQUIREMENTS.md §22.1)
+- [ ] Write `lib/search/index.ts` — `buildSearchIndex()`: reads all available items, returns `SearchIndexEntry[]` with fields: `name`, `description`, `brand`, `model`, `tags`, `course`, `isbn`, `edition`. The function only returns the array; the caller (`scripts/build-search-index.ts`, run in `prebuild`) writes the result to `public/search-index.json` (NOT `lib/generated/`) so SearchBar can fetch it via HTTP (TECH_REQUIREMENTS.md §22.1 and §7)
 - [ ] Image URL resolution: `manifest[key] ?? "/items/{key}"` fallback (DESIGN.md §11)
 - [ ] Image sorting: `filenames.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))` — explicit sort, never rely on `readdir` order (DESIGN.md §4)
 - [ ] Verify `reserved_for` field is never included in returned `Item` type
@@ -234,7 +234,7 @@ DESIGN.md §3, §14 · TECH_REQUIREMENTS.md §7
 
 #### 7a — Hooks
 - [ ] `components/pricing/useGeolocation.ts` — `idle → pending → granted/denied/unavailable`; `idle` treated same as `pending` in all rendering (DESIGN.md §17)
-- [ ] `components/pricing/useDistancePricing.ts` — returns `{ source: "fallback" }` for `idle`/`pending`; exports `setManualMiles`; exports `resolveItemPrice` re-export for callsite convenience
+- [ ] `components/pricing/useDistancePricing.ts` — returns `{ source: "fallback" }` for `idle`/`pending`; exports `setManualMiles`; internally uses `resolveItemPrice` from `lib/utils/pricing.ts` (callers always import directly from that module — never re-exported from this hook)
 - [ ] Verify `useDistancePricing` with `{ source: "fallback" }` → calls `resolveItemPrice` with fallback → highest tier
 
 #### 7b — LocationPriceBar
@@ -247,8 +247,9 @@ DESIGN.md §3, §14 · TECH_REQUIREMENTS.md §7
 
 #### 7d — PricingSection & FilterBar
 - [ ] `components/item/PricingSection.tsx` (client) — owns geo+distance state for item detail; renders `LocationPriceBar` above `PricingTable`; accepts `initialResolvedTier` for SSG initial render
+- [ ] `components/filters/SortSelect.tsx` (client) — sort dropdown: Price low→high · Price high→low · Date listed (newest) · Condition (new first); child of `FilterBar`; separate component so it can hold its own dropdown state. **Must be created before `FilterBar`** (FilterBar renders SortSelect as a child).
 - [ ] `components/filters/useFilters.ts` — condition chips, price range slider (`[min, max]` on resolved prices), status toggle; slider hidden when no items have tiers; slider resets on distance change
-- [ ] `components/filters/FilterBar.tsx` (client) — renders useFilters controls; receives `resolvedDistanceMi` prop; passes `Infinity` from parent when source = fallback
+- [ ] `components/filters/FilterBar.tsx` (client) — renders useFilters controls (including `SortSelect`); receives `resolvedDistanceMi` prop; passes `Infinity` from parent when source = fallback
 
 ### Acceptance Criteria
 - Permission granted → correct distance displayed; card prices update
@@ -269,11 +270,11 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 ### Tasks
 
 #### 8a — Category Page
-- [ ] `components/filters/SortSelect.tsx` (client) — sort dropdown: Price low/high, Date listed, Condition; child of `FilterBar`; separate component so it can hold its own dropdown state
-- [ ] `components/item/ItemGrid.tsx` (client) — owns `resolvedDistance` state; renders `LocationPriceBar` + `FilterBar` + item cards; passes `resolvedDistanceMi={Infinity}` to FilterBar when fallback
+- [ ] `components/item/ItemGrid.tsx` (client) — owns `resolvedDistance` state; renders `LocationPriceBar` + `FilterBar` (with `SortSelect`) + item cards; passes `resolvedDistanceMi={Infinity}` to FilterBar when fallback
 - [ ] `app/[category]/page.tsx` — `generateStaticParams` from `loadCategories()`; `generateMetadata` with OG; renders `ItemGrid` with items
 - [ ] Sold item overlay on item cards (status badge + dimming)
-- [ ] Empty category (all sold/draft) → 404 or redirect per DESIGN.md §15
+- [ ] "Browse All" prominent link in the category page body — distinct from the header navigation link; points to `/all` (DESIGN.md §10.2)
+- [ ] Empty category (all sold/draft items or all expired sold) → renders empty grid with "No items currently available in this category" message; the route is still generated because `loadCategories()` does not filter by item visibility (DESIGN.md §10.2; §15 governs item-level visibility, not route generation)
 
 #### 8b — Browse All Page (`/all`)
 - [ ] `app/all/page.tsx` — server component; calls `loadCategories()` then `loadItemsByCategory()` for each and flattens into a single `Item[]`; renders same `ItemGrid` + `FilterBar` as category page but without a category-level header; adds "Items in: {category}" chip to each card linking to the category page (DESIGN.md §10.4)
@@ -386,8 +387,9 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 ### Tasks
 
 #### Full-Text Search
-- [ ] Add `pnpm add fuse.js` and `pnpm add -D @types/fuse.js` (if not already installed in Phase 0)
-- [ ] Wire `buildSearchIndex()` (written in Phase 3c) into `next build`: in `app/[category]/[item]/page.tsx` or a dedicated `prebuild` step — write the result to `public/search-index.json` (NOT `lib/generated/`) so Next.js serves it statically
+- [ ] Write `scripts/build-search-index.ts` — imports `buildSearchIndex()` from `lib/search/index.ts`, writes the result to `public/search-index.json`, logs entry count, exits 1 on error. (fuse.js and its types are already installed in Phase 0; fuse.js v7 ships its own TypeScript types, no `@types/fuse.js` needed)
+- [ ] Update `prebuild` script in `package.json` to chain: `tsx scripts/sync-images.ts --mode build-check && tsx scripts/build-search-index.ts` (see TECH_REQUIREMENTS.md §7 for the full scripts block)
+- [ ] Verify: `pnpm build` generates `public/search-index.json` before `next build` renders any page (index built once in prebuild, not per-page)
 - [ ] Write `components/search/SearchBar.tsx` (client) — loaded via `next/dynamic({ ssr: false })`; on mount fetches `/search-index.json`; graceful 404 handling (empty index, no crash — see TECH_REQUIREMENTS.md §22.1); debounce 150 ms; shows results inline with cover image, name, category, price badge; clicking navigates to detail page
 - [ ] Write `components/search/useSearch.ts` — loads index on mount, manages query + results state
 - [ ] Wire `SearchBar` into `SiteHeader` (shown when `siteConfig.search.enabled === true`)
@@ -494,6 +496,7 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 - [ ] Test partial re-run: "just update my contact info"
 
 #### 14d — Validation & Documentation
+- [ ] Create `SETUP_GUIDE.md` at the project root — plain-English seller guide with no code, no terminal jargon, no git commands. Contents per TECH_REQUIREMENTS.md §22.12: (1) adding a new item, (2) marking an item sold, (3) creating from template, (4) changing prices, (5) uploading new photos, (6) what to back up, (7) who to contact if something breaks.
 - [ ] Add a "Verify skill output" step to `SETUP_GUIDE.md`: after running `/update-items`, run `pnpm type-check` to confirm generated JSON is valid
 - [ ] Test both skills in at least one non-Claude AI tool (Cursor or GitHub Copilot) to verify compatibility
 - [ ] Confirm `content/` rule: AI never modifies any file outside `content/`
@@ -516,7 +519,7 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 | Vercel Blob token not available during local `pnpm upload-images` | Low | Low | Use `.env.local` for local uploads; clearly documented in TECH_REQUIREMENTS.md §3 |
 | `pnpm setup-ui` fails mid-run (network error) | Medium | Low | Script is idempotent; re-run from the failed component; partial installs don't break existing code |
 | Geolocation API blocked by browser settings or corporate proxy | Medium | Low | Fallback to highest tier is already implemented; buyer can always enter distance manually |
-| Some Aceternity components require additional peer dependencies (e.g. `three.js` for 3D Globe) | Low | Medium | Only install dependencies actually needed by the 25 selected components; verify `pnpm type-check` after `setup-ui` |
+| Some Aceternity components require additional peer dependencies (e.g. `three.js` for 3D Globe) | Low | Medium | Only install dependencies actually needed by the 27 selected components; verify `pnpm type-check` after `setup-ui` |
 | Item photos exceed Vercel Blob free tier (500 MB) | Low (early) | Medium | Track Blob usage in Vercel Dashboard; upgrade plan or migrate to Cloudflare R2 (config switch = one line) |
 | Haversine distance off for non-US locations | Low | Low | Formula is standard WGS84; unit test with known city pairs before shipping |
 | AI misidentifies item or hallucinates brand/model in skill output | Medium | Low | Skill always instructs the AI to show a confirmation preview; `status: "draft"` until seller confirms; empty string preferred over guessing |
@@ -539,8 +542,8 @@ The project is **ready for v1 launch** when:
 1. All 14 phases are done (Phase 14 may ship slightly after Phases 0–13 if agents are delayed)
 2. AI skill `/setup` generates a valid `content/config.ts` — `pnpm type-check` passes (Phase 14)
 3. At least one complete real listing (generated via AI skill `/update-items`) exists
-3. Site is live and passing Lighthouse ≥ 80/90
-4. Seller has successfully completed the full workflow: add item → upload photos → commit → push → verify live
+4. Site is live and passing Lighthouse ≥ 80/90
+5. Seller has successfully completed the full workflow: add item → upload photos → commit → push → verify live
 
 ---
 
@@ -575,3 +578,5 @@ pnpm dev               # Phase 0 verification — should start after Phase 0
 3. `lib/utils/pricing.ts` has no `"use client"` (must be importable by server components)
 4. `components/ui-adapters/` files begin with `⚠️ DO NOT EDIT`
 5. Sellers never need to edit anything outside `content/`
+6. `lib/generated/image-manifest.json` is git-tracked — never add it to `.gitignore`
+7. `public/search-index.json` is gitignored — generated each build by `scripts/build-search-index.ts` in the `prebuild` step; never committed to git
