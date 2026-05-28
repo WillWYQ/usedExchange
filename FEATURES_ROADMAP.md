@@ -23,7 +23,7 @@ The following features were initially on the roadmap and have been moved into th
 | Schema additions 🎓 | stripe_payment_link, pickup_windows, no_lowball, bundle_with, price_reduced, youtube_link, isbn, course, edition, semester_listed, name_zh, description_zh, venmo_payment_request, min_acceptable_offer |
 | Client-side full-text search 🎓👤 | fuse.js; build-time index; search bar in header |
 | Auto dark mode (system setting) 🎓 | Tailwind `darkMode: "media"` — no toggle needed |
-| Seller CLI tools 🎓👤 | `pnpm create-item`, `pnpm create-template`, `pnpm new`; existing: `mark-sold`, `inventory`, etc. |
+| Seller CLI tools 🎓👤 | `pnpm create-item`, `pnpm create-template`, `pnpm new`, `pnpm mark-sold` |
 | "Browse All" cross-category page 🎓👤 | `/all` route with full filter + sort |
 | "Make an Offer" flow 🎓👤 | Inline form + pre-filled contact message; `min_acceptable_offer` gate |
 | Recently viewed items 🎓👤 | `sessionStorage`-based strip on home + detail pages |
@@ -63,9 +63,9 @@ Features tagged 🎓 are primarily motivated by the CS student profile. Features
 
 Discord is the dominant communication platform for CS students — it's where campus communities, club servers, and class Discord channels live. It is already the most common place CS students would share or discover a listing.
 
-- Direct message link: `https://discord.com/users/{18-digit-user-id}`
+- Direct message link: `https://discord.com/users/{user-id}` (17–19 digits; typically 18)
 - Server invite link: `https://discord.gg/{invite-code}` (for sellers who post listings in a trade server)
-- Value field accepts either format; `constructUrl` auto-detects based on whether the value is all digits
+- Value field accepts either format; `constructUrl` auto-detects via `/^\d{17,19}$/` — all digits = user ID, otherwise = invite code
 
 **This is a v1 feature for the primary user** — Discord should ship in the initial contact platform set alongside email and Instagram.
 
@@ -259,7 +259,7 @@ Scripts that run on the seller's machine to reduce manual `item.json` editing. C
 
 | Script | What it does | User |
 |---|---|---|
-| `pnpm mark-sold houseware/ikea-lamp` | Sets `status: "sold"` and `sold_date: today` | 🎓 👤 |
+| `pnpm mark-sold houseware/ikea-lamp` | Sets `status: "sold"` and `sold_date: today` — **shipped in v1** (required by SETUP_GUIDE.md) | 🎓 👤 |
 | `pnpm mark-available houseware/ikea-lamp` | Resets status to `available` | 🎓 👤 |
 | `pnpm duplicate houseware/ikea-lamp houseware/ikea-lamp-2` | Copies folder + item.json, sets copy to `draft` | 🎓 |
 | `pnpm inventory` | Prints a Markdown table of all items: name, status, price, days listed | 🎓 👤 |
@@ -272,12 +272,12 @@ These are Node.js scripts in `scripts/` — no UI, no backend, no framework.
 
 ---
 
-### 2.5 "Browse All" Cross-Category Page
+### 2.5 "Browse All" Cross-Category Page ✅ Shipped in v1
 **Effort:** S · **Value:** ⭐⭐
 
-A `/all` route that displays every available item across all categories in one scrollable grid with the full filter bar. Good for buyers who want to see everything.
+A `/all` route that displays all non-draft items across every category in one scrollable grid with the full filter + sort bar.
 
-Uses `loadAllItems()` which already exists, extended to include `reserved`/`pending` items with appropriate badges.
+**Implementation note (v0.8.0):** The page aggregates `loadItemsByCategory()` across all categories — the same data set as individual category pages. `loadAllItems()` is used only for the home recently-listed strip (available-only, count-limited). The /all page shows `available`, `reserved`/`pending` (with badges), and toggleable `sold` items.
 
 ---
 

@@ -68,6 +68,10 @@ public/contact/
 # ── Incremental upload cache (seller's machine only) ─────────────────────────
 .image-cache/
 
+# ── Generated build artifacts (rebuilt on every next build) ──────────────────
+# image-manifest.json is intentionally NOT listed here — it IS committed.
+lib/generated/search-index.json
+
 # ── Editor / IDE ──────────────────────────────────────────────────────────────
 .vscode/settings.json
 .idea/

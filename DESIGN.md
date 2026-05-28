@@ -1,6 +1,6 @@
 # UsedExchange — Project Design Document
 
-**Version:** 0.7.0  
+**Version:** 0.8.0  
 **Date:** 2026-05-27  
 **Status:** Decisions Resolved — Ready for Implementation
 
@@ -28,7 +28,7 @@ The designed-for user. Comfortable with git, the terminal, JSON editing, and the
 
 **What this means for the design:**
 - Git-based workflow is acceptable (not a barrier)
-- Terminal scripts (`pnpm mark-sold`, `pnpm inventory`) are welcome
+- Terminal scripts (`pnpm mark-sold`, `pnpm create-item`, etc.) are welcome
 - Discord must be a supported contact platform
 - Default distance tiers should be short-range (pickup-first)
 - The `content/` single-folder rule protects non-code files from accidental breakage
@@ -93,7 +93,7 @@ The app supports two modes toggled by a single config value in `content/config.t
 | Mode | `deploymentMode` | Next.js config | Image strategy |
 |---|---|---|---|
 | Vercel (default) | `"vercel"` | Default (server functions allowed) | `next/image` with Vercel optimisation |
-| Self-hosted static | `"static"` | `output: 'export'` | Plain `<img>` via `UnoptimizedImage` wrapper |
+| Self-hosted static | `"static"` | `output: 'export'` | Plain `<img>` via `AdaptiveImage` wrapper |
 
 The `<AdaptiveImage>` component switches internally based on `deploymentMode` — no callsite changes needed when switching modes.
 
@@ -272,7 +272,7 @@ content/                            ← ★ THE ONLY FOLDER SELLERS NEED TO TOUC
 | Category slug | Category folder name under `content/items/`; auto-capitalised, hyphens → spaces |
 | Item slug | Item folder name; becomes the URL path segment |
 | Gallery images | All `.jpg .jpeg .png .webp .gif` in an item folder — gitignored; local + CDN |
-| Thumbnail | File named `cover.*` is pinned as thumbnail; otherwise the loader sorts image files case-insensitively in ascending Unicode order (e.g., `a.jpg` before `b.jpg`) and uses the first. The loader must sort explicitly — never rely on `readdir` order (differs between macOS HFS+ and Linux/Vercel). |
+| Thumbnail | File named `cover.*` is pinned as thumbnail; otherwise the loader sorts remaining filenames with `filenames.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))` and uses the first result (e.g. `a.jpg` before `B.jpg` before `c.jpg`). The loader must sort explicitly — never rely on `readdir` order (differs between macOS HFS+ and Linux/Vercel). |
 | Other files | Silently ignored (no crash). The loader reads only the file literally named `item.json` — all other `.json` files in an item folder are ignored. |
 | Reserved prefix | Folders/files starting with `_` are metadata — never treated as items/categories |
 | QR code images | Place in `content/contact/`; git-tracked; sync script copies to `public/contact/` |
@@ -336,9 +336,10 @@ Only `name` is required. Every other field is optional; the build applies safe d
   // ^ enum: "available" | "pending" | "reserved" | "sold" | "draft"
   //   default "available"
 
-  "listed_date": "2026-05-25",               // ISO 8601; default: build date
-  "sold_date": "2026-05-28",                 // ISO 8601; used for retention calculation
+  "listed_date": "2026-05-25",               // date-only YYYY-MM-DD; default: build date
+  "sold_date": "2026-05-28",                 // date-only YYYY-MM-DD; used for retention calculation
   // ^ if status is "sold" and sold_date is absent, listed_date is used as fallback
+  // ^ pnpm mark-sold writes YYYY-MM-DD. Full ISO timestamps are also accepted and parsed correctly.
 
   "reserved_for": "",
   // ^ string; buyer name/contact — NOT rendered on page, kept private in json
@@ -478,7 +479,7 @@ contact: {
     // Link-based: value is the username/handle/phone/email
     { type: "email",     value: "you@example.com" },
     { type: "discord",   value: "123456789012345678" },
-    // ^ Discord numeric user ID (18 digits). Find yours: Discord → Settings → Advanced → Developer Mode ON
+    // ^ Discord numeric user ID (17–19 digits; typically 18). Find yours: Discord → Settings → Advanced → Developer Mode ON
     //   → right-click your username → Copy User ID.
     //   Opens a direct message link. Alternatively, use a server invite code for a trade server.
     { type: "facebook",  value: "your.username" },
@@ -496,6 +497,7 @@ contact: {
     //   scan directly without knowing your username.
     { type: "venmo",     value: "your_username" },                          // → venmo.com/u/{value}
     // { type: "venmo", qr_image: "/contact/venmo-qr.png", label: "Venmo" }, // QR alternative
+    // If both value and qr_image are set on the same entry, qr_image takes precedence (QR modal shown).
 
     // Zelle — QR code ONLY (Zelle has no public profile URL).
     //   Generate your Zelle QR code in your bank's app and save to content/contact/.
@@ -560,13 +562,18 @@ At build time, the loader applies:
 ```
 visible = (status !== "sold")
        OR (soldItemRetentionDays === 0)            // 0 = keep forever; special case
+       OR (effective_sold_date === null)           // no parseable date → always keep (see note)
        OR (today − effective_sold_date ≤ soldItemRetentionDays)
 
 where effective_sold_date:
-  = sold_date   if present and valid ISO 8601
-  = listed_date if sold_date is absent or fails to parse
-  // Note: TECH_REQUIREMENTS.md §6.3 says invalid sold_date → null.
-  //       When null, this formula treats the item as "keep" (never expires).
+  = sold_date    if present and valid ISO 8601
+  = listed_date  if sold_date is absent or fails to parse
+  = null         if listed_date is also absent or fails to parse
+  // Note: TECH_REQUIREMENTS.md §6.3 says invalid dates → null.
+  //       The explicit null check above short-circuits to "keep" before the
+  //       arithmetic, since (today − null) evaluates to NaN in JavaScript
+  //       and NaN ≤ any number is always false — without the guard, a null
+  //       date would incorrectly HIDE the item instead of keeping it.
   //       Sellers marking items sold without a sold_date will see them stay
   //       visible until manually removed or given an explicit sold_date.
 ```
@@ -599,7 +606,7 @@ All routes are statically generated at build time.
 ### Global — SiteHeader
 The site header appears on all pages and contains:
 - Site name / logo
-- **Search bar** (shown when `siteConfig.search.enabled === true`) — full-text fuse.js search; results appear inline as the user types; searches name, description, brand, model, tags, course
+- **Search bar** (shown when `siteConfig.search.enabled === true`) — full-text fuse.js search; results appear inline as the user types; searches name, description, brand, model, tags, course, isbn, edition
 - Navigation links (Home, Browse All if enabled)
 
 ### 10.1 Home Page (`/`)
@@ -692,8 +699,11 @@ lib/content/loader.ts
   ├── loadCategories()              → Category[]       (used by all pages)
   ├── loadItemsByCategory(slug)     → Item[]           (used by category page)
   ├── loadItem(catSlug, itemSlug)   → Item | null      (used by item detail page)
-  ├── loadAllItems()                → Item[]           (used by home page "Recently Listed" + /all page;
-  │                                                     filters: available status only, no draft, no expired-sold)
+  ├── loadAllItems()                → Item[]           (used by home page "Recently Listed" strip ONLY;
+  │                                                     filters: status === "available" only, limited to
+  │                                                     siteConfig.recentlyListedCount. The /all page does
+  │                                                     NOT use this function — it aggregates
+  │                                                     loadItemsByCategory() across all categories.)
   ├── loadSoldItems()               → Item[]           (used by /sold archive page; all sold, no date filter)
   └── buildSearchIndex()            → SearchIndex      (called at build time; serialised to
                                                         lib/generated/search-index.json for fuse.js)
@@ -785,8 +795,14 @@ components/
 ### Component Rules
 - `ui/` — Aceternity originals; extend by wrapping, never modifying in place
 - Prop types derived from `lib/content/types.ts`; no raw JSON objects passed to components
-- `"use client"` on: `RecentlyListedSection`, `ItemGrid`, `PricingSection`, `ItemGallery`, `FilterBar`, `ContactSection`, `PlatformButton`, `QRModal`, `LocationPriceBar`, `PricingTableToggle`
+- `"use client"` on: `RecentlyListedSection`, `ItemGrid`, `PricingSection`, `ItemGallery`, `FilterBar`, `SortSelect`, `ContactSection`, `PlatformButton`, `QRModal`, `LocationPriceBar`, `PricingTableToggle`, `MakeOfferButton`, `ConditionGuide`, `SearchBar`, `ShareButton`, `RecentlyViewed`
   - `PlatformButton` requires `"use client"` because it receives an `onClick` function prop (state setter from `ContactSection`) — function props are not serialisable across the server/client boundary.
+  - `SearchBar` is loaded via `next/dynamic({ ssr: false })` to avoid hydration mismatch from fuse.js.
+  - `ShareButton` uses `navigator.share()` and `navigator.clipboard` — browser-only APIs.
+  - `RecentlyViewed` reads/writes `sessionStorage` on mount — browser-only API.
+  - `MakeOfferButton` manages offer form state and pre-fills contact platform messages.
+  - `ConditionGuide` manages tooltip / modal open-close state.
+  - `SortSelect` manages sort dropdown state (rendered inside FilterBar, itself client).
   - Note: `PricingTable` is NOT in this list. It is a presentational component (no hooks, no `"use client"`). However, it always renders inside `PricingSection` (a client component) in practice because it renders `PricingTableToggle` (a client component) as a child. `PricingTable` alone (without its toggle child) could be rendered in a server context, but this is not used in v1.
 - All other components are React Server Components
 - Visitor coordinates are **never passed outside the browser** — all distance math runs in `useDistancePricing.ts`
@@ -889,7 +905,7 @@ export const siteConfig: SiteConfig = {
   search: {
     enabled:     true,
     placeholder: "Search items...",
-    // Fields indexed: name, description, brand, model, tags, course
+    // Fields indexed: name, description, brand, model, tags, course, isbn, edition
     // Index built at build time → lib/generated/search-index.json
   },
 
@@ -1005,13 +1021,21 @@ pnpm dev
 
 ## 15. Status & Visibility Rules
 
-| Status | Home page | Category grid | Detail page | Notes |
-|---|---|---|---|---|
-| `available` | Yes | Yes | Yes | |
-| `reserved` | Yes + badge | Yes + badge | Yes | Buyer info stays private |
-| `pending` | Yes + badge | Yes + badge | Yes | |
-| `sold` | No | Yes + overlay | Yes | Hidden after `soldItemRetentionDays` |
-| `draft` | No | No | No | Never generates a route |
+| Status | Home — recently listed | Home — category card | `/[category]` page | `/all` page | `/sold` archive | Detail page | Notes |
+|---|---|---|---|---|---|---|---|
+| `available` | Yes | Card visible | Yes | Yes | No | Yes | |
+| `reserved` | **No** | Card visible | Yes + badge | Yes + badge | No | Yes | Buyer info stays private |
+| `pending` | **No** | Card visible | Yes + badge | Yes + badge | No | Yes | |
+| `sold` | No | Card visible (if not past retention) | Yes + overlay (hidden by toggle) | Yes (hidden by toggle) | **Always** | Yes (if not past retention) | Detail page excluded after `soldItemRetentionDays` |
+| `draft` | No | No | No | No | No | No | Never generates a route |
+
+**Notes on "Home — recently listed":** The recently listed strip uses `loadAllItems()`, which returns `available` status only and is limited to `siteConfig.recentlyListedCount` items. `reserved` and `pending` items do NOT appear in the strip.
+
+**Notes on "Home — category card":** A category card on the home page is visible if the category contains ≥ 1 item of any non-`draft` status. The displayed item count on the card shows `available` items only. Cover image uses the first `available` item's cover.
+
+**Notes on `/[category]` and `/all` pages:** Both pages load all non-draft, non-expired-sold items via `loadItemsByCategory()` (or aggregated calls for `/all`). Sold items are hidden by the status toggle by default but visible when toggled on.
+
+**Notes on `/sold` archive:** Uses `loadSoldItems()`. Shows ALL `sold` items regardless of `soldItemRetentionDays`. No retention filter applies here.
 
 ---
 
@@ -1078,10 +1102,13 @@ usedExchange/
 │   ├── generated/
 │   │   ├── image-manifest.json    ← ✓ git-tracked; written by pnpm upload-images
 │   │   └── search-index.json      ← ✗ gitignored; written by next build; consumed by SearchBar
-│   └── config/
-│       └── types.ts               ← SiteConfig TypeScript type (not edited by sellers)
+│   ├── config/
+│   │   └── types.ts               ← SiteConfig TypeScript type (not edited by sellers)
+│   └── ui/
+│       └── types.ts               ← UIConfig TypeScript types (BackgroundOption, ItemGridOption, etc.)
 │
 ├── .claude/                       ← Claude Code project configuration
+│   ├── CLAUDE.md                  ← loaded automatically by Claude Code; project context + content/ rule
 │   └── skills/                    ← AI skill files (see §20); work with Claude Code + other AI tools
 │       ├── update-items.md        ← Skill: generate item.json from photos + description file
 │       └── setup-wizard.md        ← Skill: interactive site config setup wizard
@@ -1090,15 +1117,11 @@ usedExchange/
 │   ├── sync-images.ts             ← image upload pipeline (3 modes)
 │   ├── setup-ui.sh                ← one-time developer setup: installs all Aceternity components
 │   ├── create-item.ts             ← pnpm create-item <category>/<name>
+│   ├── mark-sold.ts               ← pnpm mark-sold <category>/<name>
 │   └── create-template.ts         ← pnpm create-template [category]
 │
 ├── next-sitemap.config.js         ← sitemap config (reads siteConfig.baseUrl)
 ├── SETUP_GUIDE.md                 ← non-technical user guide (content/ folder operations only)
-│
-├── lib/
-│   └── ui/
-│       └── types.ts               ← UIConfig TypeScript types (BackgroundOption, ItemGridOption, etc.)
-│
 ├── tailwind.config.ts
 ├── next.config.ts                 ← imports content/config.ts for deploymentMode
 ├── tsconfig.json

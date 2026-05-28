@@ -2,7 +2,7 @@
 
 **Version:** 1.0  
 **Date:** 2026-05-27  
-**Based on:** DESIGN.md v0.6.0 · TECH_REQUIREMENTS.md v0.5.0  
+**Based on:** DESIGN.md v0.8.0 · TECH_REQUIREMENTS.md v0.8.0  
 **Assumption:** Single developer; primary target = Vercel Hobby + Vercel Blob
 
 ---
@@ -19,14 +19,14 @@
 | 5 | Common Components | 1 | 1, 3 |
 | 6 | Home Page | 1.5 | 5 |
 | 7 | Geolocation & Pricing System | 2 | 3 |
-| 8 | Category Page | 1.5 | 6, 7 |
+| 8 | Category Page + Browse All + Sold Archive | 2 | 6, 7 |
 | 9 | Item Detail Page | 2 | 6, 7, 10 |
 | 10 | Contact System | 1 | 5 |
 | 11 | UI Slot Adapters (wiring) | 1 | 1, 8, 9 |
 | 12 | SEO, A11y & Security Hardening | 1 | 11 |
 | 13 | Deployment | 1 | 4, 12 |
 | 14 | AI Agents (Setup Wizard + Item Generator) | 2 | 3 |
-| **Total** | | **~20 days** | |
+| **Total** | | **~22 days** | |
 
 **Critical path:** 0 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 11 → 12 → 13  
 **Parallelisable:** Phase 1 ∥ Phase 2; Phase 4 ∥ Phase 3; Phase 10 ∥ Phase 7; Phase 14 ∥ Phases 5–13
@@ -111,6 +111,9 @@
 #### 3b — Pure Utilities (`lib/utils/`)
 - [ ] Write `lib/utils/haversine.ts` — `haversineInMiles(lat1, lng1, lat2, lng2)` (TECH_REQUIREMENTS.md §20)
 - [ ] Write `lib/utils/pricing.ts` — `resolveItemPrice(price, resolved)` pure function (DESIGN.md §17; importable by server components)
+- [ ] Write `lib/utils/date.ts` — `formatRelativeDate(isoDate: string | null): string` → "Today" / "3 days ago" / "" (TECH_REQUIREMENTS.md §22.11)
+- [ ] Write `lib/utils/jsonld.ts` — `buildProductJsonLd(item, baseUrl)` and `buildBreadcrumbJsonLd(crumbs)` (TECH_REQUIREMENTS.md §22.4)
+- [ ] Write `lib/utils/i18n.ts` — `getLocalizedField(item, field, locale)` and `t(key)` (TECH_REQUIREMENTS.md §22.8)
 - [ ] Test `haversineInMiles` against known coordinates
 - [ ] Test `resolveItemPrice` for all branches: Infinity, exact match, gap, empty tiers, open-ended tier
 
@@ -118,15 +121,20 @@
 - [ ] Implement `loadCategories()` — reads `content/items/`, parses `_category.json`, applies sort logic (DESIGN.md §6), excludes `_`-prefixed folders
 - [ ] Implement `loadItemsByCategory()` — reads item folders, applies visibility rules (draft excluded, sold+retention check), reads manifest for image URLs
 - [ ] Implement `loadItem()` — returns `null` if missing, never throws
-- [ ] Implement `loadAllItems()` — `available` status only; sorted by `listedDate` desc; capped at `recentlyListedCount`
+- [ ] Implement `loadAllItems()` — `available` status ONLY; sorted by `listedDate` desc; capped at `siteConfig.recentlyListedCount`. **Home page recently-listed strip only.** Do NOT use for the /all page (see Phase 8b).
+- [ ] Implement `loadSoldItems()` — returns ALL sold items regardless of `soldItemRetentionDays`; sorted by `soldDate` desc (falls back to `listedDate`); used by `/sold` archive page (TECH_REQUIREMENTS.md §8)
+- [ ] Write `lib/search/index.ts` — `buildSearchIndex()`: reads all available items, returns `SearchIndexEntry[]` with fields: `name`, `description`, `brand`, `model`, `tags`, `course`, `isbn`, `edition`; serialised to `lib/generated/search-index.json` during `next build` (TECH_REQUIREMENTS.md §22.1)
 - [ ] Image URL resolution: `manifest[key] ?? "/items/{key}"` fallback (DESIGN.md §11)
-- [ ] Image sorting: case-insensitive ascending, explicit sort (DESIGN.md §4)
+- [ ] Image sorting: `filenames.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))` — explicit sort, never rely on `readdir` order (DESIGN.md §4)
 - [ ] Verify `reserved_for` field is never included in returned `Item` type
 
-#### 3d — Seed Data
+#### 3d — Seed Data & Content CLI Scripts
 - [ ] Create 2 sample categories (`content/items/houseware/`, `content/items/electronics/`)
 - [ ] Create 3–4 sample `item.json` files covering all status values and edge cases
 - [ ] Create `lib/generated/image-manifest.json` with `{}` (empty starter)
+- [ ] Write `scripts/mark-sold.ts` — reads `content/items/<cat>/<name>/item.json`, sets `status: "sold"` and `sold_date: today (ISO 8601)`, writes file in place; exits 1 with a clear error if the item path does not exist (TECH_REQUIREMENTS.md §22.3)
+- [ ] Write `scripts/create-item.ts` — creates `content/items/<category>/<name>/` folder and `item.json` from template; opens in `$EDITOR` if set; validates category exists (TECH_REQUIREMENTS.md §22.3)
+- [ ] Write `scripts/create-template.ts` — creates `content/items/<category>/_template.json` or global `content/items/_template.json` without an argument (TECH_REQUIREMENTS.md §22.3)
 - [ ] Verify loader returns correct data for sample items
 
 ### Acceptance Criteria
@@ -255,21 +263,35 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 
 ---
 
-## Phase 8 — Category Page
-**Goal:** `/[category]` renders with filter bar, item grid, and location-resolved prices.
+## Phase 8 — Category Page, Browse All & Sold Archive
+**Goal:** `/[category]`, `/all`, and `/sold` all render. Filter bar, item grid, and location-resolved prices complete.
 
 ### Tasks
+
+#### 8a — Category Page
+- [ ] `components/filters/SortSelect.tsx` (client) — sort dropdown: Price low/high, Date listed, Condition; child of `FilterBar`; separate component so it can hold its own dropdown state
 - [ ] `components/item/ItemGrid.tsx` (client) — owns `resolvedDistance` state; renders `LocationPriceBar` + `FilterBar` + item cards; passes `resolvedDistanceMi={Infinity}` to FilterBar when fallback
 - [ ] `app/[category]/page.tsx` — `generateStaticParams` from `loadCategories()`; `generateMetadata` with OG; renders `ItemGrid` with items
 - [ ] Sold item overlay on item cards (status badge + dimming)
 - [ ] Empty category (all sold/draft) → 404 or redirect per DESIGN.md §15
+
+#### 8b — Browse All Page (`/all`)
+- [ ] `app/all/page.tsx` — server component; calls `loadCategories()` then `loadItemsByCategory()` for each and flattens into a single `Item[]`; renders same `ItemGrid` + `FilterBar` as category page but without a category-level header; adds "Items in: {category}" chip to each card linking to the category page (DESIGN.md §10.4)
+- [ ] Verify: `available` + `reserved`/`pending` all appear; sold items hidden by toggle (default) but visible when on; `draft` items never appear
+- [ ] Verify: filter bar condition chips, price slider, sort, status toggle all work
+
+#### 8c — Sold Items Archive (`/sold`)
+- [ ] `app/sold/page.tsx` — server component; calls `loadSoldItems()`; renders a simple item grid (no filter bar, no pricing, no contact); sorted by `soldDate` desc; shows cover image, name, condition badge, sold date, category chip (DESIGN.md §10.5)
+- [ ] Verify all sold items appear regardless of `soldItemRetentionDays`
+- [ ] Verify no pricing shown; no contact section
 
 ### Acceptance Criteria
 - All category routes statically generated at build time
 - Filter bar: condition chips, price slider, status toggle all work independently
 - Sold items show "SOLD" overlay but are present in grid (until retention expires)
 - `draft` items never render
-- `generateStaticParams` returns only valid category slugs
+- `/all` page shows `reserved`/`pending` with badges; `loadAllItems()` is NOT used for this page
+- `/sold` archive shows every sold item; no retention filter applied
 
 ---
 
@@ -277,12 +299,27 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 **Goal:** `/[category]/[item]` renders with gallery, SSG pricing, contact section, and all metadata.
 
 ### Tasks
+
+#### 9a — Supporting Components (build before wiring into page)
+- [ ] `components/item/FreshnessLabel.tsx` — calls `formatRelativeDate(item.listedDate)`; returns "Listed 3 days ago" / "Listed today" / "" (hidden when null/empty) (TECH_REQUIREMENTS.md §22.11)
+- [ ] `components/item/QuantityBadge.tsx` — renders "3 available" when `item.quantity > 1`; hidden otherwise
+- [ ] `components/item/TextbookBadge.tsx` — renders "For CS101 · 3rd Edition" badge + "Compare prices" link (`bookfinder.com/search/?isbn={isbn}`); only shown when `isbn` or `course` is present (DESIGN.md §10.3)
+- [ ] `components/item/MakeOfferButton.tsx` (client) — renders when `price.negotiable: true` AND `min_acceptable_offer` is set; inline offer form; pre-fills contact message on submit; client-side rejection below threshold (DESIGN.md §10.3)
+- [ ] `components/item/ConditionGuide.tsx` (client) — `?` icon next to `ConditionBadge`; opens tooltip/modal explaining each condition value; closes on Escape; keyboard accessible
+- [ ] `components/common/ShareButton.tsx` (client) — `navigator.share()` on mobile; `navigator.clipboard.writeText()` fallback on desktop; shows "Copied!" toast for 2s (TECH_REQUIREMENTS.md §22.10)
+- [ ] `components/common/RecentlyViewed.tsx` (client) — reads/writes `sessionStorage`; records current item slug on mount; renders horizontal strip of last 5 viewed items on home and detail pages; hidden when empty (DESIGN.md §10.3)
+- [ ] `components/common/JsonLd.tsx` — server component; renders `<script type="application/ld+json">{JSON.stringify(data)}</script>` (TECH_REQUIREMENTS.md §22.4)
+
+#### 9b — Gallery
 - [ ] `components/item/ItemGallery.tsx` (client) — simple default: large main image + thumbnail strip; click to swap (used by `GalleryAdapter` for `"simple"` config)
+
+#### 9c — Item Detail Page
 - [ ] `app/[category]/[item]/page.tsx`:
   - [ ] `generateStaticParams` from `loadCategories()` + `loadItemsByCategory()`
-  - [ ] `generateMetadata` — title, description, og:image, og:title, twitter card
+  - [ ] `generateMetadata` — title, description, og:image, og:title, Twitter card, Pinterest rich pin meta (TECH_REQUIREMENTS.md §22.5)
   - [ ] Server-side: calls `resolveItemPrice(item.price, { source: "fallback" })` for `initialResolvedTier`
-  - [ ] Renders: `Breadcrumb`, gallery, status+condition badges, name, description (react-markdown), `PricingSection`, `MetadataTable`, `ContactSection`, tags
+  - [ ] Inject `<JsonLd data={buildProductJsonLd(item, siteConfig.baseUrl)} />` and `<JsonLd data={buildBreadcrumbJsonLd(crumbs)} />`
+  - [ ] Renders: `Breadcrumb`, gallery (`GalleryAdapter`), `FreshnessLabel`, status+condition badges (`ConditionGuide` attached to `ConditionBadge`), `QuantityBadge`, name, description (react-markdown), `TextbookBadge`, `PricingSection` (with `MakeOfferButton`), `MetadataTable`, `ContactSection`, tags, `ShareButton`, `RecentlyViewed`
   - [ ] Sold item: "SOLD" banner prominent; contact section CTA disabled; `sold_date` shown if present
 - [ ] `app/not-found.tsx` — site header, "Page not found" message, link to home
 
@@ -293,6 +330,9 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 - Description renders Markdown correctly
 - `reserved_for` never appears in rendered HTML (confirm via browser source inspection)
 - `og:image` is the item's `coverImage` URL
+- JSON-LD Product schema present in `<head>` (verify via Google Rich Results Test)
+- `FreshnessLabel`, `QuantityBadge`, `TextbookBadge` are all hidden when their trigger condition is absent
+- `RecentlyViewed` strip hidden on first visit (sessionStorage empty)
 
 ---
 
@@ -338,10 +378,19 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 
 ---
 
-## Phase 12 — SEO, Accessibility & Security Hardening
-**Goal:** Lighthouse ≥ 80 performance, ≥ 90 accessibility. All TECH_REQUIREMENTS.md §14 and §15 checks pass.
+## Phase 12 — SEO, Search, Accessibility & Security Hardening
+**Goal:** Lighthouse ≥ 80 performance, ≥ 90 accessibility. Full-text search working. All TECH_REQUIREMENTS.md §14 and §15 checks pass.
 
 ### Tasks
+
+#### Full-Text Search
+- [ ] Add `pnpm add fuse.js` and `pnpm add -D @types/fuse.js` (if not already installed in Phase 0)
+- [ ] Wire `buildSearchIndex()` (written in Phase 3c) into `next build`: in `app/[category]/[item]/page.tsx` or a dedicated `prebuild` step — write the result to `public/search-index.json` (NOT `lib/generated/`) so Next.js serves it statically
+- [ ] Write `components/search/SearchBar.tsx` (client) — loaded via `next/dynamic({ ssr: false })`; on mount fetches `/search-index.json`; graceful 404 handling (empty index, no crash — see TECH_REQUIREMENTS.md §22.1); debounce 150 ms; shows results inline with cover image, name, category, price badge; clicking navigates to detail page
+- [ ] Write `components/search/useSearch.ts` — loads index on mount, manages query + results state
+- [ ] Wire `SearchBar` into `SiteHeader` (shown when `siteConfig.search.enabled === true`)
+- [ ] Verify: search for a brand name, tag, course code, ISBN, edition — all return results
+- [ ] Verify: in `pnpm dev` without a prior build — SearchBar shows no results, no crash
 
 #### SEO
 - [ ] Verify every route has `<title>` and `<meta name="description">` populated
@@ -513,7 +562,8 @@ pnpm dev               # Phase 0 verification — should start after Phase 0
 | How does `resolveItemPrice` work? | DESIGN.md §17, TECH_REQUIREMENTS.md §20 |
 | How does PricingSection get its initial tier? | DESIGN.md §10.3, TECH_REQUIREMENTS.md §21 |
 | How do image adapters work? | DESIGN.md §3, TECH_REQUIREMENTS.md §7 |
-| What does `loadAllItems()` filter? | TECH_REQUIREMENTS.md §8 |
+| What does `loadAllItems()` filter? | TECH_REQUIREMENTS.md §8 — available only, for home recently-listed strip |
+| What does the /all page use instead of loadAllItems()? | DESIGN.md §11, TECH_REQUIREMENTS.md §8 — loadItemsByCategory() aggregated |
 | How are UI slots wired? | DESIGN.md §18, TECH_REQUIREMENTS.md §21 |
 | What's the deployment checklist? | TECH_REQUIREMENTS.md §19 |
 

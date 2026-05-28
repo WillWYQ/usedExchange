@@ -1,8 +1,8 @@
 # UsedExchange — Technical Requirements
 
-**Version:** 0.7.0  
+**Version:** 0.8.0  
 **Date:** 2026-05-27  
-**Companion:** DESIGN.md v0.7.0
+**Companion:** DESIGN.md v0.8.0
 
 ---
 
@@ -46,7 +46,7 @@ Aceternity components are installed individually via their CLI. The following pa
 
 > Aceternity components are copied into `components/ui/` at install time. They are treated as source files — do not install Aceternity as a package dependency.
 >
-> Each UI slot adapter (`components/ui-adapters/`) only imports the Aceternity components the seller has explicitly installed and registered. Only install the components you actually configure. See DESIGN.md §19 for the full slot ↔ component registry and install commands.
+> Each UI slot adapter (`components/ui-adapters/`) only imports the Aceternity components the seller has explicitly installed and registered. Only install the components you actually configure. See DESIGN.md §18 for the full slot ↔ component registry and install commands.
 
 ### 2.3 Development Dependencies
 
@@ -85,11 +85,11 @@ pnpm add -D @vercel/blob
 pnpm add -D @aws-sdk/client-s3
 ```
 
-### 2.4 Image Storage — Vercel devDependency Note
+### 2.5 Image Storage — Vercel devDependency Note
 
 > ⚠️ `@vercel/blob`, `@aws-sdk/client-s3`, and `tsx` are listed as **devDependencies**. Vercel installs devDependencies by default during the build step. If you have customised the install command (e.g., `pnpm install --prod`), the `prebuild` script will fail. Ensure Vercel's install command does **not** skip devDependencies.
 
-### 2.5 Optional / Future Dependencies
+### 2.6 Optional / Future Dependencies
 
 These are not installed in v1 but are the designated choices when the extension points in DESIGN.md §19 are implemented:
 
@@ -257,7 +257,7 @@ function withDefaults<T>(partial: Partial<T>, defaults: T): T {
 | Any number field | If absent → Zod default (`null` for most number fields; `1` for `quantity`). If present but NaN or non-numeric → `null`. If negative → `null`. Zero (`0`) is a valid value and is NOT converted to `null` (e.g., `age_years: 0` = brand new, `original_price: 0` = gifted). |
 | `price.currency` | If absent → falls back to `siteConfig.currency`. Item-level `price.currency` takes precedence over site-level config. |
 | Any URL field | If fails URL parse → `""` (not rendered) |
-| `listed_date` / `sold_date` | If not ISO 8601 → `null`; sold retention: `null sold_date` → falls back to `listed_date` for the formula (consistent with DESIGN.md §5 field defaults). If `listed_date` is also null, the item is treated as "keep" (never expires). |
+| `listed_date` / `sold_date` | Expected format: date-only `YYYY-MM-DD` (written by `pnpm mark-sold` and the AI skills). Full ISO timestamps (e.g. `2026-05-28T10:00:00Z`) are also accepted — parse the date portion only. Any other string → `null`. Sold retention: `null sold_date` → falls back to `listed_date` for the formula (consistent with DESIGN.md §5 field defaults). If `listed_date` is also null, the item is treated as "keep" (never expires). |
 
 ---
 
@@ -404,6 +404,7 @@ Printed to stdout after every successful `upload` run:
     "create-item":     "tsx scripts/create-item.ts",
     "create-template": "tsx scripts/create-template.ts",
     "new":             "tsx scripts/create-item.ts",
+    "mark-sold":       "tsx scripts/mark-sold.ts",
     "prebuild":        "tsx scripts/sync-images.ts --mode build-check",
     "build":           "next build",
     "postbuild":       "next-sitemap",
@@ -418,6 +419,7 @@ Printed to stdout after every successful `upload` run:
 | Script | When to run | Who runs it |
 |---|---|---|
 | `pnpm upload-images` | After adding, replacing, or deleting photos | Seller, on their machine |
+| `pnpm mark-sold <cat>/<name>` | After an item sells — sets `status: "sold"` and `sold_date` | Seller, on their machine |
 | `pnpm build` | Deploy to production | Vercel (automatic on push) or seller |
 | `pnpm dev` | Local development preview | Seller, on their machine |
 
@@ -441,11 +443,15 @@ export async function loadItem(
   itemSlug: string
 ): Promise<Item | null>
 
-// Returns items for home page "Recently Listed" and /all page.
+// Returns items for the home page "Recently Listed" strip ONLY.
 // Applies MORE RESTRICTIVE filters than loadItemsByCategory():
-//   - status === "available" ONLY
-//   - excludes draft, sold, and expired-sold items
+//   - status === "available" ONLY (reserved, pending, sold, draft all excluded)
+//   - excludes expired-sold items
 // Results sorted by listedDate descending, limited to siteConfig.recentlyListedCount.
+//
+// ⚠️  Do NOT use this function for the /all page. The /all page aggregates
+// loadItemsByCategory() across every category so it includes reserved, pending,
+// and toggleable-sold items — the same set as any individual category page.
 export async function loadAllItems(): Promise<Item[]>
 
 // Returns ALL sold items for the /sold archive page.
@@ -548,10 +554,10 @@ Behaviour:
 **`constructUrl` — Discord special handling:**
 
 Discord `value` can be either:
-- An 18-digit numeric user ID → `https://discord.com/users/{value}` (direct message link)
+- A numeric user ID (17–19 digits; typically 18 per Discord Snowflake spec) → `https://discord.com/users/{value}` (direct message link)
 - A server invite code (e.g. `abc123`) → `https://discord.gg/{value}` (server invite)
 
-Detection: if `value` matches `/^\d{17,19}$/` treat as user ID; otherwise treat as server invite code.
+Detection: if `value` matches `/^\d{17,19}$/` treat as user ID; otherwise treat as server invite code. The 17–19 range intentionally covers the full Discord Snowflake ID spec rather than hard-coding 18.
 
 ### `QRModal` (client component)
 
@@ -742,6 +748,8 @@ public/contact/
 .next/
 out/
 ```
+
+> **Mixed-case extensions** (e.g. `.Jpg`, `.jPg`) are not covered by the patterns above. They are extremely rare in practice (cameras save `.jpg` or `.JPG`). If they appear, git will track them; `pnpm upload-images` still handles them (the scan regex uses the `/i` flag). Rename to lowercase before placing in `content/items/` if you want git to ignore them.
 
 **What is intentionally NOT gitignored:**
 - `content/**/*.json` — inventory metadata, always committed
@@ -969,6 +977,12 @@ The slider's initial `max` is set to the highest resolved price across all items
 | `ContactSection` | Click-to-reveal toggle |
 | `PlatformButton` | Receives `onClick` function prop (state setter from `ContactSection`) — function props are not serialisable across the server/client boundary |
 | `QRModal` | Modal open/close state |
+| `SortSelect` | Sort dropdown state (child of FilterBar; client for consistency) |
+| `MakeOfferButton` | Offer form state; pre-fills contact platform message on submit |
+| `ConditionGuide` | Tooltip / modal open-close state explaining each condition value |
+| `SearchBar` | Loaded via `next/dynamic({ ssr: false })`; fuse.js query + results state |
+| `ShareButton` | `navigator.share()` and `navigator.clipboard` — browser-only APIs |
+| `RecentlyViewed` | `sessionStorage` read/write on mount — browser-only API |
 
 > **`PricingTable` reclassification note:** `PricingTable` is NOT in this list. It was previously documented as a server component but was reclassified to a **presentational component** (no `"use client"`, no hooks). It renders `PricingTableToggle` (a client component) as a child, so in practice it always runs in a client subtree. The server-side page (`page.tsx`) calls `resolveItemPrice` as a pure function for the SSG initial render and passes the result as `initialResolvedTier` prop to `PricingSection`, not directly to `PricingTable`.
 
@@ -977,7 +991,7 @@ The slider's initial `max` is set to the highest resolved price across all items
 | Concern | Mitigation |
 |---|---|
 | Visitor coordinates sent to server | **Impossible** — site is fully static; no server functions receive data |
-| Coordinates persisted without consent | `useState` only in v1; cleared on page close. No `localStorage` or cookies. A `sessionStorage` cache is listed in DESIGN.md §18 Extensibility as a future opt-in — it must be gated behind user consent or an explicit config flag when implemented. |
+| Coordinates persisted without consent | `useState` only in v1; cleared on page close. No `localStorage` or cookies. A `sessionStorage` cache is listed in DESIGN.md §19 Extensibility Register as a future opt-in — it must be gated behind user consent or an explicit config flag when implemented. |
 | Seller coordinates exposed | Intentional and documented in DESIGN.md §17; seller should use a nearby landmark |
 | HTTPS requirement for Geolocation API | Next.js on Vercel serves HTTPS by default; self-hosted must configure TLS |
 
@@ -1241,6 +1255,7 @@ export type SearchIndexEntry = {
   tags: string[];
   course: string;        // textbook field
   isbn: string;
+  edition: string;       // textbook field; searchable (e.g. "3rd Edition")
   coverImage: string | null;
 };
 
@@ -1251,8 +1266,9 @@ The index is written to `lib/generated/search-index.json` during `next build`. I
 
 **`SearchBar` component** (`components/search/SearchBar.tsx` — client):
 - Loaded lazily via `next/dynamic` with `{ ssr: false }` to avoid hydration mismatch
-- On mount, fetches `/search-index.json` (Next.js serves it from `public/` — the build copies it there during generation)
-- Initialises fuse.js with keys: `["name", "description", "brand", "model", "tags", "course", "isbn"]`
+- On mount, fetches `/search-index.json` (Next.js serves it from `public/` — `next build` writes it there)
+- **Dev mode behaviour:** In `pnpm dev`, `search-index.json` does not exist until a `pnpm build` has been run at least once. If the fetch returns 404, `SearchBar` initialises with an empty index and the search input shows no results (no crash, no error state shown to the user). Run `pnpm build` once to populate the index; subsequent `pnpm dev` sessions reuse the last-built index.
+- Initialises fuse.js with keys: `["name", "description", "brand", "model", "tags", "course", "isbn", "edition"]`
 - Shows results inline as the user types (debounced 150 ms)
 - Results show: item cover image, name, category, price badge
 - Clicking a result navigates to the item detail page
@@ -1290,6 +1306,17 @@ All scripts write ONLY to `content/` — sellers never touch any other directory
 4. Renames the copy to `item.json`; substitutes `{name}` placeholder with the humanised item name
 5. Opens `item.json` in `$EDITOR` if set; otherwise prints: "Created content/items/<category>/<name>/item.json — edit it now."
 6. Exits 0
+
+#### `pnpm mark-sold <category>/<name>` (`scripts/mark-sold.ts`)
+
+1. Validates that `content/items/<category>/<name>/item.json` exists; exits 1 with a clear error if not found
+2. Reads the current `item.json`
+3. Sets `status: "sold"` and `sold_date: <today in ISO 8601 format (YYYY-MM-DD)>`
+4. Writes the updated `item.json` in place (preserves all other fields)
+5. Prints: `Marked content/items/<category>/<name> as sold (sold_date: YYYY-MM-DD).`
+6. Exits 0
+
+This script exists so non-technical users (the "potential" user persona) can mark items sold without opening or editing a JSON file directly. It is the CLI equivalent of the SETUP_GUIDE.md step 2.
 
 #### `pnpm create-template [category]` (`scripts/create-template.ts`)
 

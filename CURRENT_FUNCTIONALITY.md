@@ -1,6 +1,6 @@
 # UsedExchange — Current Functionality (v1)
 
-**Based on:** DESIGN.md v0.7.0 · TECH_REQUIREMENTS.md v0.6.0  
+**Based on:** DESIGN.md v0.8.0 · TECH_REQUIREMENTS.md v0.8.0  
 **Date:** 2026-05-27
 
 ---
@@ -58,8 +58,8 @@ content/
 | `original_link` | URL | Link to original product listing |
 | `original_price` | number | What seller originally paid |
 | `status` | enum | `available` / `pending` / `reserved` / `sold` / `draft` |
-| `listed_date` | ISO 8601 | When listed; defaults to build date |
-| `sold_date` | ISO 8601 | When sold; used for retention calculation |
+| `listed_date` | date-only YYYY-MM-DD | When listed; defaults to build date |
+| `sold_date` | date-only YYYY-MM-DD | When sold; used for retention calculation. Full ISO timestamps also accepted. |
 | `reserved_for` | string | Buyer name — **never rendered on page** |
 | `preferred_payment` | string[] | e.g. `["Venmo", "Zelle", "Cash"]` |
 | `contact_note` | string | Item-specific contact note |
@@ -179,7 +179,7 @@ During `pnpm upload-images`, advisory warnings are printed (never block) for:
 - **If sold** — "SOLD" banner; contact CTA disabled; sold date shown
 
 ### Browse All Page (`/all`)
-All available items across all categories in one grid with full filter + sort bar.
+All non-draft items across all categories in one scrollable grid: `available` items shown by default; `reserved` and `pending` items shown with status badges; `sold` items hidden by default but visible when the status toggle is turned on. Full filter + sort bar, identical to category pages. (Data source: `loadItemsByCategory()` aggregated across all categories — same visibility rules as any category page.)
 
 ### Sold Items Archive (`/sold`)
 All sold items regardless of retention; sorted by sold date descending. Social proof. No pricing or contact.
@@ -222,30 +222,24 @@ Site header + "Page not found" + link home.
 
 ---
 
-## AI-Powered Content Generation Agents
+## AI-Powered Content Generation
 
-Two Claude-powered scripts eliminate manual JSON editing. Both require `ANTHROPIC_API_KEY` in `.env.local` and write only to `content/`.
+Two AI-assisted workflows ship as **Claude Code skill files** in `.claude/skills/`. The seller uses any AI coding tool they already have — Claude Code, Cursor, GitHub Copilot, or any capable assistant. **No additional API keys, environment variables, or packages are required.**
 
-### Agent 1 — Site Setup Wizard (`pnpm agent:setup`)
+### Skill 1 — Item JSON Generator (`/update-items`)
 
-Run **once** during initial project setup. A conversational agent asks about:
-- Store name and location (lat/lng resolved automatically from a place description)
-- Item types being sold (creates category scaffold)
-- Contact platforms (Discord, Venmo, Zelle, Instagram, etc.)
-- Pricing style (firm vs negotiable; currency)
-- Visual preferences (background, card effects)
-- Language/locale
+Drop photos into an item folder (and optionally a description file), then invoke this skill in your AI tool.
 
-Generates a complete `content/config.ts` and the initial `content/items/<category>/_category.json` files. Detects seller personality from their answers and writes a matching tagline. Can be re-run with flags (`--contact`, `--ui`, `--force`) to update specific sections.
-
-### Agent 2 — Item JSON Generator (`pnpm agent:update-items`)
-
-Drop photos into any item folder (and optionally a description file), then run this agent. It:
-1. Scans `content/items/` for folders with photos but no `item.json`, or with `status: "draft"`
-2. For each qualifying folder: reads photos via Claude vision API + reads any description file
-3. Extracts: name, description, condition, brand, model, colour, tags, textbook fields (ISBN, course, edition)
-4. Shows a preview in the terminal for the seller to confirm, edit, or skip
-5. Saves `item.json` with `status: "draft"` (seller changes to `"available"` when ready)
+```
+1. Create content/items/<category>/<item-name>/
+2. Drop photos into the folder (cover.jpg, photo1.jpg, ...)
+3. Optionally add a description file (notes.txt, info.yaml, etc.)
+4. Open Claude Code (or similar AI tool) in the project
+5. Type: /update-items    (or describe the task in natural language)
+6. Review the proposed item.json preview in the chat
+7. Confirm → AI writes item.json  (always status: "draft" until seller changes it)
+8. pnpm upload-images    ← upload photos to CDN as usual
+```
 
 **Supported description file formats:** `.txt`, `.md`, `.yaml`, `.json` — any text file in the item folder alongside the photos.
 
@@ -256,11 +250,24 @@ CS101 textbook, 3rd edition. Minor pen marks.
 Asking $30.
 ```
 
-**Cost:** ~$0.01–0.05 per item (Claude Sonnet). Configurable model in the script.
+**Trigger conditions:** folder has photos but no `item.json`; `item.json` exists with `status: "draft"`; or description file is newer than the existing `item.json`.
 
-**Trigger:** runs on items where folder has images + (no item.json OR item.json is draft OR description file is newer than item.json).
+### Skill 2 — Site Setup Wizard (`/setup`)
 
-**After the agent:** run `pnpm upload-images` to upload photos to CDN as usual.
+Run **once** during initial project setup.
+
+```
+1. Open Claude Code (or similar AI tool) in the project directory
+2. Type: /setup   (or "help me set up content/config.ts")
+3. Answer the AI's questions in the chat
+4. AI writes content/config.ts and the initial category scaffold
+```
+
+The AI asks about 8 areas: store name, location (lat/lng resolved from a place description), item types being sold (creates `_category.json` scaffold), contact platforms, pricing style, visual preferences, and language/locale. Detects seller personality and writes a matching tagline. Can be re-run with targeted requests ("update just my contact info", "change my background effect").
+
+### No API Key Required
+
+Both skills are Markdown instruction files, not code. The AI tool uses its own built-in capabilities and the user's existing subscription — no `ANTHROPIC_API_KEY`, no extra packages, no new environment variables. Both skills write only to `content/`.
 
 ---
 
@@ -277,6 +284,7 @@ Scripts run on the seller's machine. All write only to `content/`.
 | Command | What it does |
 |---|---|
 | `pnpm upload-images` | Upload photos to CDN, update manifest, print backup reminder |
+| `pnpm mark-sold <cat>/<name>` | Set `status: "sold"` and `sold_date: today` without editing JSON |
 | `pnpm create-item <cat>/<name>` | Create new item folder + `item.json` from template |
 | `pnpm new <cat>/<name>` | Shorthand for `create-item` |
 | `pnpm create-template [cat]` | Create a `_template.json` for a category (or global) |
@@ -285,13 +293,15 @@ Scripts run on the seller's machine. All write only to `content/`.
 
 ## Item Status & Visibility
 
-| Status | Home | Category | Detail | Notes |
-|---|---|---|---|---|
-| `available` | Yes | Yes | Yes | |
-| `reserved` | Yes + badge | Yes + badge | Yes | `reserved_for` never rendered |
-| `pending` | Yes + badge | Yes + badge | Yes | |
-| `sold` | No | Yes + overlay | Yes | Hidden after `soldItemRetentionDays`; always in `/sold` archive |
-| `draft` | No | No | No | No route generated |
+| Status | Recently listed (home) | Category card (home) | `/[category]` page | `/all` page | `/sold` archive | Detail page | Notes |
+|---|---|---|---|---|---|---|---|
+| `available` | Yes | Card visible | Yes | Yes | No | Yes | |
+| `reserved` | **No** | Card visible | Yes + badge | Yes + badge | No | Yes | `reserved_for` never rendered |
+| `pending` | **No** | Card visible | Yes + badge | Yes + badge | No | Yes | |
+| `sold` | No | Card visible (if in retention) | Yes + overlay (toggle) | Yes (toggle) | **Always** | Yes (if in retention) | Detail page excluded after `soldItemRetentionDays`; `/sold` archive always shows all |
+| `draft` | No | No | No | No | No | No | No route generated |
+
+**Key clarification:** The home-page recently listed strip uses `loadAllItems()` which returns `available` status only. `reserved` and `pending` items do NOT appear in the strip, but they DO keep the category card visible on the home page.
 
 ---
 
