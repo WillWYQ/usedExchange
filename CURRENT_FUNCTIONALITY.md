@@ -344,7 +344,7 @@ Set any option in `content/config.ts`. All 27 Aceternity components are pre-inst
 Photos → CDN, manifest updated, backup reminder printed, photo quality warnings shown.
 
 **Vercel build** (`pnpm build`):
-Reads manifest → generates all pages → builds search index → postbuild generates sitemap.
+Prebuild: reads manifest + builds search index → `next build` generates all pages → postbuild generates sitemap.
 
 **Local dev** (`pnpm dev`):
 Photos copied locally → dev server with hot reload.

@@ -407,7 +407,9 @@ Only `name` is required. Every other field is optional; the build applies safe d
   // ^ Chinese display name; shown when siteConfig.i18n.locale === "zh"
   "description_zh": ""
   // ^ Chinese description; same condition.
-  // Pattern: name_{locale} and description_{locale} for any locale in siteConfig.i18n
+  // Pattern: name_{locale} / description_{locale}. v1 carries the _zh variants concretely in the
+  // Zod schema (TECH §6) and Item type (TECH §8). Adding another locale (e.g. "es") means adding its
+  // name_{locale}/description_{locale} fields there too; otherwise getLocalizedField falls back to English. See TECH §22.8.
 }
 ```
 
@@ -587,7 +589,7 @@ Items past retention are excluded from all pages and `generateStaticParams` enti
 
 ```
 /                              Home — category overview + recently listed
-/all                           Browse All — all available items, cross-category, with filter + sort
+/all                           Browse All — all non-draft items, cross-category (sold toggleable), with filter + sort
 /sold                          Sold Archive — all sold items regardless of retention window
 /[category]                    Category page — item grid with filter, sort, search
 /[category]/[item]             Item detail — gallery, pricing, metadata, contact, share
@@ -662,7 +664,7 @@ The site header appears on all pages and contains:
 - **Pinterest** — `product:price:amount` and `product:price:currency` meta tags (rich pin support)
 
 ### 10.4 Browse All Page (`/all`)
-- All available items across all categories in one grid
+- All non-draft items across all categories in one grid — `available` shown by default; `reserved`/`pending` shown with status badges; `sold` hidden by the status toggle (toggle on to reveal). Same visibility set as a category page (aggregates `loadItemsByCategory()` across all categories — see §15)
 - Full filter + sort bar (same as category page)
 - `LocationPriceBar` + distance-resolved pricing
 - No category filter (shows all); condition, sort, price, status filters apply
@@ -1074,7 +1076,7 @@ usedExchange/
 ├── public/
 │   ├── contact/                   ← ✗ gitignored; copied from content/contact/ by sync
 │   ├── items/                     ← ✗ gitignored; copied from content/items/ by pnpm dev
-│   └── search-index.json          ← ✗ gitignored; written by next build; fetched by SearchBar at runtime
+│   └── search-index.json          ← ✗ gitignored; written by the prebuild step (scripts/build-search-index.ts); fetched by SearchBar at runtime
 │
 ├── .image-cache/                  ← ✗ gitignored; incremental upload speed cache
 │   └── checksums.json

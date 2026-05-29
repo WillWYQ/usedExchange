@@ -58,7 +58,7 @@ Features tagged 🎓 are primarily motivated by the CS student profile. Features
 ## Tier 1 — Quick Wins
 *Low effort, immediately actionable. Many can be added during Phase 12 (hardening) or Phase 10 (contact).*
 
-### 1.1 Discord Contact Platform 🎓
+### 1.1 Discord Contact Platform 🎓 ✅ Shipped in v1
 **Effort:** XS · **Value:** ⭐⭐⭐
 
 Discord is the dominant communication platform for CS students — it's where campus communities, club servers, and class Discord channels live. It is already the most common place CS students would share or discover a listing.
@@ -71,7 +71,7 @@ Discord is the dominant communication platform for CS students — it's where ca
 
 ---
 
-### 1.2 Pre-filled Contact Messages 🎓 👤
+### 1.2 Pre-filled Contact Messages 🎓 👤 ✅ Shipped in v1
 **Effort:** XS · **Value:** ⭐⭐⭐
 
 When a visitor clicks a contact platform button, the outreach message is pre-filled with the item name and price — removing the friction of composing a message from scratch.
@@ -84,7 +84,7 @@ When a visitor clicks a contact platform button, the outreach message is pre-fil
 
 ---
 
-### 1.3 Native Share + Copy Link
+### 1.3 Native Share + Copy Link ✅ Shipped in v1
 **Effort:** XS · **Value:** ⭐⭐⭐
 
 A "Share" button on item detail pages.
@@ -96,7 +96,7 @@ A "Share" button on item detail pages.
 
 ---
 
-### 1.4 Sort Options on Category Page
+### 1.4 Sort Options on Category Page ✅ Shipped in v1
 **Effort:** XS · **Value:** ⭐⭐⭐
 
 Sort the item grid by:
@@ -108,7 +108,7 @@ Client-side only, no rebuild. A dropdown in the filter bar.
 
 ---
 
-### 1.5 "Listed X days ago" Freshness Indicator
+### 1.5 "Listed X days ago" Freshness Indicator ✅ Shipped in v1
 **Effort:** XS · **Value:** ⭐⭐
 
 Show how long an item has been listed on the item card and detail page. Derived from `listed_date`.  
@@ -118,7 +118,7 @@ Adds urgency and transparency without any schema changes.
 
 ---
 
-### 1.6 Condition Guide Tooltip 👤
+### 1.6 Condition Guide Tooltip 👤 ✅ Shipped in v1
 **Effort:** XS · **Value:** ⭐⭐
 
 A `?` icon next to the condition badge that opens a small tooltip or modal explaining what each condition value means:
@@ -132,7 +132,7 @@ Reduces buyer uncertainty. One shared `ConditionGuide` component.
 
 ---
 
-### 1.7 JSON-LD Structured Data (Product Schema)
+### 1.7 JSON-LD Structured Data (Product Schema) ✅ Shipped in v1
 **Effort:** S · **Value:** ⭐⭐⭐
 
 Embed `<script type="application/ld+json">` on item detail pages with `@type: "Product"`. Google uses this to show rich snippets in search results (price, availability, rating slot).
@@ -145,14 +145,14 @@ Fields available from existing data: `name`, `description`, `image`, `offers.pri
 
 ---
 
-### 1.8 Quantity Indicator
+### 1.8 Quantity Indicator ✅ Shipped in v1
 **Effort:** XS · **Value:** ⭐⭐
 
 The `quantity` field exists in `item.json` but is never displayed. Show "3 available" on item cards and detail pages when `quantity > 1`. Adds urgency for bulk listings.
 
 ---
 
-### 1.9 Vercel Analytics + Speed Insights
+### 1.9 Vercel Analytics + Speed Insights ✅ Shipped in v1
 **Effort:** XS · **Value:** ⭐⭐
 
 One script component in `app/layout.tsx`. Free on Vercel Hobby. Shows:
@@ -177,7 +177,7 @@ No service worker needed for v1 — manifest alone enables installation.
 
 ---
 
-### 1.11 Schema Additions for Free (add in Phase 3) 🎓 👤
+### 1.11 Schema Additions for Free (add in Phase 3) 🎓 👤 ✅ Shipped in v1
 **Effort:** XS · **Value:** ⭐⭐⭐
 
 These fields cost nothing to add to `item.json` schema during Phase 3 (Content Schema). Retrofitting them later requires updating all existing `item.json` files.
@@ -265,7 +265,7 @@ Scripts that run on the seller's machine to reduce manual `item.json` editing. C
 | `pnpm stale-check` | Lists items that have been `available` for > N days | 🎓 |
 | `pnpm audit-listings` | Reports items missing recommended fields | 🎓 |
 | `pnpm export-csv` | Exports all items as a CSV for record-keeping | 🎓 👤 |
-| `pnpm semester-end` | Batch review + cleanup (see 1.11) | 🎓 |
+| `pnpm semester-end` | Batch review + cleanup (see 1.12) | 🎓 |
 
 These are Node.js scripts in `scripts/` — no UI, no backend, no framework.
 
@@ -310,7 +310,7 @@ No backend required — the form just constructs a deep-link message.
 ### 2.9 Recently Viewed Items ✅ Shipped in v1
 **Effort:** S · **Value:** ⭐⭐
 
-Store the last 5 viewed item slugs in `sessionStorage`. Display a "Recently Viewed" row at the bottom of category and item detail pages. Zero server changes; one client component.
+Store the last 5 viewed item slugs in `sessionStorage`. Display a "Recently Viewed" row at the bottom of the home page and item detail pages. Zero server changes; one client component.
 
 ---
 
@@ -367,7 +367,7 @@ Already in the Extensibility Register.
 
 CS students sell many textbooks. First-class textbook support makes the site significantly more useful for this user segment.
 
-**Schema additions** (already proposed in 1.10): `isbn`, `course`, `edition`, `semester_listed`
+**Schema additions** (already proposed in 1.11): `isbn`, `course`, `edition`, `semester_listed`
 
 **UI additions:**
 - On item detail pages where `isbn` is present, show a "Compare prices" button linking to `https://bookfinder.com/search/?isbn={isbn}`
@@ -422,7 +422,7 @@ Enables a future "Most Viewed" section on the home page as a complement to "Rece
 
 A service worker that caches recently visited item pages and images. Allows buyers to view previously visited items without connectivity — useful at garage sales or markets where signal is poor.
 
-Builds on the PWA manifest (Tier 1.9).
+Builds on the PWA manifest (Tier 1.10).
 
 ---
 
@@ -446,10 +446,10 @@ Add `bundle_with` to `item.json` as a v2 schema addition (it is **not** part of 
 
 ---
 
-### 3.6 Price Drop Tracking
+### 3.6 Price Drop Tracking (history log)
 **Effort:** M · **Value:** ⭐⭐
 
-Add `price_reduced: true` and optional `previous_lowest_price` to `item.json`. Shows a "Price Reduced" chip on item cards with the old price struck through.
+**Schema + UI already shipped in v1:** `price_reduced` and `previous_lowest_price` are v1 `item.json` fields (DESIGN.md §5); the "Price Reduced" chip and struck-through previous price already render on item cards and the detail page (DESIGN.md §10.3). **Only the price-history *log* below is a future (v2) addition** — the price-signal display is done.
 
 `pnpm price-history` could maintain a local `price-history.json` per item tracking all price changes over time — useful for the seller to see how long items took to sell at various price points.
 

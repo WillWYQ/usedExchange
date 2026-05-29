@@ -545,7 +545,7 @@ A phase is **done** when:
 5. Changes are committed to git with Conventional Commit message
 
 The project is **ready for v1 launch** when:
-1. All 14 phases are done (Phase 14 may ship slightly after Phases 0–13 if agents are delayed)
+1. All 14 phases are done (Phase 14 may ship slightly after Phases 0–13 if the AI skill files are delayed)
 2. AI skill `/setup` generates a valid `content/config.ts` — `pnpm type-check` passes (Phase 14)
 3. At least one complete real listing (generated via AI skill `/update-items`) exists
 4. Site is live and passing Lighthouse ≥ 80/90
