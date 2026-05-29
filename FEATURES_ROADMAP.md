@@ -1,6 +1,6 @@
 # UsedExchange — Features Roadmap
 
-**Date:** 2026-05-27  
+**Date:** 2026-05-29  
 **Scope:** Features beyond v1. Not committed — prioritised for planning discussions.
 
 ---
@@ -20,9 +20,9 @@ The following features were initially on the roadmap and have been moved into th
 | JSON-LD structured data (Product schema) 🎓👤 | Rich snippets + BreadcrumbList |
 | Quantity indicator 🎓👤 | "3 available" badge when `quantity > 1` |
 | Vercel Analytics + Speed Insights 🎓 | Free on Hobby; enabled via config |
-| Schema additions 🎓 | stripe_payment_link, pickup_windows, no_lowball, bundle_with, price_reduced, youtube_link, isbn, course, edition, semester_listed, name_zh, description_zh, venmo_payment_request, min_acceptable_offer |
+| Schema additions 🎓 | stripe_payment_link, pickup_windows, no_lowball, price_reduced, youtube_link, isbn, course, edition, semester_listed, name_zh, description_zh, venmo_payment_request, min_acceptable_offer |
 | Client-side full-text search 🎓👤 | fuse.js; build-time index; search bar in header |
-| Auto dark mode (system setting) 🎓 | Tailwind `darkMode: "media"` — no toggle needed |
+| Auto dark mode (system setting) 🎓 | Tailwind v4 default (`prefers-color-scheme`) — no toggle needed |
 | Seller CLI tools 🎓👤 | `pnpm create-item`, `pnpm create-template`, `pnpm new`, `pnpm mark-sold` |
 | "Browse All" cross-category page 🎓👤 | `/all` route with full filter + sort |
 | "Make an Offer" flow 🎓👤 | Inline form + pre-filled contact message; `min_acceptable_offer` gate |
@@ -186,7 +186,6 @@ These fields cost nothing to add to `item.json` schema during Phase 3 (Content S
 "stripe_payment_link": "",    // Stripe Payment Link URL → "Buy Now (pay deposit)" button
 "pickup_windows": [],         // ["Weekday evenings", "Saturdays 10am–2pm"]
 "no_lowball": false,          // shows "Firm Price" badge alongside price
-"bundle_with": [],            // item slugs this item can be sold with
 "price_reduced": false,       // shows "Price Reduced" chip on card
 "youtube_link": "",           // demo video URL (useful for electronics, appliances)
 
@@ -277,7 +276,7 @@ These are Node.js scripts in `scripts/` — no UI, no backend, no framework.
 
 A `/all` route that displays all non-draft items across every category in one scrollable grid with the full filter + sort bar.
 
-**Implementation note (v0.8.0):** The page aggregates `loadItemsByCategory()` across all categories — the same data set as individual category pages. `loadAllItems()` is used only for the home recently-listed strip (available-only, count-limited). The /all page shows `available`, `reserved`/`pending` (with badges), and toggleable `sold` items.
+**Implementation note (v0.8.1):** The page aggregates `loadItemsByCategory()` across all categories — the same data set as individual category pages. `loadAllItems()` is used only for the home recently-listed strip (available-only, count-limited). The /all page shows `available`, `reserved`/`pending` (with badges), and toggleable `sold` items.
 
 ---
 
@@ -443,7 +442,7 @@ Reads `item.json` and formats fields per each platform's conventions (title leng
 ### 3.5 "Bundle Deal" Multi-Item Contact
 **Effort:** M · **Value:** ⭐⭐
 
-Add `bundle_with` to `item.json` (already proposed as a schema addition). The item detail page shows a "Bundle available with {item X}" section listing the linked items with a combined total price. A "Contact about bundle" button pre-fills the contact message with all included items and the total.
+Add `bundle_with` to `item.json` as a v2 schema addition (it is **not** part of the v1 schema). The item detail page shows a "Bundle available with {item X}" section listing the linked items with a combined total price. A "Contact about bundle" button pre-fills the contact message with all included items and the total.
 
 ---
 
@@ -531,7 +530,6 @@ These fields are free to add during initial schema implementation (Phase 3). Ret
 "stripe_payment_link": "",          // Stripe Payment Link for instant deposit
 "pickup_windows": [],               // ["Weekday evenings", "Saturdays 10am–2pm"]
 "no_lowball": false,                // "Firm Price" badge
-"bundle_with": [],                  // slugs of bundleable items
 "price_reduced": false,             // "Price Reduced" chip
 "previous_lowest_price": null,      // for price-drop display
 "youtube_link": "",                 // demo video URL

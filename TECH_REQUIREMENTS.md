@@ -1,8 +1,8 @@
 # UsedExchange — Technical Requirements
 
-**Version:** 0.8.0  
-**Date:** 2026-05-27  
-**Companion:** DESIGN.md v0.8.0
+**Version:** 0.8.1  
+**Date:** 2026-05-29  
+**Companion:** DESIGN.md v0.8.1
 
 ---
 
@@ -56,8 +56,9 @@ Aceternity components are installed individually via their CLI. The following pa
 | `@types/node` | `^20.0.0` | Node.js types for `fs`, `path` in loader/scripts |
 | `@types/react` | `^19.0.0` | React types |
 | `@types/react-dom` | `^19.0.0` | ReactDOM types |
-| `tailwindcss` | `^4.0.0` | Utility CSS |
-| `@tailwindcss/typography` | `^0.5.0` | Prose styles for Markdown descriptions |
+| `tailwindcss` | `^4.0.0` | Utility CSS — v4, CSS-first; see §22.2 for setup |
+| `@tailwindcss/postcss` | `^4.0.0` | PostCSS integration for Tailwind v4 (replaces the v3 `tailwindcss` PostCSS plugin) |
+| `@tailwindcss/typography` | `^0.5.13` | Prose styles for Markdown descriptions; registered via `@plugin` in CSS (v4-compatible) |
 | `eslint` | `^9.0.0` | Linting |
 | `eslint-config-next` | `^15.0.0` | Next.js ESLint preset |
 | `prettier` | `^3.3.0` | Code formatting |
@@ -463,14 +464,47 @@ export async function loadAllItems(): Promise<Item[]>
 // Sorted by soldDate descending (falls back to listedDate if soldDate absent).
 export async function loadSoldItems(): Promise<Item[]>
 
-// Builds the fuse.js search index from all available items.
-// Called during next build; result written to public/search-index.json (NOT lib/generated/).
-// SearchBar fetches /search-index.json via HTTP at runtime — must be in public/.
-// Fields indexed: name, description, brand, model, tags, course, isbn, edition.
-export async function buildSearchIndex(): Promise<SearchIndexEntry[]>
+// Note: buildSearchIndex() is NOT part of loader.ts.
+// It lives in lib/search/index.ts and is called by scripts/build-search-index.ts (prebuild).
+// See §22.1 for the full specification and SearchIndexEntry type.
 ```
 
-### Item object shape (abbreviated — see `lib/content/types.ts` for full definition)
+### Type definitions (abbreviated — see `lib/content/types.ts` for full definitions)
+
+#### `Category`
+
+```ts
+export type Category = {
+  slug: string;               // folder name under content/items/
+  displayName: string;        // from _category.json display_name, or auto-capitalised slug
+  description: string;        // from _category.json; default ""
+  icon: string;               // emoji from _category.json; default ""
+  sortOrder: number | null;   // from _category.json; null = sort alphabetically
+  availableItemCount: number; // items with status "available"
+  coverImage: string | null;  // first available item's cover image URL; null if none
+};
+```
+
+#### `PriceTier` and `Price`
+
+```ts
+export type PriceTier = {
+  label: string;
+  miles_min?: number;   // absent = no lower bound (open start)
+  miles_max?: number;   // absent = no upper bound (open-ended; matches Infinity distance)
+  amount: number;
+};
+
+export type Price = {
+  currency: string;
+  tiers: PriceTier[];
+  negotiable: boolean;
+};
+```
+
+> `miles_max` is **absent** (key missing in JSON) for open-ended tiers — not a large number. A large number is NOT treated as open-ended by `resolveItemPrice`. See DESIGN.md §17.
+
+#### `Item` (abbreviated — see `lib/content/types.ts` for full definition)
 
 ```ts
 export type Item = {
@@ -538,9 +572,11 @@ type Props = {
 Props:
 ```ts
 type ContactSectionProps = {
+  item?: Item;                  // item context for geo-resolved price + pre-filled messages
+                                // omit (or pass undefined) when used in footer
   preferredPayment: string[];   // item-level; pass [] from footer
   contactNote: string;          // item-level; pass "" from footer
-  // platforms come from siteConfig — no need to pass per item
+  // platforms and seller location come from siteConfig — no need to pass separately
 };
 ```
 
@@ -549,12 +585,32 @@ Behaviour:
 - If `reveal_behavior === "always"`: renders platforms immediately
 - `preferredPayment` block is not rendered when the array is empty
 - `contactNote` block is not rendered when the string is empty or whitespace-only
-- **Footer usage:** Pass `preferredPayment={[]}` and `contactNote=""`. The component renders only the platform buttons with no payment or note blocks — no separate footer-specific component is needed.
+- **Footer usage:** Pass `preferredPayment={[]}` and `contactNote=""` (omit `item`). The component renders only the platform buttons with no payment or note blocks — no separate footer-specific component is needed.
+
+**Geo-resolved price in pre-filled messages:**
+When `item` is provided, `ContactSection` independently resolves the geo price for WhatsApp and email pre-fills:
+
+1. Calls `useGeolocation()` + `useDistancePricing(siteConfig.location, geoState)` internally
+2. Calls `resolveItemPrice(item.price, resolved)` → `resolvedPrice: PriceTier | null`
+3. Passes `item` and `resolvedPrice` to each `PlatformButton` for use in `constructUrl`
+
+Because `navigator.geolocation.getCurrentPosition` is called with `maximumAge: 300_000`, the browser returns the already-cached position instantly (no second prompt, no visible delay). `ContactSection` and `PricingSection` independently invoke the same geo hooks and both resolve from the same browser cache — two invocations, one underlying permission.
+
+When `resolvedPrice` is `null` (empty `price.tiers`), the price token is omitted from the pre-fill message and only the item name is used.
 
 ### `PlatformButton`
 
-- Link-based: `<a href={constructUrl(platform)} target="_blank" rel="noopener noreferrer">`
+- Link-based: `<a href={constructUrl(platform, item, resolvedPrice)} target="_blank" rel="noopener noreferrer">`
 - QR-based: `<button onClick={() => setModalOpen(true)}>`
+
+**`constructUrl` signature:**
+```ts
+function constructUrl(
+  platform: Platform,
+  item?: Item,
+  resolvedPrice?: PriceTier | null
+): string | null   // null → QR type (handled by QRModal, not a link)
+```
 
 **`constructUrl` — Discord special handling:**
 
@@ -991,6 +1047,8 @@ The slider's initial `max` is set to the highest resolved price across all items
 | `SearchBar` | Loaded via `next/dynamic({ ssr: false })`; fuse.js query + results state |
 | `ShareButton` | `navigator.share()` and `navigator.clipboard` — browser-only APIs |
 | `RecentlyViewed` | `sessionStorage` read/write on mount — browser-only API |
+| `FreshnessLabel` | Calculates relative date against `new Date()` (visitor's clock, not SSG build time); `useState`/`useEffect` prevents stale freshness text |
+| `ContactSection` | Click-to-reveal toggle; also independently runs `useGeolocation` + `useDistancePricing` for geo-resolved price in pre-fill messages |
 
 > **`PricingTable` reclassification note:** `PricingTable` is NOT in this list. It was previously documented as a server component but was reclassified to a **presentational component** (no `"use client"`, no hooks). It renders `PricingTableToggle` (a client component) as a child, so in practice it always runs in a client subtree. The server-side page (`page.tsx`) calls `resolveItemPrice` as a pure function for the SSG initial render and passes the result as `initialResolvedTier` prop to `PricingSection`, not directly to `PricingTable`.
 
@@ -1286,19 +1344,28 @@ The index is written to `public/search-index.json` during `next build`. It is gi
 
 ### 22.2 Dark Mode (Auto — System Preference)
 
-**Tailwind configuration:**
-```ts
-// tailwind.config.ts
-export default {
-  darkMode: "media",   // follows prefers-color-scheme media query automatically
-  // ...
-}
+**Tailwind v4 setup — CSS-first, no `tailwind.config.ts` needed for dark mode:**
+
+In Tailwind v4, `darkMode: "media"` is the **default behaviour** — `prefers-color-scheme` is followed automatically without any configuration entry.
+
+```css
+/* app/globals.css */
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+/* No dark mode directive needed — v4 defaults to media-query dark mode */
 ```
 
+```js
+// postcss.config.mjs  (required for Next.js 15 + Tailwind v4)
+export default { plugins: { "@tailwindcss/postcss": {} } };
+```
+
+> ⚠️ Do **not** add `darkMode: "media"` to `tailwind.config.ts`. That is Tailwind v3 syntax and is a no-op (or causes deprecation warnings) in v4. The `tailwind.config.ts` file is optional in v4 and used only for theme extension — omit it unless you need to extend the default theme.
+
 - No toggle needed; no user action required; no JavaScript involved
-- All Tailwind `dark:` variant classes respond to OS/browser preference
-- Aceternity components support dark mode via their own `dark:` classes
-- `siteConfig.darkMode` is typed `"media" | "class"`. The `"class"` variant is a future extension (requires toggle button in SiteHeader + persisted preference)
+- All Tailwind `dark:` variant classes respond to OS/browser `prefers-color-scheme`
+- Aceternity components installed via `npx shadcn@latest` are Tailwind v4 compatible
+- `siteConfig.darkMode` is typed `"media" | "class"`. The `"class"` variant is a future extension (requires toggle button in SiteHeader + persisted preference; see DESIGN.md §19)
 
 ---
 
@@ -1468,6 +1535,21 @@ export function getLocalizedField(
 export function t(key: keyof UIStrings): string
 ```
 
+**`UIStrings` type** (defined in `lib/config/types.ts` and used by `SiteConfig.i18n.strings`):
+
+```ts
+export type UIStrings = {
+  heroTagline: string;     // hero section tagline; falls back to siteConfig.tagline
+  recentlyListed: string;  // "Recently Listed" section heading
+  browseAll: string;       // "Browse All" link label
+  makeOffer: string;       // "Make an Offer" button label
+  contactSeller: string;   // "Contact Seller" toggle label
+  soldBanner: string;      // "SOLD" banner text on sold item pages
+};
+```
+
+All fields default to their built-in English strings when the value is `""`. Sellers only need to populate the strings they want to override.
+
 All item-rendering components call `getLocalizedField` instead of accessing `item.name` directly. The locale comes from `siteConfig.i18n.locale` (static at build time).
 
 ---
@@ -1482,6 +1564,13 @@ Both follow the existing contact platform architecture (DESIGN.md §7).
 
 **Venmo (QR-based):**
 - `type: "venmo"`, `qr_image: "/contact/venmo-qr.png"` → QR modal (same as WeChat)
+
+**Venmo (item-level payment request — `item.venmo_payment_request`):**
+- Distinct from the Venmo *contact platform* above: this is an item-level `item.json` field, **not** a `contact.platforms[]` entry.
+- When `item.venmo_payment_request` is a non-empty URL, the item detail page renders a **"Pay with Venmo"** button (parallel to the Stripe "Pay Deposit" button) that opens the URL in a new tab with `target="_blank" rel="noopener noreferrer"`.
+- Seller-supplied URL format: `https://venmo.com/?txn=pay&recipients={username}&amount={price}&note={item.name}`.
+- Validated as a URL by Zod (invalid → `""` → no button), consistent with §15 URL handling.
+- When empty, no button renders; the Venmo contact-platform link (if configured) remains available in the contact section.
 
 **Zelle (QR-only):**
 - `type: "zelle"`, `qr_image: "/contact/zelle-qr.png"` → QR modal
@@ -1517,10 +1606,14 @@ case "zelle":
 
 **`lib/utils/date.ts`**:
 ```ts
-export function formatRelativeDate(isoDate: string | null): string
+// `now` defaults to `new Date()` when omitted — pass explicitly in tests only.
+// Pure function — safe to import in both server and client code.
+export function formatRelativeDate(isoDate: string | null, now?: Date): string
 // Returns: "Today" | "Yesterday" | "3 days ago" | "2 weeks ago" | "1 month ago" | ""
 // Returns "" when isoDate is null/invalid (graceful; caller hides the element)
 ```
+
+**`FreshnessLabel.tsx` is a client component** (`"use client"`). It uses `useState<string | null>(null)` and `useEffect(() => { setLabel(formatRelativeDate(listedDate)) }, [listedDate])`. The component renders `null` until the first effect fires — relative dates are then computed against the visitor's live browser clock (`new Date()`), not the SSG build clock. This ensures "Listed 3 days ago" is always accurate at view time regardless of when the last deploy happened.
 
 ---
 

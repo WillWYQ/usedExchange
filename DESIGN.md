@@ -1,7 +1,7 @@
 # UsedExchange — Project Design Document
 
-**Version:** 0.8.0  
-**Date:** 2026-05-27  
+**Version:** 0.8.1  
+**Date:** 2026-05-29  
 **Status:** Decisions Resolved — Ready for Implementation
 
 ---
@@ -381,18 +381,16 @@ Only `name` is required. Every other field is optional; the build applies safe d
   "stripe_payment_link": "",
   // ^ Stripe Payment Link URL; shows "Pay Deposit" button on item detail page
   "venmo_payment_request": "",
-  // ^ Optional: Venmo payment request URL for a specific amount.
+  // ^ Optional: Venmo payment request URL for a specific amount. When non-empty, renders a
+  //   "Pay with Venmo" button on the item detail page (parallel to the Stripe "Pay Deposit" button).
   //   Format: https://venmo.com/?txn=pay&recipients={username}&amount={price}&note={item.name}
-  //   If empty, falls back to the Venmo contact platform link (profile link).
+  //   If empty, no button is shown; the Venmo contact platform link (profile) remains available.
 
   // ── Logistics ────────────────────────────────────────────────────────────
   "pickup_windows": [],
   // ^ string[]; e.g. ["Weekday evenings 6–9pm", "Saturday 10am–2pm"]
   "youtube_link": "",
   // ^ demo video URL; shown as "Watch Demo" button on item detail page
-  "bundle_with": [],
-  // ^ string[]; slugs of items available as a bundle with this one.
-  //   e.g. ["electronics/keyboard"] — shown as "Also available as bundle" section
 
   // ── Textbook-specific (all optional, gracefully ignored for non-textbooks) ─
   "isbn": "",
@@ -536,17 +534,17 @@ contact: {
 All link-based platforms open in `target="_blank" rel="noopener noreferrer"`.
 
 ### Pre-filled Contact Messages
-When a visitor clicks a link-based contact button, the message is automatically pre-filled with the item name and lowest available price, reducing friction for the buyer.
+When a visitor clicks a link-based contact button, the message is automatically pre-filled with the item name and **geo-resolved price** (the same tier shown on screen), reducing friction for the buyer. If no tier is resolved (empty `price.tiers`), only the item name is included.
 
 | Platform | Pre-fill method |
 |---|---|
-| `whatsapp` | URL query param: `?text=Hi, I'm interested in your {name} ({price}). Is it still available?` |
-| `email` | `?subject=Inquiry: {name}&body=Hi, I'm interested in your {name} listed at {price}...` |
+| `whatsapp` | URL query param: `?text=Hi, I'm interested in your {name} ({price}). Is it still available?` — `{price}` is the geo-resolved tier amount (e.g. `$35`); omitted when no tiers are defined |
+| `email` | `?subject=Inquiry: {name}&body=Hi, I'm interested in your {name} listed at {price}...` — `{price}` same as above; omitted when no tiers are defined |
 | `discord` | Not supported (Discord deep-links don't accept pre-filled text) |
 | `venmo` (link) | `?txn=pay&audience=private&note={name}` appended to profile URL |
 | All others | No pre-fill (platform doesn't support deep-link pre-fill) |
 
-Pre-filling is applied at the `PlatformButton` callsite when an `item` prop is provided. The contact section on the item detail page always passes the current item; the footer ContactSection does not (no item context).
+Pre-filling is applied at the `PlatformButton` callsite when an `item` and `resolvedPrice` are provided. `ContactSection` on the item detail page always passes both — it independently calls `useGeolocation()` + `useDistancePricing()` to resolve the price (the browser returns the cached position instantly via `maximumAge: 300_000`, so there is no second permission prompt). The footer `ContactSection` receives no item context and never pre-fills.
 
 ---
 
@@ -649,6 +647,7 @@ The site header appears on all pages and contains:
   - `PricingTable` (resolved tier by default; "View all" toggle expands full list)
   - **"Make an Offer" button** — shown when `price.negotiable: true` AND `min_acceptable_offer` is set. Opens an inline form where the buyer types an amount, then pre-fills the contact platform message: "I'd like to offer $X for {name}." Offers below `min_acceptable_offer` show a gentle rejection message client-side without sending anything.
   - **"Pay Deposit" button** — shown when `stripe_payment_link` is non-empty; opens Stripe link in new tab
+  - **"Pay with Venmo" button** — shown when `venmo_payment_request` is non-empty; opens the Venmo payment-request URL in a new tab (parallel to "Pay Deposit"). When empty, no button renders; the Venmo contact platform link remains available in the contact section.
   - **Initial SSG state** — static HTML shows highest tier (`resolveItemPrice` called server-side as pure function → passed as `initialResolvedTier` to `PricingSection`)
   - **Social media note** — crawlers always see highest tier price (intentional)
 - **Metadata table** — brand, model, age, dimensions, weight, colour, original source (linked), original price; null/empty fields hidden
@@ -705,10 +704,14 @@ lib/content/loader.ts
   │                                                     siteConfig.recentlyListedCount. The /all page does
   │                                                     NOT use this function — it aggregates
   │                                                     loadItemsByCategory() across all categories.)
-  ├── loadSoldItems()               → Item[]           (used by /sold archive page; all sold, no date filter)
-  └── buildSearchIndex()            → SearchIndexEntry[]  (called at build time; written to
-                                                        public/search-index.json so SearchBar can
-                                                        fetch it via HTTP at runtime)
+  └── loadSoldItems()               → Item[]           (used by /sold archive page; all sold, no date filter)
+  │
+  │   ┌─ build-time side module (not part of page-rendering data flow) ────────┐
+  │   │  lib/search/index.ts                                                   │
+  │   │    buildSearchIndex() → SearchIndexEntry[]                             │
+  │   │    Called by scripts/build-search-index.ts (prebuild step).            │
+  │   │    Writes public/search-index.json. See TECH_REQUIREMENTS.md §22.1.   │
+  │   └────────────────────────────────────────────────────────────────────────┘
   │
   ▼
 lib/content/schema.ts              Zod schema; .safeParse() + default merge
@@ -758,7 +761,7 @@ components/
 │   ├── StatusBadge.tsx
 │   ├── ConditionBadge.tsx
 │   ├── ConditionGuide.tsx         ← client; tooltip/modal explaining each condition value
-│   ├── FreshnessLabel.tsx         ← "Listed 3 days ago" — pure, formatRelativeDate()
+│   ├── FreshnessLabel.tsx         ← client; "Listed 3 days ago" computed at view time (see §12 rules)
 │   ├── QuantityBadge.tsx          ← "3 available" when quantity > 1
 │   └── TextbookBadge.tsx          ← "For CS101 · 3rd Edition" + Compare Prices link
 │
@@ -797,7 +800,7 @@ components/
 ### Component Rules
 - `ui/` — Aceternity originals; extend by wrapping, never modifying in place
 - Prop types derived from `lib/content/types.ts`; no raw JSON objects passed to components
-- `"use client"` on: `RecentlyListedSection`, `ItemGrid`, `PricingSection`, `ItemGallery`, `FilterBar`, `SortSelect`, `ContactSection`, `PlatformButton`, `QRModal`, `LocationPriceBar`, `PricingTableToggle`, `MakeOfferButton`, `ConditionGuide`, `SearchBar`, `ShareButton`, `RecentlyViewed`
+- `"use client"` on: `RecentlyListedSection`, `ItemGrid`, `PricingSection`, `ItemGallery`, `FilterBar`, `SortSelect`, `ContactSection`, `PlatformButton`, `QRModal`, `LocationPriceBar`, `PricingTableToggle`, `MakeOfferButton`, `ConditionGuide`, `SearchBar`, `ShareButton`, `RecentlyViewed`, `FreshnessLabel`
   - `PlatformButton` requires `"use client"` because it receives an `onClick` function prop (state setter from `ContactSection`) — function props are not serialisable across the server/client boundary.
   - `SearchBar` is loaded via `next/dynamic({ ssr: false })` to avoid hydration mismatch from fuse.js.
   - `ShareButton` uses `navigator.share()` and `navigator.clipboard` — browser-only APIs.
@@ -805,6 +808,7 @@ components/
   - `MakeOfferButton` manages offer form state and pre-fills contact platform messages.
   - `ConditionGuide` manages tooltip / modal open-close state.
   - `SortSelect` manages sort dropdown state (rendered inside FilterBar, itself client).
+  - `FreshnessLabel` calculates the relative date against the visitor's live browser clock (`new Date()`) — not the SSG build time. Uses `useState`/`useEffect` to set the label after mount; renders nothing until the effect fires, so the label is never stale from the deploy date.
   - Note: `PricingTable` is NOT in this list. It is a presentational component (no hooks, no `"use client"`). However, it always renders inside `PricingSection` (a client component) in practice because it renders `PricingTableToggle` (a client component) as a child. `PricingTable` alone (without its toggle child) could be rendered in a server context, but this is not used in v1.
 - All other components are React Server Components
 - Visitor coordinates are **never passed outside the browser** — all distance math runs in `useDistancePricing.ts`
@@ -1041,7 +1045,7 @@ pnpm dev
 
 **Notes on "Home — recently listed":** The recently listed strip uses `loadAllItems()`, which returns `available` status only and is limited to `siteConfig.recentlyListedCount` items. `reserved` and `pending` items do NOT appear in the strip.
 
-**Notes on "Home — category card":** A category card on the home page is visible if the category contains ≥ 1 item of any non-`draft` status. The displayed item count on the card shows `available` items only. Cover image uses the first `available` item's cover.
+**Notes on "Home — category card":** A category card is visible if the category has ≥ 1 item with status `available`, `reserved`, `pending`, or (`sold` AND within `soldItemRetentionDays`). Items that are `draft` or (`sold` AND past retention) never count toward card visibility. The displayed item count on the card shows `available` items only. Cover image uses the first `available` item's cover.
 
 **Notes on `/[category]` and `/all` pages:** Both pages load all non-draft, non-expired-sold items via `loadItemsByCategory()` (or aggregated calls for `/all`). Sold items are hidden by the status toggle by default but visible when toggled on.
 
@@ -1079,6 +1083,7 @@ usedExchange/
 │
 ├── app/
 │   ├── layout.tsx                 ← BackgroundEffect, Analytics, SpeedInsights wrappers
+│   ├── globals.css                ← @import "tailwindcss"; @plugin "@tailwindcss/typography" (Tailwind v4)
 │   ├── page.tsx                   ← home
 │   ├── all/
 │   │   └── page.tsx               ← Browse All cross-category page
@@ -1134,7 +1139,8 @@ usedExchange/
 │
 ├── next-sitemap.config.js         ← sitemap config (reads siteConfig.baseUrl)
 ├── SETUP_GUIDE.md                 ← non-technical user guide (content/ folder operations only)
-├── tailwind.config.ts
+├── postcss.config.mjs             ← Tailwind v4 PostCSS plugin (required); see TECH_REQUIREMENTS.md §22.2
+├── tailwind.config.ts             ← optional in v4 — only if extending the theme; omit otherwise
 ├── next.config.ts                 ← imports content/config.ts for deploymentMode
 ├── tsconfig.json
 ├── package.json

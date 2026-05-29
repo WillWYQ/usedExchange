@@ -1,8 +1,8 @@
 # UsedExchange — Implementation Plan
 
-**Version:** 1.0  
-**Date:** 2026-05-27  
-**Based on:** DESIGN.md v0.8.0 · TECH_REQUIREMENTS.md v0.8.0  
+**Version:** 1.1  
+**Date:** 2026-05-29  
+**Based on:** DESIGN.md v0.8.1 · TECH_REQUIREMENTS.md v0.8.1  
 **Assumption:** Single developer; primary target = Vercel Hobby + Vercel Blob
 
 ---
@@ -23,9 +23,9 @@
 | 9 | Item Detail Page | 2 | 6, 7, 10 |
 | 10 | Contact System | 1 | 5 |
 | 11 | UI Slot Adapters (wiring) | 1 | 1, 8, 9 |
-| 12 | SEO, A11y & Security Hardening | 1 | 11 |
+| 12 | SEO, Search, A11y & Security Hardening | 1 | 11 |
 | 13 | Deployment | 1 | 4, 12 |
-| 14 | AI Agents (Setup Wizard + Item Generator) | 2 | 3 |
+| 14 | AI Skill Files (Setup Wizard + Item Generator) | 2 | 3 |
 | **Total** | | **~22 days** | |
 
 **Critical path:** 0 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 11 → 12 → 13  
@@ -39,14 +39,14 @@
 ### Tasks
 - [ ] `pnpm create next-app@latest usedExchange --typescript --tailwind --app --use-pnpm`
 - [ ] Remove all Next.js boilerplate content from `app/`
-- [ ] Configure `tailwind.config.ts` for Tailwind v4 and `@tailwindcss/typography`
+- [ ] Configure Tailwind v4: add `@import "tailwindcss"` and `@plugin "@tailwindcss/typography"` to `app/globals.css`; create `postcss.config.mjs` with `{ plugins: { "@tailwindcss/postcss": {} } }`; omit `tailwind.config.ts` unless theme customisation is needed. See TECH_REQUIREMENTS.md §22.2.
 - [ ] Configure `tsconfig.json` per TECH_REQUIREMENTS.md §5 (strict, noUncheckedIndexedAccess, `@/*` alias, correct include)
 - [ ] Configure `next.config.ts` skeleton (no Aceternity remotePatterns yet — added in Phase 1)
 - [ ] Configure ESLint per TECH_REQUIREMENTS.md §16 (including `scripts/` override for no-console)
 - [ ] Configure Prettier per TECH_REQUIREMENTS.md §16
 - [ ] Verify `.gitignore` matches TECH_REQUIREMENTS.md §18 (content/items images, public/items/, public/contact/, public/search-index.json, .image-cache/) — note: `lib/generated/image-manifest.json` is git-tracked and must NOT be gitignored
 - [ ] Install production deps: `next react react-dom zod react-markdown remark-gfm clsx tailwind-merge fuse.js @vercel/analytics @vercel/speed-insights framer-motion @tabler/icons-react`
-- [ ] Install dev deps: `typescript @types/node @types/react @types/react-dom tailwindcss @tailwindcss/typography eslint eslint-config-next prettier prettier-plugin-tailwindcss tsx next-sitemap`
+- [ ] Install dev deps: `typescript @types/node @types/react @types/react-dom tailwindcss @tailwindcss/postcss @tailwindcss/typography eslint eslint-config-next prettier prettier-plugin-tailwindcss tsx next-sitemap`
 - [ ] Create full directory skeleton (all folders from DESIGN.md §16, empty `.gitkeep` where needed)
 - [ ] Create `content/` folder with placeholder `config.ts` and sample `items/` structure
 - [ ] Verify `pnpm dev` starts without TypeScript or lint errors
@@ -111,7 +111,7 @@
 #### 3b — Pure Utilities (`lib/utils/`)
 - [ ] Write `lib/utils/haversine.ts` — `haversineInMiles(lat1, lng1, lat2, lng2)` (TECH_REQUIREMENTS.md §20)
 - [ ] Write `lib/utils/pricing.ts` — `resolveItemPrice(price, resolved)` pure function (DESIGN.md §17; importable by server components)
-- [ ] Write `lib/utils/date.ts` — `formatRelativeDate(isoDate: string | null): string` → "Today" / "3 days ago" / "" (TECH_REQUIREMENTS.md §22.11)
+- [ ] Write `lib/utils/date.ts` — `formatRelativeDate(isoDate: string | null, now?: Date): string` → "Today" / "3 days ago" / "" (`now` defaults to `new Date()`; pass explicitly in tests only — TECH_REQUIREMENTS.md §22.11)
 - [ ] Write `lib/utils/jsonld.ts` — `buildProductJsonLd(item, baseUrl)` and `buildBreadcrumbJsonLd(crumbs)` (TECH_REQUIREMENTS.md §22.4)
 - [ ] Write `lib/utils/i18n.ts` — `getLocalizedField(item, field, locale)` and `t(key)` (TECH_REQUIREMENTS.md §22.8)
 - [ ] Test `haversineInMiles` against known coordinates
@@ -215,7 +215,8 @@ DESIGN.md §3, §14 · TECH_REQUIREMENTS.md §7
 - [ ] `components/item/ItemCard.tsx` — cover photo, name, condition badge, status badge, price prop (receives resolved price from parent)
 - [ ] `components/home/RecentlyListedSection.tsx` (client component) — owns `useGeolocation()` + `useDistancePricing()` state; renders item cards with resolved prices; no `LocationPriceBar` (prices update silently)
 - [ ] `app/layout.tsx` — root layout, `BackgroundEffect` wrapper, `SiteHeader`, `SiteFooter`, global font/metadata
-- [ ] `app/page.tsx` — hero, `CategoryGrid`, `RecentlyListedSection`
+- [ ] `components/common/RecentlyViewed.tsx` (client) — reads `sessionStorage`; renders horizontal strip of last 5 viewed items; **hidden when empty** (returns `null`). Accepts optional `itemSlug?: string` prop — when provided, records that slug in `sessionStorage` on mount (used by the item detail page). Build here (Phase 6) since the component has no dependencies beyond `sessionStorage` + `Item` types; this avoids a Phase 9 → Phase 6 backward dependency.
+- [ ] `app/page.tsx` — hero, `CategoryGrid`, `RecentlyListedSection`, `RecentlyViewed` strip (hidden on first visit; appears after any item detail page is viewed in the same session)
 - [ ] OG metadata for home page (DESIGN.md §10.1: most recent available item's cover as og:image)
 
 ### Acceptance Criteria
@@ -223,6 +224,7 @@ DESIGN.md §3, §14 · TECH_REQUIREMENTS.md §7
 - Category cards show correct available item counts
 - Recently Listed shows max `recentlyListedCount` items, `available` status only
 - Zero available items → Recently Listed section hidden
+- `RecentlyViewed` strip hidden on first visit (sessionStorage empty); visible after item pages are visited
 - `pnpm type-check` → 0 errors
 
 ---
@@ -270,14 +272,14 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 ### Tasks
 
 #### 8a — Category Page
-- [ ] `components/item/ItemGrid.tsx` (client) — owns `resolvedDistance` state; renders `LocationPriceBar` + `FilterBar` (with `SortSelect`) + item cards; passes `resolvedDistanceMi={Infinity}` to FilterBar when fallback
+- [ ] `components/item/ItemGrid.tsx` (client) — owns `resolvedDistance` state; renders `LocationPriceBar` + `FilterBar` (with `SortSelect`) + item cards; passes `resolvedDistanceMi={Infinity}` to FilterBar when fallback. Prop `browseAll?: boolean` — when `true`, each `ItemCard` receives `showCategoryChip: true` so an "Items in: {Category}" chip (linking to `/[category]`) appears on each card; omit or `false` on individual category pages.
 - [ ] `app/[category]/page.tsx` — `generateStaticParams` from `loadCategories()`; `generateMetadata` with OG; renders `ItemGrid` with items
 - [ ] Sold item overlay on item cards (status badge + dimming)
 - [ ] "Browse All" prominent link in the category page body — distinct from the header navigation link; points to `/all` (DESIGN.md §10.2)
 - [ ] Empty category (all sold/draft items or all expired sold) → renders empty grid with "No items currently available in this category" message; the route is still generated because `loadCategories()` does not filter by item visibility (DESIGN.md §10.2; §15 governs item-level visibility, not route generation)
 
 #### 8b — Browse All Page (`/all`)
-- [ ] `app/all/page.tsx` — server component; calls `loadCategories()` then `loadItemsByCategory()` for each and flattens into a single `Item[]`; renders same `ItemGrid` + `FilterBar` as category page but without a category-level header; adds "Items in: {category}" chip to each card linking to the category page (DESIGN.md §10.4)
+- [ ] `app/all/page.tsx` — server component; calls `loadCategories()` then `loadItemsByCategory()` for each and flattens into a single `Item[]`; renders `<ItemGrid browseAll={true} ...>` (which adds the "Items in: {category}" chip to each card) without a category-level header (DESIGN.md §10.4)
 - [ ] Verify: `available` + `reserved`/`pending` all appear; sold items hidden by toggle (default) but visible when on; `draft` items never appear
 - [ ] Verify: filter bar condition chips, price slider, sort, status toggle all work
 
@@ -304,13 +306,13 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 ### Tasks
 
 #### 9a — Supporting Components (build before wiring into page)
-- [ ] `components/item/FreshnessLabel.tsx` — calls `formatRelativeDate(item.listedDate)`; returns "Listed 3 days ago" / "Listed today" / "" (hidden when null/empty) (TECH_REQUIREMENTS.md §22.11)
+- [ ] `components/item/FreshnessLabel.tsx` (`"use client"`) — uses `useState<string|null>(null)` + `useEffect(() => { setLabel(formatRelativeDate(listedDate)) }, [listedDate])` to compute the relative date against the visitor's live browser clock on mount. Renders `null` before hydration (no stale SSG date). (TECH_REQUIREMENTS.md §22.11)
 - [ ] `components/item/QuantityBadge.tsx` — renders "3 available" when `item.quantity > 1`; hidden otherwise
 - [ ] `components/item/TextbookBadge.tsx` — renders "For CS101 · 3rd Edition" badge + "Compare prices" link (`bookfinder.com/search/?isbn={isbn}`); only shown when `isbn` or `course` is present (DESIGN.md §10.3)
 - [ ] `components/item/MakeOfferButton.tsx` (client) — renders when `price.negotiable: true` AND `min_acceptable_offer` is set; inline offer form; pre-fills contact message on submit; client-side rejection below threshold (DESIGN.md §10.3)
 - [ ] `components/item/ConditionGuide.tsx` (client) — `?` icon next to `ConditionBadge`; opens tooltip/modal explaining each condition value; closes on Escape; keyboard accessible
 - [ ] `components/common/ShareButton.tsx` (client) — `navigator.share()` on mobile; `navigator.clipboard.writeText()` fallback on desktop; shows "Copied!" toast for 2s (TECH_REQUIREMENTS.md §22.10)
-- [ ] `components/common/RecentlyViewed.tsx` (client) — reads/writes `sessionStorage`; records current item slug on mount; renders horizontal strip of last 5 viewed items on home and detail pages; hidden when empty (DESIGN.md §10.3)
+- [ ] Wire `RecentlyViewed` (built in Phase 6) into the item detail page: pass `itemSlug={item.itemSlug}` so the component records the current item in `sessionStorage` on mount. This makes the strip populate on the home page and other detail pages after a first item view.
 - [ ] `components/common/JsonLd.tsx` — server component; renders `<script type="application/ld+json">{JSON.stringify(data)}</script>` (TECH_REQUIREMENTS.md §22.4)
 
 #### 9b — Gallery
@@ -322,7 +324,8 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
   - [ ] `generateMetadata` — title, description, og:image, og:title, Twitter card, Pinterest rich pin meta (TECH_REQUIREMENTS.md §22.5)
   - [ ] Server-side: calls `resolveItemPrice(item.price, { source: "fallback" })` for `initialResolvedTier`
   - [ ] Inject `<JsonLd data={buildProductJsonLd(item, siteConfig.baseUrl)} />` and `<JsonLd data={buildBreadcrumbJsonLd(crumbs)} />`
-  - [ ] Renders: `Breadcrumb`, gallery (`GalleryAdapter`), `FreshnessLabel`, status+condition badges (`ConditionGuide` attached to `ConditionBadge`), `QuantityBadge`, name, description (react-markdown), `TextbookBadge`, `PricingSection` (with `MakeOfferButton`), `MetadataTable`, `ContactSection`, tags, `ShareButton`, `RecentlyViewed`
+  - [ ] Renders: `Breadcrumb`, gallery (`GalleryAdapter`), `FreshnessLabel`, status+condition badges (`ConditionGuide` attached to `ConditionBadge`), `QuantityBadge`, name, description (react-markdown), `TextbookBadge`, `PricingSection` (with `MakeOfferButton`, "Pay Deposit" + "Pay with Venmo" buttons), `MetadataTable`, `ContactSection`, tags, `ShareButton`, `RecentlyViewed`
+  - [ ] Payment buttons (inline in `PricingSection`/page): render "Pay Deposit" when `stripe_payment_link` is set and "Pay with Venmo" when `venmo_payment_request` is set; each opens its URL in a new tab with `rel="noopener noreferrer"`; neither renders when its field is empty (DESIGN.md §10.3, TECH_REQUIREMENTS.md §22.9)
   - [ ] Sold item: "SOLD" banner prominent; contact section CTA disabled; `sold_date` shown if present
 - [ ] `app/not-found.tsx` — site header, "Page not found" message, link to home
 
@@ -334,8 +337,10 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 - `reserved_for` never appears in rendered HTML (confirm via browser source inspection)
 - `og:image` is the item's `coverImage` URL
 - JSON-LD Product schema present in `<head>` (verify via Google Rich Results Test)
-- `FreshnessLabel`, `QuantityBadge`, `TextbookBadge` are all hidden when their trigger condition is absent
-- `RecentlyViewed` strip hidden on first visit (sessionStorage empty)
+- `FreshnessLabel` shows correct relative date computed at visit time (not deploy time); renders nothing server-side
+- `QuantityBadge`, `TextbookBadge` are hidden when their trigger condition is absent
+- "Pay Deposit" / "Pay with Venmo" buttons render only when `stripe_payment_link` / `venmo_payment_request` are set; each opens in a new tab; hidden when empty
+- `RecentlyViewed` strip hidden on first visit (sessionStorage empty); records current item slug on mount
 
 ---
 
@@ -399,7 +404,7 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 #### SEO
 - [ ] Verify every route has `<title>` and `<meta name="description">` populated
 - [ ] Verify OG tags on all 3 route types (home, category, item)
-- [ ] Verify `sitemap.xml` if `next-sitemap` is configured (optional v1 feature)
+- [ ] Verify `sitemap.xml` + `robots.txt` are generated when `siteConfig.sitemap.enabled` (v1 feature, on by default; config-toggleable per TECH_REQUIREMENTS.md §22.7)
 
 #### Accessibility
 - [ ] All images have non-empty `alt` text — audit with axe or browser DevTools
@@ -516,6 +521,7 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | Aceternity component API changes between CLI install and adapter code | Medium | Medium | Pin `@aceternity/*` to the version installed; commit `components/ui/` to git so versions are locked |
+| Tailwind v4 incompatibility with specific Aceternity components | Low | Medium | Aceternity components are installed via `npx shadcn@latest` which targets the current Tailwind version; verify with `pnpm type-check` + `pnpm dev` after `pnpm setup-ui`; if a specific component fails to render correctly, use the `"simple"` fallback for that slot until the component is updated |
 | Vercel Blob token not available during local `pnpm upload-images` | Low | Low | Use `.env.local` for local uploads; clearly documented in TECH_REQUIREMENTS.md §3 |
 | `pnpm setup-ui` fails mid-run (network error) | Medium | Low | Script is idempotent; re-run from the failed component; partial installs don't break existing code |
 | Geolocation API blocked by browser settings or corporate proxy | Medium | Low | Fallback to highest tier is already implemented; buyer can always enter distance manually |

@@ -1,7 +1,7 @@
 # UsedExchange — Current Functionality (v1)
 
-**Based on:** DESIGN.md v0.8.0 · TECH_REQUIREMENTS.md v0.8.0  
-**Date:** 2026-05-27
+**Based on:** DESIGN.md v0.8.1 · TECH_REQUIREMENTS.md v0.8.1  
+**Date:** 2026-05-29
 
 ---
 
@@ -71,10 +71,9 @@ content/
 | `previous_lowest_price` | number | Struck-through original price when `price_reduced` |
 | `min_acceptable_offer` | number | Enables "Make an Offer" button when set + `negotiable: true` |
 | `stripe_payment_link` | URL | Shows "Pay Deposit" button |
-| `venmo_payment_request` | URL | Pre-filled Venmo payment request URL |
+| `venmo_payment_request` | URL | Venmo payment-request URL → shows "Pay with Venmo" button |
 | `pickup_windows` | string[] | e.g. `["Weekday evenings", "Saturday 10am–2pm"]` |
 | `youtube_link` | URL | Demo video; shows "Watch Demo" button |
-| `bundle_with` | string[] | Item slugs available as a bundle |
 | `isbn` | string | ISBN for textbooks; enables "Compare prices" link |
 | `course` | string | e.g. "CS101" — shown as badge, searchable |
 | `edition` | string | e.g. "3rd Edition" |
@@ -170,7 +169,7 @@ During `pnpm upload-images`, advisory warnings are printed (never block) for:
 - **Textbook section** (when `isbn`/`course` present) — course badge, Compare prices link, edition, semester
 - **YouTube demo** — "Watch Demo" button when `youtube_link` is set
 - **Pickup windows** — shown when `pickup_windows` is non-empty
-- **Pricing section** — resolved tier + toggle + "Make an Offer" button + "Pay Deposit" Stripe button
+- **Pricing section** — resolved tier + toggle + "Make an Offer" button + "Pay Deposit" Stripe button + "Pay with Venmo" button (when `venmo_payment_request` set)
 - **Metadata table** — brand, model, dimensions, weight, original source/price
 - **Contact section** — platform buttons with pre-filled messages, payment methods, contact note
 - **Tags** — non-interactive chips (searchable via search)
@@ -307,7 +306,7 @@ Scripts run on the seller's machine. All write only to `content/`.
 
 ## UI Customisation — 4 Configurable Slots
 
-Set any option in `content/config.ts`. All 25 Aceternity components are pre-installed by the developer once (`pnpm setup-ui`). Sellers just change the config value — no code editing.
+Set any option in `content/config.ts`. All 27 Aceternity components are pre-installed by the developer once (`pnpm setup-ui`). Sellers just change the config value — no code editing.
 
 | Slot | Config key | Options |
 |---|---|---|
@@ -354,7 +353,7 @@ Photos copied locally → dev server with hot reload.
 
 | Script | Purpose |
 |---|---|
-| `pnpm setup-ui` | Install all 25 Aceternity components |
+| `pnpm setup-ui` | Install all 27 Aceternity components |
 
 ---
 
@@ -372,7 +371,7 @@ Photos copied locally → dev server with hot reload.
 
 ## Dark Mode
 
-Automatic — follows the visitor's OS/browser dark/light preference via Tailwind's `darkMode: "media"`. No toggle needed; no user action required. All Aceternity components are dark-mode aware.
+Automatic — follows the visitor's OS/browser dark/light preference via Tailwind v4's default `prefers-color-scheme` behaviour (no `darkMode` directive needed). No toggle needed; no user action required. All Aceternity components are dark-mode aware.
 
 ---
 
@@ -416,7 +415,7 @@ Both enabled via `siteConfig.analytics.*`. Both are no-ops outside Vercel.
 |---|---|
 | Framework | Next.js 15 (App Router), fully static |
 | Language | TypeScript 5 (strict) |
-| UI components | Aceternity UI (25 components, pre-installed) |
+| UI components | Aceternity UI (27 components, pre-installed) |
 | Styling | Tailwind CSS v4 + @tailwindcss/typography |
 | Schema validation | Zod 3 |
 | Markdown | react-markdown + remark-gfm |
