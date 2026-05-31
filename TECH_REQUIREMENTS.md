@@ -1,8 +1,8 @@
 # UsedExchange — Technical Requirements
 
-**Version:** 0.8.1  
-**Date:** 2026-05-29  
-**Companion:** DESIGN.md v0.8.1
+**Version:** 0.9.0  
+**Date:** 2026-05-31  
+**Companion:** DESIGN.md v0.9.0
 
 ---
 
@@ -32,8 +32,8 @@
 | `clsx` | `^2.1.0` | Conditional class merging |
 | `tailwind-merge` | `^2.3.0` | Tailwind class deduplication (used in `cn()` util) |
 | `fuse.js` | `^7.0.0` | Client-side full-text search; index built at build time |
-| `@vercel/analytics` | `^1.3.0` | Vercel Analytics (enabled when `siteConfig.analytics.vercel`) |
-| `@vercel/speed-insights` | `^1.0.0` | Vercel Speed Insights / Core Web Vitals |
+| `@vercel/analytics` | `^1.3.0` | Vercel Analytics — no-op outside Vercel; enabled when `siteConfig.analytics.vercel: true` |
+| `@vercel/speed-insights` | `^1.0.0` | Vercel Speed Insights — no-op outside Vercel; enabled when `siteConfig.analytics.speedInsights: true` |
 
 ### 2.2 Aceternity UI Peer Requirements
 
@@ -79,11 +79,11 @@ These are **conditionally required** based on `siteConfig.imageStorage.provider`
 
 Installation by provider:
 ```bash
-# Vercel Blob (recommended for Vercel Hobby)
-pnpm add -D @vercel/blob
-
-# Cloudflare R2
+# Cloudflare R2 (recommended — zero egress cost, works with GitHub Pages or any host)
 pnpm add -D @aws-sdk/client-s3
+
+# Vercel Blob (for Vercel deployments)
+pnpm add -D @vercel/blob
 ```
 
 ### 2.5 Image Storage — Vercel devDependency Note
@@ -106,15 +106,15 @@ All content configuration lives in `content/config.ts` (TypeScript, type-checked
 
 ### 3.1 Variables
 
-| Variable | Required | When | Description |
+| Variable | Required | When | Where to set |
 |---|---|---|---|
-| `NEXT_PUBLIC_SITE_URL` | No | Always | Overrides `siteConfig.baseUrl` at runtime. Useful for Vercel preview deployments where the URL is auto-assigned. Falls back to `siteConfig.baseUrl`. |
-| `BLOB_READ_WRITE_TOKEN` | **Yes** | `imageStorage.provider === "vercel-blob"` | Vercel Blob write token. Generate in Vercel Dashboard → Storage → Blob → your store → Settings. Set in Vercel project Environment Variables (all environments). |
-| `CF_R2_ACCOUNT_ID` | **Yes** | `imageStorage.provider === "cloudflare-r2"` | Cloudflare account ID. Found in Cloudflare Dashboard → right sidebar. |
-| `CF_R2_ACCESS_KEY_ID` | **Yes** | `imageStorage.provider === "cloudflare-r2"` | R2 API token access key ID. |
-| `CF_R2_SECRET_ACCESS_KEY` | **Yes** | `imageStorage.provider === "cloudflare-r2"` | R2 API token secret. |
-| `CF_R2_BUCKET` | **Yes** | `imageStorage.provider === "cloudflare-r2"` | R2 bucket name. |
-| `CF_R2_PUBLIC_URL` | **Yes** | `imageStorage.provider === "cloudflare-r2"` | Public base URL for the R2 bucket (custom domain or `r2.dev` URL). Used to construct image URLs in the manifest. |
+| `NEXT_PUBLIC_SITE_URL` | No | Always | `.env.local` (local) · GitHub Actions Variable · Vercel env vars. Overrides `siteConfig.baseUrl`; useful when the deploy URL differs from the configured base. Falls back to `siteConfig.baseUrl`. |
+| `CF_R2_ACCOUNT_ID` | **Yes** | `imageStorage.provider === "cloudflare-r2"` | `.env.local` only — never needed in CI. Cloudflare Dashboard → right sidebar. |
+| `CF_R2_ACCESS_KEY_ID` | **Yes** | `imageStorage.provider === "cloudflare-r2"` | `.env.local` only — never needed in CI. |
+| `CF_R2_SECRET_ACCESS_KEY` | **Yes** | `imageStorage.provider === "cloudflare-r2"` | `.env.local` only — never needed in CI. |
+| `CF_R2_BUCKET` | **Yes** | `imageStorage.provider === "cloudflare-r2"` | `.env.local` only — never needed in CI. |
+| `CF_R2_PUBLIC_URL` | **Yes** | `imageStorage.provider === "cloudflare-r2"` | `.env.local` only — never needed in CI. Public base URL for the bucket (custom domain or `r2.dev` URL). |
+| `BLOB_READ_WRITE_TOKEN` | **Yes** | `imageStorage.provider === "vercel-blob"` | `.env.local` (local) · Vercel env vars. Generate in Vercel Dashboard → Storage → Blob → your store → Settings. |
 
 
 The app **must build and serve correctly with zero `.env` file** when `imageStorage.provider === "local"`.
@@ -122,20 +122,22 @@ The app **must build and serve correctly with zero `.env` file** when `imageStor
 ### 3.2 `.env.example`
 
 ```bash
-# ── Site URL override ────────────────────────────────────────────────────────
-# Optional. Overrides siteConfig.baseUrl (useful for Vercel preview deployments).
-# NEXT_PUBLIC_SITE_URL=https://your-preview.vercel.app
-
-# ── Vercel Blob  (required when imageStorage.provider === "vercel-blob") ──────
-# Generate at: Vercel Dashboard → Storage → Blob → <store> → Settings
-# BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
+# ── Site URL override (optional) ─────────────────────────────────────────────
+# Overrides siteConfig.baseUrl. Set as a GitHub Actions Variable for production URL.
+# NEXT_PUBLIC_SITE_URL=https://your-domain.com
 
 # ── Cloudflare R2  (required when imageStorage.provider === "cloudflare-r2") ─
+# LOCAL only — copy to .env.local; NEVER needed in GitHub Actions or CI.
+# pnpm upload-images runs only on your machine.
 # CF_R2_ACCOUNT_ID=
 # CF_R2_ACCESS_KEY_ID=
 # CF_R2_SECRET_ACCESS_KEY=
 # CF_R2_BUCKET=usedexchange-images
 # CF_R2_PUBLIC_URL=https://images.your-domain.com
+
+# ── Vercel Blob  (required when imageStorage.provider === "vercel-blob") ──────
+# Generate at: Vercel Dashboard → Storage → Blob → <store> → Settings
+# BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
 ```
 
 ### 3.3 Local development with cloud provider
@@ -825,60 +827,81 @@ out/
 
 ## 19. Deployment Checklist
 
-### Vercel Hobby — Vercel Blob (recommended path)
+### GitHub Pages + Cloudflare R2 ✅ (recommended path)
+
+> ⚠️ **R2 credentials are local-only.** `pnpm upload-images` runs on the seller's machine.
+> GitHub Actions only runs `pnpm build` (build-check mode — reads committed manifest, no uploads).
+> **No secrets are needed in GitHub Actions.**
 
 **One-time setup (do once, then forget):**
-- [ ] Run `pnpm setup-ui` to install all supported Aceternity UI components into `components/ui/`. Commit the resulting files. This only needs to be done once per developer machine; subsequent clones get the components from git.
-- [ ] Connect GitHub repo to Vercel project
-- [ ] Set `deploymentMode: "vercel"` and `imageStorage.provider: "vercel-blob"` in `content/config.ts`
-- [ ] Vercel Dashboard → Storage → Create Blob store → copy `BLOB_READ_WRITE_TOKEN`
-- [ ] Add `BLOB_READ_WRITE_TOKEN` to Vercel project Environment Variables (all environments)
-- [ ] Set `NEXT_PUBLIC_SITE_URL` to production URL in Vercel Environment Variables
-- [ ] Confirm `baseUrl` in `content/config.ts` matches production URL
-- [ ] Custom domain: configure in Vercel Dashboard → Domains
-- [ ] Run `pnpm upload-images` at least once (even with no photos) to create the initial `lib/generated/image-manifest.json`. The script creates the file with `{}` if `content/items/` has no images. Commit this file before first deploy.
-- [ ] **Vercel Blob storage note:** Blobs are permanent — they do not auto-expire. When items are deleted, `pnpm upload-images` purges their manifest entries but the actual blob files remain in storage. This is fine for v1 (storage cost is negligible). Use the Vercel Dashboard → Storage → Blob → browser to delete orphaned files manually if needed.
+- [ ] Run `pnpm setup-ui` → installs all Aceternity UI components → commit `components/ui/`
+- [ ] Set `deploymentMode: "static"` and `imageStorage.provider: "cloudflare-r2"` in `content/config.ts`
+- [ ] **Cloudflare: create R2 bucket**
+  - Cloudflare Dashboard → R2 → Create bucket
+  - Enable public access or attach a custom subdomain (e.g. `images.your-domain.com`)
+  - Create R2 API token: **Object Read & Write** scoped to this bucket only
+- [ ] **Configure CORS on the R2 bucket** — required so browsers can load images from your site:
+  ```json
+  [{ "AllowedOrigins": ["https://your-domain.com"], "AllowedMethods": ["GET"], "AllowedHeaders": ["*"] }]
+  ```
+  Use `["*"]` during testing; restrict to your production domain before go-live.
+- [ ] Copy `.env.example` → `.env.local` (project root); fill in `CF_R2_*` values
+- [ ] **GitHub Pages: enable GitHub Actions deployment**
+  - GitHub repo → Settings → Pages → Source: **GitHub Actions**
+  - GitHub repo → Settings → Variables → Actions → add `NEXT_PUBLIC_SITE_URL = https://your-domain.com`
+- [ ] Custom domain: GitHub repo → Settings → Pages → Custom domain → configure DNS CNAME
+- [ ] Run `pnpm upload-images` at least once to create the initial `lib/generated/image-manifest.json`
+  (creates `{}` if `content/items/` has no photos). Commit this file before first push.
+- [ ] `git push` → GitHub Actions triggers → site live at your domain
 
 **Adding or updating items (recurring seller workflow):**
 1. - [ ] Create/edit item folder + `item.json` in `content/items/`
 2. - [ ] Drop photos into the item folder
-3. - [ ] Run `pnpm upload-images` → photos uploaded to Blob, manifest updated
+3. - [ ] Run `pnpm upload-images` → photos uploaded to R2, manifest updated
 4. - [ ] Read and follow the printed **BACKUP REMINDER** — back up your `content/` folder
 5. - [ ] `git add content/**/*.json lib/generated/image-manifest.json && git commit && git push`
-6. - [ ] Vercel auto-builds — no images to upload on Vercel's end; just `next build` runs
+6. - [ ] GitHub Actions auto-builds and deploys — no CDN interaction; just reads committed manifest
 
 **Code-only changes (no photo edits):**
-- [ ] Edit `content/**/*.json` or `content/config.ts` → `git commit && git push` → Vercel builds immediately
+- [ ] Edit `content/**/*.json` or `content/config.ts` → `git commit && git push` → GitHub Actions builds immediately
 
-### Vercel Hobby — Cloudflare R2 (alternative, zero egress cost)
+> **Cloudflare R2 storage note:** Deleting an item purges its manifest entry but does NOT delete the blob from R2. Orphaned files accumulate silently. Manage via Cloudflare Dashboard → R2 → bucket browser. A future `pnpm clean-storage` command is planned.
+
+---
+
+### Vercel + Vercel Blob (alternative)
 
 **One-time setup:**
-- [ ] Create R2 bucket in Cloudflare Dashboard; enable public access or attach custom domain
-- [ ] Create R2 API token (Object Read & Write)
-- [ ] **Configure CORS on the R2 bucket** — without this, browsers will block image loads from your site domain. In Cloudflare Dashboard → R2 → bucket → Settings → CORS Policy, add:
-  ```json
-  [{ "AllowedOrigins": ["https://your-domain.com"], "AllowedMethods": ["GET"], "AllowedHeaders": ["*"] }]
-  ```
-  Use `["*"]` for `AllowedOrigins` during testing; restrict to your production domain before go-live.
-- [ ] Set `imageStorage.provider: "cloudflare-r2"` in `content/config.ts`
-- [ ] Add `CF_R2_ACCOUNT_ID`, `CF_R2_ACCESS_KEY_ID`, `CF_R2_SECRET_ACCESS_KEY`, `CF_R2_BUCKET`, `CF_R2_PUBLIC_URL` to Vercel Environment Variables
-- [ ] Add the same vars to local `.env.local` for `pnpm upload-images` to work locally
+- [ ] Run `pnpm setup-ui` → commit `components/ui/`
+- [ ] Set `deploymentMode: "vercel"` and `imageStorage.provider: "vercel-blob"` in `content/config.ts`
+- [ ] Connect GitHub repo to Vercel project; Vercel auto-deploys on push to `main`
+- [ ] Vercel Dashboard → Storage → Create Blob store → copy `BLOB_READ_WRITE_TOKEN`
+- [ ] Add `BLOB_READ_WRITE_TOKEN` to Vercel project Environment Variables (all environments)
+- [ ] Add `NEXT_PUBLIC_SITE_URL` to Vercel Environment Variables
+- [ ] Confirm `baseUrl` in `content/config.ts` matches production URL
+- [ ] Custom domain: Vercel Dashboard → Domains
+- [ ] Copy `.env.example` → `.env.local`; fill in `BLOB_READ_WRITE_TOKEN` for local uploads
+- [ ] Run `pnpm upload-images` at least once → commit `lib/generated/image-manifest.json`
 
-**Recurring workflow:** identical to Vercel Blob above (step 1–6).
+**Recurring workflow:** identical to GitHub Pages + R2 above (steps 1–6), substituting Vercel auto-deploy for GitHub Actions.
+
+> **Vercel Blob note:** Blobs do not auto-expire. Orphaned blobs remain after `pnpm upload-images` purges manifest entries. Delete via Vercel Dashboard → Storage → Blob browser.
+
+---
 
 ### Self-hosted static — local images (simple, no cloud storage)
 
 - [ ] Set `deploymentMode: "static"` and `imageStorage.provider: "local"` in `content/config.ts`
-- [ ] Run `pnpm build` on a machine where the `content/items/` folder (with photos) is present
-- [ ] `out/` includes all images; deploy the entire `out/` directory to any static host
+- [ ] Run `pnpm build` on a machine where `content/items/` photos are present
+- [ ] `out/` includes all images; deploy the entire `out/` to any static host
 - [ ] No size constraint for self-hosted (server storage is cheap)
 
 ### Self-hosted static — with cloud images
 
 - [ ] Set `deploymentMode: "static"` and desired provider in `content/config.ts`
-- [ ] Run `pnpm upload-images` locally → images go to CDN, manifest updated
-- [ ] Run `pnpm build` → `out/` contains only HTML/CSS/JS (tiny)
-- [ ] Deploy `out/` to static host; images served from CDN
+- [ ] Run `pnpm upload-images` locally → images on CDN, manifest updated
+- [ ] Run `pnpm build` → `out/` contains only HTML/CSS/JS (tiny); images on CDN
+- [ ] Deploy `out/` to any static host
 
 ---
 

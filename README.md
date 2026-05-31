@@ -4,7 +4,7 @@ A statically-generated personal storefront for listing second-hand items. No dat
 
 ## How it works
 
-Drop photos and a `item.json` file into `content/items/<category>/<item-name>/`, run one command, push to git. Vercel rebuilds and publishes the page automatically.
+Drop photos and a `item.json` file into `content/items/<category>/<item-name>/`, run one command, push to git. GitHub Actions builds and publishes the page automatically.
 
 ```
 content/              ← the only folder you ever touch
@@ -65,7 +65,7 @@ No API key required. Uses your existing AI tool subscription.
 
 ## Tech stack
 
-Next.js 15 · TypeScript 5 · Tailwind CSS v4 · Aceternity UI · Zod · fuse.js · Vercel Blob
+Next.js 15 · TypeScript 5 · Tailwind CSS v4 · Aceternity UI · Zod · fuse.js · GitHub Pages · Cloudflare R2
 
 ## License
 

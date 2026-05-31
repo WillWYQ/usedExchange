@@ -1,7 +1,7 @@
 # UsedExchange — Project Design Document
 
-**Version:** 0.8.1  
-**Date:** 2026-05-29  
+**Version:** 0.9.0  
+**Date:** 2026-05-31  
 **Status:** Decisions Resolved — Ready for Implementation
 
 ---
@@ -53,8 +53,8 @@ A broader audience reachable once the project gains visibility (campus blog post
 
 ### Goals
 - Zero-database, file-system-driven content management
-- Build-time static generation; output hostable on Vercel Hobby or any static host
-- Modularised deployment adapter: Vercel-optimised by default, self-host ready via config switch
+- Build-time static generation; output hostable on GitHub Pages, Vercel, or any static host
+- Modularised deployment adapter: GitHub Pages–optimised by default, Vercel and self-host ready via config switch
 - Graceful schema degradation: missing optional JSON fields never crash the build or the page
 - Distance-tiered pricing per item with automatic visitor-location detection (browser Geolocation API, client-side only)
 - Photo gallery per item, sourced from the item folder
@@ -83,8 +83,8 @@ A broader audience reachable once the project gains visibility (campus blog post
 | Markdown | **react-markdown + remark-gfm** | Renders `description` field |
 | Package manager | **pnpm** | Fast installs, disk-efficient |
 | Linting | **ESLint + Prettier** | Consistent code style |
-| Primary host | **Vercel Hobby** | Zero-config deploys from Git |
-| Alternate host | **Any static server** | Via `output: 'export'` mode |
+| Primary host | **GitHub Pages** | Static export via GitHub Actions; free, no vendor lock-in |
+| Alternate host | **Vercel Hobby** or any static server | Vercel mode additionally enables `next/image` optimisation |
 
 ### Deployment Modes
 
@@ -92,8 +92,8 @@ The app supports two modes toggled by a single config value in `content/config.t
 
 | Mode | `deploymentMode` | Next.js config | Image strategy |
 |---|---|---|---|
-| Vercel (default) | `"vercel"` | Default (server functions allowed) | `next/image` with Vercel optimisation |
-| Self-hosted static | `"static"` | `output: 'export'` | Plain `<img>` via `AdaptiveImage` wrapper |
+| Static / GitHub Pages **(default)** | `"static"` | `output: 'export'` | Plain `<img>` via `AdaptiveImage` — images served directly from CDN |
+| Vercel | `"vercel"` | Default (server functions allowed) | `next/image` with Vercel optimisation |
 
 The `<AdaptiveImage>` component switches internally based on `deploymentMode` — no callsite changes needed when switching modes.
 
@@ -101,9 +101,9 @@ The `<AdaptiveImage>` component switches internally based on `deploymentMode` �
 
 #### The Problem
 
-Vercel Hobby has a **100 MB deployment size limit**. This limit covers everything in the built output — including images copied into `public/`. A personal used-goods site with 100 items × 5 photos × 2 MB = 1 GB of images would instantly exceed this, even though the actual HTML/CSS/JS is tiny.
+Images should not live in the git repository or the deployment output. Committing photos makes every `git push` slower as the collection grows. Including them in the build output bloats the deploy: 100 items × 5 photos × 2 MB = 1 GB — far beyond what any platform handles comfortably (GitHub Pages recommends < 1 GB per repo; Vercel Hobby enforces a 100 MB built-output limit). The actual HTML/CSS/JS for this site is tiny.
 
-The naive solution (copy images into `public/` at build time) breaks on Vercel. The seller-hostile solution (manually upload images to a storage console) defeats the file-system-first design. The correct solution is an **automated image storage adapter** that runs transparently during the build.
+The naive solution (copy images into `public/` at build time) breaks at scale on any platform. The seller-hostile solution (manually upload images to a storage console) defeats the file-system-first design. The correct solution is an **automated image storage adapter** that runs transparently during the build.
 
 #### Design Principle
 
@@ -113,7 +113,7 @@ Committing photos would: (a) make every `git push` slow as photo collections gro
 
 - **JSON metadata files** stay in git — they're tiny text files, the inventory catalogue.
 - **Photos** stay on the seller's machine and are uploaded directly to cloud storage by a single command.
-- **The image manifest** (`lib/generated/image-manifest.json`) is committed — it maps each photo to its CDN URL. This is the only artifact Vercel needs to build the site.
+- **The image manifest** (`lib/generated/image-manifest.json`) is committed — it maps each photo to its CDN URL. This is the only artifact the CI build (GitHub Actions or Vercel) needs.
 - **QR code images** live in `content/contact/` (git-tracked, tiny < 50 KB). The sync script copies them to `public/contact/` so Next.js can serve them.
 
 **All seller-managed files live in one folder: `content/`.** App code never needs to be touched for routine listing updates, config changes, or adding new categories.
@@ -125,7 +125,7 @@ Adding a new item:
   1. Create content/items/category/my-item/  with item.json + photos
   2. pnpm upload-images              uploads photos → CDN, updates manifest
   3. git add content/items/<category>/my-item/item.json lib/generated/image-manifest.json
-  4. git push                        Vercel builds instantly; images already on CDN
+  4. git push                        GitHub Actions builds and deploys; images already on CDN
 
 Updating photos:
   1. Replace / add photos in content/items/category/my-item/
@@ -134,16 +134,16 @@ Updating photos:
 
 Code-only change (no photo edits):
   1. Edit content/items/**/item.json  or  content/config.ts
-  2. git add ... && git push         Vercel builds; manifest unchanged, no uploads needed
+  2. git add ... && git push         CI builds; manifest unchanged, no uploads needed
 ```
 
 #### Image Storage Tiers
 
 | `imageStorage.provider` | Best for | Deployment size | Seller effort |
 |---|---|---|---|
-| `"local"` | Local dev preview / self-hosted with no size limit | Images included in output | None |
-| `"vercel-blob"` *(recommended for Vercel Hobby)* | Vercel Hobby, Vercel Pro | Images excluded — served from Blob CDN | 1 env var, once |
-| `"cloudflare-r2"` | Self-hosted or large collections — zero egress cost | Images excluded — served from R2 CDN | 4 env vars, once |
+| `"cloudflare-r2"` *(recommended)* | GitHub Pages, any static host — zero egress cost | Images excluded — served from R2 CDN | 5 env vars, once |
+| `"vercel-blob"` | Vercel deployments | Images excluded — served from Blob CDN | 1 env var, once |
+| `"local"` | Local dev / self-hosted with no size concerns | Images included in output | None |
 
 #### How It Works
 
@@ -837,17 +837,19 @@ export const siteConfig: SiteConfig = {
   logo: "",                                   // path in /public, or "" for text logo
 
   // ── Deployment ───────────────────────────────────────────────────────────
-  deploymentMode: "vercel",                   // "vercel" | "static"
+  deploymentMode: "static",                   // "static" (GitHub Pages / any host) | "vercel"
   baseUrl: "https://your-domain.com",         // used for OG tags + sitemap
   // baseUrl can also be "https://your-name.vercel.app"
 
   // ── Image Storage ─────────────────────────────────────────────────────────
   // See DESIGN.md §3 "Image Storage Architecture" for the full rationale.
   imageStorage: {
-    provider: "vercel-blob",
+    provider: "cloudflare-r2",
+    // "cloudflare-r2" → auto-upload to Cloudflare R2; zero egress cost (recommended)
+    //                   set CF_R2_* env vars in .env.local; see .env.example
+    // "vercel-blob"   → auto-upload to Vercel Blob CDN; set BLOB_READ_WRITE_TOKEN
+    //                   best for Vercel deployments
     // "local"         → copy to public/items/ at build (good for local dev & self-hosted)
-    // "vercel-blob"   → auto-upload to Vercel Blob CDN; set BLOB_READ_WRITE_TOKEN in Vercel
-    // "cloudflare-r2" → auto-upload to Cloudflare R2; set CF_R2_* env vars
   },
 
   // ── Seller location (used for distance-based price tier resolution) ────────
@@ -905,8 +907,8 @@ export const siteConfig: SiteConfig = {
 
   // ── Analytics ─────────────────────────────────────────────────────────────
   analytics: {
-    vercel:        true,   // Vercel Analytics (free on Hobby plan)
-    speedInsights: true,   // Vercel Speed Insights (Core Web Vitals, free)
+    vercel:        false,  // Vercel Analytics — only active on Vercel deployments; no-op elsewhere
+    speedInsights: false,  // Vercel Speed Insights — same; enable if deploying to Vercel
   },
 
   // ── Full-text search ──────────────────────────────────────────────────────
@@ -965,7 +967,7 @@ Open your AI coding tool in the project directory
   Requires: any AI coding tool with vision capability
 ```
 
-Two distinct flows: **seller-side upload** (local machine) and **platform build** (Vercel/CI).
+Two distinct flows: **seller-side upload** (local machine) and **platform build** (GitHub Actions CI or Vercel).
 
 ```
 ── SELLER'S MACHINE ─────────────────────────────────────────────────────────
@@ -974,24 +976,25 @@ pnpm upload-images          (run after adding/changing photos)
   ├── Scans content/items/**/*.{jpg,jpeg,png,webp,gif}  (present locally, gitignored)
   ├── Copies content/contact/** → public/contact/
   ├── Loads .image-cache/checksums.json
-  ├── Uploads new/changed files to configured provider (Blob / R2)
+  ├── Uploads new/changed files to configured provider (R2 / Blob)
   ├── Writes lib/generated/image-manifest.json  ← commit this
   ├── Writes .image-cache/checksums.json        ← do not commit
   └── ⚠️  Prints BACKUP REMINDER
 
 Then:
   git add content/**/*.json lib/generated/image-manifest.json
-  git push
+  git push    ← GitHub Actions triggers build + deploy automatically
 
-── VERCEL BUILD ─────────────────────────────────────────────────────────────
+── CI BUILD (GitHub Actions / Vercel) ───────────────────────────────────────
 pnpm build
   │
   ├── [prebuild]
   │     ├── scripts/sync-images.ts  (build-check mode)
-  │     │     ├── No image files in content/items/ (gitignored — not on Vercel's runner)
+  │     │     ├── No image files in content/items/ (gitignored — not on CI runner)
   │     │     ├── content/contact/** present (git-tracked) → copies to public/contact/
   │     │     ├── Reads existing lib/generated/image-manifest.json  (committed)
   │     │     └── Logs: "manifest present (N entries) — skipping upload"
+  │     │     ⚠️  No CDN credentials needed — build-check never uploads
   │     │
   │     └── scripts/build-search-index.ts
   │           ├── Calls buildSearchIndex() from lib/search/index.ts
@@ -1001,11 +1004,14 @@ pnpm build
   │     loader.ts reads manifest → all image URLs resolve to CDN
   │     generateStaticParams runs for all non-draft, non-expired items
   │     All pages rendered to static HTML + JSON
-  │     If deploymentMode === "static": output: 'export' → out/
+  │     deploymentMode === "static" (default) → output: 'export' → out/
   │
   └── [postbuild]  scripts/postbuild.ts
         if siteConfig.sitemap.enabled → next-sitemap → sitemap.xml + robots.txt
         if siteConfig.sitemap.enabled === false → skip (prints message, exits 0)
+
+  GitHub Actions: uploads out/ → GitHub Pages   (see .github/workflows/deploy.yml)
+  Vercel:         auto-serves the output (deploymentMode: "vercel" omits output:'export')
 
 ── LOCAL BUILD (imageStorage.provider === "local", seller's machine) ─────────
 pnpm build
@@ -1015,7 +1021,7 @@ pnpm build
   │     │     Photos present locally → copied to public/items/ (same as dev-sync)
   │     │     content/contact/ → copied to public/contact/
   │     │     Images are included in the built output (out/) — suitable for self-hosted servers
-  │     │     ⚠️  Do NOT use this mode on Vercel (photos are gitignored on Vercel's runner)
+  │     │     ⚠️  Do NOT use this mode on GitHub Actions or Vercel (photos are gitignored on CI)
   │     │
   │     └── scripts/build-search-index.ts → public/search-index.json
   │
@@ -1139,6 +1145,10 @@ usedExchange/
 │   ├── mark-sold.ts               ← pnpm mark-sold <category>/<name>
 │   └── create-template.ts         ← pnpm create-template [category]
 │
+├── .github/
+│   └── workflows/
+│       └── deploy.yml             ← (Phase 13) GitHub Actions: pnpm build → deploy out/ to GitHub Pages
+│                                     No CDN credentials needed in CI — build-check reads committed manifest
 ├── next-sitemap.config.js         ← sitemap config (reads siteConfig.baseUrl)
 ├── SETUP_GUIDE.md                 ← non-technical user guide (content/ folder operations only)
 ├── postcss.config.mjs             ← Tailwind v4 PostCSS plugin (required); see TECH_REQUIREMENTS.md §22.2
@@ -1724,6 +1734,3 @@ The skill files are human-readable. A seller who opens them in a text editor wil
 
 Both skills instruct the AI to write ONLY to `content/config.ts`, `content/items/*/item.json`, and `content/items/*/_category.json`. No app code is touched. The AI is explicitly instructed not to modify any files outside `content/`.
 
----
-
-*All open questions from v0.1.0 are resolved. Implementation may begin.*

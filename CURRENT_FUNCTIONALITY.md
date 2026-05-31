@@ -126,9 +126,9 @@ Photos are **not committed to git** (avoids Vercel's 100 MB deployment limit). U
 ### Three Storage Providers
 | `imageStorage.provider` | When to use | Setup required |
 |---|---|---|
+| `"cloudflare-r2"` *(recommended)* | GitHub Pages, any static host — zero egress cost | Five env vars in `.env.local` (local only) |
+| `"vercel-blob"` | Vercel deployments | One env var (`BLOB_READ_WRITE_TOKEN`) |
 | `"local"` | Local dev / self-hosted | None |
-| `"vercel-blob"` *(default)* | Vercel Hobby | One env var (`BLOB_READ_WRITE_TOKEN`) |
-| `"cloudflare-r2"` | Large collections / zero egress cost | Four env vars |
 
 ### Photo Quality Warnings
 During `pnpm upload-images`, advisory warnings are printed (never block) for:
@@ -425,5 +425,5 @@ Both enabled via `siteConfig.analytics.*`. Both are no-ops outside Vercel.
 | Animations | framer-motion |
 | Icons | @tabler/icons-react |
 | Package manager | pnpm |
-| Primary host | Vercel Hobby |
-| Image CDN | Vercel Blob (default) or Cloudflare R2 |
+| Primary host | GitHub Pages (via GitHub Actions) |
+| Image CDN | Cloudflare R2 (recommended) or Vercel Blob |

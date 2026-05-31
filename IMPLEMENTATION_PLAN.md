@@ -1,9 +1,9 @@
 # UsedExchange — Implementation Plan
 
-**Version:** 1.1  
-**Date:** 2026-05-29  
-**Based on:** DESIGN.md v0.8.1 · TECH_REQUIREMENTS.md v0.8.1  
-**Assumption:** Single developer; primary target = Vercel Hobby + Vercel Blob
+**Version:** 1.2  
+**Date:** 2026-05-31  
+**Based on:** DESIGN.md v0.9.0 · TECH_REQUIREMENTS.md v0.9.0  
+**Assumption:** Single developer; primary target = GitHub Pages + Cloudflare R2
 
 ---
 
@@ -46,6 +46,7 @@
 - [ ] Configure Prettier per TECH_REQUIREMENTS.md §16
 - [ ] Verify `.gitignore` matches TECH_REQUIREMENTS.md §18 (content/items images, public/items/, public/contact/, public/search-index.json, .image-cache/) — note: `lib/generated/image-manifest.json` is git-tracked and must NOT be gitignored
 - [ ] Install production deps: `next react react-dom zod react-markdown remark-gfm clsx tailwind-merge fuse.js @vercel/analytics @vercel/speed-insights framer-motion @tabler/icons-react`
+  > `@vercel/analytics` and `@vercel/speed-insights` are no-ops outside Vercel; include them so the option is available without a reinstall.
 - [ ] Install dev deps: `typescript @types/node @types/react @types/react-dom tailwindcss @tailwindcss/postcss @tailwindcss/typography eslint eslint-config-next prettier prettier-plugin-tailwindcss tsx next-sitemap`
 - [ ] Create full directory skeleton (all folders from DESIGN.md §16, empty `.gitkeep` where needed)
 - [ ] Create `content/` folder with placeholder `config.ts` and sample `items/` structure
@@ -434,34 +435,45 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 ---
 
 ## Phase 13 — Deployment
-**Goal:** Site is live on Vercel with custom domain (or `*.vercel.app`), images on Vercel Blob, and full seller workflow validated end-to-end.
+**Goal:** Site is live on GitHub Pages with a custom domain, images on Cloudflare R2, and full seller workflow validated end-to-end.
 
 ### Tasks
 
-#### One-time Setup
-- [ ] Create Vercel project, connect GitHub repo
-- [ ] Vercel Dashboard → Storage → Create Blob store → copy `BLOB_READ_WRITE_TOKEN`
-- [ ] Add `BLOB_READ_WRITE_TOKEN` to Vercel Environment Variables (all environments)
-- [ ] Add `NEXT_PUBLIC_SITE_URL` to Vercel Environment Variables
-- [ ] Configure `content/config.ts`: `deploymentMode: "vercel"`, `imageStorage.provider: "vercel-blob"`, correct `baseUrl`, seller `location` coordinates
+#### One-time Setup — Cloudflare R2
+- [ ] Cloudflare Dashboard → R2 → Create bucket (e.g. `usedexchange-images`)
+- [ ] Enable public access or attach custom subdomain (e.g. `images.your-domain.com`)
+- [ ] Create R2 API token: **Object Read & Write**, scoped to this bucket only
+- [ ] Configure CORS on the bucket (Cloudflare Dashboard → R2 → bucket → Settings → CORS):
+  ```json
+  [{ "AllowedOrigins": ["https://your-domain.com"], "AllowedMethods": ["GET"], "AllowedHeaders": ["*"] }]
+  ```
+- [ ] Copy `.env.example` → `.env.local`; fill in all `CF_R2_*` values
+- [ ] Configure `content/config.ts`: `deploymentMode: "static"`, `imageStorage.provider: "cloudflare-r2"`, correct `baseUrl`, seller `location` coordinates
+
+#### One-time Setup — GitHub Pages
+- [ ] GitHub repo → Settings → Pages → Source: **GitHub Actions**
+- [ ] GitHub repo → Settings → Variables → Actions → add `NEXT_PUBLIC_SITE_URL = https://your-domain.com`
+- [ ] Custom domain: GitHub repo → Settings → Pages → Custom domain → set `your-domain.com`; configure DNS CNAME to `<username>.github.io`
+- [ ] Verify `.github/workflows/deploy.yml` is committed (ships with the project)
 
 #### Initial Content & Deploy
 - [ ] Add real listing photos to `content/items/` folders
-- [ ] Run `pnpm upload-images` → verify Blob upload succeeds, manifest written
+- [ ] Run `pnpm upload-images` → verify R2 upload succeeds; manifest written
 - [ ] Commit `lib/generated/image-manifest.json` + `content/**/*.json`
-- [ ] Push to `main` → Vercel auto-build → verify build succeeds (green deploy)
+- [ ] Push to `main` → GitHub Actions triggers → verify workflow passes (green check)
 - [ ] Navigate to deployed URL → verify all pages, images, and pricing work
+- [ ] Verify HTTPS (Geolocation API requires HTTPS — enforced by GitHub Pages + custom domain)
 
-#### Domain & Final Checks
-- [ ] Configure custom domain in Vercel Dashboard → Domains (if applicable)
-- [ ] Verify HTTPS (Geolocation API requires HTTPS — enforced by Vercel)
-- [ ] Run `pnpm upload-images` once more with any final photo edits
+#### Final Checks
+- [ ] Open DevTools → Network tab → confirm image URLs point to `CF_R2_PUBLIC_URL` domain
+- [ ] Run `pnpm upload-images` once more with any final photo edits → commit → push → verify live
 - [ ] Verify seller workflow end-to-end: add item.json + photos → upload → commit → push → live
 
 ### Acceptance Criteria
-- Site live at target URL (Vercel or custom domain)
-- All images served from Vercel Blob CDN (verify via DevTools Network tab → CDN URL)
+- Site live at custom domain with HTTPS
+- All images served from Cloudflare R2 CDN (verify via DevTools Network → R2 URL)
 - Geolocation permission prompt appears on category + item pages
+- GitHub Actions workflow passes with no secrets configured (no CDN credentials in CI)
 - `pnpm upload-images` on seller's machine → item appears on live site after push
 
 ---
