@@ -404,7 +404,7 @@ Only `name` is required. Every other field is optional; the build applies safe d
 
   // ── Internationalisation ──────────────────────────────────────────────────
   "name_zh": "",
-  // ^ Chinese display name; shown when siteConfig.i18n.locale === "zh"
+  // ^ Chinese display name; shown when the active locale is "zh" (selected at runtime via LocaleSwitcher; SSG renders siteConfig.i18n.defaultLocale). See TECH §22.8.
   "description_zh": ""
   // ^ Chinese description; same condition.
   // Pattern: name_{locale} / description_{locale}. v1 carries the _zh variants concretely in the
@@ -792,6 +792,11 @@ components/
 │   ├── SearchBar.tsx              ← client component; fuse.js input in SiteHeader
 │   └── useSearch.ts               ← hook: loads search-index.json, manages query + results
 │
+├── i18n/
+│   ├── LocaleProvider.tsx         ← client; React context for active locale; reads/writes localStorage
+│   ├── LocaleSwitcher.tsx         ← client; locale toggle buttons in SiteHeader; hidden when availableLocales.length ≤ 1
+│   └── useLocale.ts               ← hook: reads active locale from LocaleProvider context
+│
 └── common/
     ├── AdaptiveImage.tsx          ← next/image vs <img> switch by deploymentMode
     ├── ShareButton.tsx            ← client; navigator.share() + copy-link fallback
@@ -802,7 +807,7 @@ components/
 ### Component Rules
 - `ui/` — Aceternity originals; extend by wrapping, never modifying in place
 - Prop types derived from `lib/content/types.ts`; no raw JSON objects passed to components
-- `"use client"` on: `RecentlyListedSection`, `ItemGrid`, `PricingSection`, `ItemGallery`, `FilterBar`, `SortSelect`, `ContactSection`, `PlatformButton`, `QRModal`, `LocationPriceBar`, `PricingTableToggle`, `MakeOfferButton`, `ConditionGuide`, `SearchBar`, `ShareButton`, `RecentlyViewed`, `FreshnessLabel`
+- `"use client"` on: `RecentlyListedSection`, `ItemGrid`, `PricingSection`, `ItemGallery`, `FilterBar`, `SortSelect`, `ContactSection`, `PlatformButton`, `QRModal`, `LocationPriceBar`, `PricingTableToggle`, `MakeOfferButton`, `ConditionGuide`, `SearchBar`, `ShareButton`, `RecentlyViewed`, `FreshnessLabel`, `LocaleProvider`, `LocaleSwitcher`
   - `PlatformButton` requires `"use client"` because it receives an `onClick` function prop (state setter from `ContactSection`) — function props are not serialisable across the server/client boundary.
   - `SearchBar` is loaded via `next/dynamic({ ssr: false })` to avoid hydration mismatch from fuse.js.
   - `ShareButton` uses `navigator.share()` and `navigator.clipboard` — browser-only APIs.
@@ -811,6 +816,8 @@ components/
   - `ConditionGuide` manages tooltip / modal open-close state.
   - `SortSelect` manages sort dropdown state (rendered inside FilterBar, itself client).
   - `FreshnessLabel` calculates the relative date against the visitor's live browser clock (`new Date()`) — not the SSG build time. Uses `useState`/`useEffect` to set the label after mount; renders nothing until the effect fires, so the label is never stale from the deploy date.
+  - `LocaleProvider` reads `localStorage.getItem("locale")` on mount and provides the active locale via React context. Must be `"use client"` — `localStorage` is a browser-only API.
+  - `LocaleSwitcher` calls `setLocale()` from `LocaleProvider` context on user interaction. Hidden when `siteConfig.i18n.availableLocales.length <= 1`.
   - Note: `PricingTable` is NOT in this list. It is a presentational component (no hooks, no `"use client"`). However, it always renders inside `PricingSection` (a client component) in practice because it renders `PricingTableToggle` (a client component) as a child. `PricingTable` alone (without its toggle child) could be rendered in a server context, but this is not used in v1.
 - All other components are React Server Components
 - Visitor coordinates are **never passed outside the browser** — all distance math runs in `useDistancePricing.ts`
@@ -927,10 +934,17 @@ export const siteConfig: SiteConfig = {
   },
 
   // ── Internationalisation ──────────────────────────────────────────────────
-  // Single-locale per deployment: set locale, add name_{locale} / description_{locale}
-  // fields to item.json, and optionally override UI strings below.
+  // Single-instance multi-locale: all locale variants are served in one deployment.
+  // Visitors switch language at runtime via the LocaleSwitcher in SiteHeader.
+  // Selected locale is persisted in localStorage; static HTML always shows defaultLocale.
+  //
+  // To add translations: add name_{locale} / description_{locale} to item.json
+  // manually, or run the /translate-items AI skill to batch-fill them (see §20 Skill 3).
   i18n: {
-    locale: "en",    // active locale: "en" | "zh" | "es" | any ISO 639-1 code
+    defaultLocale: "en",              // locale rendered in SSG static HTML; ISO 639-1
+    availableLocales: ["en"],         // add "zh", "es", etc. to enable LocaleSwitcher
+                                      // LocaleSwitcher is hidden when length === 1
+    showLocaleSwitcher: true,         // show locale toggle in SiteHeader (when locales > 1)
     strings: {
       // Override any UI string. Leave "" to use the built-in English default.
       heroTagline:     "",   // hero section tagline (falls back to siteConfig.tagline)
@@ -1134,7 +1148,8 @@ usedExchange/
 │   ├── CLAUDE.md                  ← loaded automatically by Claude Code; project context + content/ rule
 │   └── skills/                    ← AI skill files (see §20); work with Claude Code + other AI tools
 │       ├── update-items.md        ← Skill: generate item.json from photos + description file
-│       └── setup-wizard.md        ← Skill: interactive site config setup wizard
+│       ├── setup-wizard.md        ← Skill: interactive site config setup wizard
+│       └── translate-items.md     ← Skill: batch-translate item fields into additional locales
 │
 ├── scripts/
 │   ├── sync-images.ts             ← image upload pipeline (3 modes)
@@ -1524,7 +1539,7 @@ The following were previously listed as future features. Those now in v1 have be
 | `pnpm clean-storage` | Script to reconcile orphaned CDN blobs vs manifest; requires provider list+delete API |
 | Add new UI component option | Install via `npx shadcn@latest add ...`; add import + entry to adapter; add value to `lib/ui/types.ts`; update `scripts/setup-ui.sh` |
 | Add new UI slot | Add key to `UIConfig`; create new adapter in `components/ui-adapters/`; document in §18 |
-| Multi-language routing | Deploy separate instances per locale (e.g. `zh.domain.com`); each has its own config + locale set |
+| Add new locale | Add locale to `siteConfig.i18n.availableLocales`; extend Zod schema + `Item` type with `name_{locale}` / `description_{locale}`; run `/translate-items` AI skill to batch-fill translations; `LocaleSwitcher` appears automatically when `availableLocales.length > 1` |
 | RSS feed | Generate `feed.xml` in postbuild by aggregating `loadItemsByCategory()` across all categories (do NOT use `loadAllItems()` — that function returns `available`-only items capped at `recentlyListedCount`); link in `<head>` |
 | Seller dashboard (local GUI) | Local-only Next.js dev-mode route or Electron app that reads/writes `content/`; key unlock for non-technical users |
 | Multi-seller support | Requires full architecture redesign; each seller gets a namespaced `content/` folder |
@@ -1533,7 +1548,7 @@ The following were previously listed as future features. Those now in v1 have be
 
 ## 20. AI-Powered Content Generation — Skill-Based Approach
 
-Two AI-assisted workflows are provided as **Claude Code skills** (see `.claude/skills/`). The seller uses whatever AI coding tool they already have — Claude Code, Cursor, GitHub Copilot, or any capable assistant. **No additional API keys, environment variables, or package installation is required.** The seller just opens their AI tool in the project directory and invokes the skill.
+Three AI-assisted workflows are provided as **Claude Code skills** (see `.claude/skills/`). The seller uses whatever AI coding tool they already have — Claude Code, Cursor, GitHub Copilot, or any capable assistant. **No additional API keys, environment variables, or package installation is required.** The seller just opens their AI tool in the project directory and invokes the skill.
 
 ### Design Principle
 
@@ -1548,16 +1563,17 @@ This approach:
 
 ### Skill Files
 
-Two skill files ship with the project:
+Three skill files ship with the project:
 
 ```
 .claude/
 └── skills/
     ├── update-items.md    ← Skill: generate item.json from photos + description
-    └── setup-wizard.md    ← Skill: interactive site config setup
+    ├── setup-wizard.md    ← Skill: interactive site config setup
+    └── translate-items.md ← Skill: batch-translate item fields into additional locales
 ```
 
-These follow the standard Claude Code skill format and are invokable via `/update-items` and `/setup` in Claude Code. Other AI tools can read them directly as prompt instructions.
+These follow the standard Claude Code skill format and are invokable via `/update-items`, `/setup`, and `/translate-items` in Claude Code. Other AI tools can read them directly as prompt instructions.
 
 ---
 
@@ -1691,11 +1707,89 @@ The AI asks about 8 areas and generates the complete config:
 | Pricing | Firm vs negotiable; currency | `currency`, seller notes |
 | Distance tiers | Campus-local / city-wide / pickup-only | Reference for item.json tiers |
 | Visual style | Background + card effect | `ui.background`, `ui.itemCard` |
-| Language | Locale selection | `i18n.locale` |
+| Language | Locale selection; sets `defaultLocale` + `availableLocales` | `i18n.defaultLocale`, `i18n.availableLocales` |
 
 The AI reads the seller's writing style and suggests a matching tagline (examples: "Good stuff finding new homes 📦" for casual tone; "Pre-owned. Priced fairly." for minimalist tone). The seller can accept or override.
 
 **Re-running:** The seller can ask "update just my contact info in the config" or "change my background effect" — the AI reads the existing `content/config.ts`, makes the targeted change, and leaves everything else intact.
+
+---
+
+### Skill 3 — Item Translator
+
+**Invocation:** `/translate-items` in Claude Code, or describe the task: "Translate my item listings into Chinese."
+
+**What the seller does:**
+```
+1. Add the target locale to siteConfig.i18n.availableLocales  (e.g. ["en", "zh"])
+2. Open Claude Code (or similar) in the project directory
+3. Type: /translate-items   (or "translate my items into zh")
+4. AI scans content/items/ for missing translations
+5. Review the proposed translations shown per item
+6. Confirm → AI writes name_zh / description_zh into each item.json
+```
+
+**Trigger Conditions**
+
+The agent processes an item when ANY of the following are true:
+- `name_{locale}` field is absent or empty string in `item.json`
+- `description_{locale}` field is absent or empty string
+- Seller explicitly targets a folder: "just translate the electronics/iphone-14 item"
+- Seller provides a scope: "translate all items missing Chinese" / "only houseware category"
+
+**What the AI Translates**
+
+| Field | Translated? | Notes |
+|---|---|---|
+| `name` → `name_{locale}` | **Yes** | Product name; preserves model numbers, brand names, measurements verbatim |
+| `description` → `description_{locale}` | **Yes** | Full Markdown preserved; inline code spans, URLs, and model strings not translated |
+| `brand`, `model`, `color` | No | Technical strings — locale-invariant |
+| `tags` | No | Used for fuse.js search; kept in English for consistency |
+| `course`, `isbn`, `edition` | No | Academic identifiers — locale-invariant |
+| Price fields, dates, status | No | Never content for translation |
+
+**Manual Override**
+
+Sellers may also type translations directly into `item.json` without using the skill:
+```jsonc
+{
+  "name": "IKEA Desk Lamp",
+  "name_zh": "宜家台灯",
+  "description": "Works perfectly. Minor scratch on base.",
+  "description_zh": "功能完好，底座有轻微划痕。"
+}
+```
+The AI skill and manual editing are fully compatible — the skill skips fields that already have non-empty translations.
+
+**Interactive Confirmation Flow**
+
+```
+Agent: 🌐 Translating 3 items into zh...
+
+  content/items/houseware/ikea-desk-lamp/item.json
+  ┌──────────────────────────────────────────────────┐
+  │ name_zh:        "宜家 TRÅDFRI 台灯"               │
+  │ description_zh: "工作正常，两年前购入。底座轻微划痕。" │
+  └──────────────────────────────────────────────────┘
+  [C] Confirm  [E] Edit  [S] Skip  [Q] Quit all
+
+  content/items/electronics/iphone-14-pro/item.json
+  ┌──────────────────────────────────────────────────┐
+  │ name_zh:        "iPhone 14 Pro 深空黑 256GB"      │
+  │ description_zh: "成色良好，屏幕无划痕，含原装充电器。" │
+  └──────────────────────────────────────────────────┘
+  [C] Confirm  [E] Edit  [S] Skip  [Q] Quit all
+```
+
+The AI confirms each item individually or accepts a batch confirm ("translate all remaining items without asking").
+
+**Locale Scope**
+
+The seller specifies the target locale in the invocation. The skill infers it from `siteConfig.i18n.availableLocales` when unambiguous (e.g. if `availableLocales: ["en", "zh"]` the skill targets `zh`). With three or more locales, the AI asks which locale to target.
+
+**`content/` Rule — Maintained**
+
+The translate skill writes ONLY to `content/items/*/item.json`. It reads `content/config.ts` for locale configuration but does not modify it. No app code is touched.
 
 ---
 
@@ -1716,15 +1810,16 @@ The skill files are human-readable. A seller who opens them in a text editor wil
 ```
 .claude/
 └── skills/
-    ├── update-items.md    ← describes how to generate item.json from photos
-    └── setup-wizard.md    ← describes how to generate content/config.ts
+    ├── update-items.md     ← describes how to generate item.json from photos
+    ├── setup-wizard.md     ← describes how to generate content/config.ts
+    └── translate-items.md  ← describes how to batch-translate item fields into other locales
 ```
 
 ### Compatibility
 
 | AI Tool | How to use |
 |---|---|
-| **Claude Code** | `/update-items` or `/setup` — skills are loaded automatically from `.claude/skills/` |
+| **Claude Code** | `/update-items`, `/setup`, or `/translate-items` — skills are loaded automatically from `.claude/skills/` |
 | **Cursor** | Open skill file → Cmd+L → paste into chat alongside photos |
 | **GitHub Copilot (chat)** | Open skill file → paste as context → attach photos |
 | **Claude.ai** | Paste skill file content + upload photos → ask AI to follow the instructions |
@@ -1732,5 +1827,5 @@ The skill files are human-readable. A seller who opens them in a text editor wil
 
 ### `content/` Rule — Maintained
 
-Both skills instruct the AI to write ONLY to `content/config.ts`, `content/items/*/item.json`, and `content/items/*/_category.json`. No app code is touched. The AI is explicitly instructed not to modify any files outside `content/`.
+All three skills instruct the AI to write ONLY to `content/config.ts`, `content/items/*/item.json`, and `content/items/*/_category.json` (the translator touches only `item.json` locale fields). No app code is touched. The AI is explicitly instructed not to modify any files outside `content/`.
 

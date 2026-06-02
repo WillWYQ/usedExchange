@@ -7,7 +7,7 @@
 
 ## ✅ Shipped in v1
 
-The following features were initially on the roadmap and have been moved into the v1 build:
+The following features were initially on the roadmap and have been moved into the **v1 scope** (specified in DESIGN.md / TECH_REQUIREMENTS.md). The project is currently in the **design phase** — "Shipped in v1" here means "specified for the v1 build," not yet implemented in code.
 
 | Feature | Notes |
 |---|---|
@@ -33,7 +33,7 @@ The following features were initially on the roadmap and have been moved into th
 | Twitter/X + Pinterest rich cards 🎓👤 | `twitter:card: "summary_large_image"` + `og:type: "product"` |
 | Textbook-specific fields & category 🎓 | isbn, course, edition, semester_listed; Compare prices link |
 | Non-technical user setup guide 👤 | `SETUP_GUIDE.md` in plain English; only `content/` operations |
-| i18n — multi-language support 🎓👤 | Single-locale per deployment; `name_zh`/`description_zh` pattern; `siteConfig.i18n.strings` |
+| i18n — multi-language support 🎓👤 | Single-instance multi-locale (runtime LocaleSwitcher); `name_zh`/`description_zh` pattern; `defaultLocale` + `availableLocales` + `siteConfig.i18n.strings`; `/translate-items` skill |
 | Venmo + Zelle payment (QR or link) 🎓👤 | Venmo: link-based or QR; Zelle: QR-only |
 
 ---
@@ -458,7 +458,7 @@ Add `bundle_with` to `item.json` as a v2 schema addition (it is **not** part of 
 ### 3.7 i18n — Multi-Language Support ✅ Shipped in v1
 **Effort:** L · **Value:** ⭐⭐
 
-Add language variants of text fields to `item.json` (`name_zh`, `description_zh`) and a `locale` config key. The site renders in the configured language, with automatic fallback to English if a field has no translation.
+Add language variants of text fields to `item.json` (`name_zh`, `description_zh`) plus `i18n.defaultLocale` / `i18n.availableLocales` config keys. Single-instance multi-locale: all locale variants ship in one deployment; the visitor switches language at runtime via the `LocaleSwitcher` in the header (selection persisted in `localStorage`; SSG HTML renders `defaultLocale`). Fields with no translation fall back to English automatically. The `/translate-items` AI skill batch-fills translations.
 
 Already in the Extensibility Register.
 

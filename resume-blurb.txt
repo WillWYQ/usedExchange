@@ -1,0 +1,120 @@
+UsedExchange — Resume Material
+================================================================
+Tech / SWE resume. Personal project, currently at design/spec stage
+(no deployed app or users yet). All numbers below describe the
+architecture and the AI-assisted process — they are true and
+defensible in an interview. Do NOT reword into "shipped to X users."
+
+
+----------------------------------------------------------------
+1. PRIMARY VERSION — Projects section entry (6 bullets)
+----------------------------------------------------------------
+
+UsedExchange — Static Marketplace Storefront (Personal Project)
+Next.js 15 · TypeScript · Tailwind CSS v4 · Zod · GitHub Actions
+github.com/WillWYQ/usedExchange · 2026
+
+- Architected a database-free, statically-generated marketplace in
+  Next.js 15 / TypeScript where all content is driven from a single
+  content/ folder, letting non-technical sellers manage inventory
+  without touching application code.
+
+- Designed a distance-tiered pricing engine that resolves buyer
+  location entirely client-side via the browser Geolocation API
+  (haversine distance, zero server calls), serving location-specific
+  prices while keeping visitor coordinates private.
+
+- Engineered a git-free image pipeline that uploads photos to a
+  Cloudflare R2 CDN and commits only a lightweight JSON manifest,
+  keeping deploy output within free static-hosting limits (vs. ~1 GB
+  if 100+ items were bundled) on GitHub Pages.
+
+- Drove a spec-first, AI-assisted workflow with Claude Code, producing
+  a ~270 KB internally-consistent design corpus (7 docs, versioned
+  v0.2.0 -> v0.9.0) hardened through 10+ AI-led multi-pass consistency
+  audits that caught cross-document defects — orphaned schema fields,
+  broken build-step ordering, dependency cycles — before any code was
+  written.
+
+- Authored a 14-phase, agent-executable implementation plan with
+  machine-checkable acceptance criteria (type-check + lint gates),
+  enabling an AI coding agent to build and self-verify the system
+  phase by phase.
+
+- Designed three portable AI assistant skills (/setup, /update-items,
+  /translate-items) that generate site config, item metadata, and
+  locale translations from a seller's photos and notes — Markdown
+  instruction files requiring no API key or extra dependencies.
+
+
+----------------------------------------------------------------
+2. CONDENSED VERSION — space-constrained resume (3 bullets)
+----------------------------------------------------------------
+
+UsedExchange — Static Marketplace Storefront (Personal Project)
+Next.js 15, TypeScript, Tailwind v4 · 2026
+
+- Architected a database-free, statically-generated marketplace
+  (Next.js 15 / TypeScript) with a single-folder content model,
+  client-side geolocation pricing, and a CDN-backed image pipeline
+  for free GitHub Pages hosting.
+
+- Drove a spec-first workflow with Claude Code, hardening a ~270 KB
+  design spec through 10+ AI-led consistency audits and a 14-phase,
+  agent-executable build plan with automated acceptance gates.
+
+- Designed three no-API-key AI skills that auto-generate site config,
+  item listings, and locale translations from seller photos/notes.
+
+
+----------------------------------------------------------------
+3. TECHNICAL SKILLS — contribution to skills block
+----------------------------------------------------------------
+
+Languages:       TypeScript, JavaScript
+Frameworks:      Next.js 15 (App Router), React
+Styling/UI:      Tailwind CSS v4, Aceternity UI
+Tooling:         Zod, fuse.js, framer-motion, pnpm, Git, GitHub Actions (CI/CD)
+Cloud/Infra:     Cloudflare R2, GitHub Pages, Vercel
+AI-Assisted Dev: Claude Code, spec-driven design, AI agent skills/tooling,
+                 prompt-based code review
+
+
+----------------------------------------------------------------
+4. PROFESSIONAL SUMMARY — optional fragment (AI-dev angle)
+----------------------------------------------------------------
+
+Pick one to weave into a summary/profile line:
+
+- "...with hands-on experience in AI-assisted, spec-first software
+  development — driving architecture, multi-pass design audits, and
+  agent-executable build plans end-to-end with Claude Code."
+
+- "Builds with an AI-augmented workflow: using coding agents for
+  design review, consistency auditing, and phased implementation."
+
+
+----------------------------------------------------------------
+5. NOTES FOR THE EDITOR
+----------------------------------------------------------------
+
+- Keep it truthful. Safe, defensible numbers: 7 documents, ~270 KB,
+  10+ audit passes, 14 phases, 27 UI components, 38-field schema,
+  3 AI skills, ~15 contact platforms. These describe design + process,
+  not traffic. Add user/performance metrics only after real deployment.
+
+- Placement: on an early-career / new-grad resume, this goes in a
+  PROJECTS section, right after Skills.
+
+- Confirm the GitHub URL — inferred from git user "WillWYQ"; verify the
+  exact repo path.
+
+- "In progress" is fine — append "(in active development)" to the
+  header if you prefer to signal that explicitly.
+
+- Verbs are varied on purpose (Architected / Designed / Engineered /
+  Drove / Authored / Shipped) so bullets don't read repetitively.
+
+- To tailor for a specific job: mirror the job description's keywords
+  and reorder bullets to lead with what that role weights most
+  (frontend, full-stack, AI tooling, or systems design).

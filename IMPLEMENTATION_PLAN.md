@@ -25,7 +25,7 @@
 | 11 | UI Slot Adapters (wiring) | 1 | 1, 8, 9 |
 | 12 | SEO, Search, A11y & Security Hardening | 1 | 11 |
 | 13 | Deployment | 1 | 4, 12 |
-| 14 | AI Skill Files (Setup Wizard + Item Generator) | 2 | 3 |
+| 14 | AI Skill Files (Setup Wizard + Item Generator + Item Translator) | 2 | 3 |
 | **Total** | | **~22 days** | |
 
 **Critical path:** 0 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 11 → 12 → 13  
@@ -478,10 +478,10 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 
 ---
 
-## Phase 14 — AI Skill Files (Setup Wizard + Item Generator)
-**Goal:** Both Claude Code skills are complete, tested, and ship with the project. A seller using Claude Code (or any capable AI tool) can run `/setup` and `/update-items` to generate `content/config.ts` and `item.json` files without editing any code.
+## Phase 14 — AI Skill Files (Setup Wizard + Item Generator + Item Translator)
+**Goal:** All three Claude Code skills are complete, tested, and ship with the project. A seller using Claude Code (or any capable AI tool) can run `/setup`, `/update-items`, and `/translate-items` to generate `content/config.ts`, generate `item.json` files, and add locale translations — all without editing any code.
 
-**No API keys, no new dependencies, no custom scripts.** The deliverable is two Markdown instruction files.
+**No API keys, no new dependencies, no custom scripts.** The deliverable is three Markdown instruction files.
 
 **Can be developed in parallel with Phases 5–13.**
 
@@ -512,16 +512,24 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 - [ ] Test idempotency: run again after config exists → verify AI reads existing values and pre-fills
 - [ ] Test partial re-run: "just update my contact info"
 
-#### 14d — Validation & Documentation
+#### 14d — `translate-items.md` Skill
+- [ ] Create `.claude/skills/translate-items.md`
+- [ ] Include full required content per TECH_REQUIREMENTS.md §23.8: trigger (scan for missing `name_{locale}`/`description_{locale}`), locale detection from `siteConfig.i18n.availableLocales`, fields to translate (`name`→`name_{locale}`, `description`→`description_{locale}`), fields preserved verbatim (brand, model, color, tags, course, isbn, edition, prices, dates, status, URLs), Markdown preservation, per-item confirmation flow (confirm / edit / skip / accept-all), natural-language scope, status filter (translate all statuses incl. draft/sold), output rules (write only locale fields; preserve everything else)
+- [ ] Include the Zod-schema precondition: skill verifies `name_{locale}`/`description_{locale}` exist in `lib/content/schema.ts`; if absent, prints the exact Zod + `Item` type snippet to add and stops (TECH_REQUIREMENTS.md §23.8)
+- [ ] Test with Claude Code: add `"zh"` to `availableLocales`, run `/translate-items` → `name_zh`/`description_zh` written, other fields untouched, Markdown preserved
+- [ ] Test idempotency: items with existing non-empty translations are skipped (no overwrite)
+
+#### 14e — Validation & Documentation
 - [ ] Create `SETUP_GUIDE.md` at the project root — plain-English seller guide with no code, no terminal jargon, no git commands. Contents per TECH_REQUIREMENTS.md §22.12: (1) adding a new item, (2) marking an item sold, (3) creating from template, (4) changing prices, (5) uploading new photos, (6) what to back up, (7) who to contact if something breaks.
 - [ ] Add a "Verify skill output" step to `SETUP_GUIDE.md`: after running `/update-items`, run `pnpm type-check` to confirm generated JSON is valid
-- [ ] Test both skills in at least one non-Claude AI tool (Cursor or GitHub Copilot) to verify compatibility
+- [ ] Test all three skills in at least one non-Claude AI tool (Cursor or GitHub Copilot) to verify compatibility
 - [ ] Confirm `content/` rule: AI never modifies any file outside `content/`
 
 ### Acceptance Criteria
 - `/update-items` in Claude Code → generates valid `item.json`; Zod schema validates it
 - `/setup` in Claude Code → `content/config.ts` generated; `pnpm type-check` passes
-- Both skills work in at least one other AI tool (Cursor / GitHub Copilot)
+- `/translate-items` in Claude Code → writes `name_{locale}`/`description_{locale}` only; other fields untouched; existing translations not overwritten
+- All three skills work in at least one other AI tool (Cursor / GitHub Copilot)
 - No new npm dependencies added
 - No API keys required
 - No files written outside `content/`

@@ -1071,6 +1071,8 @@ The slider's initial `max` is set to the highest resolved price across all items
 | `ShareButton` | `navigator.share()` and `navigator.clipboard` — browser-only APIs |
 | `RecentlyViewed` | `sessionStorage` read/write on mount — browser-only API |
 | `FreshnessLabel` | Calculates relative date against `new Date()` (visitor's clock, not SSG build time); `useState`/`useEffect` prevents stale freshness text |
+| `LocaleProvider` | Reads `localStorage.getItem("locale")` on mount; provides `{ locale, setLocale }` via React context — `localStorage` is browser-only |
+| `LocaleSwitcher` | Calls `setLocale()` from `LocaleProvider` context on user interaction; conditionally rendered (hidden when `availableLocales.length ≤ 1`) |
 
 > **`PricingTable` reclassification note:** `PricingTable` is NOT in this list. It was previously documented as a server component but was reclassified to a **presentational component** (no `"use client"`, no hooks). It renders `PricingTableToggle` (a client component) as a child, so in practice it always runs in a client subtree. The server-side page (`page.tsx`) calls `resolveItemPrice` as a pure function for the SSG initial render and passes the result as `initialResolvedTier` prop to `PricingSection`, not directly to `PricingTable`.
 
@@ -1206,6 +1208,7 @@ import type { UIConfig } from "@/lib/ui/types";
 export type SiteConfig = {
   // ... existing fields ...
   ui: UIConfig;
+  i18n: I18nConfig;   // see §22.8 for full I18nConfig type
 };
 ```
 
@@ -1541,12 +1544,48 @@ The sitemap only generates when `siteConfig.sitemap.enabled === true`. The `post
 
 ### 22.8 Internationalisation (i18n)
 
-**Design:** Single-locale per deployment. No routing changes; the active locale is set by `siteConfig.i18n.locale`.
+**Design:** Single-instance multi-locale. All locale variants are bundled into one deployment. Visitors switch language at runtime via the `LocaleSwitcher` component in `SiteHeader`. The selected locale is persisted in `localStorage`; SSG static HTML always renders `defaultLocale`.
 
-**`lib/utils/i18n.ts`**:
+### SiteConfig i18n type (`lib/config/types.ts`)
+
 ```ts
-// Returns the localised field value, falling back to the English default.
+export type I18nConfig = {
+  defaultLocale: string;           // ISO 639-1; rendered in static HTML (SSG)
+  availableLocales: string[];      // all supported locales; LocaleSwitcher shown when length > 1
+  showLocaleSwitcher: boolean;     // show toggle in SiteHeader (overridden to false if locales ≤ 1)
+  strings: UIStrings;              // UI string overrides per the defaultLocale
+};
+```
+
+### Locale switching runtime architecture
+
+```
+Visitor loads page
+  │
+  ├── SSG HTML renders with defaultLocale content (e.g. item.name, not item.name_zh)
+  │
+  └── LocaleProvider (client component wrapping app/layout.tsx children)
+        ├── reads localStorage.getItem("locale")
+        ├── falls back to siteConfig.i18n.defaultLocale if absent or not in availableLocales
+        ├── exposes { locale, setLocale } via React context
+        └── triggers re-render of all localised fields after hydration
+
+LocaleSwitcher (client component in SiteHeader)
+  ├── hidden when siteConfig.i18n.availableLocales.length <= 1
+  ├── renders buttons/select for each available locale
+  └── on change: calls setLocale(newLocale) + localStorage.setItem("locale", newLocale)
+
+useLocale() hook
+  └── reads locale from LocaleProvider context
+      used by all item-rendering components instead of reading siteConfig.i18n.defaultLocale directly
+```
+
+### `lib/utils/i18n.ts`
+
+```ts
+// Returns the localised field value for the given locale, falling back to the English default.
 // Example: getLocalizedField(item, "name", "zh") → item.name_zh ?? item.name
+// Example: getLocalizedField(item, "description", "es") → item.description_es ?? item.description
 export function getLocalizedField(
   item: Record<string, unknown>,
   field: string,    // e.g. "name", "description"
@@ -1554,8 +1593,11 @@ export function getLocalizedField(
 ): string
 
 // Returns a UI string from siteConfig.i18n.strings, falling back to the built-in English default.
-export function t(key: keyof UIStrings): string
+// locale parameter reserved for future per-locale UIStrings support.
+export function t(key: keyof UIStrings, locale?: string): string
 ```
+
+All item-rendering components call `getLocalizedField(item, "name", locale)` where `locale` comes from `useLocale()` (client) or `siteConfig.i18n.defaultLocale` (server/SSG). The same component tree works for both rendering contexts.
 
 **`UIStrings` type** (defined in `lib/config/types.ts` and used by `SiteConfig.i18n.strings`):
 
@@ -1570,11 +1612,18 @@ export type UIStrings = {
 };
 ```
 
-All fields default to their built-in English strings when the value is `""`. Sellers only need to populate the strings they want to override.
+All fields default to their built-in English strings when the value is `""`. `UIStrings` covers the `defaultLocale`; per-locale UI strings are provided by the item fields themselves.
 
-All item-rendering components call `getLocalizedField` instead of accessing `item.name` directly. The locale comes from `siteConfig.i18n.locale` (static at build time).
+### Adding a new locale
 
-> **Localized item-field scope (v1):** The v1 Zod schema (§6) and `Item` type (§8) carry the `name_zh` / `description_zh` variants. `getLocalizedField(item, "name", "zh")` reads `item.name_zh`, falling back to `item.name`. Supporting another locale (e.g. `es`) is an **additive change**: add its `name_{locale}` / `description_{locale}` fields to both the Zod schema and the `Item` type. Until those fields exist, `getLocalizedField` silently falls back to English for that locale (so setting `i18n.locale: "es"` without adding `name_es` data renders English — no crash). v1 ships concrete `zh` support; broader generic multi-locale (auto-passthrough of any `name_*` key) is intentionally out of scope.
+1. Add `name_{locale}` and `description_{locale}` to the Zod schema (`lib/content/schema.ts`) and `Item` type (`lib/content/types.ts`) — mirrors the existing `name_zh` / `description_zh` pattern.
+2. Add the locale code to `siteConfig.i18n.availableLocales` in `content/config.ts`.
+3. Run `/translate-items` AI skill (DESIGN.md §20 Skill 3) to batch-fill translations, or add `name_{locale}` / `description_{locale}` fields to `item.json` manually.
+4. `LocaleSwitcher` appears automatically once `availableLocales.length > 1`.
+
+> **Locale fallback:** `getLocalizedField` silently falls back to English for any locale whose `name_{locale}` field is absent or empty — no crash, no broken renders. Items without translations display in `defaultLocale` until translations are added. This makes adding a new locale a non-breaking, fully incremental change.
+
+> **v1 ships concrete `zh` support.** The `name_zh` / `description_zh` fields are in the Zod schema and `Item` type. `es` and other locales follow the same additive pattern.
 
 ---
 
@@ -1667,7 +1716,7 @@ See DESIGN.md §20 for the design rationale, seller workflows, and compatibility
 
 ### 23.1 Skill File Structure
 
-Both skill files live in `.claude/skills/` and follow this template:
+All three skill files live in `.claude/skills/` and follow this template:
 
 ```markdown
 # Skill: <name>
@@ -1738,7 +1787,8 @@ The `.claude/` directory also contains a `CLAUDE.md` project file. Claude Code r
 ├── CLAUDE.md          ← loaded automatically by Claude Code; project context
 └── skills/
     ├── update-items.md
-    └── setup-wizard.md
+    ├── setup-wizard.md
+    └── translate-items.md
 ```
 
 ### 23.5 No Dependencies Added
@@ -1761,9 +1811,480 @@ If the seller has no AI coding tool:
 
 ### 23.7 `content/` Rule — Enforced in Skill Files
 
-Both skill files include an explicit instruction:
+All three skill files include an explicit instruction:
 
 > **Do not modify any files outside the `content/` directory. Do not edit `app/`, `components/`, `lib/`, `scripts/`, or any configuration files. Your output is limited to: `content/config.ts`, `content/items/*/item.json`, and `content/items/*/_category.json`.**
+
+---
+
+### 23.8 `translate-items.md` — Required Content
+
+The skill file must include:
+
+| Section | Content |
+|---|---|
+| Trigger | "Scan `content/items/` for item.json files where `name_{locale}` or `description_{locale}` is absent or empty string" |
+| Locale detection | Read `siteConfig.i18n.availableLocales`; if only one non-English locale exists, target it automatically; otherwise ask the seller which locale to target |
+| Fields to translate | `name` → `name_{locale}`, `description` → `description_{locale}` only |
+| Fields to preserve verbatim | `brand`, `model`, `color`, `tags`, `course`, `isbn`, `edition`, price fields, dates, status, URLs |
+| Markdown preservation | Translate prose content only; preserve all Markdown syntax (`**bold**`, `*italic*`, code spans, links, lists) unchanged |
+| Model number / brand preservation | Keep brand names, model numbers, measurements, and technical identifiers untranslated; e.g. "IKEA TRÅDFRI" stays as-is |
+| Merge rule | If `name_{locale}` is already non-empty, skip that field (no overwrite unless seller explicitly requests it) |
+| Output rules | Write ONLY the new locale fields into each `item.json`; preserve all other fields exactly |
+| Confirmation | Show proposed translations for each item; seller confirms, edits, skips, or accepts all |
+| Scope | Accept natural language scope: "all items", "just electronics", "only the iphone-14 item", "everything missing Chinese" |
+| Status filter | Translate all statuses including `draft` and `sold` (translations persist and are useful when items are re-listed or the archive is viewed) |
+
+**Translation quality guidance the skill must apply:**
+
+- Use natural, colloquial phrasing appropriate to a peer-to-peer marketplace (not formal retail language)
+- For Chinese: use Simplified Chinese (简体中文) unless the seller specifies Traditional Chinese (繁體中文)
+- Preserve the seller's tone: casual descriptions translate casually, detailed technical descriptions translate precisely
+- Currency amounts, measurements, and model strings in the description are NOT translated
+
+**Zod schema requirement (before translating):**
+
+The skill must verify that `lib/content/schema.ts` includes the target locale fields. If `name_zh` / `description_zh` are in the schema but the target locale (e.g. `name_es`) is not, the skill must prompt the seller to add the fields to the schema before proceeding, and provide the exact Zod snippet to add:
+
+```ts
+// Add to ItemSchema in lib/content/schema.ts:
+name_es: z.string().optional().default(""),
+description_es: z.string().optional().default(""),
+```
+
+And the corresponding `Item` type addition in `lib/content/types.ts`:
+```ts
+name_es: string;
+description_es: string;
+```
+
+---
+
+## 24. CI/CD Pipeline — GitHub Actions Workflow Specification
+
+The workflow file lives at `.github/workflows/deploy.yml` and ships with the project. It handles build + deploy to GitHub Pages on every push to `main`. No CDN credentials are needed in CI — the build reads the committed `lib/generated/image-manifest.json`.
+
+### 24.1 Workflow File
+
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # allow manual trigger from GitHub UI
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write           # required for OIDC-based Pages deployment
+
+concurrency:
+  group: pages
+  cancel-in-progress: false # do not cancel in-progress deploys; finish them
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm        # caches ~/.pnpm-store between runs
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        # --frozen-lockfile: fails if pnpm-lock.yaml is out of sync (CI safety net)
+
+      - name: Build
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+          # Note: No CDN credentials (CF_R2_* / BLOB_READ_WRITE_TOKEN) are needed here.
+          # sync-images.ts runs in build-check mode: reads the committed image-manifest.json.
+          # pnpm upload-images (the upload step) runs only on the seller's local machine.
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: out/         # Next.js static export output directory
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
+        id: deployment
+```
+
+### 24.2 GitHub Repository Setup (one-time)
+
+| Setting | Value | Where |
+|---|---|---|
+| Pages source | **GitHub Actions** | Repo → Settings → Pages → Source |
+| `NEXT_PUBLIC_SITE_URL` | `https://your-domain.com` | Repo → Settings → Variables → Actions |
+| Custom domain | Your domain | Repo → Settings → Pages → Custom domain |
+
+> **No secrets needed.** `NEXT_PUBLIC_SITE_URL` is a Repository Variable (not a secret) — it is not sensitive. CDN credentials are never added to GitHub Actions.
+
+### 24.3 Build Failure Notifications
+
+GitHub Actions emails the repository owner automatically on workflow failure. No additional configuration is required. The build fails with `exit 1` in these cases:
+
+| Failure | Script | Exit code | Cause |
+|---|---|---|---|
+| `prebuild` sync-images fails | `scripts/sync-images.ts` | 1 | Unreadable `content/items/` directory (file permission error) |
+| `prebuild` search-index fails | `scripts/build-search-index.ts` | 1 | `loadCategories()` throws (malformed directory structure) |
+| TypeScript errors | `next build` | 1 | Type errors in app code (not in `content/` — those are Zod-validated) |
+| `next build` output error | `next build` | 1 | Missing required files, broken imports |
+| Sitemap generation fails | `scripts/postbuild.ts` | 1 (propagated) | `next-sitemap` crashes (e.g. invalid `baseUrl`) |
+
+> **Image manifest missing:** NOT a build failure. `sync-images.ts` build-check mode logs a warning and exits 0 (graceful degradation). The site builds and deploys; item images show as broken until the seller runs `pnpm upload-images` and pushes the manifest.
+
+### 24.4 Vercel Deployment (alternative)
+
+Vercel auto-deploys on push to `main` when the repo is connected. No workflow file is needed. Vercel uses `pnpm build` directly (reads `package.json` scripts). The `prebuild` and `postbuild` npm lifecycle hooks run automatically.
+
+| Vercel setting | Value |
+|---|---|
+| Framework preset | Next.js (auto-detected) |
+| Build command | `pnpm build` (auto-detected from `package.json`) |
+| Install command | `pnpm install` (do NOT use `--prod` — devDependencies are needed at build time) |
+| Output directory | `.next` (Vercel mode) or `out/` (static mode — set `Output Directory` to `out` in Vercel settings) |
+| Environment variables | `NEXT_PUBLIC_SITE_URL`, `BLOB_READ_WRITE_TOKEN` (if using Vercel Blob) |
+
+---
+
+## 25. Testing Strategy
+
+### 25.1 Philosophy
+
+The project has a small, well-isolated set of pure functions and a clear build-time/runtime boundary. Testing targets the functions with non-trivial logic; component rendering and routing are covered by `pnpm build` (TypeScript + Next.js static generation) as a compile-time gate.
+
+### 25.2 Test Runner
+
+| Package | Version | Purpose |
+|---|---|---|
+| `vitest` | `^2.0.0` | Test runner; fast, ESM-native, compatible with TypeScript |
+| `@vitest/coverage-v8` | `^2.0.0` | Coverage reporting (optional) |
+
+Add to `devDependencies`. Add to `package.json` scripts:
+```json
+"test":          "vitest run",
+"test:watch":    "vitest",
+"test:coverage": "vitest run --coverage"
+```
+
+### 25.3 Test File Locations
+
+Tests co-locate with the module they test, using the `.test.ts` suffix:
+
+```
+lib/utils/pricing.test.ts         ← resolveItemPrice edge cases
+lib/utils/haversine.test.ts       ← haversineInMiles known city pairs
+lib/utils/date.test.ts            ← formatRelativeDate boundary conditions
+lib/utils/i18n.test.ts            ← getLocalizedField fallback behaviour
+lib/content/schema.test.ts        ← Zod schema parse + default merge
+lib/content/loader.test.ts        ← loader with fixture content/ folders
+scripts/sync-images.test.ts       ← manifest build / purge / checksum logic
+```
+
+### 25.4 Required Test Cases
+
+#### `lib/utils/pricing.test.ts`
+
+| Case | Input | Expected |
+|---|---|---|
+| Distance within tier | `D=3`, tiers `[{max:5, $15}, {min:5, max:15, $20}]` | `$15` tier |
+| Distance at exact boundary | `D=5` | `$15` tier (inclusive: `D ≤ miles_max`) |
+| Distance in gap | `D=5.5` with tiers having max=5 and min=6 | tier whose `miles_max=5` (nearest from below) |
+| Infinity (denied/fallback) | `D=Infinity`, no open-ended tier | tier with highest `amount` |
+| Infinity with open-ended tier | `D=Infinity`, last tier has no `miles_max` | open-ended tier |
+| Multiple open-ended tiers | two tiers with absent `miles_max` | first in array order |
+| Large numeric max not open-ended | tier with `miles_max: 99999` | NOT treated as open-ended |
+| Empty tiers | `price.tiers: []` | `null` (→ "Contact for price") |
+| `negotiable: true` | any resolved tier | tier returned, `negotiable` flag on Price object |
+
+#### `lib/utils/haversine.test.ts`
+
+| Case | Input | Expected (±0.5 mi) |
+|---|---|---|
+| Same point | `(37.7749,-122.4194)` to itself | `0` |
+| SF → LA | `(37.7749,-122.4194)` to `(34.0522,-118.2437)` | `≈ 347 mi` |
+| Short distance | 1 km apart | `≈ 0.62 mi` |
+
+#### `lib/utils/date.test.ts`
+
+| Case | `isoDate` | `now` | Expected |
+|---|---|---|---|
+| Today | `"2026-05-31"` | `2026-05-31T10:00Z` | `"Today"` |
+| Yesterday | `"2026-05-30"` | `2026-05-31T10:00Z` | `"Yesterday"` |
+| 3 days ago | `"2026-05-28"` | `2026-05-31T10:00Z` | `"3 days ago"` |
+| 2 weeks ago | `"2026-05-17"` | `2026-05-31T10:00Z` | `"2 weeks ago"` |
+| null | `null` | any | `""` |
+| Invalid date | `"not-a-date"` | any | `""` |
+| Full ISO timestamp | `"2026-05-28T10:00:00Z"` | `2026-05-31T10:00Z` | `"3 days ago"` |
+
+#### `lib/content/schema.test.ts`
+
+| Case | Input | Expected |
+|---|---|---|
+| Missing `name` | `{}` | item skipped (return null / throw detectable signal) |
+| Invalid `status` enum | `status: "unknown"` | defaulted to `"available"` |
+| Negative number | `age_years: -1` | `null` |
+| Zero number | `original_price: 0` | `0` (not null) |
+| Invalid URL | `original_link: "not-a-url"` | `""` |
+| Full ISO timestamp in `listed_date` | `"2026-05-28T10:00:00Z"` | date portion parsed correctly |
+| Absent `price.tiers` | no `price` field | `price.tiers: []` |
+
+#### `lib/content/loader.test.ts`
+
+Use a temporary `content/` fixture directory created in `beforeEach` / cleaned in `afterEach`:
+
+```ts
+// Fixture: content/items/test-cat/test-item/item.json
+// Tests:
+// - loadCategories() returns category with correct slug and displayName
+// - loadItemsByCategory("test-cat") returns items filtered by visibility
+// - loadItem("test-cat", "test-item") returns parsed item
+// - loadItem("test-cat", "missing") returns null (not throws)
+// - draft items excluded from loadItemsByCategory
+// - sold items past retention excluded from loadItemsByCategory
+// - image manifest key resolves to CDN URL
+// - thumbnail: file named "cover.*" pinned; otherwise first alphabetical
+```
+
+### 25.5 Running Tests in CI
+
+Add a `test` job to `.github/workflows/deploy.yml` that runs before `build`:
+
+```yaml
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+  build:
+    needs: test        # build only if tests pass
+    # ... rest unchanged
+```
+
+### 25.6 What is NOT unit-tested
+
+| Area | Rationale |
+|---|---|
+| Component rendering | `pnpm build` + TypeScript compilation catches prop-type mismatches; Playwright/Cypress E2E is a future addition |
+| Geolocation hook | Requires browser environment; covered by manual verification in `pnpm dev` |
+| Image upload adapters | Requires live CDN credentials; covered by the deployment checklist (TECH_REQUIREMENTS.md §19) |
+| Aceternity UI components | Third-party; not modified; visual regression is out of scope for v1 |
+
+---
+
+## 26. Error Monitoring & Build Alerting
+
+### 26.1 Build Failure Alerts (GitHub Pages path)
+
+GitHub Actions sends an email to the repository owner automatically on any workflow job failure. No configuration required. The email includes a link to the failed run and the first failed step.
+
+**To ensure alerts reach the seller:**
+- GitHub account email must be verified and not have notifications disabled
+- Settings → Notifications → "Actions" → "Failed workflows only" (default) or "All activity"
+
+### 26.2 Build Failure Alerts (Vercel path)
+
+Vercel sends an email to the project owner on deployment failure. No configuration required. Slack/webhook integrations are available in Vercel's project settings for teams that want them.
+
+### 26.3 Runtime JavaScript Error Monitoring (optional, future)
+
+No runtime error monitoring is configured in v1. The site is fully static with minimal client-side JavaScript surface. If runtime monitoring is desired, the recommended path is:
+
+| Option | Integration point | Notes |
+|---|---|---|
+| Vercel Analytics | Already wired; tracks page views, no error tracking | Free on Hobby |
+| Sentry | Add `@sentry/nextjs`; configure `sentry.client.config.ts` | Free tier covers personal sites |
+
+Sentry integration is an additive change — add the package, run the wizard (`npx @sentry/wizard@latest -i nextjs`), and set `SENTRY_DSN` in environment variables. No existing code needs to change.
+
+### 26.4 Image CDN Availability
+
+The site has no mechanism to detect CDN outages at runtime (fully static, no server). If Cloudflare R2 or Vercel Blob becomes unavailable:
+- Images show as broken `<img>` elements with the item `alt` text visible
+- The rest of the page (name, price, contact) renders correctly
+- No error is reported to the seller
+
+**Mitigation:** Use `<AdaptiveImage>` with an `onError` handler that applies a CSS class showing a placeholder/skeleton. This is an additive UI improvement not currently in scope.
+
+### 26.5 `pnpm upload-images` Failure Handling
+
+See TECH_REQUIREMENTS.md §7 (Image Sync Script) and §27 (Image Upload Failure Recovery) for the full specification of upload failure handling and retry behaviour.
+
+---
+
+## 27. Image Upload Failure Recovery
+
+### 27.1 Failure Modes
+
+| Failure | Detection | Recovery |
+|---|---|---|
+| Missing env vars (R2 or Blob) | Step 1 of upload mode: check all required vars; print clear error naming the missing var; `exit 1` before any uploads | Seller adds the missing var to `.env.local` and re-runs |
+| Network timeout during upload | Provider SDK throws; caught per-file | Log `[upload-images] WARN: failed to upload {key} — {error.message}; will retry next run`; skip that file; continue with remaining files; do NOT update manifest or checksum for the failed file → next run re-uploads it |
+| Partial run (script killed mid-upload) | Checksums and manifest are written at the END of a successful run (step 8–9) | Manifest and checksums are not updated for incomplete runs; re-running re-uploads all files that were not in the last committed manifest state |
+| CDN returns non-2xx | Treat same as network timeout | Same retry-next-run behaviour |
+| Manifest write fails (disk full, permissions) | `fs.writeFile` throws after all uploads succeed | Log error; `exit 1`; the in-flight uploaded files are on CDN but not in manifest — re-running re-uploads them (harmless duplicate; CDN overwrites with same content) |
+| `content/items/` unreadable | `fs.readdir` throws | `exit 1`; no partial state written |
+
+### 27.2 Atomic Manifest Write
+
+The manifest is written atomically to prevent a corrupt half-written file from breaking the CI build:
+
+```ts
+// scripts/sync-images.ts — manifest write (step 8)
+import { writeFile, rename } from "fs/promises";
+import { join } from "path";
+
+const MANIFEST_PATH = "lib/generated/image-manifest.json";
+const MANIFEST_TMP  = `${MANIFEST_PATH}.tmp`;
+
+// Write to temp file first, then rename (atomic on POSIX; best-effort on Windows)
+await writeFile(MANIFEST_TMP, JSON.stringify(manifest, null, 2), "utf-8");
+await rename(MANIFEST_TMP, MANIFEST_PATH);
+```
+
+If the process is killed between `writeFile` and `rename`, the `.tmp` file is left behind; the previous `image-manifest.json` is untouched. On next run, the `.tmp` file is silently overwritten.
+
+### 27.3 Per-File Error Isolation
+
+Upload failures are isolated per file. One failed image does not abort the entire run:
+
+```ts
+for (const [manifestKey, sourcePath] of imagesToUpload) {
+  try {
+    const url = await adapter.syncImage(sourcePath, manifestKey, checksum);
+    updatedManifest[manifestKey] = url;
+    updatedChecksums[manifestKey] = checksum;
+    uploadedCount++;
+  } catch (err) {
+    console.warn(
+      `[upload-images] WARN: failed to upload ${manifestKey} — ${(err as Error).message}`
+    );
+    // Preserve previous manifest entry (if any) so existing CDN URL is not lost
+    if (previousManifest[manifestKey]) {
+      updatedManifest[manifestKey] = previousManifest[manifestKey];
+    }
+    warnCount++;
+  }
+}
+```
+
+### 27.4 Exit Code Summary
+
+| Outcome | Exit code | Manifest written? |
+|---|---|---|
+| All uploads succeeded | `0` | Yes |
+| Some files failed (warnings only) | `0` | Yes (failed files keep previous CDN URL or are absent) |
+| Env vars missing | `1` | No |
+| `content/items/` unreadable | `1` | No |
+| Manifest write failed | `1` | No (previous manifest intact) |
+
+> A non-zero warning count is reported in the summary line but does not cause a non-zero exit code. Sellers must inspect the summary output (`warnings=N`) after each upload.
+
+### 27.5 Retry on Next Run
+
+Because failed files are not added to `.image-cache/checksums.json`, the next `pnpm upload-images` invocation detects them as "new" (no saved checksum) and re-attempts the upload. No manual intervention is needed — re-running the command is the recovery action.
+
+---
+
+## 28. SiteConfig Structural Validation
+
+### 28.1 Rationale
+
+`content/config.ts` is a TypeScript file — TypeScript provides compile-time type checking. However, TypeScript cannot catch _values_ that are structurally invalid at the type level (e.g. `location.lat: 999` is a valid `number` but an invalid latitude). A runtime Zod validation pass at build time catches these before pages are generated.
+
+### 28.2 Validation Module
+
+```ts
+// lib/config/validate.ts  (Node.js only — never imported in browser bundle)
+import { z } from "zod";
+import { siteConfig } from "@/content/config";
+
+const SiteConfigSchema = z.object({
+  name:    z.string().min(1, "siteConfig.name must not be empty"),
+  baseUrl: z.string().url("siteConfig.baseUrl must be a valid URL (https://...)"),
+  deploymentMode: z.enum(["static", "vercel"]),
+  imageStorage: z.object({
+    provider: z.enum(["cloudflare-r2", "vercel-blob", "local"]),
+  }),
+  location: z.object({
+    lat: z.number().min(-90).max(90, "siteConfig.location.lat must be -90 to 90"),
+    lng: z.number().min(-180).max(180, "siteConfig.location.lng must be -180 to 180"),
+    label: z.string().min(1, "siteConfig.location.label must not be empty"),
+  }),
+  currency: z.string().length(3, "siteConfig.currency must be a 3-letter ISO 4217 code"),
+  soldItemRetentionDays: z.number().int(),
+  contact: z.object({
+    reveal_behavior: z.enum(["click", "always"]),
+    platforms: z.array(z.object({ type: z.string() })).min(1,
+      "siteConfig.contact.platforms must have at least one entry"),
+  }),
+  i18n: z.object({
+    defaultLocale: z.string().min(2),
+    availableLocales: z.array(z.string().min(2)).min(1),
+    showLocaleSwitcher: z.boolean(),
+  }),
+});
+
+export function validateSiteConfig(): void {
+  const result = SiteConfigSchema.safeParse(siteConfig);
+  if (!result.success) {
+    const messages = result.error.errors
+      .map((e) => `  • ${e.path.join(".")}: ${e.message}`)
+      .join("\n");
+    console.error(
+      `\n[config-validate] content/config.ts has invalid values:\n${messages}\n`
+    );
+    process.exit(1);
+  }
+  console.log("[config-validate] content/config.ts OK");
+}
+```
+
+### 28.3 Integration Point
+
+Called at the top of `scripts/sync-images.ts` (before any file scanning) so an invalid config fails the build immediately with a human-readable error:
+
+```ts
+// scripts/sync-images.ts — first executable statement
+import { validateSiteConfig } from "@/lib/config/validate";
+validateSiteConfig();   // exits 1 with a clear message if config is invalid
+```
+
+Because `sync-images.ts` runs in the `prebuild` step (before `next build`), an invalid config stops the build before any pages are generated.
+
+### 28.4 What is NOT validated at runtime
+
+TypeScript already enforces these at compile time (`pnpm type-check`):
+- Missing required fields (TypeScript non-optional types)
+- Wrong field types (e.g. `string` where `number` expected)
+- Invalid `ui.*` slot values (caught by `BackgroundOption` / `ItemGridOption` union types)
+
+Zod runtime validation fills in what TypeScript cannot: value-range checks and semantic constraints.
 
 ---
 

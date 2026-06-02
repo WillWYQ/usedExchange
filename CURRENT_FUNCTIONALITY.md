@@ -1,7 +1,8 @@
 # UsedExchange — Current Functionality (v1)
 
-**Based on:** DESIGN.md v0.8.1 · TECH_REQUIREMENTS.md v0.8.1  
-**Date:** 2026-05-29
+**Based on:** DESIGN.md v0.9.0 · TECH_REQUIREMENTS.md v0.9.0  
+**Date:** 2026-06-01  
+**Status:** Design phase — this document describes the *specified* v1 functionality. No code is implemented yet.
 
 ---
 
@@ -78,7 +79,7 @@ content/
 | `course` | string | e.g. "CS101" — shown as badge, searchable |
 | `edition` | string | e.g. "3rd Edition" |
 | `semester_listed` | string | e.g. "Spring 2026" |
-| `name_zh` | string | Chinese name (used when `siteConfig.i18n.locale = "zh"`) |
+| `name_zh` | string | Chinese name; shown when the visitor selects `zh` via the LocaleSwitcher (SSG renders `defaultLocale`) |
 | `description_zh` | string | Chinese description (same condition) |
 | `price` | object | Distance-tiered pricing (see Pricing section) |
 
@@ -223,7 +224,7 @@ Site header + "Page not found" + link home.
 
 ## AI-Powered Content Generation
 
-Two AI-assisted workflows ship as **Claude Code skill files** in `.claude/skills/`. The seller uses any AI coding tool they already have — Claude Code, Cursor, GitHub Copilot, or any capable assistant. **No additional API keys, environment variables, or packages are required.**
+Three AI-assisted workflows ship as **Claude Code skill files** in `.claude/skills/`. The seller uses any AI coding tool they already have — Claude Code, Cursor, GitHub Copilot, or any capable assistant. **No additional API keys, environment variables, or packages are required.**
 
 ### Skill 1 — Item JSON Generator (`/update-items`)
 
@@ -264,9 +265,23 @@ Run **once** during initial project setup.
 
 The AI asks about 8 areas: store name, location (lat/lng resolved from a place description), item types being sold (creates `_category.json` scaffold), contact platforms, pricing style, visual preferences, and language/locale. Detects seller personality and writes a matching tagline. Can be re-run with targeted requests ("update just my contact info", "change my background effect").
 
+### Skill 3 — Item Translator (`/translate-items`)
+
+Batch-translates item listings into additional locales. After adding a locale to `siteConfig.i18n.availableLocales`, invoke this skill in your AI tool.
+
+```
+1. Add the target locale to siteConfig.i18n.availableLocales  (e.g. ["en", "zh"])
+2. Open Claude Code (or similar AI tool) in the project directory
+3. Type: /translate-items   (or "translate my items into zh")
+4. Review the proposed translations shown per item
+5. Confirm → AI writes name_{locale} / description_{locale} into each item.json
+```
+
+Translates `name` → `name_{locale}` and `description` → `description_{locale}` only; preserves brand, model, tags, prices, dates, and all Markdown syntax verbatim. Skips items that already have a non-empty translation. Writes only to `content/items/*/item.json`.
+
 ### No API Key Required
 
-Both skills are Markdown instruction files, not code. The AI tool uses its own built-in capabilities and the user's existing subscription — no `ANTHROPIC_API_KEY`, no extra packages, no new environment variables. Both skills write only to `content/`.
+All three skills are Markdown instruction files, not code. The AI tool uses its own built-in capabilities and the user's existing subscription — no `ANTHROPIC_API_KEY`, no extra packages, no new environment variables. All three skills write only to `content/`.
 
 ---
 
@@ -334,7 +349,7 @@ Set any option in `content/config.ts`. All 27 Aceternity components are pre-inst
 | Analytics | `analytics.vercel`, `analytics.speedInsights` |
 | Search | `search.enabled`, `search.placeholder` |
 | Sitemap | `sitemap.enabled` |
-| i18n | `i18n.locale`, `i18n.strings.*` |
+| i18n | `i18n.defaultLocale`, `i18n.availableLocales`, `i18n.showLocaleSwitcher`, `i18n.strings.*` |
 
 ---
 
