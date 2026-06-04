@@ -1,7 +1,7 @@
 # UsedExchange — Implementation Plan
 
-**Version:** 1.3  
-**Date:** 2026-06-01  
+**Version:** 1.4  
+**Date:** 2026-06-03  
 **Based on:** DESIGN.md v0.9.1 · TECH_REQUIREMENTS.md v0.9.1  
 **Assumption:** Single developer; primary target = GitHub Pages + Cloudflare R2
 
@@ -48,7 +48,8 @@
 - [ ] Verify `.gitignore` matches TECH_REQUIREMENTS.md §18 (content/items images, public/items/, public/contact/, public/search-index.json, .image-cache/) — note: `lib/generated/image-manifest.json` is git-tracked and must NOT be gitignored
 - [ ] Install production deps: `next react react-dom zod react-markdown remark-gfm clsx tailwind-merge fuse.js @vercel/analytics @vercel/speed-insights framer-motion @tabler/icons-react`
   > `@vercel/analytics` and `@vercel/speed-insights` are no-ops outside Vercel; include them so the option is available without a reinstall.
-- [ ] Install dev deps: `typescript @types/node @types/react @types/react-dom tailwindcss @tailwindcss/postcss @tailwindcss/typography eslint eslint-config-next prettier prettier-plugin-tailwindcss tsx next-sitemap`
+- [ ] Install dev deps: `typescript @types/node @types/react @types/react-dom tailwindcss @tailwindcss/postcss @tailwindcss/typography eslint eslint-config-next prettier prettier-plugin-tailwindcss tsx next-sitemap vitest @vitest/coverage-v8`
+  > `vitest` + `@vitest/coverage-v8` are required by Phase 3a unit tests (TECH_REQUIREMENTS.md §25.2). Add `"test": "vitest run"`, `"test:watch": "vitest"`, `"test:coverage": "vitest run --coverage"` to `package.json` scripts at the same time.
 - [ ] Create full directory skeleton (all folders from DESIGN.md §16, empty `.gitkeep` where needed)
 - [ ] Create `content/` folder with placeholder `config.ts` and sample `items/` structure
 - [ ] Verify `pnpm dev` starts without TypeScript or lint errors
@@ -530,11 +531,11 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 
 ### Tasks
 
-#### 14a — Project CLAUDE.md
+#### 15a — Project CLAUDE.md
 - [ ] Create `.claude/CLAUDE.md` with project context: what the project is, the `content/` folder rule, common seller tasks, pointers to relevant DESIGN.md sections
 - [ ] Test: open Claude Code in project directory; confirm AI has correct project context without further explanation
 
-#### 14b — `update-items.md` Skill
+#### 15b — `update-items.md` Skill
 - [ ] Create `.claude/skills/update-items.md`
 - [ ] Include: trigger description, vision instructions for photo analysis, description file format support (`.txt`, `.md`, `.yaml`, `.json`), field extraction table (with confidence levels), merge rules (description overrides vision), output spec (`status: "draft"`, `reserved_for` never set), confirmation flow, scope instructions (natural language targets)
 - [ ] Include full `item.json` schema from DESIGN.md §5 as a reference block
@@ -543,7 +544,7 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 - [ ] Test with no description file (photos only)
 - [ ] Test with partial `info.yaml` (description file with some fields set)
 
-#### 14c — `setup-wizard.md` Skill
+#### 15c — `setup-wizard.md` Skill
 - [ ] Create `.claude/skills/setup-wizard.md`
 - [ ] Include: all 8 question groups, location resolution instructions (AI uses knowledge to suggest lat/lng, shows for confirmation), personality calibration examples, category scaffold instructions, idempotency instructions (read existing config before asking)
 - [ ] Include full `content/config.ts` template from DESIGN.md §13 as the output reference
@@ -551,14 +552,14 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 - [ ] Test idempotency: run again after config exists → verify AI reads existing values and pre-fills
 - [ ] Test partial re-run: "just update my contact info"
 
-#### 14d — `translate-items.md` Skill
+#### 15d — `translate-items.md` Skill
 - [ ] Create `.claude/skills/translate-items.md`
 - [ ] Include full required content per TECH_REQUIREMENTS.md §23.8: trigger (scan for missing `name_{locale}`/`description_{locale}`), locale detection from `siteConfig.i18n.availableLocales`, fields to translate (`name`→`name_{locale}`, `description`→`description_{locale}`), fields preserved verbatim (brand, model, color, tags, course, isbn, edition, prices, dates, status, URLs), Markdown preservation, per-item confirmation flow (confirm / edit / skip / accept-all), natural-language scope, status filter (translate all statuses incl. draft/sold), output rules (write only locale fields; preserve everything else)
 - [ ] Include the Zod-schema precondition: skill verifies `name_{locale}`/`description_{locale}` exist in `lib/content/schema.ts`; if absent, prints the exact Zod + `Item` type snippet to add and stops (TECH_REQUIREMENTS.md §23.8)
 - [ ] Test with Claude Code: add `"zh"` to `availableLocales`, run `/translate-items` → `name_zh`/`description_zh` written, other fields untouched, Markdown preserved
 - [ ] Test idempotency: items with existing non-empty translations are skipped (no overwrite)
 
-#### 14e — Validation & Documentation
+#### 15e — Validation & Documentation
 - [ ] Create `SETUP_GUIDE.md` at the project root — plain-English seller guide with no code, no terminal jargon, no git commands. Contents per TECH_REQUIREMENTS.md §22.12: (1) adding a new item, (2) marking an item sold, (3) creating from template, (4) changing prices, (5) uploading new photos, (6) what to back up, (7) who to contact if something breaks.
 - [ ] Add a "Verify skill output" step to `SETUP_GUIDE.md`: after running `/update-items`, run `pnpm type-check` to confirm generated JSON is valid
 - [ ] Test all three skills in at least one non-Claude AI tool (Cursor or GitHub Copilot) to verify compatibility

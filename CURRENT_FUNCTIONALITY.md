@@ -1,7 +1,7 @@
 # UsedExchange — Current Functionality (v1)
 
-**Based on:** DESIGN.md v0.9.1 · TECH_REQUIREMENTS.md v0.9.1  
-**Date:** 2026-06-01  
+**Based on:** DESIGN.md v0.9.1 · TECH_REQUIREMENTS.md v0.9.1 · IMPLEMENTATION_PLAN.md v1.4  
+**Date:** 2026-06-03  
 **Status:** Design phase — this document describes the *specified* v1 functionality. No code is implemented yet.
 
 ---
@@ -372,7 +372,7 @@ Set any option in `content/config.ts`. All 27 Aceternity components are pre-inst
 **Seller uploads photos** (`pnpm upload-images`):
 Photos → CDN, manifest updated, backup reminder printed, photo quality warnings shown.
 
-**Vercel build** (`pnpm build`):
+**CI build — GitHub Actions / Vercel** (`pnpm build`):
 Prebuild: reads manifest + builds search index → `next build` generates all pages → postbuild generates sitemap.
 
 **Local dev** (`pnpm dev`):

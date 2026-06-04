@@ -1,7 +1,7 @@
 # UsedExchange — 实施计划
 
-**版本：** 1.3  
-**日期：** 2026-06-01  
+**版本：** 1.4  
+**日期：** 2026-06-03  
 **基于：** DESIGN.md v0.9.1 · TECH_REQUIREMENTS.md v0.9.1  
 **假设：** 单人开发者；主要目标 = GitHub Pages + Cloudflare R2
 
@@ -47,7 +47,8 @@
 - [ ] 按 TECH_REQUIREMENTS.md §16 配置 Prettier
 - [ ] 验证 `.gitignore` 符合 TECH_REQUIREMENTS.md §18（content/items 图片、public/items/、public/contact/、public/search-index.json、.image-cache/）——注意：`lib/generated/image-manifest.json` 是 git 追踪文件，不得加入 gitignore
 - [ ] 安装生产依赖：`next react react-dom zod react-markdown remark-gfm clsx tailwind-merge fuse.js @vercel/analytics @vercel/speed-insights framer-motion @tabler/icons-react`
-- [ ] 安装开发依赖：`typescript @types/node @types/react @types/react-dom tailwindcss @tailwindcss/postcss @tailwindcss/typography eslint eslint-config-next prettier prettier-plugin-tailwindcss tsx next-sitemap`
+- [ ] 安装开发依赖：`typescript @types/node @types/react @types/react-dom tailwindcss @tailwindcss/postcss @tailwindcss/typography eslint eslint-config-next prettier prettier-plugin-tailwindcss tsx next-sitemap vitest @vitest/coverage-v8`
+  > `vitest` + `@vitest/coverage-v8` 是 Phase 3a 单元测试所必需（见 TECH_REQUIREMENTS.md §25.2）。同步在 `package.json` scripts 中添加 `"test": "vitest run"`、`"test:watch": "vitest"`、`"test:coverage": "vitest run --coverage"`。
 - [ ] 创建完整目录骨架（DESIGN.md §16 中所有文件夹，需要时添加空 `.gitkeep`）
 - [ ] 创建含占位 `config.ts` 和示例 `items/` 结构的 `content/` 文件夹
 - [ ] 验证 `pnpm dev` 无 TypeScript 或 lint 错误启动
@@ -413,26 +414,26 @@
 
 ### 任务
 
-#### 14a — 项目 CLAUDE.md
+#### 15a — 项目 CLAUDE.md
 - [ ] 创建 `.claude/CLAUDE.md`，含项目上下文：项目是什么、`content/` 文件夹规则、常见卖家任务、相关 DESIGN.md 章节指针
 - [ ] 测试：在项目目录中打开 Claude Code；确认 AI 无需进一步解释即有正确的项目上下文
 
-#### 14b — `update-items.md` 技能
+#### 15b — `update-items.md` 技能
 - [ ] 创建 `.claude/skills/update-items.md`
 - [ ] 包含：触发描述、照片分析的视觉指令、描述文件格式支持、字段提取表（含置信度级别）、合并规则、输出规范（`status: "draft"`，绝不设置 `reserved_for`）、确认流程、范围指令
 - [ ] 包含 DESIGN.md §5 中完整的 `item.json` schema 作为参考块
 - [ ] 用 Claude Code 测试：创建含 2 张照片 + notes.txt 的测试物品文件夹 → 调用技能 → 验证生成的 JSON 通过 Zod schema 验证
 
-#### 14c — `setup-wizard.md` 技能
+#### 15c — `setup-wizard.md` 技能
 - [ ] 创建 `.claude/skills/setup-wizard.md`
 - [ ] 包含：所有 8 个问题组、位置解析指令、个性校准示例、分类骨架指令、幂等性指令
 - [ ] 包含 DESIGN.md §13 中完整的 `content/config.ts` 模板作为输出参考
 
-#### 14d — `translate-items.md` 技能
+#### 15d — `translate-items.md` 技能
 - [ ] 创建 `.claude/skills/translate-items.md`
 - [ ] 包含 TECH_REQUIREMENTS.md §23.8 要求的所有内容
 
-#### 14e — 验证与文档
+#### 15e — 验证与文档
 - [ ] 在项目根目录创建 `SETUP_GUIDE.md`——纯英文、无代码、无终端术语、无 git 命令的卖家指南
 - [ ] 在至少一个非 Claude AI 工具（Cursor 或 GitHub Copilot）中测试所有三个技能，验证兼容性
 - [ ] 确认 `content/` 规则：AI 绝不修改 `content/` 之外的任何文件
