@@ -1,7 +1,7 @@
 # UsedExchange — Project Design Document
 
-**Version:** 0.9.0  
-**Date:** 2026-05-31  
+**Version:** 0.9.1  
+**Date:** 2026-06-01  
 **Status:** Decisions Resolved — Ready for Implementation
 
 ---
@@ -15,7 +15,7 @@ The UI is built on [Aceternity UI](https://ui.aceternity.com) (React + Tailwind 
 ### Target Users
 
 #### Primary — College Students with a CS Background
-The designed-for user. Comfortable with git, the terminal, JSON editing, and the GitHub → Vercel deployment workflow. They encounter this project as a practical, portfolio-worthy tool they can actually use.
+The designed-for user. Comfortable with git, the terminal, JSON editing, and a git-push → GitHub Pages deployment workflow (Vercel also supported). They encounter this project as a practical, portfolio-worthy tool they can actually use.
 
 **Profile:**
 - Sells items common to student life: textbooks, electronics (GPU, keyboard, monitors, mechanical gear), dorm furniture, bikes, gaming equipment, academic software licenses
@@ -172,10 +172,10 @@ LOCAL MACHINE — pnpm upload-images
   │
   └── ⚠️  Print BACKUP REMINDER  (see TECH_REQUIREMENTS.md §7 for exact output)
 
-VERCEL BUILD — pnpm build (no photos present; reads committed manifest)
+CI BUILD (GitHub Actions / Vercel) — pnpm build (no photos present; reads committed manifest)
   │
   ├── prebuild: scripts/sync-images.ts
-  │     ├── No image files in content/items/ (gitignored — not on Vercel's runner)
+  │     ├── No image files in content/items/ (gitignored — not on the CI runner)
   │     ├── Manifest already committed → reads existing manifest, no uploads
   │     ├── content/contact/** present (git-tracked) → copies to public/contact/
   │     └── Logs: "manifest present (N entries) — skipping upload"
@@ -202,7 +202,7 @@ For each image filename found in a content/items/ folder:
       ?? "/items/{key}"     // local fallback for dev / "local" provider
 ```
 
-On Vercel, `manifest[key]` is always populated (the manifest is committed). The fallback path is only used in local dev before `pnpm upload-images` has been run for that image.
+On the CI runner (GitHub Actions or Vercel), `manifest[key]` is always populated (the manifest is committed). The fallback path is only used in local dev before `pnpm upload-images` has been run for that image.
 
 #### Incremental Uploads
 
@@ -637,7 +637,7 @@ The site header appears on all pages and contains:
 - **Status + condition badges** — `StatusBadge` and `ConditionBadge`; condition badge has a `?` tooltip (`ConditionGuide`) explaining each condition value
 - **Quantity badge** — "3 available" shown when `quantity > 1`
 - **Price signals** — "Price Reduced" chip when `price_reduced: true`; "Firm Price" badge when `no_lowball: true`; struck-through `previous_lowest_price` alongside current price when `price_reduced` is true
-- **Name + description** (GitHub-Flavoured Markdown rendered)
+- **Name + description** — rendered by `LocalizedItemContent` (client): the localised `<h1>` name and GitHub-Flavoured Markdown description re-render when the visitor switches locale via the header `LocaleSwitcher`. SSG emits `defaultLocale` content, so crawlers and the initial paint see the default language (see §12 Component Rules + TECH_REQUIREMENTS.md §22.8)
 - **Textbook section** (shown only when `isbn` or `course` is present):
   - Course badge: "For CS101 · 3rd Edition"
   - "Compare prices" link: `https://bookfinder.com/search/?isbn={isbn}` (hidden when isbn is empty)
@@ -752,7 +752,7 @@ components/
 │   └── CategoryGrid.tsx
 │
 ├── item/
-│   ├── ItemCard.tsx               ← receives resolvedPrice prop (computed by parent)
+│   ├── ItemCard.tsx               ← client; localises its title via useLocale(); receives resolvedPrice prop
 │   ├── ItemGrid.tsx               ← client; holds distance state, sort state
 │   ├── ItemGallery.tsx            ← photo carousel (client)
 │   ├── PricingSection.tsx         ← client; owns geo+distance state; LocationPriceBar + PricingTable
@@ -765,7 +765,8 @@ components/
 │   ├── ConditionGuide.tsx         ← client; tooltip/modal explaining each condition value
 │   ├── FreshnessLabel.tsx         ← client; "Listed 3 days ago" computed at view time (see §12 rules)
 │   ├── QuantityBadge.tsx          ← "3 available" when quantity > 1
-│   └── TextbookBadge.tsx          ← "For CS101 · 3rd Edition" + Compare Prices link
+│   ├── TextbookBadge.tsx          ← "For CS101 · 3rd Edition" + Compare Prices link
+│   └── LocalizedItemContent.tsx   ← client; localised name <h1> + Markdown description; re-renders on locale switch
 │
 ├── contact/
 │   ├── ContactSection.tsx         ← reveal wrapper + platform list
@@ -807,7 +808,7 @@ components/
 ### Component Rules
 - `ui/` — Aceternity originals; extend by wrapping, never modifying in place
 - Prop types derived from `lib/content/types.ts`; no raw JSON objects passed to components
-- `"use client"` on: `RecentlyListedSection`, `ItemGrid`, `PricingSection`, `ItemGallery`, `FilterBar`, `SortSelect`, `ContactSection`, `PlatformButton`, `QRModal`, `LocationPriceBar`, `PricingTableToggle`, `MakeOfferButton`, `ConditionGuide`, `SearchBar`, `ShareButton`, `RecentlyViewed`, `FreshnessLabel`, `LocaleProvider`, `LocaleSwitcher`
+- `"use client"` on: `RecentlyListedSection`, `ItemGrid`, `PricingSection`, `ItemGallery`, `FilterBar`, `SortSelect`, `ContactSection`, `PlatformButton`, `QRModal`, `LocationPriceBar`, `PricingTableToggle`, `MakeOfferButton`, `ConditionGuide`, `SearchBar`, `ShareButton`, `RecentlyViewed`, `FreshnessLabel`, `ItemCard`, `LocalizedItemContent`, `LocaleProvider`, `LocaleSwitcher`
   - `PlatformButton` requires `"use client"` because it receives an `onClick` function prop (state setter from `ContactSection`) — function props are not serialisable across the server/client boundary.
   - `SearchBar` is loaded via `next/dynamic({ ssr: false })` to avoid hydration mismatch from fuse.js.
   - `ShareButton` uses `navigator.share()` and `navigator.clipboard` — browser-only APIs.
@@ -818,10 +819,13 @@ components/
   - `FreshnessLabel` calculates the relative date against the visitor's live browser clock (`new Date()`) — not the SSG build time. Uses `useState`/`useEffect` to set the label after mount; renders nothing until the effect fires, so the label is never stale from the deploy date.
   - `LocaleProvider` reads `localStorage.getItem("locale")` on mount and provides the active locale via React context. Must be `"use client"` — `localStorage` is a browser-only API.
   - `LocaleSwitcher` calls `setLocale()` from `LocaleProvider` context on user interaction. Hidden when `siteConfig.i18n.availableLocales.length <= 1`.
+  - `ItemCard` calls `useLocale()` to localise its title. It is always rendered inside a client parent (`ItemGrid` / `RecentlyListedSection`), so the card title updates the moment the visitor switches locale.
+  - `LocalizedItemContent` renders the item detail `<h1>` name and the react-markdown description, reading `useLocale()`. Both the name and the Markdown body re-render on a locale switch without a page reload. react-markdown runs client-side here; the SSG pass still emits the `defaultLocale` description into the static HTML.
   - Note: `PricingTable` is NOT in this list. It is a presentational component (no hooks, no `"use client"`). However, it always renders inside `PricingSection` (a client component) in practice because it renders `PricingTableToggle` (a client component) as a child. `PricingTable` alone (without its toggle child) could be rendered in a server context, but this is not used in v1.
 - All other components are React Server Components
 - Visitor coordinates are **never passed outside the browser** — all distance math runs in `useDistancePricing.ts`
 - **`content/config.ts` is imported by client components** (e.g., `AdaptiveImage`, `PricingSection`). Therefore it must not use any Node.js-only APIs (`fs`, `path`, `process.env` at module level). All values must be static, serialisable constants.
+- **Localised fields render in client components.** Every visitor-facing render of `name` or `description` (`ItemCard`, `LocalizedItemContent`) calls `getLocalizedField(item, …, locale)` with `locale` from `useLocale()`. During SSG these render `siteConfig.i18n.defaultLocale` (the `LocaleProvider`'s initial value), so the static HTML — and therefore crawlers, OG tags, and JSON-LD — always carry the default language; non-default locales appear only after hydration when the visitor selects one. Server-only surfaces (`generateMetadata`, `<title>`, OG, JSON-LD, the breadcrumb leaf) intentionally stay on `defaultLocale` and are not runtime-switchable. See TECH_REQUIREMENTS.md §22.8.
 - **Cross-folder dependency:** `components/filters/useFilters.ts` imports `resolveItemPrice` from `lib/utils/pricing.ts`. This cross-package import is intentional and documented.
 - **`resolveItemPrice` performance:** Calling `resolveItemPrice` per item on every distance change re-renders the entire item list. The function is intentionally cheap (simple array scan). No `useMemo` is required for typical collections (< 100 items). If performance issues arise with large collections, memoize in `ItemGrid`/`RecentlyListedSection` with `useMemo([items, resolvedDistance])`.
 - **`FilterBar` prop type for fallback:** When `resolved.source === "fallback"` (no location), `ItemGrid` passes `resolvedDistanceMi={Infinity}` to `FilterBar`. The slider then initialises using fallback (highest) prices, which is the conservative maximum.
@@ -1162,7 +1166,7 @@ usedExchange/
 │
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml             ← (Phase 13) GitHub Actions: pnpm build → deploy out/ to GitHub Pages
+│       └── deploy.yml             ← (Phase 14) GitHub Actions: pnpm build → deploy out/ to GitHub Pages
 │                                     No CDN credentials needed in CI — build-check reads committed manifest
 ├── next-sitemap.config.js         ← sitemap config (reads siteConfig.baseUrl)
 ├── SETUP_GUIDE.md                 ← non-technical user guide (content/ folder operations only)
@@ -1583,7 +1587,7 @@ These follow the standard Claude Code skill format and are invokable via `/updat
 
 **What the seller does:**
 
-The seller drops photos into an item folder (and optionally a description file), then runs this agent. The agent uses Claude's vision capability to analyse the photos, reads any description file, and generates a complete `item.json` — then asks the seller to confirm before saving.
+The seller drops photos into an item folder (and optionally a description file), then runs this skill. The AI uses its vision capability to analyse the photos, reads any description file, and generates a complete `item.json` — then asks the seller to confirm before saving.
 
 ```
 1. Create content/items/<category>/<item-name>/
@@ -1598,7 +1602,7 @@ The seller drops photos into an item folder (and optionally a description file),
 
 #### Trigger Conditions
 
-The agent processes a folder when ANY of the following are true:
+The skill processes a folder when ANY of the following are true:
 - Images are present but no `item.json` exists
 - `item.json` exists with `status: "draft"`
 - A description file is newer than the existing `item.json` (re-generate with updated info)
@@ -1606,16 +1610,16 @@ The agent processes a folder when ANY of the following are true:
 
 #### Description File
 
-Place any text-based file in the item folder alongside the photos. The agent detects and reads any of:
+Place any text-based file in the item folder alongside the photos. The skill detects and reads any of:
 
 | Format | Example filename | Content style |
 |---|---|---|
 | Plain text | `notes.txt`, `description.txt` | Freeform notes — "Bought from Amazon 2024, barely used, charger included" |
 | Markdown | `README.md`, `notes.md` | Structured or freeform Markdown |
 | YAML | `info.yaml`, `info.yml` | Key-value pairs matching item.json field names |
-| Partial JSON | `info.json` | A partial `item.json` — agent merges with vision output |
+| Partial JSON | `info.json` | A partial `item.json` — the AI merges with vision output |
 
-If no description file is found, the agent works from photos alone.
+If no description file is found, the skill works from photos alone.
 
 **Example `notes.txt`:**
 ```
@@ -1649,8 +1653,8 @@ min_acceptable_offer: 25
 | `tags` | Item type inference | Medium |
 | `course` / `isbn` | Text recognition on textbooks | High when visible |
 
-Fields the agent **cannot** determine from photos (left as defaults or asked interactively):
-- `price.tiers` — agent suggests based on category norms but asks seller to confirm
+Fields the AI **cannot** determine from photos (left as defaults or asked interactively):
+- `price.tiers` — the AI suggests based on category norms but asks the seller to confirm
 - `pickup_windows` — always asks
 - `preferred_payment` — pulled from `siteConfig` defaults
 - `listed_date` — set to today
@@ -1658,7 +1662,7 @@ Fields the agent **cannot** determine from photos (left as defaults or asked int
 #### Interactive Confirmation Flow
 
 ```
-Agent: 📦 Analysing 3 photos in content/items/electronics/iphone-14...
+AI: 📦 Analysing 3 photos in content/items/electronics/iphone-14...
 
   Proposed item.json:
   ┌─────────────────────────────────────────────────────────┐
@@ -1731,7 +1735,7 @@ The AI reads the seller's writing style and suggests a matching tagline (example
 
 **Trigger Conditions**
 
-The agent processes an item when ANY of the following are true:
+The skill processes an item when ANY of the following are true:
 - `name_{locale}` field is absent or empty string in `item.json`
 - `description_{locale}` field is absent or empty string
 - Seller explicitly targets a folder: "just translate the electronics/iphone-14 item"
@@ -1764,7 +1768,7 @@ The AI skill and manual editing are fully compatible — the skill skips fields 
 **Interactive Confirmation Flow**
 
 ```
-Agent: 🌐 Translating 3 items into zh...
+AI: 🌐 Translating 3 items into zh...
 
   content/items/houseware/ikea-desk-lamp/item.json
   ┌──────────────────────────────────────────────────┐

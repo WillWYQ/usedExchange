@@ -1,6 +1,6 @@
 # UsedExchange — Features Roadmap
 
-**Date:** 2026-05-29  
+**Date:** 2026-06-01  
 **Scope:** Features beyond v1. Not committed — prioritised for planning discussions.
 
 ---
@@ -56,7 +56,7 @@ Features tagged 🎓 are primarily motivated by the CS student profile. Features
 ---
 
 ## Tier 1 — Quick Wins
-*Low effort, immediately actionable. Many can be added during Phase 12 (hardening) or Phase 10 (contact).*
+*Low effort, immediately actionable. Many can be added during Phase 13 (hardening) or Phase 10 (contact).*
 
 ### 1.1 Discord Contact Platform 🎓 ✅ Shipped in v1
 **Effort:** XS · **Value:** ⭐⭐⭐

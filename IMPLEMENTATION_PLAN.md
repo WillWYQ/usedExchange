@@ -1,8 +1,8 @@
 # UsedExchange — Implementation Plan
 
-**Version:** 1.2  
-**Date:** 2026-05-31  
-**Based on:** DESIGN.md v0.9.0 · TECH_REQUIREMENTS.md v0.9.0  
+**Version:** 1.3  
+**Date:** 2026-06-01  
+**Based on:** DESIGN.md v0.9.1 · TECH_REQUIREMENTS.md v0.9.1  
 **Assumption:** Single developer; primary target = GitHub Pages + Cloudflare R2
 
 ---
@@ -23,13 +23,14 @@
 | 9 | Item Detail Page | 2 | 6, 7, 10 |
 | 10 | Contact System | 1 | 5 |
 | 11 | UI Slot Adapters (wiring) | 1 | 1, 8, 9 |
-| 12 | SEO, Search, A11y & Security Hardening | 1 | 11 |
-| 13 | Deployment | 1 | 4, 12 |
-| 14 | AI Skill Files (Setup Wizard + Item Generator + Item Translator) | 2 | 3 |
-| **Total** | | **~22 days** | |
+| 12 | Internationalisation Runtime | 2 | 5, 6, 9 |
+| 13 | SEO, Search, A11y & Security Hardening | 1 | 11 |
+| 14 | Deployment | 1 | 4, 13 |
+| 15 | AI Skill Files (Setup Wizard + Item Generator + Item Translator) | 2 | 3 |
+| **Total** | | **~24 days** | |
 
-**Critical path:** 0 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 11 → 12 → 13  
-**Parallelisable:** Phase 1 ∥ Phase 2; Phase 4 ∥ Phase 3; Phase 10 ∥ Phase 7; Phase 14 ∥ Phases 5–13
+**Critical path:** 0 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 11 → 13 → 14  
+**Parallelisable:** Phase 1 ∥ Phase 2; Phase 4 ∥ Phase 3; Phase 10 ∥ Phase 7; Phase 12 (i18n) ∥ Phases 10, 11, 13; Phase 15 ∥ Phases 5–14
 
 ---
 
@@ -151,7 +152,7 @@ DESIGN.md §4, §5, §6, §8, §11 · TECH_REQUIREMENTS.md §6, §7, §8
 ---
 
 ## Phase 4 — Image Pipeline
-**Goal:** `pnpm dev` shows images from `content/items/`. `pnpm upload-images` successfully uploads to Vercel Blob and writes a manifest. Can be developed in parallel with Phase 3.
+**Goal:** `pnpm dev` shows images from `content/items/`. `pnpm upload-images` successfully uploads to **Cloudflare R2** (the recommended/primary provider) and writes a manifest; the Vercel Blob path is implemented in parallel as the alternate. Can be developed in parallel with Phase 3.
 
 ### Tasks
 
@@ -160,9 +161,9 @@ DESIGN.md §4, §5, §6, §8, §11 · TECH_REQUIREMENTS.md §6, §7, §8
 
 #### 4b — Provider Implementations
 - [ ] Write `lib/images/local.ts` — copies to `public/items/`, returns `/items/{key}`, skips unchanged
-- [ ] Write `lib/images/vercel-blob.ts` — SHA-256 compare, `@vercel/blob put()`, returns CDN URL; clear error if `BLOB_READ_WRITE_TOKEN` missing
-- [ ] Write `lib/images/cloudflare-r2.ts` — SHA-256 compare, `@aws-sdk/client-s3 PutObjectCommand`, returns CDN URL; clear error if CF_R2_* missing
-- [ ] Install provider devDeps: `pnpm add -D @vercel/blob` (for vercel-blob provider)
+- [ ] Write `lib/images/cloudflare-r2.ts` (primary) — SHA-256 compare, `@aws-sdk/client-s3 PutObjectCommand`, returns CDN URL; clear error if `CF_R2_*` missing
+- [ ] Write `lib/images/vercel-blob.ts` (alternate) — SHA-256 compare, `@vercel/blob put()`, returns CDN URL; clear error if `BLOB_READ_WRITE_TOKEN` missing
+- [ ] Install provider devDeps: `pnpm add -D @aws-sdk/client-s3` (Cloudflare R2 — recommended). Add `pnpm add -D @vercel/blob` only if also exercising the Vercel Blob path.
 
 #### 4c — Sync Script (`scripts/sync-images.ts`)
 - [ ] Implement `--mode upload`: scan, SHA-256, upload new/changed, purge stale manifest entries, copy contact/, write manifest, write checksum cache, print backup reminder (TECH_REQUIREMENTS.md §7)
@@ -172,8 +173,8 @@ DESIGN.md §4, §5, §6, §8, §11 · TECH_REQUIREMENTS.md §6, §7, §8
 
 #### 4d — Integration Test
 - [ ] `pnpm dev` → sample images appear at `/items/houseware/item/cover.jpg`
-- [ ] `pnpm upload-images` with `BLOB_READ_WRITE_TOKEN` set → manifest written, CDN URLs in manifest
-- [ ] `pnpm build` on Vercel-like environment (no local images) → manifest read, build succeeds
+- [ ] `pnpm upload-images` with `CF_R2_*` set → images uploaded to R2; manifest written with R2 CDN URLs (repeat with `BLOB_READ_WRITE_TOKEN` if validating the Vercel Blob path)
+- [ ] `pnpm build` in a CI-like environment (no local images) → manifest read in build-check mode, no upload attempted, build succeeds
 
 ### Acceptance Criteria
 - Local dev: images served from `public/items/`
@@ -213,7 +214,7 @@ DESIGN.md §3, §14 · TECH_REQUIREMENTS.md §7
 ### Tasks
 - [ ] `components/category/CategoryCard.tsx` — icon, display name, available item count, cover image background
 - [ ] `components/category/CategoryGrid.tsx` — responsive grid of `CategoryCard`
-- [ ] `components/item/ItemCard.tsx` — cover photo, name, condition badge, status badge, price prop (receives resolved price from parent)
+- [ ] `components/item/ItemCard.tsx` — cover photo, name, condition badge, status badge, price prop (receives resolved price from parent). Renders `item.name` directly for now; **Phase 12** converts it to a `"use client"` locale-consumer (localised title) — see DESIGN.md §12
 - [ ] `components/home/RecentlyListedSection.tsx` (client component) — owns `useGeolocation()` + `useDistancePricing()` state; renders item cards with resolved prices; no `LocationPriceBar` (prices update silently)
 - [ ] `app/layout.tsx` — root layout, `BackgroundEffect` wrapper, `SiteHeader`, `SiteFooter`, global font/metadata
 - [ ] `components/common/RecentlyViewed.tsx` (client) — reads `sessionStorage`; renders horizontal strip of last 5 viewed items; **hidden when empty** (returns `null`). Accepts optional `itemSlug?: string` prop — when provided, records that slug in `sessionStorage` on mount (used by the item detail page). Build here (Phase 6) since the component has no dependencies beyond `sessionStorage` + `Item` types; this avoids a Phase 9 → Phase 6 backward dependency.
@@ -325,7 +326,7 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
   - [ ] `generateMetadata` — title, description, og:image, og:title, Twitter card, Pinterest rich pin meta (TECH_REQUIREMENTS.md §22.5)
   - [ ] Server-side: calls `resolveItemPrice(item.price, { source: "fallback" })` for `initialResolvedTier`
   - [ ] Inject `<JsonLd data={buildProductJsonLd(item, siteConfig.baseUrl)} />` and `<JsonLd data={buildBreadcrumbJsonLd(crumbs)} />`
-  - [ ] Renders: `Breadcrumb`, gallery (`GalleryAdapter`), `FreshnessLabel`, status+condition badges (`ConditionGuide` attached to `ConditionBadge`), `QuantityBadge`, name, description (react-markdown), `TextbookBadge`, `PricingSection` (with `MakeOfferButton`, "Pay Deposit" + "Pay with Venmo" buttons), `MetadataTable`, `ContactSection`, tags, `ShareButton`, `RecentlyViewed`
+  - [ ] Renders: `Breadcrumb`, gallery (`GalleryAdapter`), `FreshnessLabel`, status+condition badges (`ConditionGuide` attached to `ConditionBadge`), `QuantityBadge`, name + description (react-markdown; **Phase 12** wraps these two into `LocalizedItemContent` for runtime locale switching), `TextbookBadge`, `PricingSection` (with `MakeOfferButton`, "Pay Deposit" + "Pay with Venmo" buttons), `MetadataTable`, `ContactSection`, tags, `ShareButton`, `RecentlyViewed`
   - [ ] Payment buttons (inline in `PricingSection`/page): render "Pay Deposit" when `stripe_payment_link` is set and "Pay with Venmo" when `venmo_payment_request` is set; each opens its URL in a new tab with `rel="noopener noreferrer"`; neither renders when its field is empty (DESIGN.md §10.3, TECH_REQUIREMENTS.md §22.9)
   - [ ] Sold item: "SOLD" banner prominent; contact section CTA disabled; `sold_date` shown if present
 - [ ] `app/not-found.tsx` — site header, "Page not found" message, link to home
@@ -387,7 +388,45 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 
 ---
 
-## Phase 12 — SEO, Search, Accessibility & Security Hardening
+## Phase 12 — Internationalisation Runtime
+**Goal:** Visitors switch language at runtime via a `LocaleSwitcher` in the header. Item names (cards + detail) and the detail-page Markdown description re-render in the selected locale with no reload; the selection persists across pages and refreshes. SSG still emits `defaultLocale` content. When `availableLocales.length === 1` the switcher is hidden and behaviour is identical to a single-locale build.
+
+### Dependencies
+- Phase 3b (`lib/utils/i18n.ts` — `getLocalizedField`, `t`) must be done
+- Phase 5 (SiteHeader — hosts `LocaleSwitcher`), Phase 6 (`ItemCard`, `app/layout.tsx`), Phase 9 (item detail page — hosts `LocalizedItemContent`)
+
+**Can be developed in parallel with Phases 10, 11, and 13.**
+
+### Tasks
+
+#### 12a — i18n Runtime Components
+- [ ] `components/i18n/LocaleProvider.tsx` (client) — React context exposing `{ locale, setLocale }`; on mount reads `localStorage.getItem("locale")`, falls back to `siteConfig.i18n.defaultLocale` when absent or not in `availableLocales`; `setLocale` persists via `localStorage.setItem("locale", …)` (TECH_REQUIREMENTS.md §22.8)
+- [ ] `components/i18n/useLocale.ts` — hook returning the active locale (and `setLocale`) from `LocaleProvider` context
+- [ ] `components/i18n/LocaleSwitcher.tsx` (client) — one control per `availableLocale`; calls `setLocale()`; **returns `null` when `siteConfig.i18n.availableLocales.length <= 1`** (DESIGN.md §12)
+
+#### 12b — Localised Rendering
+- [ ] `components/item/LocalizedItemContent.tsx` (client) — renders the item `<h1>` name and the react-markdown + remark-gfm description; reads `useLocale()` and resolves each via `getLocalizedField(item, "name"/"description", locale)`; both re-render on a locale change (DESIGN.md §10.3, §12; TECH_REQUIREMENTS.md §22.8)
+- [ ] Convert `components/item/ItemCard.tsx` → `"use client"`; localise the card title via `useLocale()` + `getLocalizedField(item, "name", locale)`
+
+#### 12c — Wiring
+- [ ] Wrap `app/layout.tsx` children in `<LocaleProvider>` (outermost client provider inside `<body>`) so every page shares one locale context
+- [ ] Render `<LocaleSwitcher />` in `components/layout/SiteHeader.tsx` (auto-hidden when a single locale is configured)
+- [ ] Replace the inline name + react-markdown block on `app/[category]/[item]/page.tsx` with `<LocalizedItemContent item={item} />`
+- [ ] Confirm server-only surfaces (`generateMetadata`, `<title>`, OG, JSON-LD, breadcrumb leaf) keep reading `siteConfig.i18n.defaultLocale` — they are intentionally not runtime-switchable (TECH_REQUIREMENTS.md §22.8 SEO note)
+
+### Acceptance Criteria
+- `availableLocales: ["en"]` → `LocaleSwitcher` hidden; no behavioural change vs. a non-i18n build
+- `availableLocales: ["en","zh"]` with a translated item → switching to `zh` updates the card title, detail `<h1>`, and Markdown description with no reload; untranslated items fall back to English (no blank, no crash)
+- Selected locale persists across navigations and survives a page refresh (localStorage)
+- View-source on a cold load shows `defaultLocale` text (SSG) — confirms crawlers see the default language
+- `pnpm type-check` → 0 errors
+
+### References
+DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
+
+---
+
+## Phase 13 — SEO, Search, Accessibility & Security Hardening
 **Goal:** Lighthouse ≥ 80 performance, ≥ 90 accessibility. Full-text search working. All TECH_REQUIREMENTS.md §14 and §15 checks pass.
 
 ### Tasks
@@ -434,7 +473,7 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 
 ---
 
-## Phase 13 — Deployment
+## Phase 14 — Deployment
 **Goal:** Site is live on GitHub Pages with a custom domain, images on Cloudflare R2, and full seller workflow validated end-to-end.
 
 ### Tasks
@@ -478,12 +517,12 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 
 ---
 
-## Phase 14 — AI Skill Files (Setup Wizard + Item Generator + Item Translator)
+## Phase 15 — AI Skill Files (Setup Wizard + Item Generator + Item Translator)
 **Goal:** All three Claude Code skills are complete, tested, and ship with the project. A seller using Claude Code (or any capable AI tool) can run `/setup`, `/update-items`, and `/translate-items` to generate `content/config.ts`, generate `item.json` files, and add locale translations — all without editing any code.
 
 **No API keys, no new dependencies, no custom scripts.** The deliverable is three Markdown instruction files.
 
-**Can be developed in parallel with Phases 5–13.**
+**Can be developed in parallel with Phases 5–14.**
 
 ### Dependencies
 - Phase 3 (Content Schema) must be done — skills reference the full `item.json` schema and must stay in sync with it
@@ -565,8 +604,8 @@ A phase is **done** when:
 5. Changes are committed to git with Conventional Commit message
 
 The project is **ready for v1 launch** when:
-1. All 14 phases are done (Phase 14 may ship slightly after Phases 0–13 if the AI skill files are delayed)
-2. AI skill `/setup` generates a valid `content/config.ts` — `pnpm type-check` passes (Phase 14)
+1. All 15 phases are done (Phase 15 may ship slightly after Phases 0–14 if the AI skill files are delayed)
+2. AI skill `/setup` generates a valid `content/config.ts` — `pnpm type-check` passes (Phase 15)
 3. At least one complete real listing (generated via AI skill `/update-items`) exists
 4. Site is live and passing Lighthouse ≥ 80/90
 5. Seller has successfully completed the full workflow: add item → upload photos → commit → push → verify live

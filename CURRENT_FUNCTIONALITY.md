@@ -1,6 +1,6 @@
 # UsedExchange — Current Functionality (v1)
 
-**Based on:** DESIGN.md v0.9.0 · TECH_REQUIREMENTS.md v0.9.0  
+**Based on:** DESIGN.md v0.9.1 · TECH_REQUIREMENTS.md v0.9.1  
 **Date:** 2026-06-01  
 **Status:** Design phase — this document describes the *specified* v1 functionality. No code is implemented yet.
 
@@ -282,6 +282,20 @@ Translates `name` → `name_{locale}` and `description` → `description_{locale
 ### No API Key Required
 
 All three skills are Markdown instruction files, not code. The AI tool uses its own built-in capabilities and the user's existing subscription — no `ANTHROPIC_API_KEY`, no extra packages, no new environment variables. All three skills write only to `content/`.
+
+---
+
+## Multi-Language (Locale Switching)
+
+Visitors can read listings in more than one language and switch on the fly.
+
+- **For visitors:** a language toggle (`LocaleSwitcher`) appears in the site header whenever more than one locale is configured. Switching language instantly updates item names (on cards and detail pages) and the item description — no page reload. The choice is remembered in the browser (`localStorage`) across pages and visits.
+- **For sellers:** add locale codes to `siteConfig.i18n.availableLocales` (e.g. `["en", "zh"]`), then fill in `name_zh` / `description_zh` on each item — by hand or with the `/translate-items` AI skill. v1 ships concrete Chinese (`zh`) fields; other locales follow the same `name_{locale}` / `description_{locale}` pattern.
+- **Graceful fallback:** any item without a translation shows the default language — never a blank or an error.
+- **Single deployment:** all languages ship in one build; there are no separate per-language sites.
+- **What stays in the default language:** the page `<title>`, social-share (OG) tags, and search-engine structured data render in `defaultLocale` — that is the version crawlers index. The on-page switch is a reading convenience; per-language URLs are a future enhancement.
+
+When only one locale is configured, the switcher is hidden and the site behaves exactly as a single-language build.
 
 ---
 
