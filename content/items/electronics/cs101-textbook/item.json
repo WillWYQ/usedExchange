@@ -1,0 +1,22 @@
+{
+  "name": "Introduction to Algorithms (CLRS), 4th Edition",
+  "price": {
+    "currency": "USD",
+    "tiers": [
+      { "label": "Pickup", "miles_max": 5, "amount": 45 },
+      { "label": "Shipping", "miles_min": 5, "amount": 60 }
+    ],
+    "negotiable": true
+  },
+  "description": "Good condition. Some pencil highlights in chapters 1–4 (erased about 80%). No torn pages. Great for algorithms courses.",
+  "condition": "good",
+  "brand": "MIT Press",
+  "status": "sold",
+  "listed_date": "2026-04-10",
+  "sold_date": "2026-05-01",
+  "isbn": "9780262046305",
+  "course": "CS101",
+  "edition": "4th Edition",
+  "semester_listed": "Spring 2026",
+  "tags": ["textbook", "algorithms", "computer-science"]
+}

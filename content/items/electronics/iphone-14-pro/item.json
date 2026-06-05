@@ -1,0 +1,23 @@
+{
+  "name": "iPhone 14 Pro — 256 GB Space Black",
+  "price": {
+    "currency": "USD",
+    "tiers": [
+      { "label": "Local pickup", "miles_max": 10, "amount": 580 },
+      { "label": "Shipping", "miles_min": 10, "amount": 610 }
+    ],
+    "negotiable": false
+  },
+  "description": "Battery health 91%. No cracks, no deep scratches — just normal micro-abrasions. Face ID works perfectly. Includes original box and cable (no charger brick).\n\nFactory reset and ready for new owner.",
+  "condition": "like-new",
+  "brand": "Apple",
+  "model": "iPhone 14 Pro",
+  "color": "Space Black",
+  "quantity": 1,
+  "original_price": 999.0,
+  "status": "available",
+  "listed_date": "2026-06-01",
+  "no_lowball": true,
+  "tags": ["phone", "apple", "ios"],
+  "preferred_payment": ["Venmo", "Zelle", "Cash"]
+}

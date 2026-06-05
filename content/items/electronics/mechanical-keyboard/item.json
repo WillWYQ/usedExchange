@@ -1,0 +1,21 @@
+{
+  "name": "Keychron K2 Mechanical Keyboard (Red switches)",
+  "price": {
+    "currency": "USD",
+    "tiers": [
+      { "label": "Pickup / ≤ 5 mi", "miles_max": 5, "amount": 55 },
+      { "label": "6 – 20 mi", "miles_min": 5, "miles_max": 20, "amount": 65 },
+      { "label": "Shipping", "miles_min": 20, "amount": 75 }
+    ],
+    "negotiable": true
+  },
+  "description": "Keychron K2 v2 with Gateron Red switches (linear, light actuation). Good condition — some shine on the most-used keycaps (WASD, space). Wireless + USB-C. Mac/Win compatible.",
+  "condition": "good",
+  "brand": "Keychron",
+  "model": "K2 v2",
+  "status": "pending",
+  "listed_date": "2026-05-20",
+  "tags": ["keyboard", "mechanical", "gaming", "peripherals"],
+  "preferred_payment": ["Venmo", "Cash"],
+  "min_acceptable_offer": 45
+}

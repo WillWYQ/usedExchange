@@ -1,0 +1,24 @@
+{
+  "name": "IKEA TRÅDFRI Desk Lamp",
+  "price": {
+    "currency": "USD",
+    "tiers": [
+      { "label": "Pickup / ≤ 5 mi", "miles_max": 5, "amount": 15 },
+      { "label": "6 – 15 mi", "miles_min": 5, "miles_max": 15, "amount": 20 },
+      { "label": "Shipping", "miles_min": 15, "amount": 28 }
+    ],
+    "negotiable": true
+  },
+  "description": "Works perfectly. Bought 2 years ago — barely used since I switched to overhead lighting. Includes original power adapter.",
+  "condition": "good",
+  "brand": "IKEA",
+  "model": "TRÅDFRI E14",
+  "age_years": 2,
+  "color": "white",
+  "original_source": "IKEA",
+  "original_price": 29.99,
+  "status": "available",
+  "listed_date": "2026-05-25",
+  "tags": ["lighting", "smart-home", "dorm"],
+  "preferred_payment": ["Venmo", "Cash"]
+}
