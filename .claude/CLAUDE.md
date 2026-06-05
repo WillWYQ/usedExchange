@@ -27,11 +27,11 @@ Every documentation file has an English version and a Chinese (`_zh`) version:
 
 | English | Chinese |
 |---|---|
-| `DESIGN.md` | `DESIGN_zh.md` |
-| `TECH_REQUIREMENTS.md` | `TECH_REQUIREMENTS_zh.md` |
-| `IMPLEMENTATION_PLAN.md` | `IMPLEMENTATION_PLAN_zh.md` |
-| `FEATURES_ROADMAP.md` | `FEATURES_ROADMAP_zh.md` |
-| `CURRENT_FUNCTIONALITY.md` | `CURRENT_FUNCTIONALITY_zh.md` |
+| `docs/DESIGN.md` | `docs/DESIGN_zh.md` |
+| `docs/TECH_REQUIREMENTS.md` | `docs/TECH_REQUIREMENTS_zh.md` |
+| `docs/IMPLEMENTATION_PLAN.md` | `docs/IMPLEMENTATION_PLAN_zh.md` |
+| `docs/FEATURES_ROADMAP.md` | `docs/FEATURES_ROADMAP_zh.md` |
+| `docs/CURRENT_FUNCTIONALITY.md` | `docs/CURRENT_FUNCTIONALITY_zh.md` |
 
 **Any correction, addition, or update to an English doc MUST be mirrored to its `_zh` counterpart in the same response. Never close a doc-editing task until both language versions are confirmed fixed.**
 
@@ -55,11 +55,11 @@ It must be importable by both server and client components.
 
 | File | Version | Date |
 |---|---|---|
-| DESIGN.md / DESIGN_zh.md | v0.9.1 | 2026-06-01 |
-| TECH_REQUIREMENTS.md / TECH_REQUIREMENTS_zh.md | v0.9.1 | 2026-06-01 |
-| IMPLEMENTATION_PLAN.md / IMPLEMENTATION_PLAN_zh.md | **v1.4** | 2026-06-03 |
-| FEATURES_ROADMAP.md / FEATURES_ROADMAP_zh.md | — | 2026-06-01 |
-| CURRENT_FUNCTIONALITY.md / CURRENT_FUNCTIONALITY_zh.md | — | 2026-06-03 |
+| docs/DESIGN.md / docs/DESIGN_zh.md | v0.9.1 | 2026-06-01 |
+| docs/TECH_REQUIREMENTS.md / docs/TECH_REQUIREMENTS_zh.md | v0.9.1 | 2026-06-01 |
+| docs/IMPLEMENTATION_PLAN.md / docs/IMPLEMENTATION_PLAN_zh.md | **v1.4** | 2026-06-03 |
+| docs/FEATURES_ROADMAP.md / docs/FEATURES_ROADMAP_zh.md | — | 2026-06-01 |
+| docs/CURRENT_FUNCTIONALITY.md / docs/CURRENT_FUNCTIONALITY_zh.md | — | 2026-06-03 |
 
 ---
 
@@ -80,16 +80,16 @@ It must be importable by both server and client components.
 
 | Question | Where to look |
 |---|---|
-| Full `item.json` schema (38 fields) | DESIGN.md §5 |
-| `content/config.ts` full template | DESIGN.md §13 |
-| Image storage architecture | DESIGN.md §3 |
-| Sold item retention formula | DESIGN.md §8 |
-| Status & visibility rules | DESIGN.md §15 |
-| Distance-tiered pricing algorithm | DESIGN.md §17 |
-| Component architecture + `"use client"` list | DESIGN.md §12 |
-| UI slot options (27 Aceternity components) | DESIGN.md §18 |
-| i18n runtime (LocaleProvider / LocaleSwitcher) | DESIGN.md §12, TECH §22.8 |
-| 15-phase build plan | IMPLEMENTATION_PLAN.md |
-| Deployment checklist (GitHub Pages + R2) | TECH_REQUIREMENTS.md §19 |
-| AI skill file specs | TECH_REQUIREMENTS.md §23 |
-| Testing strategy | TECH_REQUIREMENTS.md §25 |
+| Full `item.json` schema (38 fields) | docs/DESIGN.md §5 |
+| `content/config.ts` full template | docs/DESIGN.md §13 |
+| Image storage architecture | docs/DESIGN.md §3 |
+| Sold item retention formula | docs/DESIGN.md §8 |
+| Status & visibility rules | docs/DESIGN.md §15 |
+| Distance-tiered pricing algorithm | docs/DESIGN.md §17 |
+| Component architecture + `"use client"` list | docs/DESIGN.md §12 |
+| UI slot options (27 Aceternity components) | docs/DESIGN.md §18 |
+| i18n runtime (LocaleProvider / LocaleSwitcher) | docs/DESIGN.md §12, docs/TECH_REQUIREMENTS.md §22.8 |
+| 15-phase build plan | docs/IMPLEMENTATION_PLAN.md |
+| Deployment checklist (GitHub Pages + R2) | docs/TECH_REQUIREMENTS.md §19 |
+| AI skill file specs | docs/TECH_REQUIREMENTS.md §23 |
+| Testing strategy | docs/TECH_REQUIREMENTS.md §25 |

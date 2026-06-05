@@ -56,12 +56,12 @@ git add content/ && git push
 
 | 文档 | 用途 |
 |---|---|
-| [DESIGN.md](DESIGN.md) | 完整架构、数据模型、组件规范、所有设计决策 |
-| [TECH_REQUIREMENTS.md](TECH_REQUIREMENTS.md) | 依赖项、环境变量、脚本规范、部署清单 |
-| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | 14 阶段构建计划（约 20 个开发日） |
-| [CURRENT_FUNCTIONALITY.md](CURRENT_FUNCTIONALITY.md) | v1 全部功能的简明汇总 |
-| [FEATURES_ROADMAP.md](FEATURES_ROADMAP.md) | v1 之后的功能待办列表 |
-| [SETUP_GUIDE.md](SETUP_GUIDE.md) | 非技术用户指南（仅涉及 content/ 操作） |
+| [DESIGN.md](docs/DESIGN.md) | 完整架构、数据模型、组件规范、所有设计决策 |
+| [TECH_REQUIREMENTS.md](docs/TECH_REQUIREMENTS.md) | 依赖项、环境变量、脚本规范、部署清单 |
+| [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | 14 阶段构建计划（约 20 个开发日） |
+| [CURRENT_FUNCTIONALITY.md](docs/CURRENT_FUNCTIONALITY.md) | v1 全部功能的简明汇总 |
+| [FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) | v1 之后的功能待办列表 |
+| [SETUP_GUIDE.md](docs/SETUP_GUIDE.md) | 非技术用户指南（仅涉及 content/ 操作） |
 
 ## 技术栈
 

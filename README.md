@@ -56,12 +56,12 @@ No API key required. Uses your existing AI tool subscription.
 
 | Document | Purpose |
 |---|---|
-| [DESIGN.md](DESIGN.md) | Full architecture, data model, component specs, all design decisions |
-| [TECH_REQUIREMENTS.md](TECH_REQUIREMENTS.md) | Dependencies, env vars, script specs, deployment checklist |
-| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | 14-phase build plan (~20 dev days) |
-| [CURRENT_FUNCTIONALITY.md](CURRENT_FUNCTIONALITY.md) | Plain-English summary of everything in v1 |
-| [FEATURES_ROADMAP.md](FEATURES_ROADMAP.md) | Post-v1 backlog |
-| [SETUP_GUIDE.md](SETUP_GUIDE.md) | Non-technical user guide (content/ operations only) |
+| [DESIGN.md](docs/DESIGN.md) | Full architecture, data model, component specs, all design decisions |
+| [TECH_REQUIREMENTS.md](docs/TECH_REQUIREMENTS.md) | Dependencies, env vars, script specs, deployment checklist |
+| [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | 14-phase build plan (~20 dev days) |
+| [CURRENT_FUNCTIONALITY.md](docs/CURRENT_FUNCTIONALITY.md) | Plain-English summary of everything in v1 |
+| [FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) | Post-v1 backlog |
+| [SETUP_GUIDE.md](docs/SETUP_GUIDE.md) | Non-technical user guide (content/ operations only) |
 
 ## Tech stack
 
