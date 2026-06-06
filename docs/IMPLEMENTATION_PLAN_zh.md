@@ -204,7 +204,7 @@
 
 ---
 
-## Phase 7 — 地理定位与定价系统
+## Phase 7 — 地理定位与定价系统 ✅
 **目标：** 完整的地理定位 + 距离定价栈在隔离环境中工作。在接线到页面前用 `pnpm dev` 测试。
 
 ### 任务
@@ -214,40 +214,40 @@
 - [x] `components/pricing/useDistancePricing.ts` — `idle`/`pending` 时返回 `{ source: "fallback" }`；导出 `setManualMiles` *（Phase 6 中提前实现）*
 
 #### 7b — LocationPriceBar
-- [ ] `components/pricing/LocationPriceBar.tsx`（客户端）— 所有 4 种渲染状态；内联距离输入；无障碍
+- [x] `components/pricing/LocationPriceBar.tsx`（客户端）— 所有 4 种渲染状态；内联距离输入；无障碍
 
 #### 7c — PricingTable 与切换
-- [ ] `components/item/PricingTable.tsx` — 展示式；渲染解析档位行 + `PricingTableToggle`；无档位时显示"联系询价"
-- [ ] `components/item/PricingTableToggle.tsx`（客户端）— 展开/折叠；视觉突出解析档位行；键盘可访问
+- [x] `components/item/PricingTable.tsx` — 展示式；渲染解析档位行 + `PricingTableToggle`；无档位时显示"联系询价"
+- [x] `components/item/PricingTableToggle.tsx`（客户端）— 展开/折叠；视觉突出解析档位行；键盘可访问
 
 #### 7d — PricingSection 与 FilterBar
-- [ ] `components/item/PricingSection.tsx`（客户端）— 拥有物品详情的地理+距离状态；接受 `initialResolvedTier`
-- [ ] `components/filters/SortSelect.tsx`（客户端）— 排序下拉菜单
-- [ ] `components/filters/useFilters.ts` — 成色标签、价格范围滑块、状态切换
-- [ ] `components/filters/FilterBar.tsx`（客户端）— 渲染 useFilters 控件（含 `SortSelect`）
+- [x] `components/item/PricingSection.tsx`（客户端）— 拥有物品详情的地理+距离状态；接受 `initialResolvedTier`
+- [x] `components/filters/SortSelect.tsx`（客户端）— 排序下拉菜单
+- [x] `components/filters/useFilters.ts` — 成色标签、价格范围滑块、状态切换
+- [x] `components/filters/FilterBar.tsx`（客户端）— 渲染 useFilters 控件（含 `SortSelect`）
 
 ---
 
-## Phase 8 — 分类页、浏览全部与已售档案
+## Phase 8 — 分类页、浏览全部与已售档案 ✅
 **目标：** `/[category]`、`/all` 和 `/sold` 全部渲染。筛选栏、物品网格和定位解析价格完整。
 
 ### 任务
 
 #### 8a — 分类页
-- [ ] `components/item/ItemGrid.tsx`（客户端）— 拥有 `resolvedDistance` 状态；渲染 `LocationPriceBar` + `FilterBar`（含 `SortSelect`）+ 物品卡片
-- [ ] `app/[category]/page.tsx` — 来自 `loadCategories()` 的 `generateStaticParams`；含 OG 的 `generateMetadata`；渲染含物品的 `ItemGrid`
-- [ ] 物品卡片上的已售物品遮罩（状态徽章 + 变暗）
-- [ ] 分类页正文中的"浏览全部"突出链接——指向 `/all`
-- [ ] 空分类（所有物品已售/草稿或所有已售已过期）→ 渲染空网格含"该分类当前无可用物品"消息
+- [x] `components/item/ItemGrid.tsx`（客户端）— 拥有 `resolvedDistance` 状态；渲染 `LocationPriceBar` + `FilterBar`（含 `SortSelect`）+ 物品卡片
+- [x] `app/[category]/page.tsx` — 来自 `loadCategories()` 的 `generateStaticParams`；含 OG 的 `generateMetadata`；渲染含物品的 `ItemGrid`
+- [x] 物品卡片上的已售物品遮罩（状态徽章 + 变暗）
+- [x] 分类页正文中的"浏览全部"突出链接——指向 `/all`
+- [x] 空分类（所有物品已售/草稿或所有已售已过期）→ 渲染空网格含"该分类当前无可用物品"消息
 
 #### 8b — 浏览全部页（`/all`）
-- [ ] `app/all/page.tsx` — 服务器组件；调用 `loadCategories()` 然后为每个分类调用 `loadItemsByCategory()` 并展平
-- [ ] 验证：`available` + `reserved`/`pending` 均显示；已售物品默认隐藏，切换后可见；`draft` 物品不显示
+- [x] `app/all/page.tsx` — 服务器组件；调用 `loadCategories()` 然后为每个分类调用 `loadItemsByCategory()` 并展平
+- [x] 验证：`available` + `reserved`/`pending` 均显示；已售物品默认隐藏，切换后可见；`draft` 物品不显示
 
 #### 8c — 已售物品档案（`/sold`）
-- [ ] `app/sold/page.tsx` — 服务器组件；调用 `loadSoldItems()`；渲染简单物品网格（无筛选栏、无定价、无联系方式）；按 `soldDate` 降序
-- [ ] 验证所有已售物品显示，不受 `soldItemRetentionDays` 限制
-- [ ] 验证无定价显示；无联系区块
+- [x] `app/sold/page.tsx` — 服务器组件；调用 `loadSoldItems()`；渲染简单物品网格（无筛选栏、无定价、无联系方式）；按 `soldDate` 降序
+- [x] 验证所有已售物品显示，不受 `soldItemRetentionDays` 限制
+- [x] 验证无定价显示；无联系区块
 
 ---
 

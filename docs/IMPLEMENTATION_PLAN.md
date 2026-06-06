@@ -232,7 +232,7 @@ DESIGN.md §3, §14 · TECH_REQUIREMENTS.md §7
 
 ---
 
-## Phase 7 — Geolocation & Pricing System
+## Phase 7 — Geolocation & Pricing System ✅
 **Goal:** The full geolocation + distance-pricing stack works in isolation. Tested with `pnpm dev` before wiring into pages.
 
 ### Tasks
@@ -243,18 +243,18 @@ DESIGN.md §3, §14 · TECH_REQUIREMENTS.md §7
 - [x] Verify `useDistancePricing` with `{ source: "fallback" }` → calls `resolveItemPrice` with fallback → highest tier
 
 #### 7b — LocationPriceBar
-- [ ] `components/pricing/LocationPriceBar.tsx` (client) — all 4 rendered states (idle/pending, granted-detected, manual, fallback); inline distance input; accessible (Enter/Space on toggle)
-- [ ] Test all states by temporarily forcing each `geoState` value in dev
+- [x] `components/pricing/LocationPriceBar.tsx` (client) — all 4 rendered states (idle/pending, granted-detected, manual, fallback); inline distance input; accessible (Enter/Space on toggle)
+- [x] Test all states by temporarily forcing each `geoState` value in dev
 
 #### 7c — PricingTable & Toggle
-- [ ] `components/item/PricingTable.tsx` — presentational; renders resolved tier row + `PricingTableToggle`; "Contact for price" if no tiers
-- [ ] `components/item/PricingTableToggle.tsx` (client) — expand/collapse; visually accents resolved tier row; keyboard accessible; state persists through distance changes
+- [x] `components/item/PricingTable.tsx` — presentational; renders resolved tier row + `PricingTableToggle`; "Contact for price" if no tiers
+- [x] `components/item/PricingTableToggle.tsx` (client) — expand/collapse; visually accents resolved tier row; keyboard accessible; state persists through distance changes
 
 #### 7d — PricingSection & FilterBar
-- [ ] `components/item/PricingSection.tsx` (client) — owns geo+distance state for item detail; renders `LocationPriceBar` above `PricingTable`; accepts `initialResolvedTier` for SSG initial render
-- [ ] `components/filters/SortSelect.tsx` (client) — sort dropdown: Price low→high · Price high→low · Date listed (newest) · Condition (new first); child of `FilterBar`; separate component so it can hold its own dropdown state. **Must be created before `FilterBar`** (FilterBar renders SortSelect as a child).
-- [ ] `components/filters/useFilters.ts` — condition chips, price range slider (`[min, max]` on resolved prices), status toggle; slider hidden when no items have tiers; slider resets on distance change
-- [ ] `components/filters/FilterBar.tsx` (client) — renders useFilters controls (including `SortSelect`); receives `resolvedDistanceMi` prop; passes `Infinity` from parent when source = fallback
+- [x] `components/item/PricingSection.tsx` (client) — owns geo+distance state for item detail; renders `LocationPriceBar` above `PricingTable`; accepts `initialResolvedTier` for SSG initial render
+- [x] `components/filters/SortSelect.tsx` (client) — sort dropdown: Price low→high · Price high→low · Date listed (newest) · Condition (new first); child of `FilterBar`; separate component so it can hold its own dropdown state. **Must be created before `FilterBar`** (FilterBar renders SortSelect as a child).
+- [x] `components/filters/useFilters.ts` — condition chips, price range slider (`[min, max]` on resolved prices), status toggle; slider hidden when no items have tiers; slider resets on distance change
+- [x] `components/filters/FilterBar.tsx` (client) — renders useFilters controls (including `SortSelect`); receives `resolvedDistanceMi` prop; passes `Infinity` from parent when source = fallback
 
 ### Acceptance Criteria
 - Permission granted → correct distance displayed; card prices update
@@ -269,27 +269,27 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 
 ---
 
-## Phase 8 — Category Page, Browse All & Sold Archive
+## Phase 8 — Category Page, Browse All & Sold Archive ✅
 **Goal:** `/[category]`, `/all`, and `/sold` all render. Filter bar, item grid, and location-resolved prices complete.
 
 ### Tasks
 
 #### 8a — Category Page
-- [ ] `components/item/ItemGrid.tsx` (client) — owns `resolvedDistance` state; renders `LocationPriceBar` + `FilterBar` (with `SortSelect`) + item cards; passes `resolvedDistanceMi={Infinity}` to FilterBar when fallback. Prop `browseAll?: boolean` — when `true`, each `ItemCard` receives `showCategoryChip: true` so an "Items in: {Category}" chip (linking to `/[category]`) appears on each card; omit or `false` on individual category pages.
-- [ ] `app/[category]/page.tsx` — `generateStaticParams` from `loadCategories()`; `generateMetadata` with OG; renders `ItemGrid` with items
-- [ ] Sold item overlay on item cards (status badge + dimming)
-- [ ] "Browse All" prominent link in the category page body — distinct from the header navigation link; points to `/all` (DESIGN.md §10.2)
-- [ ] Empty category (all sold/draft items or all expired sold) → renders empty grid with "No items currently available in this category" message; the route is still generated because `loadCategories()` does not filter by item visibility (DESIGN.md §10.2; §15 governs item-level visibility, not route generation)
+- [x] `components/item/ItemGrid.tsx` (client) — owns `resolvedDistance` state; renders `LocationPriceBar` + `FilterBar` (with `SortSelect`) + item cards; passes `resolvedDistanceMi={Infinity}` to FilterBar when fallback. Prop `browseAll?: boolean` — when `true`, each `ItemCard` receives `showCategoryChip: true` so an "Items in: {Category}" chip (linking to `/[category]`) appears on each card; omit or `false` on individual category pages.
+- [x] `app/[category]/page.tsx` — `generateStaticParams` from `loadCategories()`; `generateMetadata` with OG; renders `ItemGrid` with items
+- [x] Sold item overlay on item cards (status badge + dimming)
+- [x] "Browse All" prominent link in the category page body — distinct from the header navigation link; points to `/all` (DESIGN.md §10.2)
+- [x] Empty category (all sold/draft items or all expired sold) → renders empty grid with "No items currently available in this category" message; the route is still generated because `loadCategories()` does not filter by item visibility (DESIGN.md §10.2; §15 governs item-level visibility, not route generation)
 
 #### 8b — Browse All Page (`/all`)
-- [ ] `app/all/page.tsx` — server component; calls `loadCategories()` then `loadItemsByCategory()` for each and flattens into a single `Item[]`; renders `<ItemGrid browseAll={true} ...>` (which adds the "Items in: {category}" chip to each card) without a category-level header (DESIGN.md §10.4)
-- [ ] Verify: `available` + `reserved`/`pending` all appear; sold items hidden by toggle (default) but visible when on; `draft` items never appear
-- [ ] Verify: filter bar condition chips, price slider, sort, status toggle all work
+- [x] `app/all/page.tsx` — server component; calls `loadCategories()` then `loadItemsByCategory()` for each and flattens into a single `Item[]`; renders `<ItemGrid browseAll={true} ...>` (which adds the "Items in: {category}" chip to each card) without a category-level header (DESIGN.md §10.4)
+- [x] Verify: `available` + `reserved`/`pending` all appear; sold items hidden by toggle (default) but visible when on; `draft` items never appear
+- [x] Verify: filter bar condition chips, price slider, sort, status toggle all work
 
 #### 8c — Sold Items Archive (`/sold`)
-- [ ] `app/sold/page.tsx` — server component; calls `loadSoldItems()`; renders a simple item grid (no filter bar, no pricing, no contact); sorted by `soldDate` desc; shows cover image, name, condition badge, sold date, category chip (DESIGN.md §10.5)
-- [ ] Verify all sold items appear regardless of `soldItemRetentionDays`
-- [ ] Verify no pricing shown; no contact section
+- [x] `app/sold/page.tsx` — server component; calls `loadSoldItems()`; renders a simple item grid (no filter bar, no pricing, no contact); sorted by `soldDate` desc; shows cover image, name, condition badge, sold date, category chip (DESIGN.md §10.5)
+- [x] Verify all sold items appear regardless of `soldItemRetentionDays`
+- [x] Verify no pricing shown; no contact section
 
 ### Acceptance Criteria
 - All category routes statically generated at build time
