@@ -63,7 +63,9 @@ export class CloudflareR2Adapter implements ImageStorageAdapter {
     });
 
     this.bucket = bucket!;
-    this.publicUrl = publicUrl!.replace(/\/$/, "");
+    // Normalise: ensure https:// prefix and no trailing slash
+    const rawUrl = publicUrl!.trim().replace(/\/$/, "");
+    this.publicUrl = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
   }
 
   loadChecksums(saved: Record<string, string>): void {
