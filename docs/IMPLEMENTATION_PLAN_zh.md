@@ -60,16 +60,16 @@
 
 ---
 
-## Phase 1 — Aceternity UI 安装
+## Phase 1 — Aceternity UI 安装 ✅
 **目标：** 所有 27 个受支持的 Aceternity 组件安装在 `components/ui/` 中并提交到 git。可与 Phase 2 并行运行。
 
 ### 任务
-- [ ] 编写含所有 27 个安装命令的 `scripts/setup-ui.sh`（TECH_REQUIREMENTS.md §21）
-- [ ] 在 `package.json` 中添加 `"setup-ui": "bash scripts/setup-ui.sh"`
-- [ ] 运行 `pnpm setup-ui`（需要网络，约 5 分钟）
-- [ ] 解决 Aceternity 安装带来的依赖冲突（peer dep 警告）
-- [ ] 提交所有生成的 `components/ui/*.tsx` 文件
-- [ ] 验证安装后 `pnpm type-check` 仍然通过
+- [x] 编写含所有 27 个安装命令的 `scripts/setup-ui.sh`（TECH_REQUIREMENTS.md §21）
+- [x] 在 `package.json` 中添加 `"setup-ui": "bash scripts/setup-ui.sh"`
+- [x] 运行 `pnpm setup-ui`（需要网络，约 5 分钟）
+- [x] 解决 Aceternity 安装带来的依赖冲突（peer dep 警告）
+- [x] 提交所有生成的 `components/ui/*.tsx` 文件
+- [x] 验证安装后 `pnpm type-check` 仍然通过
 
 ### 验收标准
 - `components/ui/` 含所有 27 个组件文件（13 背景 + 3 网格 + 4 图库 + 7 卡片）

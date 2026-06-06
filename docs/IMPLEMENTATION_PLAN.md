@@ -61,16 +61,16 @@
 
 ---
 
-## Phase 1 — Aceternity UI Setup
+## Phase 1 — Aceternity UI Setup ✅
 **Goal:** All 27 supported Aceternity components installed in `components/ui/` and committed to git. Can be run in parallel with Phase 2.
 
 ### Tasks
-- [ ] Write `scripts/setup-ui.sh` with all 27 install commands (TECH_REQUIREMENTS.md §21)
-- [ ] Add `"setup-ui": "bash scripts/setup-ui.sh"` to `package.json`
-- [ ] Run `pnpm setup-ui` (requires internet, ~5 min)
-- [ ] Resolve any dependency conflicts from Aceternity installs (peer dep warnings)
-- [ ] Commit all generated `components/ui/*.tsx` files
-- [ ] Verify `pnpm type-check` still passes after installs
+- [x] Write `scripts/setup-ui.sh` with all 27 install commands (TECH_REQUIREMENTS.md §21)
+- [x] Add `"setup-ui": "bash scripts/setup-ui.sh"` to `package.json`
+- [x] Run `pnpm setup-ui` (requires internet, ~5 min)
+- [x] Resolve any dependency conflicts from Aceternity installs (peer dep warnings)
+- [x] Commit all generated `components/ui/*.tsx` files
+- [x] Verify `pnpm type-check` still passes after installs
 
 ### Acceptance Criteria
 - `components/ui/` contains all 27 component files (13 background + 3 grid + 4 gallery + 7 card)
