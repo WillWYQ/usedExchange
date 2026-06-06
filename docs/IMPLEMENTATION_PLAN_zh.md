@@ -148,25 +148,25 @@
 
 ---
 
-## Phase 4 — 图片管道
+## Phase 4 — 图片管道 ✅
 **目标：** `pnpm dev` 显示 `content/items/` 的图片。`pnpm upload-images` 成功上传到 **Cloudflare R2**（推荐/主要提供商）并写入清单；Vercel Blob 路径并行实现为备用。可与 Phase 3 并行开发。
 
 ### 任务
 
 #### 4a — 适配器接口
-- [ ] 编写 `lib/images/adapter.ts` — `ImageStorageAdapter` 接口
+- [x] 编写 `lib/images/adapter.ts` — `ImageStorageAdapter` 接口
 
 #### 4b — 提供商实现
-- [ ] 编写 `lib/images/local.ts` — 复制到 `public/items/`，返回 `/items/{key}`，跳过未更改文件
-- [ ] 编写 `lib/images/cloudflare-r2.ts`（主要）— SHA-256 比对，`@aws-sdk/client-s3 PutObjectCommand`，返回 CDN URL
-- [ ] 编写 `lib/images/vercel-blob.ts`（备用）— SHA-256 比对，`@vercel/blob put()`，返回 CDN URL
-- [ ] 安装提供商开发依赖：`pnpm add -D @aws-sdk/client-s3`（Cloudflare R2——推荐）
+- [x] 编写 `lib/images/local.ts` — 复制到 `public/items/`，返回 `/items/{key}`，跳过未更改文件
+- [x] 编写 `lib/images/cloudflare-r2.ts`（主要）— SHA-256 比对，`@aws-sdk/client-s3 PutObjectCommand`，返回 CDN URL
+- [x] 编写 `lib/images/vercel-blob.ts`（备用）— SHA-256 比对，`@vercel/blob put()`，返回 CDN URL；代码已实现，需单独安装包
+- [x] 安装提供商开发依赖：`pnpm add -D @aws-sdk/client-s3`（Cloudflare R2——推荐）
 
 #### 4c — 同步脚本（`scripts/sync-images.ts`）
-- [ ] 实现 `--mode upload`：扫描、SHA-256、上传新/已更改文件、清除过时清单条目、复制 contact/、写入清单、写入校验和缓存、打印备份提醒
-- [ ] 实现 `--mode dev-sync`：复制到 `public/items/`，复制 contact/，content/items/ 缺失时优雅处理
-- [ ] 实现 `--mode build-check`：本地提供商 → 本地复制；云提供商 → 验证清单存在；始终复制 contact/
-- [ ] 更新 `next.config.ts` 添加 Vercel Blob / R2 远程模式
+- [x] 实现 `--mode upload`：扫描、SHA-256、上传新/已更改文件、清除过时清单条目、复制 contact/、写入清单、写入校验和缓存、打印备份提醒
+- [x] 实现 `--mode dev-sync`：复制到 `public/items/`，复制 contact/，content/items/ 缺失时优雅处理
+- [x] 实现 `--mode build-check`：本地提供商 → 本地复制；云提供商 → 验证清单存在；始终复制 contact/
+- [x] 更新 `next.config.ts` 添加 Vercel Blob / R2 远程模式（Phase 0 已完成）
 
 #### 4d — 集成测试
 - [ ] `pnpm dev` → 示例图片出现在 `/items/houseware/item/cover.jpg`

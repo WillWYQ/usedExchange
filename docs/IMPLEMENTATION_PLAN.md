@@ -152,25 +152,25 @@ DESIGN.md §4, §5, §6, §8, §11 · TECH_REQUIREMENTS.md §6, §7, §8
 
 ---
 
-## Phase 4 — Image Pipeline
+## Phase 4 — Image Pipeline ✅
 **Goal:** `pnpm dev` shows images from `content/items/`. `pnpm upload-images` successfully uploads to **Cloudflare R2** (the recommended/primary provider) and writes a manifest; the Vercel Blob path is implemented in parallel as the alternate. Can be developed in parallel with Phase 3.
 
 ### Tasks
 
 #### 4a — Adapter Interface
-- [ ] Write `lib/images/adapter.ts` — `ImageStorageAdapter` interface (TECH_REQUIREMENTS.md §7)
+- [x] Write `lib/images/adapter.ts` — `ImageStorageAdapter` interface (TECH_REQUIREMENTS.md §7)
 
 #### 4b — Provider Implementations
-- [ ] Write `lib/images/local.ts` — copies to `public/items/`, returns `/items/{key}`, skips unchanged
-- [ ] Write `lib/images/cloudflare-r2.ts` (primary) — SHA-256 compare, `@aws-sdk/client-s3 PutObjectCommand`, returns CDN URL; clear error if `CF_R2_*` missing
-- [ ] Write `lib/images/vercel-blob.ts` (alternate) — SHA-256 compare, `@vercel/blob put()`, returns CDN URL; clear error if `BLOB_READ_WRITE_TOKEN` missing
-- [ ] Install provider devDeps: `pnpm add -D @aws-sdk/client-s3` (Cloudflare R2 — recommended). Add `pnpm add -D @vercel/blob` only if also exercising the Vercel Blob path.
+- [x] Write `lib/images/local.ts` — copies to `public/items/`, returns `/items/{key}`, skips unchanged
+- [x] Write `lib/images/cloudflare-r2.ts` (primary) — SHA-256 compare, `@aws-sdk/client-s3 PutObjectCommand`, returns CDN URL; clear error if `CF_R2_*` missing
+- [x] Write `lib/images/vercel-blob.ts` (alternate) — SHA-256 compare, `@vercel/blob put()`, returns CDN URL; clear error if `BLOB_READ_WRITE_TOKEN` missing
+- [x] Install provider devDeps: `pnpm add -D @aws-sdk/client-s3` (Cloudflare R2 — recommended). `@vercel/blob` code implemented; install separately when exercising that path.
 
 #### 4c — Sync Script (`scripts/sync-images.ts`)
-- [ ] Implement `--mode upload`: scan, SHA-256, upload new/changed, purge stale manifest entries, copy contact/, write manifest, write checksum cache, print backup reminder (TECH_REQUIREMENTS.md §7)
-- [ ] Implement `--mode dev-sync`: copy to `public/items/`, copy contact/, graceful if `content/items/` missing
-- [ ] Implement `--mode build-check`: local provider → copy locally; cloud provider → verify manifest exists, warn if missing; always copy contact/
-- [ ] Update `next.config.ts` to add Vercel Blob / R2 remote patterns (TECH_REQUIREMENTS.md §4)
+- [x] Implement `--mode upload`: scan, SHA-256, upload new/changed, purge stale manifest entries, copy contact/, write manifest, write checksum cache, print backup reminder (TECH_REQUIREMENTS.md §7)
+- [x] Implement `--mode dev-sync`: copy to `public/items/`, copy contact/, graceful if `content/items/` missing
+- [x] Implement `--mode build-check`: local provider → copy locally; cloud provider → verify manifest exists, warn if missing; always copy contact/
+- [x] Update `next.config.ts` to add Vercel Blob / R2 remote patterns (TECH_REQUIREMENTS.md §4) — completed in Phase 0
 
 #### 4d — Integration Test
 - [ ] `pnpm dev` → sample images appear at `/items/houseware/item/cover.jpg`
