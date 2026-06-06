@@ -1,4 +1,4 @@
-import fs from "fs";
+import { readFile } from "fs/promises";
 import path from "path";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import type { ImageStorageAdapter } from "./adapter";
@@ -89,7 +89,7 @@ export class CloudflareR2Adapter implements ImageStorageAdapter {
       return cdnUrl;
     }
 
-    const body = fs.readFileSync(sourcePath);
+    const body = await readFile(sourcePath);
 
     await this.client.send(
       new PutObjectCommand({

@@ -31,7 +31,11 @@ type StatusBadgeProps = {
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const { label, classes } = STATUS_CONFIG[status];
+  const config = STATUS_CONFIG[status] ?? {
+    label: status,
+    classes: "bg-white/10 text-white/50 ring-white/20",
+  };
+  const { label, classes } = config;
   return (
     <span
       className={clsx(

@@ -31,6 +31,11 @@ async function getManifest(): Promise<Record<string, string>> {
   return manifestPromise;
 }
 
+/** Resets the manifest cache. Call in tests or after running pnpm upload-images. */
+export function resetManifestCache(): void {
+  manifestPromise = null;
+}
+
 function resolveImageUrl(
   manifest: Record<string, string>,
   key: string,
@@ -238,39 +243,36 @@ async function parseCategory(
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+// ── Category builder (private) ────────────────────────────────────────────────
+
 /**
- * All valid categories in display order (DESIGN.md §6 sort logic).
- * Never throws; returns [] when content/items/ is missing.
+ * Builds Category objects from a pre-parsed item list.
+ * Reads only _category.json files — does NOT re-parse item.json.
+ * This is the single source of category-building logic; both loadCategories()
+ * and loadHomePageData() delegate here to avoid duplicate item parses.
  */
-export async function loadCategories(): Promise<Category[]> {
-  let entries: Dirent<string>[];
-  try {
-    entries = await fs.readdir(CONTENT_ROOT, {
-      withFileTypes: true,
-      encoding: "utf8",
-    });
-  } catch {
-    return [];
+async function buildCategoriesFromItems(
+  slugs: string[],
+  allItems: Item[],
+): Promise<Category[]> {
+  // Group visible items by categorySlug (single pass, O(n))
+  const byCategory = new Map<string, Item[]>();
+  for (const slug of slugs) byCategory.set(slug, []);
+  for (const item of allItems) {
+    if (isItemVisible(item)) {
+      byCategory.get(item.categorySlug)?.push(item);
+    }
   }
 
-  const categoryFolders = entries.filter(
-    (e) => e.isDirectory() && !e.name.startsWith("_"),
-  );
-
-  const manifest = await getManifest();
-
   const categories = await Promise.all(
-    categoryFolders.map(async (e) => {
-      const slug = e.name;
+    slugs.map(async (slug) => {
       const catJsonPath = path.join(CONTENT_ROOT, slug, "_category.json");
-
       let catParsed = {
         display_name: "",
         description: "",
         icon: "",
         sort_order: null as number | null,
       };
-
       try {
         const raw = JSON.parse(await fs.readFile(catJsonPath, "utf-8"));
         const r = categoryJsonSchema.safeParse(raw);
@@ -279,14 +281,11 @@ export async function loadCategories(): Promise<Category[]> {
         // No _category.json → use defaults
       }
 
-      // Load visible items to compute availableItemCount and coverImage
-      const items = await loadItemsByCategory(slug, manifest);
-      const availableItems = items.filter((i) => i.status === "available");
+      const visibleItems = byCategory.get(slug) ?? [];
+      const availableItems = visibleItems.filter((i) => i.status === "available");
 
       // FIX Bug 3: sort by itemSlug before selecting the cover image so the
       // result is deterministic across OS/filesystem implementations.
-      // Previously the first element of availableItems depended on readdir
-      // order, which differs between macOS (alphabetical) and Linux (inode).
       const sortedAvailable = [...availableItems].sort((a, b) =>
         a.itemSlug.localeCompare(b.itemSlug),
       );
@@ -321,6 +320,31 @@ export async function loadCategories(): Promise<Category[]> {
     if (bOrdered) return 1;
     return a.slug.localeCompare(b.slug);
   });
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+/**
+ * All valid categories in display order (DESIGN.md §6 sort logic).
+ * Never throws; returns [] when content/items/ is missing.
+ */
+export async function loadCategories(): Promise<Category[]> {
+  let entries: Dirent<string>[];
+  try {
+    entries = await fs.readdir(CONTENT_ROOT, {
+      withFileTypes: true,
+      encoding: "utf8",
+    });
+  } catch {
+    return [];
+  }
+
+  const slugs = entries
+    .filter((e) => e.isDirectory() && !e.name.startsWith("_"))
+    .map((e) => e.name);
+
+  const allItems = await loadAllItemsRaw();
+  return buildCategoriesFromItems(slugs, allItems);
 }
 
 /**
@@ -425,4 +449,46 @@ export async function loadSoldItems(): Promise<Item[]> {
       const bDate = b.soldDate ?? b.listedDate;
       return bDate.localeCompare(aDate);
     });
+}
+
+/**
+ * Single-pass loader for the home page.
+ * Parses every item exactly once, then derives both categories (for the grid)
+ * and the recently listed strip — eliminating the double parse that occurred
+ * when page.tsx called loadCategories() and loadAllItems() concurrently.
+ *
+ * Use this in app/page.tsx instead of Promise.all([loadCategories(), loadAllItems()]).
+ */
+export async function loadHomePageData(): Promise<{
+  categories: Category[];
+  recentItems: Item[];
+}> {
+  let entries: Dirent<string>[];
+  try {
+    entries = await fs.readdir(CONTENT_ROOT, {
+      withFileTypes: true,
+      encoding: "utf8",
+    });
+  } catch {
+    return { categories: [], recentItems: [] };
+  }
+
+  const slugs = entries
+    .filter((e) => e.isDirectory() && !e.name.startsWith("_"))
+    .map((e) => e.name);
+
+  // Single parse pass — manifest is shared via the module-level cache.
+  const allItems = await loadAllItemsRaw();
+
+  const [categories, recentItems] = await Promise.all([
+    buildCategoriesFromItems(slugs, allItems),
+    Promise.resolve(
+      allItems
+        .filter((i) => i.status === "available")
+        .sort((a, b) => b.listedDate.localeCompare(a.listedDate))
+        .slice(0, siteConfig.recentlyListedCount),
+    ),
+  ]);
+
+  return { categories, recentItems };
 }

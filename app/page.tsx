@@ -1,14 +1,18 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import Link from "next/link";
 import { siteConfig } from "@/content/config";
-import { loadCategories, loadAllItems } from "@/lib/content/loader";
+import { loadHomePageData } from "@/lib/content/loader";
+
+// Memoised per-request so generateMetadata and HomePage share one parse pass.
+const getHomePageData = cache(loadHomePageData);
 import { CategoryGrid } from "@/components/category/CategoryGrid";
 import { RecentlyListedSection } from "@/components/home/RecentlyListedSection";
 import { RecentlyViewed } from "@/components/common/RecentlyViewed";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const items = await loadAllItems();
-  const ogImage = items[0]?.coverImage ?? (siteConfig.logo || undefined);
+  const { recentItems } = await getHomePageData();
+  const ogImage = recentItems[0]?.coverImage ?? (siteConfig.logo || undefined);
 
   return {
     title: siteConfig.name,
@@ -22,10 +26,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const [categories, recentItems] = await Promise.all([
-    loadCategories(),
-    loadAllItems(),
-  ]);
+  const { categories, recentItems } = await getHomePageData();
 
   const tagline = siteConfig.i18n.strings.heroTagline || siteConfig.tagline;
 

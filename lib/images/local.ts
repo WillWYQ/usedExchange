@@ -1,4 +1,4 @@
-import fs from "fs";
+import { mkdir, stat, copyFile } from "fs/promises";
 import path from "path";
 import type { ImageStorageAdapter } from "./adapter";
 
@@ -22,20 +22,20 @@ export class LocalAdapter implements ImageStorageAdapter {
     _checksum: string,
   ): Promise<string> {
     const destPath = path.join(PUBLIC_ITEMS, manifestKey);
-    const destDir = path.dirname(destPath);
+    await mkdir(path.dirname(destPath), { recursive: true });
 
-    fs.mkdirSync(destDir, { recursive: true });
-
-    // Skip copy when mtime + size are unchanged (equivalent to checksum match, but faster)
-    if (fs.existsSync(destPath)) {
-      const src = fs.statSync(sourcePath);
-      const dst = fs.statSync(destPath);
-      if (src.size === dst.size && src.mtimeMs <= dst.mtimeMs) {
+    // Skip copy when size and mtime are identical — use strict equality so that
+    // a same-size file restored from backup (older mtime) is still copied.
+    try {
+      const [src, dst] = await Promise.all([stat(sourcePath), stat(destPath)]);
+      if (src.size === dst.size && src.mtimeMs === dst.mtimeMs) {
         return `/items/${manifestKey}`;
       }
+    } catch {
+      // destPath does not exist yet — fall through to copy
     }
 
-    fs.copyFileSync(sourcePath, destPath);
+    await copyFile(sourcePath, destPath);
     return `/items/${manifestKey}`;
   }
 }

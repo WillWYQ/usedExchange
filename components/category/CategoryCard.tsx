@@ -20,7 +20,12 @@ export function CategoryCard({ category }: CategoryCardProps) {
       {category.coverImage && (
         <div
           className="absolute inset-0 scale-105 bg-cover bg-center opacity-20 transition-opacity duration-300 group-hover:opacity-30"
-          style={{ backgroundImage: `url(${category.coverImage})` }}
+          style={{
+            backgroundImage: `url("${category.coverImage
+              .replace(/\\/g, "\\\\")
+              .replace(/"/g, "%22")
+              .replace(/\)/g, "%29")}")`,
+          }}
           aria-hidden="true"
         />
       )}

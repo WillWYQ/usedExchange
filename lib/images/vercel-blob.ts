@@ -1,4 +1,4 @@
-import fs from "fs";
+import { readFile } from "fs/promises";
 import type { ImageStorageAdapter } from "./adapter";
 
 // Minimal inline type for the @vercel/blob put() call.
@@ -68,7 +68,7 @@ export class VercelBlobAdapter implements ImageStorageAdapter {
       );
     })) as unknown as { put: BlobPutFn };
 
-    const body = fs.readFileSync(sourcePath);
+    const body = await readFile(sourcePath);
     const result = await mod.put(manifestKey, body, {
       access: "public",
       addRandomSuffix: false,
