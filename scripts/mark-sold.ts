@@ -4,6 +4,22 @@
 import fs from "fs/promises";
 import path from "path";
 
+// FIX Sec 3: only allow lowercase kebab-case slugs (letters, digits, hyphens).
+// Prevents path-traversal payloads such as "../../etc/passwd" from reaching
+// any filesystem operation.  The check runs before any fs.access / fs.readFile
+// call so the error is surfaced immediately with a clear message.
+const SAFE_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+function assertSafeSlug(value: string, label: string): void {
+  if (!SAFE_SLUG_RE.test(value)) {
+    console.error(
+      `Error: ${label} must be kebab-case (lowercase letters, digits, and hyphens only).\n` +
+        `  Got: "${value}"`,
+    );
+    process.exit(1);
+  }
+}
+
 async function main() {
   const arg = process.argv[2];
 
@@ -21,6 +37,10 @@ async function main() {
     console.error("Error: both <category> and <item> must be non-empty.");
     process.exit(1);
   }
+
+  // FIX Sec 3: validate slugs before constructing any filesystem paths.
+  assertSafeSlug(category, "category");
+  assertSafeSlug(item, "item name");
 
   const jsonPath = path.join(
     process.cwd(),

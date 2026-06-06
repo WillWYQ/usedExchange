@@ -14,19 +14,21 @@ const MANIFEST_PATH = path.join(
   "image-manifest.json",
 );
 
-// Build-time manifest cache — read once per process
-let manifestCache: Record<string, string> | null = null;
+// ── Manifest cache ────────────────────────────────────────────────────────────
+// FIX Arch 2: cache the Promise itself, not its resolved value.
+// Caching the resolved value leaves a window where two concurrent awaits both
+// see `null` and each trigger a separate fs.readFile call.  Caching the Promise
+// means all concurrent callers share the same in-flight read.
+let manifestPromise: Promise<Record<string, string>> | null = null;
 
 async function getManifest(): Promise<Record<string, string>> {
-  if (manifestCache) return manifestCache;
-  try {
-    manifestCache = JSON.parse(
-      await fs.readFile(MANIFEST_PATH, "utf-8"),
-    ) as Record<string, string>;
-  } catch {
-    manifestCache = {};
+  if (!manifestPromise) {
+    manifestPromise = fs
+      .readFile(MANIFEST_PATH, "utf-8")
+      .then((content) => JSON.parse(content) as Record<string, string>)
+      .catch(() => ({}) as Record<string, string>);
   }
-  return manifestCache;
+  return manifestPromise;
 }
 
 function resolveImageUrl(
@@ -36,23 +38,32 @@ function resolveImageUrl(
   return manifest[key] ?? `/items/${key}`;
 }
 
+// ── Visibility helpers ────────────────────────────────────────────────────────
+
 // Returns true when a sold item is still within its retention window.
-// `soldItemRetentionDays === 0` means keep forever.
-// `soldItemRetentionDays === -1` means hide immediately.
+// FIX Bug 1: explicit guard for retention < 0 ("hide immediately") so that
+// no code path can accidentally display a sold item.
+// Previous bug: when retention === -1, a future-dated soldDate produced a
+// negative daysDiff which satisfied `daysDiff <= -1`, showing the item.
+// The secondary `daysDiff >= 0` guard now prevents any future-dated item
+// (whether sold_date was set to a future value intentionally or not) from
+// appearing in visible listings.
 function isSoldItemVisible(item: Item): boolean {
   const retention = siteConfig.soldItemRetentionDays;
-  if (retention === 0) return true; // keep forever
+  if (retention === 0) return true;   // keep forever
+  if (retention < 0) return false;   // -1 = hide immediately; covers all negative values
 
   const effectiveDateStr = item.soldDate ?? item.listedDate;
-  // Compute days elapsed since effective sold date (UTC midnight comparison)
   const soldMs = Date.parse(effectiveDateStr + "T00:00:00Z");
-  if (isNaN(soldMs)) return true; // unparseable date → keep
+  // Unparseable date: conservatively hide rather than expose stale items.
+  if (isNaN(soldMs)) return false;
 
   const today = new Date().toISOString().slice(0, 10);
   const todayMs = Date.parse(today + "T00:00:00Z");
   const daysDiff = (todayMs - soldMs) / 86_400_000;
 
-  return daysDiff <= retention;
+  // daysDiff < 0 means soldDate is in the future — hide those too.
+  return daysDiff >= 0 && daysDiff <= retention;
 }
 
 // Returns false for items that should never appear on any page.
@@ -190,6 +201,41 @@ async function buildItem(
   };
 }
 
+// ── Private helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Parses all items in a single category directory without applying any
+ * visibility filter.  Null results (missing item.json or empty name) are
+ * removed; every other status (draft, sold, available…) is preserved.
+ *
+ * This is the single source of truth for directory traversal within a category.
+ * Both `loadItemsByCategory` and `loadAllItemsRaw` delegate to this function
+ * so directory-reading logic is never duplicated.
+ */
+async function parseCategory(
+  categorySlug: string,
+  manifest: Record<string, string>,
+): Promise<Item[]> {
+  const catDir = path.join(CONTENT_ROOT, categorySlug);
+
+  let entries: Dirent<string>[];
+  try {
+    entries = await fs.readdir(catDir, { withFileTypes: true, encoding: "utf8" });
+  } catch {
+    return [];
+  }
+
+  const itemFolders = entries.filter(
+    (e) => e.isDirectory() && !e.name.startsWith("_"),
+  );
+
+  const items = await Promise.all(
+    itemFolders.map((e) => parseItem(categorySlug, e.name, manifest)),
+  );
+
+  return items.filter((item): item is Item => item !== null);
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -237,6 +283,14 @@ export async function loadCategories(): Promise<Category[]> {
       const items = await loadItemsByCategory(slug, manifest);
       const availableItems = items.filter((i) => i.status === "available");
 
+      // FIX Bug 3: sort by itemSlug before selecting the cover image so the
+      // result is deterministic across OS/filesystem implementations.
+      // Previously the first element of availableItems depended on readdir
+      // order, which differs between macOS (alphabetical) and Linux (inode).
+      const sortedAvailable = [...availableItems].sort((a, b) =>
+        a.itemSlug.localeCompare(b.itemSlug),
+      );
+
       const displayName =
         catParsed.display_name ||
         slug
@@ -250,7 +304,7 @@ export async function loadCategories(): Promise<Category[]> {
         icon: catParsed.icon,
         sortOrder: catParsed.sort_order,
         availableItemCount: availableItems.length,
-        coverImage: availableItems[0]?.coverImage ?? null,
+        coverImage: sortedAvailable[0]?.coverImage ?? null,
       } satisfies Category;
     }),
   );
@@ -278,28 +332,8 @@ export async function loadItemsByCategory(
   manifest?: Record<string, string>,
 ): Promise<Item[]> {
   const resolvedManifest = manifest ?? (await getManifest());
-  const catDir = path.join(CONTENT_ROOT, categorySlug);
-
-  let entries: Dirent<string>[];
-  try {
-    entries = await fs.readdir(catDir, { withFileTypes: true, encoding: "utf8" });
-  } catch {
-    return [];
-  }
-
-  const itemFolders = entries.filter(
-    (e) => e.isDirectory() && !e.name.startsWith("_"),
-  );
-
-  const items = await Promise.all(
-    itemFolders.map((e) =>
-      parseItem(categorySlug, e.name, resolvedManifest),
-    ),
-  );
-
-  return items.filter(
-    (item): item is Item => item !== null && isItemVisible(item),
-  );
+  const items = await parseCategory(categorySlug, resolvedManifest);
+  return items.filter(isItemVisible);
 }
 
 /**
@@ -315,23 +349,60 @@ export async function loadItem(
 }
 
 /**
+ * All parsed items across every category, with no visibility filter applied.
+ * Draft, sold, pending, reserved, and available items are all included.
+ * Null results (missing item.json or blank name) are removed.
+ *
+ * FIX Arch 1 / Perf 1: this function is the shared single-pass foundation for
+ * loadAllItems, loadSoldItems, and buildSearchIndex.  It replaces the previous
+ * pattern of calling loadCategories() (which internally loads all items for
+ * stats) and then calling loadItemsByCategory() a second time — an O(2n) item
+ * parse that doubled fs.readFile and JSON.parse calls on every build.
+ *
+ * All category directories are processed concurrently via Promise.all.
+ *
+ * ⚠️  Do NOT use in UI components — use loadItemsByCategory() which applies
+ * the correct visibility filter for each rendering context.
+ */
+export async function loadAllItemsRaw(): Promise<Item[]> {
+  const manifest = await getManifest();
+
+  let entries: Dirent<string>[];
+  try {
+    entries = await fs.readdir(CONTENT_ROOT, {
+      withFileTypes: true,
+      encoding: "utf8",
+    });
+  } catch {
+    return [];
+  }
+
+  const categoryFolders = entries.filter(
+    (e) => e.isDirectory() && !e.name.startsWith("_"),
+  );
+
+  const allItemArrays = await Promise.all(
+    categoryFolders.map((e) => parseCategory(e.name, manifest)),
+  );
+
+  return allItemArrays.flat();
+}
+
+/**
  * Recently listed items for the home page strip ONLY.
- * Filters: status === "available"; excludes expired sold.
+ * Filters: status === "available".
  * Sorted by listedDate desc, capped at siteConfig.recentlyListedCount.
+ *
+ * FIX Arch 1: previously called loadCategories() + loadItemsByCategory() per
+ * category — O(2n) item parses, sequential for-of loop.  Now calls
+ * loadAllItemsRaw() once: single pass, fully concurrent.
  *
  * ⚠️  Do NOT use for the /all page — use loadItemsByCategory() per category.
  */
 export async function loadAllItems(): Promise<Item[]> {
-  const categories = await loadCategories();
-  const manifest = await getManifest();
-
-  const allItems: Item[] = [];
-  for (const cat of categories) {
-    const items = await loadItemsByCategory(cat.slug, manifest);
-    allItems.push(...items.filter((i) => i.status === "available"));
-  }
-
-  return allItems
+  const all = await loadAllItemsRaw();
+  return all
+    .filter((i) => i.status === "available")
     .sort((a, b) => b.listedDate.localeCompare(a.listedDate))
     .slice(0, siteConfig.recentlyListedCount);
 }
@@ -340,38 +411,18 @@ export async function loadAllItems(): Promise<Item[]> {
  * All sold items for the /sold archive page.
  * No retention filter — shows every item with status "sold".
  * Sorted by soldDate desc (falls back to listedDate when soldDate absent).
+ *
+ * FIX Arch 1: previously called loadCategories() (O(n) parse) then re-read
+ * every category directory sequentially.  Now calls loadAllItemsRaw() once:
+ * single pass, fully concurrent, eliminates the intermediate category step.
  */
 export async function loadSoldItems(): Promise<Item[]> {
-  const categories = await loadCategories();
-  const manifest = await getManifest();
-
-  const soldItems: Item[] = [];
-
-  for (const cat of categories) {
-    const catDir = path.join(CONTENT_ROOT, cat.slug);
-    let entries: Dirent<string>[];
-    try {
-      entries = await fs.readdir(catDir, { withFileTypes: true, encoding: "utf8" });
-    } catch {
-      continue;
-    }
-
-    const itemFolders = entries.filter(
-      (e) => e.isDirectory() && !e.name.startsWith("_"),
-    );
-
-    const items = await Promise.all(
-      itemFolders.map((e) => parseItem(cat.slug, e.name, manifest)),
-    );
-
-    for (const item of items) {
-      if (item && item.status === "sold") soldItems.push(item);
-    }
-  }
-
-  return soldItems.sort((a, b) => {
-    const aDate = a.soldDate ?? a.listedDate;
-    const bDate = b.soldDate ?? b.listedDate;
-    return bDate.localeCompare(aDate);
-  });
+  const all = await loadAllItemsRaw();
+  return all
+    .filter((i) => i.status === "sold")
+    .sort((a, b) => {
+      const aDate = a.soldDate ?? a.listedDate;
+      const bDate = b.soldDate ?? b.listedDate;
+      return bDate.localeCompare(aDate);
+    });
 }

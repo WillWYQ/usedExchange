@@ -4,7 +4,23 @@
 
 import fs from "fs/promises";
 import path from "path";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
+
+// FIX Sec 3: only allow lowercase kebab-case slugs (letters, digits, hyphens).
+// This prevents path-traversal payloads such as "../../etc/cron.d" from being
+// accepted as category or item names.  The check runs before any filesystem
+// access so the error is surfaced immediately with a clear message.
+const SAFE_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+function assertSafeSlug(value: string, label: string): void {
+  if (!SAFE_SLUG_RE.test(value)) {
+    console.error(
+      `Error: ${label} must be kebab-case (lowercase letters, digits, and hyphens only).\n` +
+        `  Got: "${value}"`,
+    );
+    process.exit(1);
+  }
+}
 
 async function main() {
   const arg = process.argv[2];
@@ -23,6 +39,10 @@ async function main() {
     console.error("Error: both <category> and <name> must be non-empty.");
     process.exit(1);
   }
+
+  // FIX Sec 3: validate slugs before constructing any filesystem paths.
+  assertSafeSlug(category, "category");
+  assertSafeSlug(itemName, "item name");
 
   const catDir = path.join(process.cwd(), "content", "items", category);
 
@@ -70,9 +90,14 @@ async function main() {
     `  Next steps:\n  1. Edit ${jsonPath} (add price, description, photos)\n  2. Drop photos into ${itemDir}/\n  3. Set status to "available" when ready`,
   );
 
+  // FIX Sec 2: use spawnSync with an args array instead of execSync with a
+  // shell-interpolated string.  The previous form embedded `jsonPath` inside a
+  // shell command string, which could be abused if itemName contained shell
+  // metacharacters (`;`, `"`, `\`).  spawnSync bypasses the shell entirely —
+  // the editor binary is invoked directly with jsonPath as a literal argument.
   if (process.env["EDITOR"]) {
     try {
-      execSync(`${process.env["EDITOR"]} "${jsonPath}"`, { stdio: "inherit" });
+      spawnSync(process.env["EDITOR"], [jsonPath], { stdio: "inherit" });
     } catch {
       // Editor launch failure is non-fatal
     }

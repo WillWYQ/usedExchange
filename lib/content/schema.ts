@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+// ── Protocol allowlist ────────────────────────────────────────────────────────
+// FIX Sec 1: restrict URL fields to http/https only.
+// new URL("javascript:alert(1)") is valid per the WHATWG spec, so a structural
+// check alone is insufficient.  Only http: and https: are meaningful for item
+// links, payment pages, and YouTube URLs.
+const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
+
 // ── Reusable preprocessors ────────────────────────────────────────────────────
 
 /**
@@ -24,13 +31,15 @@ const nullableDateString = z.preprocess((val): string | null => {
 }, z.string().nullable()) as z.ZodType<string | null>;
 
 /**
- * URL strings: invalid URL → empty string.
+ * URL strings: invalid URL or disallowed protocol → empty string.
+ * FIX Sec 1: javascript:, vbscript:, data: and other non-http/s schemes are
+ * rejected and coerced to "".
  */
 const urlString = z.preprocess((val): string => {
   if (!val || typeof val !== "string") return "";
   try {
-    new URL(val);
-    return val;
+    const u = new URL(val);
+    return ALLOWED_PROTOCOLS.has(u.protocol) ? val : "";
   } catch {
     return "";
   }
@@ -49,24 +58,32 @@ const priceTierSchema = z.object({
   }, z.number().nonnegative()),
 });
 
+// FIX Bug 2: added `.positive()` on each dimension field so negative values
+// are rejected at the field level instead of being passed through.
+// Added outer `.catch(null)` so that a structurally invalid or partially-filled
+// dimensions object coerces the whole sub-object to null rather than failing
+// the entire item parse and triggering the lossy schema-recovery path.
 const dimensionsSchema = z
   .object({
-    length: z.number(),
-    width: z.number(),
-    height: z.number(),
+    length: z.number().positive(),
+    width: z.number().positive(),
+    height: z.number().positive(),
     unit: z.enum(["cm", "in"]).catch("cm").default("cm"),
   })
   .nullable()
   .optional()
+  .catch(null)
   .default(null);
 
+// FIX Bug 2 (same): positive value only; `.catch(null)` for partial objects.
 const weightSchema = z
   .object({
-    value: z.number(),
+    value: z.number().positive(),
     unit: z.enum(["kg", "lb"]).catch("kg").default("kg"),
   })
   .nullable()
   .optional()
+  .catch(null)
   .default(null);
 
 const priceSchema = z
