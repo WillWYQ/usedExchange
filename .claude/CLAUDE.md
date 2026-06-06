@@ -10,7 +10,7 @@
 **UsedExchange** is a Next.js 15 static site for listing second-hand items.
 Single seller, zero database, file-system-driven. Hosted on GitHub Pages + Cloudflare R2.
 
-**Status:** Design-phase only — all docs are finalised (v0.9.1), no code yet.
+**Status:** Phase 0 (Bootstrap) ✅ complete — Next.js 15 scaffold ready. Phases 1–15 pending.
 
 ---
 
@@ -48,6 +48,9 @@ This field is private buyer info — must never appear on any rendered page.
 
 ### 6. `lib/utils/pricing.ts` has no `"use client"`
 It must be importable by both server and client components.
+
+### 7. Mark phases complete in docs
+After finishing each phase's implementation, **update `docs/IMPLEMENTATION_PLAN.md` and `docs/IMPLEMENTATION_PLAN_zh.md`** to mark all tasks `[x]` (checked) and add ✅ after the phase title. This maintains a visible record of progress and helps future sessions understand project state. Use the bilingual sync rule (Rule 2) — update both English and Chinese versions in the same commit.
 
 ---
 
