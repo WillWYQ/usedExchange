@@ -175,32 +175,32 @@
 
 ---
 
-## Phase 5 — 公共组件
+## Phase 5 — 公共组件 ✅
 **目标：** 所有共享展示组件就绪。尚无页面。
 
 ### 任务
-- [ ] `components/common/AdaptiveImage.tsx` — 基于 `deploymentMode` 的 `next/image` vs `<img>`
-- [ ] `components/layout/SiteHeader.tsx` — 站点名称/Logo、导航占位符
-- [ ] `components/layout/SiteFooter.tsx` — 站点名称、最后构建时间戳、ContactSection 槽位
-- [ ] `components/layout/Breadcrumb.tsx` — 首页 → 分类 → 物品，正确的 href
-- [ ] `components/item/StatusBadge.tsx` — 颜色编码标签，不能只依赖颜色（必须有文字标签）
-- [ ] `components/item/ConditionBadge.tsx` — 同上约束
-- [ ] `components/item/MetadataTable.tsx` — 渲染品牌、型号、尺寸、重量、原始来源（链接）、原始价格；隐藏任何 null/空字段
+- [x] `components/common/AdaptiveImage.tsx` — 基于 `deploymentMode` 的 `next/image` vs `<img>`
+- [x] `components/layout/SiteHeader.tsx` — 站点名称/Logo、导航占位符
+- [x] `components/layout/SiteFooter.tsx` — 站点名称、最后构建时间戳、ContactSection 槽位
+- [x] `components/layout/Breadcrumb.tsx` — 首页 → 分类 → 物品，正确的 href
+- [x] `components/item/StatusBadge.tsx` — 颜色编码标签，不能只依赖颜色（必须有文字标签）
+- [x] `components/item/ConditionBadge.tsx` — 同上约束
+- [x] `components/item/MetadataTable.tsx` — 渲染品牌、型号、尺寸、重量、原始来源（链接）、原始价格；隐藏任何 null/空字段
 
 ---
 
-## Phase 6 — 首页
+## Phase 6 — 首页 ✅
 **目标：** `/` 完整渲染，含 Hero、分类网格和最近上架区块。分类和物品从 `content/` 加载。
 
 ### 任务
-- [ ] `components/category/CategoryCard.tsx` — 图标、显示名称、可用物品数量、封面图背景
-- [ ] `components/category/CategoryGrid.tsx` — `CategoryCard` 的响应式网格
-- [ ] `components/item/ItemCard.tsx` — 封面图、名称、成色徽章、状态徽章、价格 prop（从父级接收解析价格）
-- [ ] `components/home/RecentlyListedSection.tsx`（客户端组件）— 拥有 `useGeolocation()` + `useDistancePricing()` 状态；渲染含解析价格的物品卡片
-- [ ] `app/layout.tsx` — 根布局、`BackgroundEffect` 包装、`SiteHeader`、`SiteFooter`、全局字体/元数据
-- [ ] `components/common/RecentlyViewed.tsx`（客户端）— 读取 `sessionStorage`；渲染最近 5 件浏览物品的横向条；**为空时隐藏**
-- [ ] `app/page.tsx` — Hero、`CategoryGrid`、`RecentlyListedSection`、`RecentlyViewed` 条
-- [ ] 首页 OG 元数据（最近可用物品封面作为 og:image）
+- [x] `components/category/CategoryCard.tsx` — 图标、显示名称、可用物品数量、封面图背景
+- [x] `components/category/CategoryGrid.tsx` — `CategoryCard` 的响应式网格
+- [x] `components/item/ItemCard.tsx` — 封面图、名称、成色徽章、状态徽章、价格 prop（从父级接收解析价格）
+- [x] `components/home/RecentlyListedSection.tsx`（客户端组件）— 拥有 `useGeolocation()` + `useDistancePricing()` 状态；渲染含解析价格的物品卡片
+- [x] `app/layout.tsx` — 根布局、`BackgroundEffect` 包装、`SiteHeader`、`SiteFooter`、全局字体/元数据
+- [x] `components/common/RecentlyViewed.tsx`（客户端）— 读取 `sessionStorage`；渲染最近 5 件浏览物品的横向条；**为空时隐藏**
+- [x] `app/page.tsx` — Hero、`CategoryGrid`、`RecentlyListedSection`、`RecentlyViewed` 条
+- [x] 首页 OG 元数据（最近可用物品封面作为 og:image）
 
 ---
 
@@ -210,8 +210,8 @@
 ### 任务
 
 #### 7a — Hooks
-- [ ] `components/pricing/useGeolocation.ts` — `idle → pending → granted/denied/unavailable`
-- [ ] `components/pricing/useDistancePricing.ts` — `idle`/`pending` 时返回 `{ source: "fallback" }`；导出 `setManualMiles`
+- [x] `components/pricing/useGeolocation.ts` — `idle → pending → granted/denied/unavailable` *（Phase 6 中提前实现以支持 RecentlyListedSection）*
+- [x] `components/pricing/useDistancePricing.ts` — `idle`/`pending` 时返回 `{ source: "fallback" }`；导出 `setManualMiles` *（Phase 6 中提前实现）*
 
 #### 7b — LocationPriceBar
 - [ ] `components/pricing/LocationPriceBar.tsx`（客户端）— 所有 4 种渲染状态；内联距离输入；无障碍

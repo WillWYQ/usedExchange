@@ -1,15 +1,39 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { siteConfig } from "@/content/config";
+import { SiteHeader } from "@/components/layout/SiteHeader";
+import { SiteFooter } from "@/components/layout/SiteFooter";
 
 export const metadata: Metadata = {
-  title: "UsedExchange",
-  description: "Personal second-hand marketplace.",
+  title: {
+    default: siteConfig.name,
+    template: `%s | ${siteConfig.name}`,
+  },
+  description: siteConfig.meta.description,
+  metadataBase: new URL(siteConfig.baseUrl),
+  openGraph: {
+    siteName: siteConfig.name,
+    locale: siteConfig.i18n.defaultLocale,
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    ...(siteConfig.meta.twitterHandle
+      ? { creator: `@${siteConfig.meta.twitterHandle}` }
+      : {}),
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang={siteConfig.i18n.defaultLocale}>
+      <body className="min-h-screen bg-black text-white antialiased">
+        {/* LocaleProvider slot — Phase 12 */}
+        {/* BackgroundEffect slot — Phase 11 */}
+        <SiteHeader />
+        <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+        <SiteFooter />
+      </body>
     </html>
   );
 }

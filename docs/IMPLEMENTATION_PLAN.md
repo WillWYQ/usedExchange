@@ -189,17 +189,17 @@ DESIGN.md §3, §14 · TECH_REQUIREMENTS.md §7
 
 ---
 
-## Phase 5 — Common Components
+## Phase 5 — Common Components ✅
 **Goal:** All shared presentational components are ready. No pages yet.
 
 ### Tasks
-- [ ] `components/common/AdaptiveImage.tsx` — `next/image` vs `<img>` based on `deploymentMode` (TECH_REQUIREMENTS.md §9)
-- [ ] `components/layout/SiteHeader.tsx` — site name/logo, navigation placeholder
-- [ ] `components/layout/SiteFooter.tsx` — site name, last-build timestamp, ContactSection slot
-- [ ] `components/layout/Breadcrumb.tsx` — Home → Category → Item, correct hrefs
-- [ ] `components/item/StatusBadge.tsx` — colour-coded label, must not rely on colour alone (text label required)
-- [ ] `components/item/ConditionBadge.tsx` — same constraint
-- [ ] `components/item/MetadataTable.tsx` — renders brand, model, dimensions, weight, original source (linked), original price; hides any null/empty fields
+- [x] `components/common/AdaptiveImage.tsx` — `next/image` vs `<img>` based on `deploymentMode` (TECH_REQUIREMENTS.md §9)
+- [x] `components/layout/SiteHeader.tsx` — site name/logo, navigation placeholder
+- [x] `components/layout/SiteFooter.tsx` — site name, last-build timestamp, ContactSection slot
+- [x] `components/layout/Breadcrumb.tsx` — Home → Category → Item, correct hrefs
+- [x] `components/item/StatusBadge.tsx` — colour-coded label, must not rely on colour alone (text label required)
+- [x] `components/item/ConditionBadge.tsx` — same constraint
+- [x] `components/item/MetadataTable.tsx` — renders brand, model, dimensions, weight, original source (linked), original price; hides any null/empty fields
 
 ### Acceptance Criteria
 - All components render without runtime errors with real `Item` data
@@ -209,18 +209,18 @@ DESIGN.md §3, §14 · TECH_REQUIREMENTS.md §7
 
 ---
 
-## Phase 6 — Home Page
+## Phase 6 — Home Page ✅
 **Goal:** `/` renders fully with hero, category grid, and recently listed section. Categories and items load from `content/`.
 
 ### Tasks
-- [ ] `components/category/CategoryCard.tsx` — icon, display name, available item count, cover image background
-- [ ] `components/category/CategoryGrid.tsx` — responsive grid of `CategoryCard`
-- [ ] `components/item/ItemCard.tsx` — cover photo, name, condition badge, status badge, price prop (receives resolved price from parent). Renders `item.name` directly for now; **Phase 12** converts it to a `"use client"` locale-consumer (localised title) — see DESIGN.md §12
-- [ ] `components/home/RecentlyListedSection.tsx` (client component) — owns `useGeolocation()` + `useDistancePricing()` state; renders item cards with resolved prices; no `LocationPriceBar` (prices update silently)
-- [ ] `app/layout.tsx` — root layout, `BackgroundEffect` wrapper, `SiteHeader`, `SiteFooter`, global font/metadata
-- [ ] `components/common/RecentlyViewed.tsx` (client) — reads `sessionStorage`; renders horizontal strip of last 5 viewed items; **hidden when empty** (returns `null`). Accepts optional `itemSlug?: string` prop — when provided, records that slug in `sessionStorage` on mount (used by the item detail page). Build here (Phase 6) since the component has no dependencies beyond `sessionStorage` + `Item` types; this avoids a Phase 9 → Phase 6 backward dependency.
-- [ ] `app/page.tsx` — hero, `CategoryGrid`, `RecentlyListedSection`, `RecentlyViewed` strip (hidden on first visit; appears after any item detail page is viewed in the same session)
-- [ ] OG metadata for home page (DESIGN.md §10.1: most recent available item's cover as og:image)
+- [x] `components/category/CategoryCard.tsx` — icon, display name, available item count, cover image background
+- [x] `components/category/CategoryGrid.tsx` — responsive grid of `CategoryCard`
+- [x] `components/item/ItemCard.tsx` — cover photo, name, condition badge, status badge, price prop (receives resolved price from parent). Renders `item.name` directly for now; **Phase 12** converts it to a `"use client"` locale-consumer (localised title) — see DESIGN.md §12
+- [x] `components/home/RecentlyListedSection.tsx` (client component) — owns `useGeolocation()` + `useDistancePricing()` state; renders item cards with resolved prices; no `LocationPriceBar` (prices update silently)
+- [x] `app/layout.tsx` — root layout, `BackgroundEffect` wrapper, `SiteHeader`, `SiteFooter`, global font/metadata
+- [x] `components/common/RecentlyViewed.tsx` (client) — reads `sessionStorage`; renders horizontal strip of last 5 viewed items; **hidden when empty** (returns `null`). Accepts optional `itemSlug?: string` prop — when provided, records that slug in `sessionStorage` on mount (used by the item detail page). Build here (Phase 6) since the component has no dependencies beyond `sessionStorage` + `Item` types; this avoids a Phase 9 → Phase 6 backward dependency.
+- [x] `app/page.tsx` — hero, `CategoryGrid`, `RecentlyListedSection`, `RecentlyViewed` strip (hidden on first visit; appears after any item detail page is viewed in the same session)
+- [x] OG metadata for home page (DESIGN.md §10.1: most recent available item's cover as og:image)
 
 ### Acceptance Criteria
 - Home page renders with real content from `content/items/`
@@ -238,9 +238,9 @@ DESIGN.md §3, §14 · TECH_REQUIREMENTS.md §7
 ### Tasks
 
 #### 7a — Hooks
-- [ ] `components/pricing/useGeolocation.ts` — `idle → pending → granted/denied/unavailable`; `idle` treated same as `pending` in all rendering (DESIGN.md §17)
-- [ ] `components/pricing/useDistancePricing.ts` — returns `{ source: "fallback" }` for `idle`/`pending`; exports `setManualMiles`; internally uses `resolveItemPrice` from `lib/utils/pricing.ts` (callers always import directly from that module — never re-exported from this hook)
-- [ ] Verify `useDistancePricing` with `{ source: "fallback" }` → calls `resolveItemPrice` with fallback → highest tier
+- [x] `components/pricing/useGeolocation.ts` — `idle → pending → granted/denied/unavailable`; `idle` treated same as `pending` in all rendering (DESIGN.md §17) *(implemented early in Phase 6 for RecentlyListedSection)*
+- [x] `components/pricing/useDistancePricing.ts` — returns `{ source: "fallback" }` for `idle`/`pending`; exports `setManualMiles`; internally uses `resolveItemPrice` from `lib/utils/pricing.ts` (callers always import directly from that module — never re-exported from this hook) *(implemented early in Phase 6)*
+- [x] Verify `useDistancePricing` with `{ source: "fallback" }` → calls `resolveItemPrice` with fallback → highest tier
 
 #### 7b — LocationPriceBar
 - [ ] `components/pricing/LocationPriceBar.tsx` (client) — all 4 rendered states (idle/pending, granted-detected, manual, fallback); inline distance input; accessible (Enter/Space on toggle)
