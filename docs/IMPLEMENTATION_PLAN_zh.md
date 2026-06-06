@@ -99,45 +99,45 @@
 
 ---
 
-## Phase 3 — 内容 Schema 与加载器
+## Phase 3 — 内容 Schema 与加载器 ✅
 **目标：** 数据层完整。`loadCategories()`、`loadItemsByCategory()`、`loadItem()`、`loadAllItems()` 均可对真实 `content/items/` 文件夹运行。**这是最重要的 Phase——所有页面都依赖它。**
 
 ### 任务
 
 #### 3a — Zod Schema（`lib/content/schema.ts`）
-- [ ] 编写 `itemJsonSchema` — 含所有默认值的 Zod schema（TECH_REQUIREMENTS.md §6）
-- [ ] 编写 `categoryJsonSchema` — `_category.json` 的 Zod schema
-- [ ] 实现 `withDefaults<T>()` 辅助函数
-- [ ] 单元测试边缘情况：缺少 `name`（跳过物品）、无效枚举（默认为有效值）、null 数字（→ null）、零数字（→ 0，非 null）、负数（→ null）、无效 ISO 日期（→ null）
+- [x] 编写 `itemJsonSchema` — 含所有默认值的 Zod schema（TECH_REQUIREMENTS.md §6）
+- [x] 编写 `categoryJsonSchema` — `_category.json` 的 Zod schema
+- [x] 实现 `withDefaults<T>()` 辅助函数
+- [x] 单元测试边缘情况：缺少 `name`（跳过物品）、无效枚举（默认为有效值）、null 数字（→ null）、零数字（→ 0，非 null）、负数（→ null）、无效 ISO 日期（→ null）
 
 #### 3b — 纯工具函数（`lib/utils/`）
-- [ ] 编写 `lib/utils/haversine.ts` — `haversineInMiles(lat1, lng1, lat2, lng2)`
-- [ ] 编写 `lib/utils/pricing.ts` — 纯函数 `resolveItemPrice(price, resolved)`（可被服务器组件导入）
-- [ ] 编写 `lib/utils/date.ts` — `formatRelativeDate(isoDate: string | null, now?: Date): string`
-- [ ] 编写 `lib/utils/jsonld.ts` — `buildProductJsonLd(item, baseUrl)` 和 `buildBreadcrumbJsonLd(crumbs)`
-- [ ] 编写 `lib/utils/i18n.ts` — `getLocalizedField(item, field, locale)` 和 `t(key)`
-- [ ] 用已知坐标测试 `haversineInMiles`
-- [ ] 测试 `resolveItemPrice` 的所有分支：Infinity、精确匹配、间隙、空档位、开放式档位
+- [x] 编写 `lib/utils/haversine.ts` — `haversineInMiles(lat1, lng1, lat2, lng2)`
+- [x] 编写 `lib/utils/pricing.ts` — 纯函数 `resolveItemPrice(price, resolved)`（可被服务器组件导入）
+- [x] 编写 `lib/utils/date.ts` — `formatRelativeDate(isoDate: string | null, now?: Date): string`
+- [x] 编写 `lib/utils/jsonld.ts` — `buildProductJsonLd(item, baseUrl)` 和 `buildBreadcrumbJsonLd(crumbs)`
+- [x] 编写 `lib/utils/i18n.ts` — `getLocalizedField(item, field, locale)` 和 `t(key)`
+- [x] 用已知坐标测试 `haversineInMiles`
+- [x] 测试 `resolveItemPrice` 的所有分支：Infinity、精确匹配、间隙、空档位、开放式档位
 
 #### 3c — 加载器（`lib/content/loader.ts`）
-- [ ] 实现 `loadCategories()` — 读取 `content/items/`，解析 `_category.json`，应用排序逻辑，排除 `_` 前缀文件夹
-- [ ] 实现 `loadItemsByCategory()` — 读取物品文件夹，应用可见性规则（排除草稿，检查已售+保留期），从清单解析图片 URL
-- [ ] 实现 `loadItem()` — 缺失时返回 `null`，不抛出异常
-- [ ] 实现 `loadAllItems()` — 仅 `available` 状态；按 `listedDate` 降序排列；上限为 `siteConfig.recentlyListedCount`。**仅用于首页最近上架区块。**
-- [ ] 实现 `loadSoldItems()` — 返回所有已售物品，不受 `soldItemRetentionDays` 限制；按 `soldDate` 降序（回退到 `listedDate`）；用于 `/sold` 档案页
-- [ ] 编写 `lib/search/index.ts` — `buildSearchIndex()`：读取所有可用物品，返回 `SearchIndexEntry[]`
-- [ ] 图片 URL 解析：`manifest[key] ?? "/items/{key}"` 回退
-- [ ] 图片排序：`filenames.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))` ——显式排序，绝不依赖 `readdir` 顺序
-- [ ] 验证返回的 `Item` 类型中从不包含 `reserved_for` 字段
+- [x] 实现 `loadCategories()` — 读取 `content/items/`，解析 `_category.json`，应用排序逻辑，排除 `_` 前缀文件夹
+- [x] 实现 `loadItemsByCategory()` — 读取物品文件夹，应用可见性规则（排除草稿，检查已售+保留期），从清单解析图片 URL
+- [x] 实现 `loadItem()` — 缺失时返回 `null`，不抛出异常
+- [x] 实现 `loadAllItems()` — 仅 `available` 状态；按 `listedDate` 降序排列；上限为 `siteConfig.recentlyListedCount`。**仅用于首页最近上架区块。**
+- [x] 实现 `loadSoldItems()` — 返回所有已售物品，不受 `soldItemRetentionDays` 限制；按 `soldDate` 降序（回退到 `listedDate`）；用于 `/sold` 档案页
+- [x] 编写 `lib/search/index.ts` — `buildSearchIndex()`：读取所有可用物品，返回 `SearchIndexEntry[]`
+- [x] 图片 URL 解析：`manifest[key] ?? "/items/{key}"` 回退
+- [x] 图片排序：`filenames.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))` ——显式排序，绝不依赖 `readdir` 顺序
+- [x] 验证返回的 `Item` 类型中从不包含 `reserved_for` 字段
 
 #### 3d — 种子数据与内容 CLI 脚本
-- [ ] 创建 2 个示例分类（`content/items/houseware/`、`content/items/electronics/`）
-- [ ] 创建 3–4 个涵盖所有状态值和边缘情况的示例 `item.json` 文件
-- [ ] 创建含 `{}` 的 `lib/generated/image-manifest.json`（空的起始值）
-- [ ] 编写 `scripts/mark-sold.ts`
-- [ ] 编写 `scripts/create-item.ts`
-- [ ] 编写 `scripts/create-template.ts`
-- [ ] 验证加载器为示例物品返回正确数据
+- [x] 创建 2 个示例分类（`content/items/houseware/`、`content/items/electronics/`）
+- [x] 创建 3–4 个涵盖所有状态值和边缘情况的示例 `item.json` 文件
+- [x] 创建含 `{}` 的 `lib/generated/image-manifest.json`（空的起始值）
+- [x] 编写 `scripts/mark-sold.ts`
+- [x] 编写 `scripts/create-item.ts`
+- [x] 编写 `scripts/create-template.ts`
+- [x] 验证加载器为示例物品返回正确数据
 
 ### 验收标准
 - 所有 4 个加载器函数从示例 `content/items/` 返回类型化数据

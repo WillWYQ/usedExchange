@@ -1,3 +1,63 @@
-// Phase 0 placeholder — full implementation in Phase 3d
-// Usage: pnpm mark-sold <category>/<name>
-console.log("[mark-sold] placeholder — Phase 3d will implement status update");
+// Usage: pnpm mark-sold <category>/<item>
+// Sets status to "sold" and sold_date to today on the given item.json.
+
+import fs from "fs/promises";
+import path from "path";
+
+async function main() {
+  const arg = process.argv[2];
+
+  if (!arg || !arg.includes("/")) {
+    console.error("Usage: pnpm mark-sold <category>/<item>");
+    console.error("Example: pnpm mark-sold electronics/iphone-14-pro");
+    process.exit(1);
+  }
+
+  const slashIdx = arg.indexOf("/");
+  const category = arg.slice(0, slashIdx);
+  const item = arg.slice(slashIdx + 1);
+
+  if (!category || !item) {
+    console.error("Error: both <category> and <item> must be non-empty.");
+    process.exit(1);
+  }
+
+  const jsonPath = path.join(
+    process.cwd(),
+    "content",
+    "items",
+    category,
+    item,
+    "item.json",
+  );
+
+  try {
+    await fs.access(jsonPath);
+  } catch {
+    console.error(`Error: item not found at ${jsonPath}`);
+    process.exit(1);
+  }
+
+  const raw = JSON.parse(await fs.readFile(jsonPath, "utf-8")) as Record<
+    string,
+    unknown
+  >;
+
+  if (raw["status"] === "sold") {
+    console.log(`[mark-sold] ${arg} is already marked as sold.`);
+    process.exit(0);
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  raw["status"] = "sold";
+  raw["sold_date"] = today;
+
+  await fs.writeFile(jsonPath, JSON.stringify(raw, null, 2) + "\n");
+
+  console.log(`✓ Marked ${arg} as sold  (sold_date: ${today})`);
+}
+
+main().catch((err: unknown) => {
+  console.error(err);
+  process.exit(1);
+});

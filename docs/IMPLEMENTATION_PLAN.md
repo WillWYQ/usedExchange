@@ -100,45 +100,45 @@
 
 ---
 
-## Phase 3 — Content Schema & Loader
+## Phase 3 — Content Schema & Loader ✅
 **Goal:** The data layer is complete. `loadCategories()`, `loadItemsByCategory()`, `loadItem()`, `loadAllItems()` all work against real `content/items/` folders. **This is the single most important phase — all pages depend on it.**
 
 ### Tasks
 
 #### 3a — Zod Schema (`lib/content/schema.ts`)
-- [ ] Write `itemJsonSchema` — Zod schema for `item.json` with all defaults per TECH_REQUIREMENTS.md §6 (safe defaults, `.safeParse()` contract)
-- [ ] Write `categoryJsonSchema` — Zod schema for `_category.json`
-- [ ] Implement `withDefaults<T>()` helper per TECH_REQUIREMENTS.md §6.2
-- [ ] Unit-test edge cases: missing `name` (skip item), invalid enum (default to valid), null number (→ null), zero number (→ 0, not null), negative number (→ null), invalid ISO date (→ null)
+- [x] Write `itemJsonSchema` — Zod schema for `item.json` with all defaults per TECH_REQUIREMENTS.md §6 (safe defaults, `.safeParse()` contract)
+- [x] Write `categoryJsonSchema` — Zod schema for `_category.json`
+- [x] Implement `withDefaults<T>()` helper per TECH_REQUIREMENTS.md §6.2
+- [x] Unit-test edge cases: missing `name` (skip item), invalid enum (default to valid), null number (→ null), zero number (→ 0, not null), negative number (→ null), invalid ISO date (→ null)
 
 #### 3b — Pure Utilities (`lib/utils/`)
-- [ ] Write `lib/utils/haversine.ts` — `haversineInMiles(lat1, lng1, lat2, lng2)` (TECH_REQUIREMENTS.md §20)
-- [ ] Write `lib/utils/pricing.ts` — `resolveItemPrice(price, resolved)` pure function (DESIGN.md §17; importable by server components)
-- [ ] Write `lib/utils/date.ts` — `formatRelativeDate(isoDate: string | null, now?: Date): string` → "Today" / "3 days ago" / "" (`now` defaults to `new Date()`; pass explicitly in tests only — TECH_REQUIREMENTS.md §22.11)
-- [ ] Write `lib/utils/jsonld.ts` — `buildProductJsonLd(item, baseUrl)` and `buildBreadcrumbJsonLd(crumbs)` (TECH_REQUIREMENTS.md §22.4)
-- [ ] Write `lib/utils/i18n.ts` — `getLocalizedField(item, field, locale)` and `t(key)` (TECH_REQUIREMENTS.md §22.8)
-- [ ] Test `haversineInMiles` against known coordinates
-- [ ] Test `resolveItemPrice` for all branches: Infinity, exact match, gap, empty tiers, open-ended tier
+- [x] Write `lib/utils/haversine.ts` — `haversineInMiles(lat1, lng1, lat2, lng2)` (TECH_REQUIREMENTS.md §20)
+- [x] Write `lib/utils/pricing.ts` — `resolveItemPrice(price, resolved)` pure function (DESIGN.md §17; importable by server components)
+- [x] Write `lib/utils/date.ts` — `formatRelativeDate(isoDate: string | null, now?: Date): string` → "Today" / "3 days ago" / "" (`now` defaults to `new Date()`; pass explicitly in tests only — TECH_REQUIREMENTS.md §22.11)
+- [x] Write `lib/utils/jsonld.ts` — `buildProductJsonLd(item, baseUrl)` and `buildBreadcrumbJsonLd(crumbs)` (TECH_REQUIREMENTS.md §22.4)
+- [x] Write `lib/utils/i18n.ts` — `getLocalizedField(item, field, locale)` and `t(key)` (TECH_REQUIREMENTS.md §22.8)
+- [x] Test `haversineInMiles` against known coordinates
+- [x] Test `resolveItemPrice` for all branches: Infinity, exact match, gap, empty tiers, open-ended tier
 
 #### 3c — Loader (`lib/content/loader.ts`)
-- [ ] Implement `loadCategories()` — reads `content/items/`, parses `_category.json`, applies sort logic (DESIGN.md §6), excludes `_`-prefixed folders
-- [ ] Implement `loadItemsByCategory()` — reads item folders, applies visibility rules (draft excluded, sold+retention check), reads manifest for image URLs
-- [ ] Implement `loadItem()` — returns `null` if missing, never throws
-- [ ] Implement `loadAllItems()` — `available` status ONLY; sorted by `listedDate` desc; capped at `siteConfig.recentlyListedCount`. **Home page recently-listed strip only.** Do NOT use for the /all page (see Phase 8b).
-- [ ] Implement `loadSoldItems()` — returns ALL sold items regardless of `soldItemRetentionDays`; sorted by `soldDate` desc (falls back to `listedDate`); used by `/sold` archive page (TECH_REQUIREMENTS.md §8)
-- [ ] Write `lib/search/index.ts` — `buildSearchIndex()`: reads all available items, returns `SearchIndexEntry[]` with fields: `name`, `description`, `brand`, `model`, `tags`, `course`, `isbn`, `edition`. The function only returns the array; the caller (`scripts/build-search-index.ts`, run in `prebuild`) writes the result to `public/search-index.json` (NOT `lib/generated/`) so SearchBar can fetch it via HTTP (TECH_REQUIREMENTS.md §22.1 and §7)
-- [ ] Image URL resolution: `manifest[key] ?? "/items/{key}"` fallback (DESIGN.md §11)
-- [ ] Image sorting: `filenames.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))` — explicit sort, never rely on `readdir` order (DESIGN.md §4)
-- [ ] Verify `reserved_for` field is never included in returned `Item` type
+- [x] Implement `loadCategories()` — reads `content/items/`, parses `_category.json`, applies sort logic (DESIGN.md §6), excludes `_`-prefixed folders
+- [x] Implement `loadItemsByCategory()` — reads item folders, applies visibility rules (draft excluded, sold+retention check), reads manifest for image URLs
+- [x] Implement `loadItem()` — returns `null` if missing, never throws
+- [x] Implement `loadAllItems()` — `available` status ONLY; sorted by `listedDate` desc; capped at `siteConfig.recentlyListedCount`. **Home page recently-listed strip only.** Do NOT use for the /all page (see Phase 8b).
+- [x] Implement `loadSoldItems()` — returns ALL sold items regardless of `soldItemRetentionDays`; sorted by `soldDate` desc (falls back to `listedDate`); used by `/sold` archive page (TECH_REQUIREMENTS.md §8)
+- [x] Write `lib/search/index.ts` — `buildSearchIndex()`: reads all available items, returns `SearchIndexEntry[]` with fields: `name`, `description`, `brand`, `model`, `tags`, `course`, `isbn`, `edition`. The function only returns the array; the caller (`scripts/build-search-index.ts`, run in `prebuild`) writes the result to `public/search-index.json` (NOT `lib/generated/`) so SearchBar can fetch it via HTTP (TECH_REQUIREMENTS.md §22.1 and §7)
+- [x] Image URL resolution: `manifest[key] ?? "/items/{key}"` fallback (DESIGN.md §11)
+- [x] Image sorting: `filenames.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))` — explicit sort, never rely on `readdir` order (DESIGN.md §4)
+- [x] Verify `reserved_for` field is never included in returned `Item` type
 
 #### 3d — Seed Data & Content CLI Scripts
-- [ ] Create 2 sample categories (`content/items/houseware/`, `content/items/electronics/`)
-- [ ] Create 3–4 sample `item.json` files covering all status values and edge cases
-- [ ] Create `lib/generated/image-manifest.json` with `{}` (empty starter)
-- [ ] Write `scripts/mark-sold.ts` — reads `content/items/<cat>/<name>/item.json`, sets `status: "sold"` and `sold_date: today (ISO 8601)`, writes file in place; exits 1 with a clear error if the item path does not exist (TECH_REQUIREMENTS.md §22.3)
-- [ ] Write `scripts/create-item.ts` — creates `content/items/<category>/<name>/` folder and `item.json` from template; opens in `$EDITOR` if set; validates category exists (TECH_REQUIREMENTS.md §22.3)
-- [ ] Write `scripts/create-template.ts` — creates `content/items/<category>/_template.json` or global `content/items/_template.json` without an argument (TECH_REQUIREMENTS.md §22.3)
-- [ ] Verify loader returns correct data for sample items
+- [x] Create 2 sample categories (`content/items/houseware/`, `content/items/electronics/`)
+- [x] Create 3–4 sample `item.json` files covering all status values and edge cases
+- [x] Create `lib/generated/image-manifest.json` with `{}` (empty starter)
+- [x] Write `scripts/mark-sold.ts` — reads `content/items/<cat>/<name>/item.json`, sets `status: "sold"` and `sold_date: today (ISO 8601)`, writes file in place; exits 1 with a clear error if the item path does not exist (TECH_REQUIREMENTS.md §22.3)
+- [x] Write `scripts/create-item.ts` — creates `content/items/<category>/<name>/` folder and `item.json` from template; opens in `$EDITOR` if set; validates category exists (TECH_REQUIREMENTS.md §22.3)
+- [x] Write `scripts/create-template.ts` — creates `content/items/<category>/_template.json` or global `content/items/_template.json` without an argument (TECH_REQUIREMENTS.md §22.3)
+- [x] Verify loader returns correct data for sample items
 
 ### Acceptance Criteria
 - All 4 loader functions return typed data from sample `content/items/`

@@ -1,0 +1,21 @@
+{
+  "name": "ASUS TUF RTX 4070 12 GB",
+  "price": {
+    "currency": "USD",
+    "tiers": [
+      { "label": "Pickup / ≤ 10 mi", "miles_max": 10, "amount": 340 },
+      { "label": "Shipping", "miles_min": 10, "amount": 370 }
+    ],
+    "negotiable": true
+  },
+  "description": "Running perfectly. Replaced with a 4090. Includes the original box. Memory junction temps stay healthy under load.",
+  "condition": "good",
+  "brand": "ASUS",
+  "model": "TUF RTX 4070 OC",
+  "status": "available",
+  "listed_date": "2026-06-03",
+  "tags": ["gpu", "graphics-card", "gaming", "nvidia"],
+  "preferred_payment": ["Venmo", "Zelle"],
+  "min_acceptable_offer": 310,
+  "original_price": 599.0
+}

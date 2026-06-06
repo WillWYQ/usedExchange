@@ -1,0 +1,18 @@
+{
+  "name": "Lodge 12-inch Cast Iron Skillet",
+  "price": {
+    "currency": "USD",
+    "tiers": [
+      { "label": "Pickup", "miles_max": 8, "amount": 18 },
+      { "label": "Shipping", "miles_min": 8, "amount": 28 }
+    ],
+    "negotiable": false
+  },
+  "description": "Well-seasoned, no rust. Perfect for camping or dorm cooking. Pickup preferred due to weight.",
+  "condition": "good",
+  "brand": "Lodge",
+  "model": "L10SK3",
+  "status": "reserved",
+  "listed_date": "2026-05-30",
+  "tags": ["cookware", "kitchen", "camping"]
+}
