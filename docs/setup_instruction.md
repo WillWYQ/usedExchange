@@ -24,21 +24,22 @@ Three storage providers are available. Choose one in `content/config.ts`:
 
 ### Step 1 — Create an R2 Bucket
 
-1. Log in to [Cloudflare Dashboard](https://dash.cloudflare.com) → **R2** (left sidebar)
-2. Click **Create bucket**
-3. Name it (e.g. `usedexchange-images`) and choose a region close to your buyers
-4. Click **Create bucket**
+1. Log in to [Cloudflare Dashboard](https://dash.cloudflare.com)
+2. Navigate to **R2 Object Storage** (left sidebar: **Build → Storage & databases → R2 Object Storage**)
+3. Click **Create bucket**
+4. Name it (e.g. `usedexchange-images`) and choose a region close to your buyers
+5. Click **Create bucket**
 
 ### Step 2 — Enable Public Access
 
 In the bucket settings, enable public access:
 
-- **Option A (Custom domain):** R2 → your bucket → **Settings** → **Custom Domains** → Add your domain (e.g. `images.your-domain.com`). Set a DNS CNAME pointing to the provided R2 hostname.
-- **Option B (r2.dev URL):** R2 → your bucket → **Settings** → **Public access** → Enable `r2.dev` subdomain. Copy the URL shown (e.g. `https://pub-xxxxxxxx.r2.dev`).
+- **Option A (Custom domain):** your bucket → **Settings** → **Custom Domains** → Add your domain (e.g. `images.your-domain.com`). Set a DNS CNAME pointing to the provided R2 hostname.
+- **Option B (r2.dev URL):** your bucket → **Settings** → **Public access** → Enable `r2.dev` subdomain. Copy the URL shown (e.g. `https://pub-xxxxxxxx.r2.dev`).
 
 ### Step 3 — Configure CORS
 
-R2 → your bucket → **Settings** → **CORS Policy** → Add:
+your bucket → **Settings** → **CORS Policy** → Add:
 
 ```json
 [
@@ -52,15 +53,24 @@ R2 → your bucket → **Settings** → **CORS Policy** → Add:
 
 Replace `https://your-domain.com` with your actual site URL.
 
-### Step 4 — Create an API Token
+### Step 4 — Find Account ID and Create API Token
 
-Cloudflare Dashboard → **R2** → **Manage R2 API Tokens** → **Create API token**
+All three values are on one page:
 
+**R2 Object Storage → Overview → scroll to bottom → "Account Details" panel**
+
+| Field | What to do |
+|---|---|
+| **Account ID** | Copy this → `CF_R2_ACCOUNT_ID` |
+| **API Tokens** (Manage link) | Click to open the token manager |
+| **S3 API** | The S3-compatible endpoint — used internally by the adapter, no action needed |
+
+In the token manager, click **Create API token**:
+- **Token type:** User API Tokens *(ideal for personal access and development)*
 - **Permissions:** Object Read & Write
 - **Specify bucket:** your bucket only (principle of least privilege)
-- Copy the **Access Key ID** and **Secret Access Key** — you won't see them again
-
-Also note your **Account ID** from the right sidebar of the Cloudflare Dashboard.
+- Click **Create API Token**
+- Copy the **Access Key ID** and **Secret Access Key** — you won't see the secret again
 
 ### Step 5 — Configure `.env.local`
 

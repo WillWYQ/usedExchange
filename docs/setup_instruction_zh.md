@@ -24,21 +24,22 @@
 
 ### 第 1 步 — 创建 R2 存储桶
 
-1. 登录 [Cloudflare 控制台](https://dash.cloudflare.com) → 左侧栏点击 **R2**
-2. 点击 **Create bucket**
-3. 输入存储桶名称（例如 `usedexchange-images`），选择靠近买家的区域
-4. 点击 **Create bucket**
+1. 登录 [Cloudflare 控制台](https://dash.cloudflare.com)
+2. 进入 **R2 Object Storage**（左侧导航：**Build → Storage & databases → R2 Object Storage**）
+3. 点击 **Create bucket**
+4. 输入存储桶名称（例如 `usedexchange-images`），选择靠近买家的区域
+5. 点击 **Create bucket**
 
 ### 第 2 步 — 启用公共访问
 
 在存储桶设置中启用公共访问：
 
-- **方案 A（自定义域名）：** R2 → 你的存储桶 → **Settings** → **Custom Domains** → 添加你的域名（如 `images.your-domain.com`），并在 DNS 中添加 CNAME 指向 R2 提供的主机名。
-- **方案 B（r2.dev URL）：** R2 → 你的存储桶 → **Settings** → **Public access** → 启用 `r2.dev` 子域名，复制显示的 URL（如 `https://pub-xxxxxxxx.r2.dev`）。
+- **方案 A（自定义域名）：** 你的存储桶 → **Settings** → **Custom Domains** → 添加你的域名（如 `images.your-domain.com`），并在 DNS 中添加 CNAME 指向 R2 提供的主机名。
+- **方案 B（r2.dev URL）：** 你的存储桶 → **Settings** → **Public access** → 启用 `r2.dev` 子域名，复制显示的 URL（如 `https://pub-xxxxxxxx.r2.dev`）。
 
 ### 第 3 步 — 配置 CORS
 
-R2 → 你的存储桶 → **Settings** → **CORS Policy** → 添加：
+你的存储桶 → **Settings** → **CORS Policy** → 添加：
 
 ```json
 [
@@ -52,15 +53,24 @@ R2 → 你的存储桶 → **Settings** → **CORS Policy** → 添加：
 
 将 `https://your-domain.com` 替换为你的实际站点 URL。
 
-### 第 4 步 — 创建 API Token
+### 第 4 步 — 找到 Account ID 并创建 API Token
 
-Cloudflare 控制台 → **R2** → **Manage R2 API Tokens** → **Create API token**
+三个值都在同一个页面：
 
-- **权限：** Object Read & Write
-- **指定存储桶：** 仅选择你的存储桶（最小权限原则）
-- 复制 **Access Key ID** 和 **Secret Access Key**——页面关闭后不再显示
+**R2 Object Storage → Overview → 滚动到底部 → "Account Details" 面板**
 
-同时记下 Cloudflare 控制台右侧栏的 **Account ID**。
+| 字段 | 操作 |
+|---|---|
+| **Account ID** | 复制此值 → `CF_R2_ACCOUNT_ID` |
+| **API Tokens**（Manage 链接） | 点击进入 Token 管理页面 |
+| **S3 API** | S3 兼容端点——适配器内部使用，无需操作 |
+
+在 Token 管理页面，点击 **Create API token**：
+- **Token 类型：** User API Tokens（*适合个人访问和开发用途*）
+- **Permissions：** Object Read & Write
+- **Specify bucket：** 仅选择你的存储桶（最小权限原则）
+- 点击 **Create API Token**
+- 复制 **Access Key ID** 和 **Secret Access Key**——Secret 关闭页面后不再显示
 
 ### 第 5 步 — 配置 `.env.local`
 
