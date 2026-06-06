@@ -169,9 +169,9 @@
 - [x] 更新 `next.config.ts` 添加 Vercel Blob / R2 远程模式（Phase 0 已完成）
 
 #### 4d — 集成测试
-- [ ] `pnpm dev` → 示例图片出现在 `/items/houseware/item/cover.jpg`
-- [ ] `pnpm upload-images` 设置 `CF_R2_*` → 图片上传到 R2；清单写入 R2 CDN URL
-- [ ] 类 CI 环境（无本地图片）中 `pnpm build` → 读取清单以 build-check 模式，不尝试上传，构建成功
+- [x] `pnpm dev` → 示例图片出现在 `/items/houseware/item/cover.jpg`
+- [x] `pnpm upload-images` 设置 `CF_R2_*` → 图片上传到 R2；清单写入 R2 CDN URL
+- [x] 类 CI 环境（无本地图片）中 `pnpm build` → 读取清单以 build-check 模式，不尝试上传，构建成功
 
 ---
 

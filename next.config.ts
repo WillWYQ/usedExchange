@@ -13,7 +13,8 @@ if (siteConfig.imageStorage.provider === "vercel-blob") {
 }
 
 if (siteConfig.imageStorage.provider === "cloudflare-r2") {
-  const r2Url = new URL(process.env["CF_R2_PUBLIC_URL"] ?? "https://example.com");
+  const raw = (process.env["CF_R2_PUBLIC_URL"] ?? "https://example.com").trim();
+  const r2Url = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
   remotePatterns.push({
     protocol: "https",
     hostname: r2Url.hostname,

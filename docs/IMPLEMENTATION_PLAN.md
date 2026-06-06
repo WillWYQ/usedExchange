@@ -173,9 +173,9 @@ DESIGN.md §4, §5, §6, §8, §11 · TECH_REQUIREMENTS.md §6, §7, §8
 - [x] Update `next.config.ts` to add Vercel Blob / R2 remote patterns (TECH_REQUIREMENTS.md §4) — completed in Phase 0
 
 #### 4d — Integration Test
-- [ ] `pnpm dev` → sample images appear at `/items/houseware/item/cover.jpg`
-- [ ] `pnpm upload-images` with `CF_R2_*` set → images uploaded to R2; manifest written with R2 CDN URLs (repeat with `BLOB_READ_WRITE_TOKEN` if validating the Vercel Blob path)
-- [ ] `pnpm build` in a CI-like environment (no local images) → manifest read in build-check mode, no upload attempted, build succeeds
+- [x] `pnpm dev` → sample images appear at `/items/houseware/item/cover.jpg`
+- [x] `pnpm upload-images` with `CF_R2_*` set → images uploaded to R2; manifest written with R2 CDN URLs (repeat with `BLOB_READ_WRITE_TOKEN` if validating the Vercel Blob path)
+- [x] `pnpm build` in a CI-like environment (no local images) → manifest read in build-check mode, no upload attempted, build succeeds
 
 ### Acceptance Criteria
 - Local dev: images served from `public/items/`
