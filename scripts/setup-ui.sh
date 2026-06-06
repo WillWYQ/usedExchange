@@ -9,39 +9,39 @@ set -e
 echo "Installing all supported Aceternity UI components..."
 
 # ── Background slot (13 components) ──────────────────────────────────────────
-npx shadcn@latest add @aceternity/aurora-background
-npx shadcn@latest add @aceternity/background-beams-demo
-npx shadcn@latest add @aceternity/background-beams-with-collision
-npx shadcn@latest add @aceternity/background-gradient-animation
-npx shadcn@latest add @aceternity/background-boxes-demo
-npx shadcn@latest add @aceternity/wavy-background
-npx shadcn@latest add @aceternity/vortex
-npx shadcn@latest add @aceternity/shooting-stars-and-stars-background-demo
-npx shadcn@latest add @aceternity/meteors
-npx shadcn@latest add @aceternity/grid-background-demo
-npx shadcn@latest add @aceternity/background-lines
-npx shadcn@latest add @aceternity/spotlight
-npx shadcn@latest add @aceternity/spotlight-new
+npx shadcn@latest add @aceternity/aurora-background -y
+npx shadcn@latest add @aceternity/background-beams-demo -y
+npx shadcn@latest add @aceternity/background-beams-with-collision -y
+npx shadcn@latest add @aceternity/background-gradient-animation -y
+npx shadcn@latest add @aceternity/background-boxes-demo -y
+npx shadcn@latest add @aceternity/wavy-background -y
+npx shadcn@latest add @aceternity/vortex -y
+npx shadcn@latest add @aceternity/shooting-stars-and-stars-background-demo -y
+npx shadcn@latest add @aceternity/meteors -y
+npx shadcn@latest add @aceternity/grid-background-demo -y
+npx shadcn@latest add @aceternity/background-lines -y
+npx shadcn@latest add @aceternity/spotlight -y
+npx shadcn@latest add @aceternity/spotlight-new -y
 
 # ── Item Grid slot (3 components) ─────────────────────────────────────────────
-npx shadcn@latest add @aceternity/bento-grid
-npx shadcn@latest add @aceternity/layout-grid
-npx shadcn@latest add @aceternity/focus-cards
+npx shadcn@latest add @aceternity/bento-grid -y
+npx shadcn@latest add @aceternity/layout-grid -y
+npx shadcn@latest add @aceternity/focus-cards -y
 
 # ── Gallery slot (4 components) ───────────────────────────────────────────────
-npx shadcn@latest add @aceternity/apple-cards-carousel-demo
-npx shadcn@latest add @aceternity/images-slider
-npx shadcn@latest add @aceternity/carousel
-npx shadcn@latest add @aceternity/parallax-scroll parallax-scroll-2
+npx shadcn@latest add @aceternity/apple-cards-carousel-demo -y
+npx shadcn@latest add @aceternity/images-slider -y
+npx shadcn@latest add @aceternity/carousel -y
+npx shadcn@latest add @aceternity/parallax-scroll -y
 
 # ── Item Card slot (7 components) ─────────────────────────────────────────────
-npx shadcn@latest add @aceternity/card-hover-effect
-npx shadcn@latest add @aceternity/card-spotlight
-npx shadcn@latest add @aceternity/3d-card
-npx shadcn@latest add @aceternity/evervault-card
-npx shadcn@latest add @aceternity/wobble-card
-npx shadcn@latest add @aceternity/direction-aware-hover
-npx shadcn@latest add @aceternity/glare-card
+npx shadcn@latest add @aceternity/card-hover-effect -y
+npx shadcn@latest add @aceternity/card-spotlight -y
+npx shadcn@latest add @aceternity/3d-card -y
+npx shadcn@latest add @aceternity/evervault-card -y
+npx shadcn@latest add @aceternity/wobble-card -y
+npx shadcn@latest add @aceternity/direction-aware-hover -y
+npx shadcn@latest add @aceternity/glare-card -y
 
 echo "Done. Commit the components/ui/ files to git."
 echo "Sellers can now configure any ui.* option in content/config.ts without further setup."
