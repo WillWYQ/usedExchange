@@ -82,15 +82,15 @@
 
 ---
 
-## Phase 2 — 类型系统与配置
+## Phase 2 — 类型系统与配置 ✅
 **目标：** 所有 TypeScript 类型、`SiteConfig` 和 `content/config.ts` 已定义。尚无实现——只是每个后续 Phase 依赖的类型契约。
 
 ### 任务
-- [ ] 编写 `lib/ui/types.ts` — `BackgroundOption`、`ItemGridOption`、`GalleryOption`、`ItemCardOption`、`UIConfig`
-- [ ] 编写 `lib/config/types.ts` — `SiteConfig` 类型（DESIGN.md §13 的所有字段；包含 `UIConfig`）
-- [ ] 编写 `content/config.ts` — 含所有字段、注释、合理默认值的完整入门配置
-- [ ] 编写 `lib/content/types.ts` — `Item`、`Category`、`Price`、`PriceTier`、`Condition`、`Status`、`Dimensions`、`Weight`、`ResolvedDistance`、`GeolocationState`
-- [ ] 验证 `pnpm type-check` 通过（类型自洽）
+- [x] 编写 `lib/ui/types.ts` — `BackgroundOption`、`ItemGridOption`、`GalleryOption`、`ItemCardOption`、`UIConfig`
+- [x] 编写 `lib/config/types.ts` — `SiteConfig` 类型（DESIGN.md §13 的所有字段；包含 `UIConfig`）
+- [x] 编写 `content/config.ts` — 含所有字段、注释、合理默认值的完整入门配置
+- [x] 编写 `lib/content/types.ts` — `Item`、`Category`、`Price`、`PriceTier`、`Condition`、`Status`、`Dimensions`、`Weight`、`ResolvedDistance`、`GeolocationState`
+- [x] 验证 `pnpm type-check` 通过（类型自洽）
 
 ### 验收标准
 - 所有类型编译无错误

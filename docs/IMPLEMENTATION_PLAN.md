@@ -83,15 +83,15 @@
 
 ---
 
-## Phase 2 — Type System & Config
+## Phase 2 — Type System & Config ✅
 **Goal:** All TypeScript types, `SiteConfig`, and `content/config.ts` defined. No implementation yet — just the type contracts every subsequent phase depends on.
 
 ### Tasks
-- [ ] Write `lib/ui/types.ts` — `BackgroundOption`, `ItemGridOption`, `GalleryOption`, `ItemCardOption`, `UIConfig` (TECH_REQUIREMENTS.md §21)
-- [ ] Write `lib/config/types.ts` — `SiteConfig` type (all fields from DESIGN.md §13; includes `UIConfig`)
-- [ ] Write `content/config.ts` — fully populated starter config with all fields, comments, sensible defaults (DESIGN.md §13)
-- [ ] Write `lib/content/types.ts` — `Item`, `Category`, `Price`, `PriceTier`, `Condition`, `Status`, `Dimensions`, `Weight`, `ResolvedDistance`, `GeolocationState` (TECH_REQUIREMENTS.md §8, §20)
-- [ ] Verify `pnpm type-check` passes (types self-consistent)
+- [x] Write `lib/ui/types.ts` — `BackgroundOption`, `ItemGridOption`, `GalleryOption`, `ItemCardOption`, `UIConfig` (TECH_REQUIREMENTS.md §21)
+- [x] Write `lib/config/types.ts` — `SiteConfig` type (all fields from DESIGN.md §13; includes `UIConfig`)
+- [x] Write `content/config.ts` — fully populated starter config with all fields, comments, sensible defaults (DESIGN.md §13)
+- [x] Write `lib/content/types.ts` — `Item`, `Category`, `Price`, `PriceTier`, `Condition`, `Status`, `Dimensions`, `Weight`, `ResolvedDistance`, `GeolocationState` (TECH_REQUIREMENTS.md §8, §20)
+- [x] Verify `pnpm type-check` passes (types self-consistent)
 
 ### Acceptance Criteria
 - All types compile with 0 errors
