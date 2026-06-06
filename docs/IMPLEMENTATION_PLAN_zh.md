@@ -34,24 +34,24 @@
 
 ---
 
-## Phase 0 — 项目引导
+## Phase 0 — 项目引导 ✅
 **目标：** 干净、可运行的 Next.js 15 仓库，所有工具已配置。`pnpm dev` 无报错启动（空白页面即可）。
 
 ### 任务
-- [ ] `pnpm create next-app@latest usedExchange --typescript --tailwind --app --use-pnpm`
-- [ ] 删除 `app/` 中所有 Next.js 样板内容
-- [ ] 配置 Tailwind v4：在 `app/globals.css` 中添加 `@import "tailwindcss"` 和 `@plugin "@tailwindcss/typography"`；创建含 `{ plugins: { "@tailwindcss/postcss": {} } }` 的 `postcss.config.mjs`；除非需要主题自定义，否则省略 `tailwind.config.ts`
-- [ ] 按 TECH_REQUIREMENTS.md §5 配置 `tsconfig.json`（strict、noUncheckedIndexedAccess、`@/*` 别名、正确的 include）
-- [ ] 配置 `next.config.ts` 骨架（尚无 Aceternity remotePatterns——Phase 1 添加）
-- [ ] 按 TECH_REQUIREMENTS.md §16 配置 ESLint（包含 `scripts/` 的 no-console 覆盖）
-- [ ] 按 TECH_REQUIREMENTS.md §16 配置 Prettier
-- [ ] 验证 `.gitignore` 符合 TECH_REQUIREMENTS.md §18（content/items 图片、public/items/、public/contact/、public/search-index.json、.image-cache/）——注意：`lib/generated/image-manifest.json` 是 git 追踪文件，不得加入 gitignore
-- [ ] 安装生产依赖：`next react react-dom zod react-markdown remark-gfm clsx tailwind-merge fuse.js @vercel/analytics @vercel/speed-insights framer-motion @tabler/icons-react`
-- [ ] 安装开发依赖：`typescript @types/node @types/react @types/react-dom tailwindcss @tailwindcss/postcss @tailwindcss/typography eslint eslint-config-next prettier prettier-plugin-tailwindcss tsx next-sitemap vitest @vitest/coverage-v8`
+- [x] `pnpm create next-app@latest usedExchange --typescript --tailwind --app --use-pnpm`
+- [x] 删除 `app/` 中所有 Next.js 样板内容
+- [x] 配置 Tailwind v4：在 `app/globals.css` 中添加 `@import "tailwindcss"` 和 `@plugin "@tailwindcss/typography"`；创建含 `{ plugins: { "@tailwindcss/postcss": {} } }` 的 `postcss.config.mjs`；除非需要主题自定义，否则省略 `tailwind.config.ts`
+- [x] 按 TECH_REQUIREMENTS.md §5 配置 `tsconfig.json`（strict、noUncheckedIndexedAccess、`@/*` 别名、正确的 include）
+- [x] 配置 `next.config.ts` 骨架（尚无 Aceternity remotePatterns——Phase 1 添加）
+- [x] 按 TECH_REQUIREMENTS.md §16 配置 ESLint（包含 `scripts/` 的 no-console 覆盖）
+- [x] 按 TECH_REQUIREMENTS.md §16 配置 Prettier
+- [x] 验证 `.gitignore` 符合 TECH_REQUIREMENTS.md §18（content/items 图片、public/items/、public/contact/、public/search-index.json、.image-cache/）——注意：`lib/generated/image-manifest.json` 是 git 追踪文件，不得加入 gitignore
+- [x] 安装生产依赖：`next react react-dom zod react-markdown remark-gfm clsx tailwind-merge fuse.js @vercel/analytics @vercel/speed-insights framer-motion @tabler/icons-react`
+- [x] 安装开发依赖：`typescript @types/node @types/react @types/react-dom tailwindcss @tailwindcss/postcss @tailwindcss/typography eslint eslint-config-next prettier prettier-plugin-tailwindcss tsx next-sitemap vitest @vitest/coverage-v8`
   > `vitest` + `@vitest/coverage-v8` 是 Phase 3a 单元测试所必需（见 TECH_REQUIREMENTS.md §25.2）。同步在 `package.json` scripts 中添加 `"test": "vitest run"`、`"test:watch": "vitest"`、`"test:coverage": "vitest run --coverage"`。
-- [ ] 创建完整目录骨架（DESIGN.md §16 中所有文件夹，需要时添加空 `.gitkeep`）
-- [ ] 创建含占位 `config.ts` 和示例 `items/` 结构的 `content/` 文件夹
-- [ ] 验证 `pnpm dev` 无 TypeScript 或 lint 错误启动
+- [x] 创建完整目录骨架（DESIGN.md §16 中所有文件夹，需要时添加空 `.gitkeep`）
+- [x] 创建含占位 `config.ts` 和示例 `items/` 结构的 `content/` 文件夹
+- [x] 验证 `pnpm dev` 无 TypeScript 或 lint 错误启动
 
 ### 验收标准
 - `pnpm dev` → 空白页面，无控制台错误

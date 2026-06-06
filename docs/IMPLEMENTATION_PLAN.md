@@ -34,25 +34,25 @@
 
 ---
 
-## Phase 0 — Project Bootstrap
+## Phase 0 — Project Bootstrap ✅
 **Goal:** A clean, runnable Next.js 15 repo with all tooling configured. `pnpm dev` starts without errors (blank page is fine).
 
 ### Tasks
-- [ ] `pnpm create next-app@latest usedExchange --typescript --tailwind --app --use-pnpm`
-- [ ] Remove all Next.js boilerplate content from `app/`
-- [ ] Configure Tailwind v4: add `@import "tailwindcss"` and `@plugin "@tailwindcss/typography"` to `app/globals.css`; create `postcss.config.mjs` with `{ plugins: { "@tailwindcss/postcss": {} } }`; omit `tailwind.config.ts` unless theme customisation is needed. See TECH_REQUIREMENTS.md §22.2.
-- [ ] Configure `tsconfig.json` per TECH_REQUIREMENTS.md §5 (strict, noUncheckedIndexedAccess, `@/*` alias, correct include)
-- [ ] Configure `next.config.ts` skeleton (no Aceternity remotePatterns yet — added in Phase 1)
-- [ ] Configure ESLint per TECH_REQUIREMENTS.md §16 (including `scripts/` override for no-console)
-- [ ] Configure Prettier per TECH_REQUIREMENTS.md §16
-- [ ] Verify `.gitignore` matches TECH_REQUIREMENTS.md §18 (content/items images, public/items/, public/contact/, public/search-index.json, .image-cache/) — note: `lib/generated/image-manifest.json` is git-tracked and must NOT be gitignored
-- [ ] Install production deps: `next react react-dom zod react-markdown remark-gfm clsx tailwind-merge fuse.js @vercel/analytics @vercel/speed-insights framer-motion @tabler/icons-react`
+- [x] `pnpm create next-app@latest usedExchange --typescript --tailwind --app --use-pnpm`
+- [x] Remove all Next.js boilerplate content from `app/`
+- [x] Configure Tailwind v4: add `@import "tailwindcss"` and `@plugin "@tailwindcss/typography"` to `app/globals.css`; create `postcss.config.mjs` with `{ plugins: { "@tailwindcss/postcss": {} } }`; omit `tailwind.config.ts` unless theme customisation is needed. See TECH_REQUIREMENTS.md §22.2.
+- [x] Configure `tsconfig.json` per TECH_REQUIREMENTS.md §5 (strict, noUncheckedIndexedAccess, `@/*` alias, correct include)
+- [x] Configure `next.config.ts` skeleton (no Aceternity remotePatterns yet — added in Phase 1)
+- [x] Configure ESLint per TECH_REQUIREMENTS.md §16 (including `scripts/` override for no-console)
+- [x] Configure Prettier per TECH_REQUIREMENTS.md §16
+- [x] Verify `.gitignore` matches TECH_REQUIREMENTS.md §18 (content/items images, public/items/, public/contact/, public/search-index.json, .image-cache/) — note: `lib/generated/image-manifest.json` is git-tracked and must NOT be gitignored
+- [x] Install production deps: `next react react-dom zod react-markdown remark-gfm clsx tailwind-merge fuse.js @vercel/analytics @vercel/speed-insights framer-motion @tabler/icons-react`
   > `@vercel/analytics` and `@vercel/speed-insights` are no-ops outside Vercel; include them so the option is available without a reinstall.
-- [ ] Install dev deps: `typescript @types/node @types/react @types/react-dom tailwindcss @tailwindcss/postcss @tailwindcss/typography eslint eslint-config-next prettier prettier-plugin-tailwindcss tsx next-sitemap vitest @vitest/coverage-v8`
+- [x] Install dev deps: `typescript @types/node @types/react @types/react-dom tailwindcss @tailwindcss/postcss @tailwindcss/typography eslint eslint-config-next prettier prettier-plugin-tailwindcss tsx next-sitemap vitest @vitest/coverage-v8`
   > `vitest` + `@vitest/coverage-v8` are required by Phase 3a unit tests (TECH_REQUIREMENTS.md §25.2). Add `"test": "vitest run"`, `"test:watch": "vitest"`, `"test:coverage": "vitest run --coverage"` to `package.json` scripts at the same time.
-- [ ] Create full directory skeleton (all folders from DESIGN.md §16, empty `.gitkeep` where needed)
-- [ ] Create `content/` folder with placeholder `config.ts` and sample `items/` structure
-- [ ] Verify `pnpm dev` starts without TypeScript or lint errors
+- [x] Create full directory skeleton (all folders from DESIGN.md §16, empty `.gitkeep` where needed)
+- [x] Create `content/` folder with placeholder `config.ts` and sample `items/` structure
+- [x] Verify `pnpm dev` starts without TypeScript or lint errors
 
 ### Acceptance Criteria
 - `pnpm dev` → blank page, no console errors
