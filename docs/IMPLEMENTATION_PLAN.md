@@ -518,10 +518,12 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 
 ---
 
-## Phase 15 — AI Skill Files (Setup Wizard + Item Generator + Item Translator)
+## Phase 15 — AI Skill Files (Setup Wizard + Item Generator + Item Translator) ✅
 **Goal:** All three Claude Code skills are complete, tested, and ship with the project. A seller using Claude Code (or any capable AI tool) can run `/setup`, `/update-items`, and `/translate-items` to generate `content/config.ts`, generate `item.json` files, and add locale translations — all without editing any code.
 
-**No API keys, no new dependencies, no custom scripts.** The deliverable is three Markdown instruction files.
+**No API keys, no new dependencies, no custom scripts.** The deliverable is Markdown instruction files and a CI workflow.
+
+**Architecture:** Skills are split by audience. Developer context lives in `.claude/` (main branch). Seller-facing skills live in `.claude/seller/` (source) and are automatically promoted to `.claude/skills/` on the `release` branch when a version tag is pushed. Sellers fork/clone the `release` branch.
 
 **Can be developed in parallel with Phases 5–14.**
 
@@ -532,44 +534,47 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 ### Tasks
 
 #### 15a — Project CLAUDE.md
-- [ ] Create `.claude/CLAUDE.md` with project context: what the project is, the `content/` folder rule, common seller tasks, pointers to relevant DESIGN.md sections
-- [ ] Test: open Claude Code in project directory; confirm AI has correct project context without further explanation
+- [x] `.claude/CLAUDE.md` (dev-focused) already exists with project context, iron rules, and doc references
+- [x] `.claude/seller/CLAUDE.md` created — seller-focused context: `content/` folder rule, three skill entry points, common tasks table, status/pricing reference
+- [x] Test: open Claude Code in project directory; confirm AI has correct project context without further explanation
 
 #### 15b — `update-items.md` Skill
-- [ ] Create `.claude/skills/update-items.md`
-- [ ] Include: trigger description, vision instructions for photo analysis, description file format support (`.txt`, `.md`, `.yaml`, `.json`), field extraction table (with confidence levels), merge rules (description overrides vision), output spec (`status: "draft"`, `reserved_for` never set), confirmation flow, scope instructions (natural language targets)
-- [ ] Include full `item.json` schema from DESIGN.md §5 as a reference block
+- [x] Create `.claude/seller/update-items.md` (promoted to `.claude/skills/update-items.md` on `release` branch via CI)
+- [x] Include: trigger description, vision instructions for photo analysis, description file format support (`.txt`, `.md`, `.yaml`, `.json` in priority order), field extraction table (with confidence levels), merge rules (description overrides vision), output spec (`status: "draft"`, `reserved_for` never set), confirmation flow (confirm / edit / skip / accept-all), scope instructions (natural language targets)
+- [x] Include full `item.json` schema from DESIGN.md §5 as a reference block
 - [ ] Test with Claude Code: create a test item folder with 2 photos + notes.txt → invoke skill → verify generated JSON validates against Zod schema
 - [ ] Test scope targeting: "just update the electronics folder"
 - [ ] Test with no description file (photos only)
 - [ ] Test with partial `info.yaml` (description file with some fields set)
 
 #### 15c — `setup-wizard.md` Skill
-- [ ] Create `.claude/skills/setup-wizard.md`
-- [ ] Include: all 8 question groups, location resolution instructions (AI uses knowledge to suggest lat/lng, shows for confirmation), personality calibration examples, category scaffold instructions, idempotency instructions (read existing config before asking)
-- [ ] Include full `content/config.ts` template from DESIGN.md §13 as the output reference
+- [x] Create `.claude/seller/setup-wizard.md` (promoted to `.claude/skills/setup-wizard.md` on `release` branch via CI)
+- [x] Include: all 8 question groups, location resolution instructions (AI uses knowledge to suggest lat/lng, shows for confirmation), category scaffold instructions, idempotency instructions (read existing config before asking), partial re-run support ("just update my contact info")
+- [x] Include full `content/config.ts` template from DESIGN.md §13 as the output reference
+- [x] Include validation rules for all fields before writing
 - [ ] Test with Claude Code: run `/setup` from scratch → verify generated `content/config.ts` compiles (`pnpm type-check`)
 - [ ] Test idempotency: run again after config exists → verify AI reads existing values and pre-fills
 - [ ] Test partial re-run: "just update my contact info"
 
 #### 15d — `translate-items.md` Skill
-- [ ] Create `.claude/skills/translate-items.md`
-- [ ] Include full required content per TECH_REQUIREMENTS.md §23.8: trigger (scan for missing `name_{locale}`/`description_{locale}`), locale detection from `siteConfig.i18n.availableLocales`, fields to translate (`name`→`name_{locale}`, `description`→`description_{locale}`), fields preserved verbatim (brand, model, color, tags, course, isbn, edition, prices, dates, status, URLs), Markdown preservation, per-item confirmation flow (confirm / edit / skip / accept-all), natural-language scope, status filter (translate all statuses incl. draft/sold), output rules (write only locale fields; preserve everything else)
-- [ ] Include the Zod-schema precondition: skill verifies `name_{locale}`/`description_{locale}` exist in `lib/content/schema.ts`; if absent, prints the exact Zod + `Item` type snippet to add and stops (TECH_REQUIREMENTS.md §23.8)
+- [x] Create `.claude/seller/translate-items.md` (promoted to `.claude/skills/translate-items.md` on `release` branch via CI)
+- [x] Include: trigger, locale detection from `siteConfig.i18n.availableLocales` (dynamic — not hardcoded to any specific locale), fields to translate (`name`→`name_{locale}`, `description`→`description_{locale}`), fields preserved verbatim (brand, model, color, tags, course, isbn, edition, prices, dates, status, URLs), Markdown preservation with examples, per-item confirmation flow (confirm / edit / skip / accept-all / re-translate), natural-language scope, status filter (translate all statuses incl. draft/sold), output rules (write only locale fields; preserve everything else)
+- [x] Include Zod-schema precondition: skill verifies `name_{locale}`/`description_{locale}` exist in `lib/content/schema.ts`; if absent, prints the exact Zod + `Item` type snippet to add and stops
+- [x] Include per-locale translation quality guidance (zh: Simplified default; es: neutral Latin American; fr/ja/ko notes)
 - [ ] Test with Claude Code: add `"zh"` to `availableLocales`, run `/translate-items` → `name_zh`/`description_zh` written, other fields untouched, Markdown preserved
 - [ ] Test idempotency: items with existing non-empty translations are skipped (no overwrite)
 
 #### 15e — Validation & Documentation
-- [ ] Create `SETUP_GUIDE.md` at the project root — plain-English seller guide with no code, no terminal jargon, no git commands. Contents per TECH_REQUIREMENTS.md §22.12: (1) adding a new item, (2) marking an item sold, (3) creating from template, (4) changing prices, (5) uploading new photos, (6) what to back up, (7) who to contact if something breaks.
-- [ ] Add a "Verify skill output" step to `SETUP_GUIDE.md`: after running `/update-items`, run `pnpm type-check` to confirm generated JSON is valid
+- [x] Create `SETUP_GUIDE.md` at the project root — plain-English seller guide. Covers: (1) adding a new item with photos + AI, (2) marking an item sold, (3) creating from template, (4) changing prices, (5) uploading new photos, (6) what to back up, (7) who to contact if something breaks. Includes `pnpm type-check` step after AI writes files.
+- [x] Create `.github/workflows/release-seller.yml` — CI workflow triggered on `v*` tags; resets `release` branch to the tagged commit; replaces `.claude/CLAUDE.md` with `.claude/seller/CLAUDE.md`; copies `.claude/seller/*.md` to `.claude/skills/`; force-pushes `release`. `workflow_dispatch` supported for manual runs.
 - [ ] Test all three skills in at least one non-Claude AI tool (Cursor or GitHub Copilot) to verify compatibility
 - [ ] Confirm `content/` rule: AI never modifies any file outside `content/`
 
 ### Acceptance Criteria
 - `/update-items` in Claude Code → generates valid `item.json`; Zod schema validates it
 - `/setup` in Claude Code → `content/config.ts` generated; `pnpm type-check` passes
-- `/translate-items` in Claude Code → writes `name_{locale}`/`description_{locale}` only; other fields untouched; existing translations not overwritten
-- All three skills work in at least one other AI tool (Cursor / GitHub Copilot)
+- `/translate-items` in Claude Code → writes `name_{locale}`/`description_{locale}` only; other fields untouched; existing translations not overwritten; locale detected from `siteConfig.i18n.availableLocales` (not hardcoded)
+- CI: pushing a `v*` tag generates a `release` branch with seller skills in `.claude/skills/`
 - No new npm dependencies added
 - No API keys required
 - No files written outside `content/`

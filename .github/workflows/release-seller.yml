@@ -1,0 +1,105 @@
+name: Release Seller Template
+
+# Triggered by pushing a version tag (e.g. v1.0.0, v1.2.3-beta).
+# Creates / updates the `release` branch with the seller-facing skill files
+# copied into .claude/CLAUDE.md and .claude/skills/.
+#
+# Sellers fork or clone the `release` branch — they get the full site code
+# plus seller-ready AI skills, without any dev-internal skill source files.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag or ref to release (defaults to HEAD)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Sync seller skills to release branch
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history needed so we can push to release branch
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine release ref
+        id: ref
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "ref=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or reset release branch
+        run: |
+          # Reset the release branch to the exact commit of the triggering tag.
+          # Force-push is intentional: release is always regenerated, never hand-edited.
+          git checkout -B release
+
+      - name: Inject seller CLAUDE.md
+        run: |
+          # Replace the dev-focused CLAUDE.md with the seller-focused one.
+          cp .claude/seller/CLAUDE.md .claude/CLAUDE.md
+
+      - name: Populate .claude/skills/ with seller skill files
+        run: |
+          mkdir -p .claude/skills
+          # Copy every .md file from .claude/seller/ except CLAUDE.md
+          for f in .claude/seller/*.md; do
+            filename="$(basename "$f")"
+            if [ "$filename" != "CLAUDE.md" ]; then
+              cp "$f" ".claude/skills/$filename"
+            fi
+          done
+
+      - name: Commit seller skill changes
+        run: |
+          git add .claude/CLAUDE.md .claude/skills/
+          # Only commit if there are staged changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit — skill files are identical to previous release."
+          else
+            git commit -m "chore(release): sync seller skills for ${{ steps.ref.outputs.ref }}"
+          fi
+
+      - name: Push release branch
+        run: |
+          # Force-push because release is always regenerated from the tagged commit.
+          git push origin release --force
+
+      - name: Summary
+        run: |
+          echo "### Release complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Tag:** \`${{ steps.ref.outputs.ref }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Branch:** \`release\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Seller skill files written to \`release\` branch:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| File | Destination |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| \`.claude/seller/CLAUDE.md\` | \`.claude/CLAUDE.md\` |" >> "$GITHUB_STEP_SUMMARY"
+          for f in .claude/seller/*.md; do
+            filename="$(basename "$f")"
+            if [ "$filename" != "CLAUDE.md" ]; then
+              echo "| \`.claude/seller/$filename\` | \`.claude/skills/$filename\` |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Sellers can fork or clone the \`release\` branch to get started." >> "$GITHUB_STEP_SUMMARY"

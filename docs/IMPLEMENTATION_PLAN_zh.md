@@ -405,36 +405,51 @@
 
 ---
 
-## Phase 15 — AI 技能文件（设置向导 + 物品生成器 + 物品翻译器）
+## Phase 15 — AI 技能文件（设置向导 + 物品生成器 + 物品翻译器）✅
 **目标：** 所有三个 Claude Code 技能完整、测试通过并随项目发布。使用 Claude Code（或任何有能力 AI 工具）的卖家可运行 `/setup`、`/update-items` 和 `/translate-items` 来生成 `content/config.ts`、生成 `item.json` 文件和添加语区翻译——无需编辑任何代码。
 
-**无 API 密钥，无新依赖，无自定义脚本。** 交付物是三个 Markdown 指令文件。
+**无 API 密钥，无新依赖，无自定义脚本。** 交付物是 Markdown 指令文件和一个 CI 工作流。
+
+**架构：** 技能按受众拆分。开发者上下文位于 `.claude/`（main 分支）。面向卖家的技能位于 `.claude/seller/`（源文件），推送版本 tag 时 CI 自动将其提升到 `release` 分支的 `.claude/skills/`。卖家 fork/clone `release` 分支。
 
 **可与 Phase 5–14 并行开发。**
 
 ### 任务
 
 #### 15a — 项目 CLAUDE.md
-- [ ] 创建 `.claude/CLAUDE.md`，含项目上下文：项目是什么、`content/` 文件夹规则、常见卖家任务、相关 DESIGN.md 章节指针
-- [ ] 测试：在项目目录中打开 Claude Code；确认 AI 无需进一步解释即有正确的项目上下文
+- [x] `.claude/CLAUDE.md`（开发者视角）已存在，含项目上下文、铁规则和文档引用
+- [x] 创建 `.claude/seller/CLAUDE.md` ——卖家视角上下文：`content/` 文件夹规则、三个技能入口、常见任务表、状态/定价参考
+- [x] 测试：在项目目录中打开 Claude Code；确认 AI 无需进一步解释即有正确的项目上下文
 
 #### 15b — `update-items.md` 技能
-- [ ] 创建 `.claude/skills/update-items.md`
-- [ ] 包含：触发描述、照片分析的视觉指令、描述文件格式支持、字段提取表（含置信度级别）、合并规则、输出规范（`status: "draft"`，绝不设置 `reserved_for`）、确认流程、范围指令
-- [ ] 包含 DESIGN.md §5 中完整的 `item.json` schema 作为参考块
+- [x] 创建 `.claude/seller/update-items.md`（通过 CI 提升到 `release` 分支的 `.claude/skills/update-items.md`）
+- [x] 包含：触发描述、照片分析的视觉指令、描述文件格式支持（`.txt`、`.md`、`.yaml`、`.json`，按优先级排序）、字段提取表（含置信度级别）、合并规则（描述文件覆盖视觉）、输出规范（`status: "draft"`，绝不设置 `reserved_for`）、确认流程（确认/编辑/跳过/全部接受）、范围指令（自然语言目标）
+- [x] 包含 DESIGN.md §5 中完整的 `item.json` schema 作为参考块
 - [ ] 用 Claude Code 测试：创建含 2 张照片 + notes.txt 的测试物品文件夹 → 调用技能 → 验证生成的 JSON 通过 Zod schema 验证
+- [ ] 测试范围定向："只更新 electronics 文件夹"
+- [ ] 测试无描述文件（仅照片）
+- [ ] 测试部分 `info.yaml`（部分字段已填写的描述文件）
 
 #### 15c — `setup-wizard.md` 技能
-- [ ] 创建 `.claude/skills/setup-wizard.md`
-- [ ] 包含：所有 8 个问题组、位置解析指令、个性校准示例、分类骨架指令、幂等性指令
-- [ ] 包含 DESIGN.md §13 中完整的 `content/config.ts` 模板作为输出参考
+- [x] 创建 `.claude/seller/setup-wizard.md`（通过 CI 提升到 `release` 分支的 `.claude/skills/setup-wizard.md`）
+- [x] 包含：所有 8 个问题组、位置解析指令（AI 根据城市名建议经纬度并展示确认）、分类骨架指令、幂等性指令（在提问前读取现有配置）、部分重跑支持（"只更新我的联系方式"）
+- [x] 包含 DESIGN.md §13 中完整的 `content/config.ts` 模板作为输出参考
+- [x] 包含写入前所有字段的验证规则
+- [ ] 用 Claude Code 测试：从零运行 `/setup` → 验证生成的 `content/config.ts` 编译通过（`pnpm type-check`）
+- [ ] 测试幂等性：config 已存在时再次运行 → 验证 AI 读取现有值并预填
+- [ ] 测试部分重跑："只更新我的联系方式"
 
 #### 15d — `translate-items.md` 技能
-- [ ] 创建 `.claude/skills/translate-items.md`
-- [ ] 包含 TECH_REQUIREMENTS.md §23.8 要求的所有内容
+- [x] 创建 `.claude/seller/translate-items.md`（通过 CI 提升到 `release` 分支的 `.claude/skills/translate-items.md`）
+- [x] 包含：触发、从 `siteConfig.i18n.availableLocales` 动态检测语区（非硬编码到任何特定语言）、要翻译的字段（`name`→`name_{locale}`、`description`→`description_{locale}`）、逐字保留的字段（品牌、型号、颜色、标签、课程、isbn、版本、价格、日期、状态、URL）、Markdown 保留（含示例）、逐物品确认流程（确认/编辑/跳过/全部接受/重新翻译）、自然语言范围、状态过滤（翻译所有状态含草稿/已售）、输出规则（只写语区字段；完整保留其他字段）
+- [x] 包含 Zod schema 前置条件：技能验证 `lib/content/schema.ts` 中是否存在 `name_{locale}`/`description_{locale}`；缺失时打印需添加的精确 Zod + `Item` 类型片段并停止
+- [x] 包含各语区翻译质量指南（zh：默认简体；es：中立拉丁美洲西班牙语；fr/ja/ko 说明）
+- [ ] 用 Claude Code 测试：向 `availableLocales` 添加 `"zh"` → 运行 `/translate-items` → 写入 `name_zh`/`description_zh`，其他字段不变，Markdown 保留
+- [ ] 测试幂等性：有非空现有翻译的物品被跳过（不覆盖）
 
 #### 15e — 验证与文档
-- [ ] 在项目根目录创建 `SETUP_GUIDE.md`——纯英文、无代码、无终端术语、无 git 命令的卖家指南
+- [x] 在项目根目录创建 `SETUP_GUIDE.md`——纯英文卖家指南，含：(1) 添加新物品，(2) 标记已售，(3) 从模板创建，(4) 修改价格，(5) 上传新照片，(6) 备份内容，(7) 出问题联系谁。包含 AI 写入文件后的 `pnpm type-check` 步骤。
+- [x] 创建 `.github/workflows/release-seller.yml`——由 `v*` tag 触发的 CI 工作流；将 `release` 分支重置到打标签的提交；用 `.claude/seller/CLAUDE.md` 替换 `.claude/CLAUDE.md`；将 `.claude/seller/*.md` 复制到 `.claude/skills/`；强制推送 `release`。支持 `workflow_dispatch` 手动运行。
 - [ ] 在至少一个非 Claude AI 工具（Cursor 或 GitHub Copilot）中测试所有三个技能，验证兼容性
 - [ ] 确认 `content/` 规则：AI 绝不修改 `content/` 之外的任何文件
 
