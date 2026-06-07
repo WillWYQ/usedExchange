@@ -5,7 +5,7 @@ import { siteConfig } from "@/content/config";
 import { useGeolocation } from "@/components/pricing/useGeolocation";
 import { useDistancePricing } from "@/components/pricing/useDistancePricing";
 import { resolveItemPrice } from "@/lib/utils/pricing";
-import { ItemCard } from "@/components/item/ItemCard";
+import { ItemCardAdapter } from "@/components/ui-adapters/ItemCardAdapter";
 
 type RecentlyListedSectionProps = {
   items: Item[];
@@ -32,7 +32,7 @@ export function RecentlyListedSection({ items }: RecentlyListedSectionProps) {
       </h2>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {items.map((item) => (
-          <ItemCard
+          <ItemCardAdapter
             key={`${item.categorySlug}/${item.itemSlug}`}
             item={item}
             resolvedPrice={resolveItemPrice(item.price, resolved)}

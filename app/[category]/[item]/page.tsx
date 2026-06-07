@@ -1,8 +1,6 @@
 import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { siteConfig } from "@/content/config";
 import { loadCategories, loadItemsByCategory } from "@/lib/content/loader";
 import { resolveItemPrice } from "@/lib/utils/pricing";
@@ -17,7 +15,8 @@ import { FreshnessLabel } from "@/components/item/FreshnessLabel";
 import { QuantityBadge } from "@/components/item/QuantityBadge";
 import { TextbookBadge } from "@/components/item/TextbookBadge";
 import { MakeOfferButton } from "@/components/item/MakeOfferButton";
-import { ItemGallery } from "@/components/item/ItemGallery";
+import { GalleryAdapter } from "@/components/ui-adapters/GalleryAdapter";
+import { LocalizedItemContent } from "@/components/item/LocalizedItemContent";
 import { ContactSection } from "@/components/contact/ContactSection";
 import { ShareButton } from "@/components/common/ShareButton";
 import { RecentlyViewed } from "@/components/common/RecentlyViewed";
@@ -158,7 +157,7 @@ export default async function ItemDetailPage({
       <div className="mt-4 grid grid-cols-1 gap-10 lg:grid-cols-2">
         {/* Left column — gallery */}
         <div>
-          <ItemGallery images={itemData.images} itemName={itemData.name} />
+          <GalleryAdapter images={itemData.images} itemName={itemData.name} />
         </div>
 
         {/* Right column — details */}
@@ -183,11 +182,9 @@ export default async function ItemDetailPage({
             )}
           </div>
 
-          {/* Name + freshness */}
+          {/* Name — locale-aware via LocalizedItemContent; Freshness uses live clock */}
           <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-bold text-white sm:text-3xl">
-              {itemData.name}
-            </h1>
+            <LocalizedItemContent item={itemData} />
             <FreshnessLabel listedDate={itemData.listedDate} />
           </div>
 
@@ -258,14 +255,7 @@ export default async function ItemDetailPage({
         </div>
       </div>
 
-      {/* Description — full width below the two-column block */}
-      {itemData.description && (
-        <div className="prose prose-invert mt-8 max-w-none">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {itemData.description}
-          </ReactMarkdown>
-        </div>
-      )}
+      {/* Description rendered inside LocalizedItemContent above (two-column right column) */}
 
       {/* Textbook section */}
       {(itemData.isbn || itemData.course) && (

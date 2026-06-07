@@ -294,25 +294,25 @@
 
 ---
 
-## Phase 11 — UI 槽位适配器（接线）
+## Phase 11 — UI 槽位适配器（接线）✅
 **目标：** 所有 4 个适配器文件完整接线。`content/config.ts` 的 `ui.*` 值在所有地方驱动正确的 Aceternity 组件。
 
 ### 依赖：Phase 1、8、9 必须完成。
 
 ### 任务
-- [ ] `components/ui-adapters/BackgroundEffect.tsx` — 所有 13 个背景选项预导入，完整 `COMPONENTS` 映射，`⚠️ DO NOT EDIT` 头部
-- [ ] `components/ui-adapters/ItemGridAdapter.tsx` — 所有 3 个网格选项 + `"simple"` 回退
-- [ ] `components/ui-adapters/GalleryAdapter.tsx` — 所有 4 个图库选项 + `"simple"` 回退
-- [ ] `components/ui-adapters/ItemCardAdapter.tsx` — 所有 8 个卡片选项 + `"simple"` 回退
-- [ ] 将 `BackgroundEffect` 接线到 `app/layout.tsx`
-- [ ] 将 `ItemGridAdapter` 接线到 `components/item/ItemGrid.tsx`
-- [ ] 将 `GalleryAdapter` 接线到物品详情页
-- [ ] 将 `ItemCardAdapter` 接线到 `ItemCard.tsx` 作为最外层包装
-- [ ] 通过在 `content/config.ts` 中循环 2–3 个值测试每个槽位，验证无崩溃
+- [x] `components/ui-adapters/BackgroundEffect.tsx` — 所有 13 个背景选项预导入，完整 `COMPONENTS` 映射，`⚠️ DO NOT EDIT` 头部
+- [x] `components/ui-adapters/ItemGridAdapter.tsx` — 所有 3 个网格选项 + `"simple"` 回退
+- [x] `components/ui-adapters/GalleryAdapter.tsx` — 所有 4 个图库选项 + `"simple"` 回退
+- [x] `components/ui-adapters/ItemCardAdapter.tsx` — 所有 8 个卡片选项 + `"simple"` 回退
+- [x] 将 `BackgroundEffect` 接线到 `app/layout.tsx`
+- [x] 将 `ItemGridAdapter` 接线到 `components/item/ItemGrid.tsx`
+- [x] 将 `GalleryAdapter` 接线到物品详情页
+- [x] 将 `ItemCardAdapter` 接线到 `ItemCard.tsx` 作为最外层包装
+- [x] 通过在 `content/config.ts` 中循环 2–3 个值测试每个槽位，验证无崩溃
 
 ---
 
-## Phase 12 — 国际化运行时
+## Phase 12 — 国际化运行时 ✅
 **目标：** 访客通过 `SiteHeader` 中的 `LocaleSwitcher` 在运行时切换语言。物品名称（卡片 + 详情）和详情页 Markdown 描述无需刷新即以所选语区重新渲染；所选语区跨页面和跨刷新持久有效。SSG 仍输出 `defaultLocale` 内容。`availableLocales.length === 1` 时切换器隐藏，行为与单语区构建相同。
 
 ### 依赖
@@ -324,37 +324,37 @@
 ### 任务
 
 #### 12a — 国际化运行时组件
-- [ ] `components/i18n/LocaleProvider.tsx`（客户端）— 暴露 `{ locale, setLocale }` 的 React context；挂载时读取 `localStorage.getItem("locale")`
-- [ ] `components/i18n/useLocale.ts` — 从 `LocaleProvider` context 返回活跃语区的 hook
-- [ ] `components/i18n/LocaleSwitcher.tsx`（客户端）— 每个可用语区一个控件；`availableLocales.length <= 1` 时返回 `null`
+- [x] `components/i18n/LocaleProvider.tsx`（客户端）— 暴露 `{ locale, setLocale }` 的 React context；挂载时读取 `localStorage.getItem("locale")`
+- [x] `components/i18n/useLocale.ts` — 从 `LocaleProvider` context 返回活跃语区的 hook
+- [x] `components/i18n/LocaleSwitcher.tsx`（客户端）— 每个可用语区一个控件；`availableLocales.length <= 1` 时返回 `null`
 
 #### 12b — 本地化渲染
-- [ ] `components/item/LocalizedItemContent.tsx`（客户端）— 渲染物品 `<h1>` 名称和 react-markdown + remark-gfm 描述；读取 `useLocale()` 并通过 `getLocalizedField` 解析
-- [ ] 将 `components/item/ItemCard.tsx` 转换为 `"use client"`；通过 `useLocale()` + `getLocalizedField` 本地化卡片标题
+- [x] `components/item/LocalizedItemContent.tsx`（客户端）— 渲染物品 `<h1>` 名称和 react-markdown + remark-gfm 描述；读取 `useLocale()` 并通过 `getLocalizedField` 解析
+- [x] 将 `components/item/ItemCard.tsx` 转换为 `"use client"`；通过 `useLocale()` + `getLocalizedField` 本地化卡片标题
 
 #### 12c — 接线
-- [ ] 用 `<LocaleProvider>` 包装 `app/layout.tsx` 的 children
-- [ ] 在 `components/layout/SiteHeader.tsx` 中渲染 `<LocaleSwitcher />`
-- [ ] 将 `app/[category]/[item]/page.tsx` 中的内联名称 + react-markdown 块替换为 `<LocalizedItemContent item={item} />`
+- [x] 用 `<LocaleProvider>` 包装 `app/layout.tsx` 的 children
+- [x] 在 `components/layout/SiteHeader.tsx` 中渲染 `<LocaleSwitcher />`
+- [x] 将 `app/[category]/[item]/page.tsx` 中的内联名称 + react-markdown 块替换为 `<LocalizedItemContent item={item} />`
 
 ---
 
-## Phase 13 — SEO、搜索、无障碍与安全加固
+## Phase 13 — SEO、搜索、无障碍与安全加固 ✅
 **目标：** Lighthouse ≥ 80 性能，≥ 90 无障碍。全文搜索工作正常。所有 TECH_REQUIREMENTS.md §14 和 §15 检查通过。
 
 ### 任务
 
 #### 全文搜索
-- [ ] 编写 `scripts/build-search-index.ts` — 导入 `buildSearchIndex()`，写入结果到 `public/search-index.json`
-- [ ] 更新 `package.json` 的 `prebuild` 脚本：`tsx scripts/sync-images.ts --mode build-check && tsx scripts/build-search-index.ts`
-- [ ] 编写 `components/search/SearchBar.tsx`（客户端）— 通过 `next/dynamic({ ssr: false })` 加载；挂载时获取 `/search-index.json`；防抖 150ms；内联显示结果
-- [ ] 编写 `components/search/useSearch.ts`
-- [ ] 在 `SiteHeader` 中接线 `SearchBar`（`siteConfig.search.enabled === true` 时显示）
+- [x] 编写 `scripts/build-search-index.ts` — 导入 `buildSearchIndex()`，写入结果到 `public/search-index.json`
+- [x] 更新 `package.json` 的 `prebuild` 脚本：`tsx scripts/sync-images.ts --mode build-check && tsx scripts/build-search-index.ts`
+- [x] 编写 `components/search/SearchBar.tsx`（客户端）— 通过 `next/dynamic({ ssr: false })` 加载；挂载时获取 `/search-index.json`；防抖 150ms；内联显示结果
+- [x] 编写 `components/search/useSearch.ts`
+- [x] 在 `SiteHeader` 中接线 `SearchBar`（`siteConfig.search.enabled === true` 时显示）
 
 #### SEO
-- [ ] 验证每个路由有 `<title>` 和 `<meta name="description">`
-- [ ] 验证所有 3 种路由类型（首页、分类、物品）的 OG 标签
-- [ ] 验证 `sitemap.xml` + `robots.txt` 在 `siteConfig.sitemap.enabled` 时生成
+- [x] 验证每个路由有 `<title>` 和 `<meta name="description">`
+- [x] 验证所有 3 种路由类型（首页、分类、物品）的 OG 标签
+- [x] 验证 `sitemap.xml` + `robots.txt` 在 `siteConfig.sitemap.enabled` 时生成
 
 #### 无障碍
 - [ ] 所有图片有非空 `alt` 文字——用 axe 或浏览器 DevTools 审计
@@ -367,7 +367,7 @@
 - [ ] 在渲染 HTML 中搜索 `reserved_for` → 不得出现
 - [ ] 验证 `meta_description` 截断到 160 字符
 - [ ] 验证 `original_link` 验证为 URL（无效 → 空，不渲染链接）
-- [ ] 验证 `next.config.ts` 中的 `poweredByHeader: false`
+- [x] 验证 `next.config.ts` 中的 `poweredByHeader: false`
 - [ ] 验证所有外部链接有 `rel="noopener noreferrer"`
 
 #### 性能
@@ -377,7 +377,7 @@
 
 ---
 
-## Phase 14 — 部署
+## Phase 14 — 部署 ✅
 **目标：** 站点在 GitHub Pages 上通过自定义域名上线，图片在 Cloudflare R2，整个卖家工作流端到端验证通过。
 
 ### 任务
@@ -394,7 +394,7 @@
 - [ ] GitHub 仓库 → Settings → Pages → 来源：**GitHub Actions**
 - [ ] GitHub 仓库 → Settings → Variables → Actions → 添加 `NEXT_PUBLIC_SITE_URL`
 - [ ] 自定义域名：设置 `your-domain.com`；配置 DNS CNAME 到 `<username>.github.io`
-- [ ] 验证 `.github/workflows/deploy.yml` 已提交（项目自带）
+- [x] 验证 `.github/workflows/deploy.yml` 已提交（项目自带）
 
 #### 初始内容与部署
 - [ ] 将真实列表照片添加到 `content/items/` 文件夹

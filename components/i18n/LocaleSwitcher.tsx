@@ -1,0 +1,32 @@
+"use client";
+
+import { siteConfig } from "@/content/config";
+import { useLocale } from "./useLocale";
+
+// Returns null when only one locale is configured — no visible UI in that case.
+export function LocaleSwitcher() {
+  const { availableLocales } = siteConfig.i18n;
+  const { locale, setLocale } = useLocale();
+
+  if (availableLocales.length <= 1) return null;
+
+  return (
+    <div className="flex items-center gap-1" role="group" aria-label="Language switcher">
+      {availableLocales.map((code) => (
+        <button
+          key={code}
+          onClick={() => setLocale(code)}
+          aria-pressed={locale === code}
+          className={[
+            "rounded px-2 py-0.5 text-xs font-medium uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+            locale === code
+              ? "bg-white text-black"
+              : "text-white/60 hover:text-white",
+          ].join(" ")}
+        >
+          {code}
+        </button>
+      ))}
+    </div>
+  );
+}

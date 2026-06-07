@@ -5,9 +5,9 @@ import { siteConfig } from "@/content/config";
 import { useGeolocation } from "@/components/pricing/useGeolocation";
 import { useDistancePricing } from "@/components/pricing/useDistancePricing";
 import { useFilters } from "@/components/filters/useFilters";
-import { ItemCard } from "./ItemCard";
 import { FilterBar } from "@/components/filters/FilterBar";
 import { LocationPriceBar } from "@/components/pricing/LocationPriceBar";
+import { ItemGridAdapter } from "@/components/ui-adapters/ItemGridAdapter";
 
 type ItemGridProps = {
   items: Item[];
@@ -68,20 +68,15 @@ export function ItemGrid({ items, browseAll = false }: ItemGridProps) {
         onSortKeyChange={setSortKey}
       />
 
-      {/* Item grid — resolvedPrice reused from useFilters' resolvedPrices map
-          (already computed once per item at the current distance; avoids
-          recomputing resolveItemPrice a second time per render). */}
+      {/* Item grid — delegated to ItemGridAdapter (wires siteConfig.ui.itemGrid).
+          resolvedPrices computed once in useFilters; passed through to avoid
+          re-running resolveItemPrice per render. */}
       {filteredItems.length > 0 ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {filteredItems.map((item) => (
-            <ItemCard
-              key={`${item.categorySlug}/${item.itemSlug}`}
-              item={item}
-              resolvedPrice={resolvedPrices.get(`${item.categorySlug}/${item.itemSlug}`) ?? null}
-              showCategoryChip={browseAll}
-            />
-          ))}
-        </div>
+        <ItemGridAdapter
+          items={filteredItems}
+          resolvedPrices={resolvedPrices}
+          browseAll={browseAll}
+        />
       ) : (
         <p className="py-16 text-center text-white/40">
           No items match the current filters.

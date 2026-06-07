@@ -1,7 +1,14 @@
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { siteConfig } from "@/content/config";
+import { LocaleSwitcher } from "@/components/i18n/LocaleSwitcher";
 
-// SearchBar (Phase 13) and LocaleSwitcher (Phase 12) slots are left as comments.
+// SearchBar is dynamically imported (ssr: false) — keeps it out of the SSG bundle.
+const SearchBar = dynamic(
+  () => import("@/components/search/SearchBar").then((m) => m.SearchBar),
+  { ssr: false },
+);
+
 export function SiteHeader() {
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-black/80 backdrop-blur-md">
@@ -24,7 +31,7 @@ export function SiteHeader() {
           className="flex items-center gap-5 text-sm text-white/70"
           aria-label="Main navigation"
         >
-          {/* SearchBar slot — Phase 13 */}
+          {siteConfig.search.enabled && <SearchBar />}
 
           <Link
             href="/"
@@ -39,7 +46,7 @@ export function SiteHeader() {
             {siteConfig.i18n.strings.browseAll || "Browse All"}
           </Link>
 
-          {/* LocaleSwitcher slot — Phase 12 */}
+          <LocaleSwitcher />
         </nav>
       </div>
     </header>

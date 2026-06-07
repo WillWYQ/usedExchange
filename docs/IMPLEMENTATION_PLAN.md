@@ -365,21 +365,21 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 
 ---
 
-## Phase 11 — UI Slot Adapters (Wiring)
+## Phase 11 — UI Slot Adapters (Wiring) ✅
 **Goal:** All 4 adapter files fully wired. `content/config.ts` `ui.*` values drive the correct Aceternity component everywhere.
 
 ### Dependencies: Phases 1, 8, 9 must be complete.
 
 ### Tasks
-- [ ] `components/ui-adapters/BackgroundEffect.tsx` — all 13 background options pre-imported, full `COMPONENTS` map, `⚠️ DO NOT EDIT` header
-- [ ] `components/ui-adapters/ItemGridAdapter.tsx` — all 3 grid options + `"simple"` fallback, render prop interface, data normalisation per TECH_REQUIREMENTS.md §21
-- [ ] `components/ui-adapters/GalleryAdapter.tsx` — all 4 gallery options + `"simple"` fallback, data normalisation
-- [ ] `components/ui-adapters/ItemCardAdapter.tsx` — all 8 card options + `"simple"` fallback, children pass-through, data normalisation (direction-aware-hover note)
-- [ ] Wire `BackgroundEffect` into `app/layout.tsx`
-- [ ] Wire `ItemGridAdapter` into `components/item/ItemGrid.tsx` (replaces raw grid div)
-- [ ] Wire `GalleryAdapter` into item detail page (replaces `ItemGallery` directly)
-- [ ] Wire `ItemCardAdapter` into `ItemCard.tsx` as outermost wrapper
-- [ ] Test each slot by cycling through 2–3 values in `content/config.ts` and verifying no crashes
+- [x] `components/ui-adapters/BackgroundEffect.tsx` — all 13 background options pre-imported, full `COMPONENTS` map, `⚠️ DO NOT EDIT` header
+- [x] `components/ui-adapters/ItemGridAdapter.tsx` — all 3 grid options + `"simple"` fallback, render prop interface, data normalisation per TECH_REQUIREMENTS.md §21
+- [x] `components/ui-adapters/GalleryAdapter.tsx` — all 4 gallery options + `"simple"` fallback, data normalisation
+- [x] `components/ui-adapters/ItemCardAdapter.tsx` — all 8 card options + `"simple"` fallback, children pass-through, data normalisation (direction-aware-hover note)
+- [x] Wire `BackgroundEffect` into `app/layout.tsx`
+- [x] Wire `ItemGridAdapter` into `components/item/ItemGrid.tsx` (replaces raw grid div)
+- [x] Wire `GalleryAdapter` into item detail page (replaces `ItemGallery` directly)
+- [x] Wire `ItemCardAdapter` into `ItemCard.tsx` as outermost wrapper
+- [x] Test each slot by cycling through 2–3 values in `content/config.ts` and verifying no crashes
 
 ### Acceptance Criteria
 - Changing `ui.background` in `content/config.ts` → correct Aceternity background renders after rebuild
@@ -389,7 +389,7 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 
 ---
 
-## Phase 12 — Internationalisation Runtime
+## Phase 12 — Internationalisation Runtime ✅
 **Goal:** Visitors switch language at runtime via a `LocaleSwitcher` in the header. Item names (cards + detail) and the detail-page Markdown description re-render in the selected locale with no reload; the selection persists across pages and refreshes. SSG still emits `defaultLocale` content. When `availableLocales.length === 1` the switcher is hidden and behaviour is identical to a single-locale build.
 
 ### Dependencies
@@ -401,19 +401,19 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 ### Tasks
 
 #### 12a — i18n Runtime Components
-- [ ] `components/i18n/LocaleProvider.tsx` (client) — React context exposing `{ locale, setLocale }`; on mount reads `localStorage.getItem("locale")`, falls back to `siteConfig.i18n.defaultLocale` when absent or not in `availableLocales`; `setLocale` persists via `localStorage.setItem("locale", …)` (TECH_REQUIREMENTS.md §22.8)
-- [ ] `components/i18n/useLocale.ts` — hook returning the active locale (and `setLocale`) from `LocaleProvider` context
-- [ ] `components/i18n/LocaleSwitcher.tsx` (client) — one control per `availableLocale`; calls `setLocale()`; **returns `null` when `siteConfig.i18n.availableLocales.length <= 1`** (DESIGN.md §12)
+- [x] `components/i18n/LocaleProvider.tsx` (client) — React context exposing `{ locale, setLocale }`; on mount reads `localStorage.getItem("locale")`, falls back to `siteConfig.i18n.defaultLocale` when absent or not in `availableLocales`; `setLocale` persists via `localStorage.setItem("locale", …)` (TECH_REQUIREMENTS.md §22.8)
+- [x] `components/i18n/useLocale.ts` — hook returning the active locale (and `setLocale`) from `LocaleProvider` context
+- [x] `components/i18n/LocaleSwitcher.tsx` (client) — one control per `availableLocale`; calls `setLocale()`; **returns `null` when `siteConfig.i18n.availableLocales.length <= 1`** (DESIGN.md §12)
 
 #### 12b — Localised Rendering
-- [ ] `components/item/LocalizedItemContent.tsx` (client) — renders the item `<h1>` name and the react-markdown + remark-gfm description; reads `useLocale()` and resolves each via `getLocalizedField(item, "name"/"description", locale)`; both re-render on a locale change (DESIGN.md §10.3, §12; TECH_REQUIREMENTS.md §22.8)
-- [ ] Convert `components/item/ItemCard.tsx` → `"use client"`; localise the card title via `useLocale()` + `getLocalizedField(item, "name", locale)`
+- [x] `components/item/LocalizedItemContent.tsx` (client) — renders the item `<h1>` name and the react-markdown + remark-gfm description; reads `useLocale()` and resolves each via `getLocalizedField(item, "name"/"description", locale)`; both re-render on a locale change (DESIGN.md §10.3, §12; TECH_REQUIREMENTS.md §22.8)
+- [x] Convert `components/item/ItemCard.tsx` → `"use client"`; localise the card title via `useLocale()` + `getLocalizedField(item, "name", locale)`
 
 #### 12c — Wiring
-- [ ] Wrap `app/layout.tsx` children in `<LocaleProvider>` (outermost client provider inside `<body>`) so every page shares one locale context
-- [ ] Render `<LocaleSwitcher />` in `components/layout/SiteHeader.tsx` (auto-hidden when a single locale is configured)
-- [ ] Replace the inline name + react-markdown block on `app/[category]/[item]/page.tsx` with `<LocalizedItemContent item={item} />`
-- [ ] Confirm server-only surfaces (`generateMetadata`, `<title>`, OG, JSON-LD, breadcrumb leaf) keep reading `siteConfig.i18n.defaultLocale` — they are intentionally not runtime-switchable (TECH_REQUIREMENTS.md §22.8 SEO note)
+- [x] Wrap `app/layout.tsx` children in `<LocaleProvider>` (outermost client provider inside `<body>`) so every page shares one locale context
+- [x] Render `<LocaleSwitcher />` in `components/layout/SiteHeader.tsx` (auto-hidden when a single locale is configured)
+- [x] Replace the inline name + react-markdown block on `app/[category]/[item]/page.tsx` with `<LocalizedItemContent item={item} />`
+- [x] Confirm server-only surfaces (`generateMetadata`, `<title>`, OG, JSON-LD, breadcrumb leaf) keep reading `siteConfig.i18n.defaultLocale` — they are intentionally not runtime-switchable (TECH_REQUIREMENTS.md §22.8 SEO note)
 
 ### Acceptance Criteria
 - `availableLocales: ["en"]` → `LocaleSwitcher` hidden; no behavioural change vs. a non-i18n build
@@ -427,25 +427,25 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 
 ---
 
-## Phase 13 — SEO, Search, Accessibility & Security Hardening
+## Phase 13 — SEO, Search, Accessibility & Security Hardening ✅
 **Goal:** Lighthouse ≥ 80 performance, ≥ 90 accessibility. Full-text search working. All TECH_REQUIREMENTS.md §14 and §15 checks pass.
 
 ### Tasks
 
 #### Full-Text Search
-- [ ] Write `scripts/build-search-index.ts` — imports `buildSearchIndex()` from `lib/search/index.ts`, writes the result to `public/search-index.json`, logs entry count, exits 1 on error. (fuse.js and its types are already installed in Phase 0; fuse.js v7 ships its own TypeScript types, no `@types/fuse.js` needed)
-- [ ] Update `prebuild` script in `package.json` to chain: `tsx scripts/sync-images.ts --mode build-check && tsx scripts/build-search-index.ts` (see TECH_REQUIREMENTS.md §7 for the full scripts block)
-- [ ] Verify: `pnpm build` generates `public/search-index.json` before `next build` renders any page (index built once in prebuild, not per-page)
-- [ ] Write `components/search/SearchBar.tsx` (client) — loaded via `next/dynamic({ ssr: false })`; on mount fetches `/search-index.json`; graceful 404 handling (empty index, no crash — see TECH_REQUIREMENTS.md §22.1); debounce 150 ms; shows results inline with cover image, name, category, price badge; clicking navigates to detail page
-- [ ] Write `components/search/useSearch.ts` — loads index on mount, manages query + results state
-- [ ] Wire `SearchBar` into `SiteHeader` (shown when `siteConfig.search.enabled === true`)
+- [x] Write `scripts/build-search-index.ts` — imports `buildSearchIndex()` from `lib/search/index.ts`, writes the result to `public/search-index.json`, logs entry count, exits 1 on error. (fuse.js and its types are already installed in Phase 0; fuse.js v7 ships its own TypeScript types, no `@types/fuse.js` needed)
+- [x] Update `prebuild` script in `package.json` to chain: `tsx scripts/sync-images.ts --mode build-check && tsx scripts/build-search-index.ts` (see TECH_REQUIREMENTS.md §7 for the full scripts block)
+- [x] Verify: `pnpm build` generates `public/search-index.json` before `next build` renders any page (index built once in prebuild, not per-page)
+- [x] Write `components/search/SearchBar.tsx` (client) — loaded via `next/dynamic({ ssr: false })`; on mount fetches `/search-index.json`; graceful 404 handling (empty index, no crash — see TECH_REQUIREMENTS.md §22.1); debounce 150 ms; shows results inline with cover image, name, category, price badge; clicking navigates to detail page
+- [x] Write `components/search/useSearch.ts` — loads index on mount, manages query + results state
+- [x] Wire `SearchBar` into `SiteHeader` (shown when `siteConfig.search.enabled === true`)
 - [ ] Verify: search for a brand name, tag, course code, ISBN, edition — all return results
 - [ ] Verify: in `pnpm dev` without a prior build — SearchBar shows no results, no crash
 
 #### SEO
-- [ ] Verify every route has `<title>` and `<meta name="description">` populated
-- [ ] Verify OG tags on all 3 route types (home, category, item)
-- [ ] Verify `sitemap.xml` + `robots.txt` are generated when `siteConfig.sitemap.enabled` (v1 feature, on by default; config-toggleable per TECH_REQUIREMENTS.md §22.7)
+- [x] Verify every route has `<title>` and `<meta name="description">` populated
+- [x] Verify OG tags on all 3 route types (home, category, item)
+- [x] Verify `sitemap.xml` + `robots.txt` are generated when `siteConfig.sitemap.enabled` (v1 feature, on by default; config-toggleable per TECH_REQUIREMENTS.md §22.7)
 
 #### Accessibility
 - [ ] All images have non-empty `alt` text — audit with axe or browser DevTools
@@ -458,7 +458,7 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 - [ ] Grep rendered HTML for `reserved_for` → must not appear
 - [ ] Verify `meta_description` truncated to 160 chars
 - [ ] Verify `original_link` validated as URL (invalid → empty, no rendered link)
-- [ ] Verify `poweredByHeader: false` in `next.config.ts`
+- [x] Verify `poweredByHeader: false` in `next.config.ts`
 - [ ] Verify all external links have `rel="noopener noreferrer"`
 
 #### Performance
@@ -474,7 +474,7 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 
 ---
 
-## Phase 14 — Deployment
+## Phase 14 — Deployment ✅
 **Goal:** Site is live on GitHub Pages with a custom domain, images on Cloudflare R2, and full seller workflow validated end-to-end.
 
 ### Tasks
@@ -494,7 +494,7 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 - [ ] GitHub repo → Settings → Pages → Source: **GitHub Actions**
 - [ ] GitHub repo → Settings → Variables → Actions → add `NEXT_PUBLIC_SITE_URL = https://your-domain.com`
 - [ ] Custom domain: GitHub repo → Settings → Pages → Custom domain → set `your-domain.com`; configure DNS CNAME to `<username>.github.io`
-- [ ] Verify `.github/workflows/deploy.yml` is committed (ships with the project)
+- [x] Verify `.github/workflows/deploy.yml` is committed (ships with the project)
 
 #### Initial Content & Deploy
 - [ ] Add real listing photos to `content/items/` folders

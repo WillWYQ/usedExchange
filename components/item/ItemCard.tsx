@@ -1,10 +1,12 @@
-// Server component for Phase 5/6. Phase 12 converts this to "use client" and
-// wraps the title in useLocale() + getLocalizedField() for i18n runtime switching.
+"use client";
+
 import Link from "next/link";
 import type { Item, PriceTier } from "@/lib/content/types";
 import { AdaptiveImage } from "@/components/common/AdaptiveImage";
 import { ConditionBadge } from "./ConditionBadge";
 import { StatusBadge } from "./StatusBadge";
+import { useLocale } from "@/components/i18n/useLocale";
+import { getLocalizedField } from "@/lib/utils/i18n";
 
 type ItemCardProps = {
   item: Item;
@@ -17,6 +19,8 @@ type ItemCardProps = {
 export function ItemCard({ item, resolvedPrice, showCategoryChip = false }: ItemCardProps) {
   const href = `/${item.categorySlug}/${item.itemSlug}`;
   const isSold = item.status === "sold";
+  const { locale } = useLocale();
+  const displayName = getLocalizedField(item, "name", locale);
 
   return (
     <Link
@@ -73,9 +77,9 @@ export function ItemCard({ item, resolvedPrice, showCategoryChip = false }: Item
           </span>
         )}
 
-        {/* Item name */}
+        {/* Item name — locale-aware, re-renders on LocaleSwitcher change */}
         <h3 className="line-clamp-2 text-sm font-medium leading-snug text-white">
-          {item.name}
+          {displayName}
         </h3>
 
         {/* Condition + Status badges */}

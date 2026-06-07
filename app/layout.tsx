@@ -3,6 +3,8 @@ import "./globals.css";
 import { siteConfig } from "@/content/config";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
+import { BackgroundEffect } from "@/components/ui-adapters/BackgroundEffect";
+import { LocaleProvider } from "@/components/i18n/LocaleProvider";
 
 export const metadata: Metadata = {
   title: {
@@ -28,11 +30,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang={siteConfig.i18n.defaultLocale}>
       <body className="min-h-screen bg-black text-white antialiased">
-        {/* LocaleProvider slot — Phase 12 */}
-        {/* BackgroundEffect slot — Phase 11 */}
-        <SiteHeader />
-        <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
-        <SiteFooter />
+        <LocaleProvider>
+        <BackgroundEffect>
+          <SiteHeader />
+          <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+          <SiteFooter />
+        </BackgroundEffect>
+        </LocaleProvider>
       </body>
     </html>
   );
