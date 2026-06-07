@@ -452,6 +452,46 @@ export async function loadSoldItems(): Promise<Item[]> {
 }
 
 /**
+ * Single-pass loader for the /all (Browse All) page.
+ * Parses every item exactly once, then derives both the visible cross-category
+ * item list and the category metadata (for the header count) — eliminating the
+ * double parse that occurred when page.tsx called loadCategories() and then
+ * loadItemsByCategory() per category.
+ *
+ * Do NOT use loadAllItems() — that returns "available" only, capped at
+ * recentlyListedCount. This page needs all non-draft, non-expired-sold items.
+ *
+ * Use this in app/all/page.tsx instead of loadCategories() + loadItemsByCategory().
+ */
+export async function loadBrowseAllPageData(): Promise<{
+  items: Item[];
+  categories: Category[];
+}> {
+  let entries: Dirent<string>[];
+  try {
+    entries = await fs.readdir(CONTENT_ROOT, {
+      withFileTypes: true,
+      encoding: "utf8",
+    });
+  } catch {
+    return { items: [], categories: [] };
+  }
+
+  const slugs = entries
+    .filter((e) => e.isDirectory() && !e.name.startsWith("_"))
+    .map((e) => e.name);
+
+  const allItems = await loadAllItemsRaw();
+
+  const [categories, items] = await Promise.all([
+    buildCategoriesFromItems(slugs, allItems),
+    Promise.resolve(allItems.filter(isItemVisible)),
+  ]);
+
+  return { items, categories };
+}
+
+/**
  * Single-pass loader for the home page.
  * Parses every item exactly once, then derives both categories (for the grid)
  * and the recently listed strip — eliminating the double parse that occurred

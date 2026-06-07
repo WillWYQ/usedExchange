@@ -1,7 +1,7 @@
 import { siteConfig } from "@/content/config";
+import { ContactSection } from "@/components/contact/ContactSection";
 
 // Build timestamp is computed at static-export time (correct "last updated" value).
-// ContactSection slot wired in Phase 10.
 export function SiteFooter() {
   const buildDate = new Date().toLocaleDateString("en-US", {
     year: "numeric",
@@ -10,10 +10,13 @@ export function SiteFooter() {
   });
 
   return (
-    <footer className="mt-16 border-t border-white/10 bg-black/60 px-4 py-10 text-center text-sm text-white/50">
-      {/* ContactSection slot — Phase 10 */}
+    <footer className="mt-16 border-t border-white/10 bg-black/60 px-4 py-10 text-sm text-white/50">
+      {/* Footer contact — no item context, no preferred payment or note */}
+      <div className="mx-auto mb-6 flex max-w-2xl justify-center">
+        <ContactSection preferredPayment={[]} contactNote="" />
+      </div>
 
-      <p className="mt-4">
+      <p className="text-center">
         {siteConfig.name} &middot; Last updated {buildDate}
       </p>
     </footer>

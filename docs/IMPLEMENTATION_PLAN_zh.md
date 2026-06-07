@@ -251,7 +251,7 @@
 
 ---
 
-## Phase 9 — 物品详情页
+## Phase 9 — 物品详情页 ✅
 **目标：** `/[category]/[item]` 渲染，含图库、SSG 定价、联系区块和所有元数据。
 
 > **⚠️ 顺序说明：** Phase 9 依赖 Phase 10（联系系统）。尽管在文档中先出现，Phase 10 必须在 Phase 9 接线前完成。先完成 Phase 10，再回到这里。
@@ -259,38 +259,38 @@
 ### 任务
 
 #### 9a — 支持组件（在接线到页面前构建）
-- [ ] `components/item/FreshnessLabel.tsx`（`"use client"`）— 使用 `useState<string|null>(null)` + `useEffect` 在挂载时针对访客实时浏览器时钟计算相对日期
-- [ ] `components/item/QuantityBadge.tsx` — `item.quantity > 1` 时渲染"3 件在售"；否则隐藏
-- [ ] `components/item/TextbookBadge.tsx` — 渲染"适用于 CS101 · 第3版"徽章 + "比价"链接；仅在存在 `isbn` 或 `course` 时显示
-- [ ] `components/item/MakeOfferButton.tsx`（客户端）— `price.negotiable: true` 且设置 `min_acceptable_offer` 时渲染
-- [ ] `components/item/ConditionGuide.tsx`（客户端）— 成色徽章旁的 `?` 图标；打开工具提示/弹窗；Escape 关闭；键盘可访问
-- [ ] `components/common/ShareButton.tsx`（客户端）— 移动端 `navigator.share()`；桌面端 `navigator.clipboard.writeText()` 回退；显示"已复制！"提示 2 秒
-- [ ] 将 `RecentlyViewed` 接线到物品详情页：传递 `itemSlug={item.itemSlug}` 以在挂载时记录到 `sessionStorage`
-- [ ] `components/common/JsonLd.tsx` — 服务器组件；渲染 `<script type="application/ld+json">{JSON.stringify(data)}</script>`
+- [x] `components/item/FreshnessLabel.tsx`（`"use client"`）— 使用 `useState<string|null>(null)` + `useEffect` 在挂载时针对访客实时浏览器时钟计算相对日期
+- [x] `components/item/QuantityBadge.tsx` — `item.quantity > 1` 时渲染"3 件在售"；否则隐藏
+- [x] `components/item/TextbookBadge.tsx` — 渲染"适用于 CS101 · 第3版"徽章 + "比价"链接；仅在存在 `isbn` 或 `course` 时显示
+- [x] `components/item/MakeOfferButton.tsx`（客户端）— `price.negotiable: true` 且设置 `min_acceptable_offer` 时渲染
+- [x] `components/item/ConditionGuide.tsx`（客户端）— 成色徽章旁的 `?` 图标；打开工具提示/弹窗；Escape 关闭；键盘可访问
+- [x] `components/common/ShareButton.tsx`（客户端）— 移动端 `navigator.share()`；桌面端 `navigator.clipboard.writeText()` 回退；显示"已复制！"提示 2 秒
+- [x] 将 `RecentlyViewed` 接线到物品详情页：传递 `itemSlug={item.itemSlug}` 以在挂载时记录到 `sessionStorage`
+- [x] `components/common/JsonLd.tsx` — 服务器组件；渲染 `<script type="application/ld+json">{JSON.stringify(data)}</script>`
 
 #### 9b — 图库
-- [ ] `components/item/ItemGallery.tsx`（客户端）— 简单默认值：大主图 + 缩略图条；点击切换
+- [x] `components/item/ItemGallery.tsx`（客户端）— 简单默认值：大主图 + 缩略图条；点击切换
 
 #### 9c — 物品详情页
-- [ ] `app/[category]/[item]/page.tsx`：
-  - [ ] 来自 `loadCategories()` + `loadItemsByCategory()` 的 `generateStaticParams`
-  - [ ] `generateMetadata` — 标题、描述、og:image、og:title、Twitter 卡片、Pinterest 富 pin 元数据
-  - [ ] 服务器端：调用 `resolveItemPrice(item.price, { source: "fallback" })` 获取 `initialResolvedTier`
-  - [ ] 注入 `<JsonLd data={buildProductJsonLd(item, siteConfig.baseUrl)} />` 和 `<JsonLd data={buildBreadcrumbJsonLd(crumbs)} />`
-  - [ ] 渲染：面包屑、图库、`FreshnessLabel`、状态+成色徽章、`QuantityBadge`、名称+描述、`TextbookBadge`、`PricingSection`（含 `MakeOfferButton`、付款按钮）、`MetadataTable`、`ContactSection`、标签、`ShareButton`、`RecentlyViewed`
-  - [ ] 已售物品："已售"横幅突出；联系 CTA 禁用；显示 `sold_date`
-- [ ] `app/not-found.tsx` — 站点头部、"页面未找到"消息、返回首页链接
+- [x] `app/[category]/[item]/page.tsx`：
+  - [x] 来自 `loadCategories()` + `loadItemsByCategory()` 的 `generateStaticParams`
+  - [x] `generateMetadata` — 标题、描述、og:image、og:title、Twitter 卡片、Pinterest 富 pin 元数据
+  - [x] 服务器端：调用 `resolveItemPrice(item.price, { source: "fallback" })` 获取 `initialResolvedTier`
+  - [x] 注入 `<JsonLd data={buildProductJsonLd(item, siteConfig.baseUrl)} />` 和 `<JsonLd data={buildBreadcrumbJsonLd(crumbs)} />`
+  - [x] 渲染：面包屑、图库、`FreshnessLabel`、状态+成色徽章、`QuantityBadge`、名称+描述、`TextbookBadge`、`PricingSection`（含 `MakeOfferButton`、付款按钮）、`MetadataTable`、`ContactSection`、标签、`ShareButton`、`RecentlyViewed`
+  - [x] 已售物品："已售"横幅突出；联系 CTA 禁用；显示 `sold_date`
+- [x] `app/not-found.tsx` — 站点头部、"页面未找到"消息、返回首页链接
 
 ---
 
-## Phase 10 — 联系系统
+## Phase 10 — 联系系统 ✅
 **目标：** 联系区块在物品详情页和 footer 中正确渲染。二维码弹窗工作正常。
 
 ### 任务
-- [ ] `components/contact/PlatformButton.tsx`（客户端）— 链接式：`<a>` 含按平台表格的正确 URL；二维码式：`<button>` 触发弹窗
-- [ ] `components/contact/QRModal.tsx`（客户端）— `<dialog>`；点击背景或 Escape 关闭；打开时焦点捕获；关闭时恢复焦点
-- [ ] `components/contact/ContactSection.tsx`（客户端）— `reveal_behavior: "click"` 切换；渲染平台按钮；`preferredPayment`/`contactNote` 为空时隐藏
-- [ ] 接线到物品详情页和 `SiteFooter`
+- [x] `components/contact/PlatformButton.tsx`（客户端）— 链接式：`<a>` 含按平台表格的正确 URL；二维码式：`<button>` 触发弹窗
+- [x] `components/contact/QRModal.tsx`（客户端）— `<dialog>`；点击背景或 Escape 关闭；打开时焦点捕获；关闭时恢复焦点
+- [x] `components/contact/ContactSection.tsx`（客户端）— `reveal_behavior: "click"` 切换；渲染平台按钮；`preferredPayment`/`contactNote` 为空时隐藏
+- [x] 接线到物品详情页和 `SiteFooter`
 
 ---
 

@@ -147,7 +147,7 @@ export function FilterBar({
           <div className="flex items-center justify-between text-xs text-white/50">
             <span>Price</span>
             <span>
-              ${priceRange![0]} – ${priceRange![1]}
+              ${priceRange![0].toLocaleString()} – ${priceRange![1].toLocaleString()}
             </span>
           </div>
           <PriceRangeSlider

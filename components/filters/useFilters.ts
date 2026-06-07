@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import type { Item, Condition } from "@/lib/content/types";
+import { useState, useRef, useMemo } from "react";
+import type { Item, Condition, PriceTier } from "@/lib/content/types";
 import { resolveItemPrice } from "@/lib/utils/pricing";
 import type { SortKey } from "./SortSelect";
 
@@ -34,6 +34,11 @@ export type UseFiltersResult = {
 
   // Derived output — use this array for rendering
   filteredItems: Item[];
+
+  // Per-item resolved price at the current distance, keyed by "categorySlug/itemSlug".
+  // Exposed so callers (e.g. ItemCard) can reuse the already-computed tier instead
+  // of calling resolveItemPrice again — avoids redundant computation per render.
+  resolvedPrices: Map<string, PriceTier | null>;
 };
 
 // Manages filter + sort state for ItemGrid / category pages.
@@ -64,18 +69,35 @@ export function useFilters(
   }, [items, resolvedDistanceMi]);
 
   // Bounds across all items that have at least one tier.
+  // Uses a single pass instead of Math.min(...amounts)/Math.max(...amounts) —
+  // the spread form risks "Maximum call stack size exceeded" on large item sets.
   const priceBounds = useMemo<[number, number] | null>(() => {
     const amounts = [...resolvedPrices.values()]
       .filter((t) => t !== null)
       .map((t) => t!.amount);
     if (amounts.length === 0) return null;
-    return [Math.min(...amounts), Math.max(...amounts)];
+    let lo = amounts[0]!;
+    let hi = amounts[0]!;
+    for (const amount of amounts) {
+      if (amount < lo) lo = amount;
+      if (amount > hi) hi = amount;
+    }
+    return [lo, hi];
   }, [resolvedPrices]);
 
   // Reset slider to full range whenever the distance (and therefore prices) change.
-  useEffect(() => {
+  // Adjusted during render (React's documented pattern for derived state) rather
+  // than via useEffect — an effect here would commit the old priceRange first,
+  // then schedule a second render to apply the reset, producing a visible flash
+  // of the stale (pre-reset) range on every distance change.
+  // null sentinel guarantees the reset also fires on the very first render
+  // (resolvedDistanceMi is always a number — Infinity included — so it can
+  // never equal null, unlike using resolvedDistanceMi itself as the initial ref value).
+  const prevDistanceRef = useRef<number | null>(null);
+  if (prevDistanceRef.current !== resolvedDistanceMi) {
+    prevDistanceRef.current = resolvedDistanceMi;
     setPriceRange(priceBounds);
-  }, [resolvedDistanceMi, priceBounds]);
+  }
 
   // Conditions present in the item set, in quality order (best → worst).
   const availableConditions = useMemo<Condition[]>(() => {
@@ -140,5 +162,6 @@ export function useFilters(
     sortKey,
     setSortKey,
     filteredItems,
+    resolvedPrices,
   };
 }

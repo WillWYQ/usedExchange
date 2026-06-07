@@ -4,7 +4,6 @@ import type { Item } from "@/lib/content/types";
 import { siteConfig } from "@/content/config";
 import { useGeolocation } from "@/components/pricing/useGeolocation";
 import { useDistancePricing } from "@/components/pricing/useDistancePricing";
-import { resolveItemPrice } from "@/lib/utils/pricing";
 import { useFilters } from "@/components/filters/useFilters";
 import { ItemCard } from "./ItemCard";
 import { FilterBar } from "@/components/filters/FilterBar";
@@ -43,6 +42,7 @@ export function ItemGrid({ items, browseAll = false }: ItemGridProps) {
     sortKey,
     setSortKey,
     filteredItems,
+    resolvedPrices,
   } = useFilters(items, resolvedDistanceMi);
 
   return (
@@ -68,14 +68,16 @@ export function ItemGrid({ items, browseAll = false }: ItemGridProps) {
         onSortKeyChange={setSortKey}
       />
 
-      {/* Item grid — resolvedPrice computed per card against current distance */}
+      {/* Item grid — resolvedPrice reused from useFilters' resolvedPrices map
+          (already computed once per item at the current distance; avoids
+          recomputing resolveItemPrice a second time per render). */}
       {filteredItems.length > 0 ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {filteredItems.map((item) => (
             <ItemCard
               key={`${item.categorySlug}/${item.itemSlug}`}
               item={item}
-              resolvedPrice={resolveItemPrice(item.price, resolved)}
+              resolvedPrice={resolvedPrices.get(`${item.categorySlug}/${item.itemSlug}`) ?? null}
               showCategoryChip={browseAll}
             />
           ))}

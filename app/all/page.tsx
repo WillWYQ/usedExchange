@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { siteConfig } from "@/content/config";
-import { loadCategories, loadItemsByCategory } from "@/lib/content/loader";
+import { loadBrowseAllPageData } from "@/lib/content/loader";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ItemGrid } from "@/components/item/ItemGrid";
 
@@ -14,14 +14,9 @@ export const metadata: Metadata = {
 };
 
 export default async function BrowseAllPage() {
-  // Load every category, then fetch items for each concurrently and flatten.
-  // Do NOT use loadAllItems() — that returns "available" only, capped at recentlyListedCount.
-  // This page needs all non-draft, non-expired-sold items across every category.
-  const categories = await loadCategories();
-  const itemArrays = await Promise.all(
-    categories.map((c) => loadItemsByCategory(c.slug)),
-  );
-  const items = itemArrays.flat();
+  // Single-pass load — parses every item exactly once and derives both the
+  // visible cross-category item list and category metadata for the header count.
+  const { items, categories } = await loadBrowseAllPageData();
 
   const browseAllLabel = siteConfig.i18n.strings.browseAll || "Browse All";
 

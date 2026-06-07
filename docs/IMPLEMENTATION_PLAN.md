@@ -301,7 +301,7 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 
 ---
 
-## Phase 9 — Item Detail Page
+## Phase 9 — Item Detail Page ✅
 **Goal:** `/[category]/[item]` renders with gallery, SSG pricing, contact section, and all metadata.
 
 > **⚠️ Ordering note:** Phase 9 depends on Phase 10 (Contact System). Despite appearing first in this document, Phase 10 must be completed before Phase 9 can be wired together. Complete Phase 10 first, then return here.
@@ -309,28 +309,28 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 ### Tasks
 
 #### 9a — Supporting Components (build before wiring into page)
-- [ ] `components/item/FreshnessLabel.tsx` (`"use client"`) — uses `useState<string|null>(null)` + `useEffect(() => { setLabel(formatRelativeDate(listedDate)) }, [listedDate])` to compute the relative date against the visitor's live browser clock on mount. Renders `null` before hydration (no stale SSG date). (TECH_REQUIREMENTS.md §22.11)
-- [ ] `components/item/QuantityBadge.tsx` — renders "3 available" when `item.quantity > 1`; hidden otherwise
-- [ ] `components/item/TextbookBadge.tsx` — renders "For CS101 · 3rd Edition" badge + "Compare prices" link (`bookfinder.com/search/?isbn={isbn}`); only shown when `isbn` or `course` is present (DESIGN.md §10.3)
-- [ ] `components/item/MakeOfferButton.tsx` (client) — renders when `price.negotiable: true` AND `min_acceptable_offer` is set; inline offer form; pre-fills contact message on submit; client-side rejection below threshold (DESIGN.md §10.3)
-- [ ] `components/item/ConditionGuide.tsx` (client) — `?` icon next to `ConditionBadge`; opens tooltip/modal explaining each condition value; closes on Escape; keyboard accessible
-- [ ] `components/common/ShareButton.tsx` (client) — `navigator.share()` on mobile; `navigator.clipboard.writeText()` fallback on desktop; shows "Copied!" toast for 2s (TECH_REQUIREMENTS.md §22.10)
-- [ ] Wire `RecentlyViewed` (built in Phase 6) into the item detail page: pass `itemSlug={item.itemSlug}` so the component records the current item in `sessionStorage` on mount. This makes the strip populate on the home page and other detail pages after a first item view.
-- [ ] `components/common/JsonLd.tsx` — server component; renders `<script type="application/ld+json">{JSON.stringify(data)}</script>` (TECH_REQUIREMENTS.md §22.4)
+- [x] `components/item/FreshnessLabel.tsx` (`"use client"`) — uses `useState<string|null>(null)` + `useEffect(() => { setLabel(formatRelativeDate(listedDate)) }, [listedDate])` to compute the relative date against the visitor's live browser clock on mount. Renders `null` before hydration (no stale SSG date). (TECH_REQUIREMENTS.md §22.11)
+- [x] `components/item/QuantityBadge.tsx` — renders "3 available" when `item.quantity > 1`; hidden otherwise
+- [x] `components/item/TextbookBadge.tsx` — renders "For CS101 · 3rd Edition" badge + "Compare prices" link (`bookfinder.com/search/?isbn={isbn}`); only shown when `isbn` or `course` is present (DESIGN.md §10.3)
+- [x] `components/item/MakeOfferButton.tsx` (client) — renders when `price.negotiable: true` AND `min_acceptable_offer` is set; inline offer form; pre-fills contact message on submit; client-side rejection below threshold (DESIGN.md §10.3)
+- [x] `components/item/ConditionGuide.tsx` (client) — `?` icon next to `ConditionBadge`; opens tooltip/modal explaining each condition value; closes on Escape; keyboard accessible
+- [x] `components/common/ShareButton.tsx` (client) — `navigator.share()` on mobile; `navigator.clipboard.writeText()` fallback on desktop; shows "Copied!" toast for 2s (TECH_REQUIREMENTS.md §22.10)
+- [x] Wire `RecentlyViewed` (built in Phase 6) into the item detail page: pass `itemSlug={item.itemSlug}` so the component records the current item in `sessionStorage` on mount. This makes the strip populate on the home page and other detail pages after a first item view.
+- [x] `components/common/JsonLd.tsx` — server component; renders `<script type="application/ld+json">{JSON.stringify(data)}</script>` (TECH_REQUIREMENTS.md §22.4)
 
 #### 9b — Gallery
-- [ ] `components/item/ItemGallery.tsx` (client) — simple default: large main image + thumbnail strip; click to swap (used by `GalleryAdapter` for `"simple"` config)
+- [x] `components/item/ItemGallery.tsx` (client) — simple default: large main image + thumbnail strip; click to swap (used by `GalleryAdapter` for `"simple"` config)
 
 #### 9c — Item Detail Page
-- [ ] `app/[category]/[item]/page.tsx`:
-  - [ ] `generateStaticParams` from `loadCategories()` + `loadItemsByCategory()`
-  - [ ] `generateMetadata` — title, description, og:image, og:title, Twitter card, Pinterest rich pin meta (TECH_REQUIREMENTS.md §22.5)
-  - [ ] Server-side: calls `resolveItemPrice(item.price, { source: "fallback" })` for `initialResolvedTier`
-  - [ ] Inject `<JsonLd data={buildProductJsonLd(item, siteConfig.baseUrl)} />` and `<JsonLd data={buildBreadcrumbJsonLd(crumbs)} />`
-  - [ ] Renders: `Breadcrumb`, gallery (`GalleryAdapter`), `FreshnessLabel`, status+condition badges (`ConditionGuide` attached to `ConditionBadge`), `QuantityBadge`, name + description (react-markdown; **Phase 12** wraps these two into `LocalizedItemContent` for runtime locale switching), `TextbookBadge`, `PricingSection` (with `MakeOfferButton`, "Pay Deposit" + "Pay with Venmo" buttons), `MetadataTable`, `ContactSection`, tags, `ShareButton`, `RecentlyViewed`
-  - [ ] Payment buttons (inline in `PricingSection`/page): render "Pay Deposit" when `stripe_payment_link` is set and "Pay with Venmo" when `venmo_payment_request` is set; each opens its URL in a new tab with `rel="noopener noreferrer"`; neither renders when its field is empty (DESIGN.md §10.3, TECH_REQUIREMENTS.md §22.9)
-  - [ ] Sold item: "SOLD" banner prominent; contact section CTA disabled; `sold_date` shown if present
-- [ ] `app/not-found.tsx` — site header, "Page not found" message, link to home
+- [x] `app/[category]/[item]/page.tsx`:
+  - [x] `generateStaticParams` from `loadCategories()` + `loadItemsByCategory()`
+  - [x] `generateMetadata` — title, description, og:image, og:title, Twitter card, Pinterest rich pin meta (TECH_REQUIREMENTS.md §22.5)
+  - [x] Server-side: calls `resolveItemPrice(item.price, { source: "fallback" })` for `initialResolvedTier`
+  - [x] Inject `<JsonLd data={buildProductJsonLd(item, siteConfig.baseUrl)} />` and `<JsonLd data={buildBreadcrumbJsonLd(crumbs)} />`
+  - [x] Renders: `Breadcrumb`, gallery (`GalleryAdapter`), `FreshnessLabel`, status+condition badges (`ConditionGuide` attached to `ConditionBadge`), `QuantityBadge`, name + description (react-markdown; **Phase 12** wraps these two into `LocalizedItemContent` for runtime locale switching), `TextbookBadge`, `PricingSection` (with `MakeOfferButton`, "Pay Deposit" + "Pay with Venmo" buttons), `MetadataTable`, `ContactSection`, tags, `ShareButton`, `RecentlyViewed`
+  - [x] Payment buttons (inline in `PricingSection`/page): render "Pay Deposit" when `stripe_payment_link` is set and "Pay with Venmo" when `venmo_payment_request` is set; each opens its URL in a new tab with `rel="noopener noreferrer"`; neither renders when its field is empty (DESIGN.md §10.3, TECH_REQUIREMENTS.md §22.9)
+  - [x] Sold item: "SOLD" banner prominent; contact section CTA disabled; `sold_date` shown if present
+- [x] `app/not-found.tsx` — site header, "Page not found" message, link to home
 
 ### Acceptance Criteria
 - All item detail routes statically generated
@@ -347,14 +347,14 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 
 ---
 
-## Phase 10 — Contact System
+## Phase 10 — Contact System ✅
 **Goal:** Contact section renders correctly on item detail page and in footer. QR modal works.
 
 ### Tasks
-- [ ] `components/contact/PlatformButton.tsx` (client) — link-based: `<a>` with correct URL per platform table (DESIGN.md §7); QR-based: `<button>` triggering modal
-- [ ] `components/contact/QRModal.tsx` (client) — `<dialog>`; closes on backdrop click + Escape; focus trapped inside while open; restores focus on close
-- [ ] `components/contact/ContactSection.tsx` (client) — `reveal_behavior: "click"` toggle; renders platform buttons; hides `preferredPayment`/`contactNote` blocks when empty; footer usage: pass `preferredPayment={[]}` and `contactNote=""`
-- [ ] Wire into item detail page and `SiteFooter`
+- [x] `components/contact/PlatformButton.tsx` (client) — link-based: `<a>` with correct URL per platform table (DESIGN.md §7); QR-based: `<button>` triggering modal
+- [x] `components/contact/QRModal.tsx` (client) — `<dialog>`; closes on backdrop click + Escape; focus trapped inside while open; restores focus on close
+- [x] `components/contact/ContactSection.tsx` (client) — `reveal_behavior: "click"` toggle; renders platform buttons; hides `preferredPayment`/`contactNote` blocks when empty; footer usage: pass `preferredPayment={[]}` and `contactNote=""`
+- [x] Wire into item detail page and `SiteFooter`
 
 ### Acceptance Criteria
 - All link platforms open in new tab with `rel="noopener noreferrer"`

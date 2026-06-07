@@ -1,5 +1,7 @@
 "use client";
 
+import { useId } from "react";
+
 export type SortKey = "date-desc" | "price-asc" | "price-desc" | "condition-asc";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
@@ -15,16 +17,18 @@ type SortSelectProps = {
 };
 
 export function SortSelect({ value, onChange }: SortSelectProps) {
+  const id = useId();
+
   return (
     <div className="flex items-center gap-2">
       <label
-        htmlFor="sort-select"
+        htmlFor={id}
         className="whitespace-nowrap text-xs text-white/50"
       >
         Sort by
       </label>
       <select
-        id="sort-select"
+        id={id}
         value={value}
         onChange={(e) => onChange(e.target.value as SortKey)}
         className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"

@@ -3,6 +3,11 @@
 import { useState, useRef, useId } from "react";
 import type { GeolocationState, ResolvedDistance } from "@/lib/content/types";
 
+// Earth's antipodal distance (~12,450 mi) — any larger value is meaningless
+// for a buyer/seller distance and would push resolveItemPrice into degenerate
+// "gap between tiers" branches.
+const MAX_MANUAL_MILES = 12_500;
+
 type LocationPriceBarProps = {
   geoState: GeolocationState;
   resolved: ResolvedDistance;
@@ -10,6 +15,12 @@ type LocationPriceBarProps = {
   // Call with null to clear the override and revert to detected / fallback.
   onManualMiles: (miles: number | null) => void;
 };
+
+// Narrows ResolvedDistance to the two variants that carry a `miles` field —
+// avoids repeated `as { source: "..."; miles: number }` casts below.
+function hasMiles(r: ResolvedDistance): r is Extract<ResolvedDistance, { miles: number }> {
+  return r.source === "detected" || r.source === "manual";
+}
 
 // Renders one of four states reflecting the current geolocation + distance resolution:
 //
@@ -34,13 +45,7 @@ export function LocationPriceBar({
   const isManual = resolved.source === "manual";
 
   function openInput() {
-    setDraft(
-      isManual
-        ? String(Math.round((resolved as { source: "manual"; miles: number }).miles))
-        : resolved.source === "detected"
-          ? String(Math.round((resolved as { source: "detected"; miles: number }).miles))
-          : "",
-    );
+    setDraft(hasMiles(resolved) ? String(Math.round(resolved.miles)) : "");
     setShowInput(true);
     // Focus after state update
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -54,7 +59,7 @@ export function LocationPriceBar({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const miles = parseFloat(draft);
-    if (!isNaN(miles) && miles >= 0) {
+    if (!isNaN(miles) && miles >= 0 && miles <= MAX_MANUAL_MILES) {
       onManualMiles(miles);
       closeInput();
     }
@@ -76,6 +81,7 @@ export function LocationPriceBar({
         ref={inputRef}
         type="number"
         min={0}
+        max={MAX_MANUAL_MILES}
         step={0.1}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -117,10 +123,7 @@ export function LocationPriceBar({
 
   // ── State: granted (detected distance) ────────────────────────────────────
   if (geoState.status === "granted" && !isManual) {
-    const miles =
-      resolved.source === "detected"
-        ? (resolved as { source: "detected"; miles: number }).miles
-        : null;
+    const miles = resolved.source === "detected" ? resolved.miles : null;
 
     return (
       <div
@@ -156,8 +159,8 @@ export function LocationPriceBar({
   }
 
   // ── State: manual distance override ──────────────────────────────────────
-  if (isManual) {
-    const manualMiles = (resolved as { source: "manual"; miles: number }).miles;
+  if (isManual && resolved.source === "manual") {
+    const manualMiles = resolved.miles;
 
     return (
       <div

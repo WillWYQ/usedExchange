@@ -16,10 +16,12 @@ export function useGeolocation(): GeolocationState {
       return;
     }
 
+    let cancelled = false;
     setState({ status: "pending" });
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        if (cancelled) return;
         setState({
           status: "granted",
           lat: pos.coords.latitude,
@@ -27,6 +29,7 @@ export function useGeolocation(): GeolocationState {
         });
       },
       () => {
+        if (cancelled) return;
         setState({ status: "denied" });
       },
       {
@@ -35,6 +38,11 @@ export function useGeolocation(): GeolocationState {
         maximumAge: 300_000, // reuse cached position for up to 5 min (no second prompt)
       },
     );
+
+    // getCurrentPosition is async; guard against setting state after unmount.
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return state;
