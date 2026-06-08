@@ -5,6 +5,7 @@ import { siteConfig } from "@/content/config";
 import { useGeolocation } from "@/components/pricing/useGeolocation";
 import { useDistancePricing } from "@/components/pricing/useDistancePricing";
 import { useFilters } from "@/components/filters/useFilters";
+import { useIncrementalReveal } from "@/components/common/useIncrementalReveal";
 import { FilterBar } from "@/components/filters/FilterBar";
 import { LocationPriceBar } from "@/components/pricing/LocationPriceBar";
 import { ItemGridAdapter } from "@/components/ui-adapters/ItemGridAdapter";
@@ -45,6 +46,11 @@ export function ItemGrid({ items, browseAll = false }: ItemGridProps) {
     resolvedPrices,
   } = useFilters(items, resolvedDistanceMi);
 
+  // Caps how many cards mount at once — large catalogues would otherwise mean
+  // hundreds of images/cards in the DOM on first paint. Filtering/sorting still
+  // runs over the full filteredItems set; this only limits what gets rendered.
+  const { visibleItems, hasMore, sentinelRef } = useIncrementalReveal(filteredItems);
+
   return (
     <div className="space-y-4">
       {/* Distance indicator + manual override input */}
@@ -70,13 +76,26 @@ export function ItemGrid({ items, browseAll = false }: ItemGridProps) {
 
       {/* Item grid — delegated to ItemGridAdapter (wires siteConfig.ui.itemGrid).
           resolvedPrices computed once in useFilters; passed through to avoid
-          re-running resolveItemPrice per render. */}
+          re-running resolveItemPrice per render. Rendered in incremental batches
+          (visibleItems) so large catalogues don't mount hundreds of cards at once —
+          filtering/sorting itself still runs over the full filteredItems set. */}
       {filteredItems.length > 0 ? (
-        <ItemGridAdapter
-          items={filteredItems}
-          resolvedPrices={resolvedPrices}
-          browseAll={browseAll}
-        />
+        <>
+          <ItemGridAdapter
+            items={visibleItems}
+            resolvedPrices={resolvedPrices}
+            browseAll={browseAll}
+          />
+          {hasMore && (
+            <div
+              ref={sentinelRef}
+              aria-hidden="true"
+              className="flex justify-center py-8"
+            >
+              <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white/60" />
+            </div>
+          )}
+        </>
       ) : (
         <p className="py-16 text-center text-white/40">
           No items match the current filters.

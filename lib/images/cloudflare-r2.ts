@@ -2,6 +2,7 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import type { ImageStorageAdapter } from "./adapter";
+import { normalizeR2Url } from "./normalizeR2Url";
 
 const MIME_MAP: Record<string, string> = {
   jpg: "image/jpeg",
@@ -63,9 +64,7 @@ export class CloudflareR2Adapter implements ImageStorageAdapter {
     });
 
     this.bucket = bucket!;
-    // Normalise: ensure https:// prefix and no trailing slash
-    const rawUrl = publicUrl!.trim().replace(/\/$/, "");
-    this.publicUrl = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
+    this.publicUrl = normalizeR2Url(publicUrl!);
   }
 
   loadChecksums(saved: Record<string, string>): void {

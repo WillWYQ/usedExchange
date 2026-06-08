@@ -113,6 +113,7 @@ export const siteConfig: SiteConfig = {
       makeOffer: "",
       contactSeller: "",
       soldBanner: "",
+      soldArchiveTitle: "",
     },
   },
 };

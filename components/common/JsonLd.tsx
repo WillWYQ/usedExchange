@@ -8,8 +8,11 @@ export function JsonLd({ data }: JsonLdProps) {
   return (
     <script
       type="application/ld+json"
-      // dangerouslySetInnerHTML is required for JSON-LD; data is server-generated (no user input).
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      // dangerouslySetInnerHTML is required for JSON-LD. Escape "<" so a seller-supplied
+      // string containing "</script>" can't break out of the script tag.
+      dangerouslySetInnerHTML={{
+        __html: JSON.stringify(data).replace(/</g, "\\u003c"),
+      }}
     />
   );
 }

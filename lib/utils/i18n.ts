@@ -45,14 +45,3 @@ export function getLocalizedField(
   }
   return item[field];
 }
-
-/**
- * Resolves a UI string key from siteConfig.i18n.strings.
- * Returns `fallback` when the configured string is empty.
- */
-export function t(
-  key: keyof typeof siteConfig.i18n.strings,
-  fallback: string = "",
-): string {
-  return siteConfig.i18n.strings[key] || fallback;
-}

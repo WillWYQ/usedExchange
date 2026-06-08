@@ -18,7 +18,7 @@ vi.mock("@/content/config", () => ({
   },
 }));
 
-import { getLocalizedField, t } from "./i18n";
+import { getLocalizedField } from "./i18n";
 import type { Item } from "@/lib/content/types";
 
 // ── Fixture ───────────────────────────────────────────────────────────────────
@@ -93,33 +93,5 @@ describe("getLocalizedField", () => {
         "iPhone 14 Pro",
       );
     });
-  });
-});
-
-// ── t ─────────────────────────────────────────────────────────────────────────
-
-describe("t", () => {
-  it("returns the configured string when it is non-empty", () => {
-    expect(t("heroTagline", "fallback")).toBe("Quality second-hand items");
-  });
-
-  it("returns the fallback when the configured string is empty", () => {
-    // recentlyListed is "" in the mock
-    expect(t("recentlyListed", "Recently Listed")).toBe("Recently Listed");
-  });
-
-  it("returns '' when both the configured string and fallback are empty", () => {
-    expect(t("recentlyListed", "")).toBe("");
-  });
-
-  it("returns '' when no fallback is provided and the configured string is empty", () => {
-    expect(t("browseAll")).toBe("");
-  });
-
-  it("does not return the fallback when the configured string is non-empty", () => {
-    // Make sure a truthy configured value is never overridden by the fallback
-    expect(t("heroTagline", "should not appear")).toBe(
-      "Quality second-hand items",
-    );
   });
 });

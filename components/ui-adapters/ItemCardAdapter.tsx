@@ -3,14 +3,36 @@
 "use client";
 
 import React from "react";
+import dynamic from "next/dynamic";
 import { siteConfig } from "@/content/config";
 import type { Item, PriceTier } from "@/lib/content/types";
 import { ItemCard } from "@/components/item/ItemCard";
-import { CardSpotlight } from "@/components/ui/card-spotlight";
-import { CardContainer, CardBody } from "@/components/ui/3d-card";
-import { WobbleCard } from "@/components/ui/wobble-card";
-import { DirectionAwareHover } from "@/components/ui/direction-aware-hover";
-import { GlareCard } from "@/components/ui/glare-card";
+
+// Only one card variant is ever active (siteConfig.ui.itemCard is a build-time
+// constant), so each is dynamically imported into its own chunk — the unused
+// variants (and their dependencies, e.g. three.js via card-spotlight's
+// canvas-reveal-effect) are never bundled into the page.
+const CardSpotlight = dynamic(
+  () => import("@/components/ui/card-spotlight").then((m) => m.CardSpotlight),
+  { ssr: false },
+);
+const CardContainer = dynamic(() =>
+  import("@/components/ui/3d-card").then((m) => m.CardContainer),
+);
+const CardBody = dynamic(() =>
+  import("@/components/ui/3d-card").then((m) => m.CardBody),
+);
+const WobbleCard = dynamic(() =>
+  import("@/components/ui/wobble-card").then((m) => m.WobbleCard),
+);
+const DirectionAwareHover = dynamic(() =>
+  import("@/components/ui/direction-aware-hover").then(
+    (m) => m.DirectionAwareHover,
+  ),
+);
+const GlareCard = dynamic(() =>
+  import("@/components/ui/glare-card").then((m) => m.GlareCard),
+);
 
 type Props = {
   item: Item;

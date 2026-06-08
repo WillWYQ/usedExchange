@@ -3,21 +3,60 @@
 "use client";
 
 import React from "react";
+import dynamic from "next/dynamic";
 import { siteConfig } from "@/content/config";
-import { AuroraBackground } from "@/components/ui/aurora-background";
-import { BackgroundBeams } from "@/components/ui/background-beams";
-import { BackgroundBeamsWithCollision } from "@/components/ui/background-beams-with-collision";
-import { BackgroundGradientAnimation } from "@/components/ui/background-gradient-animation";
-import { BoxesCore } from "@/components/ui/background-boxes";
-import { WavyBackground } from "@/components/ui/wavy-background";
-import { Vortex } from "@/components/ui/vortex";
-import { ShootingStars } from "@/components/ui/shooting-stars";
-import { StarsBackground } from "@/components/ui/stars-background";
-import { Meteors } from "@/components/ui/meteors";
-import { BackgroundLines } from "@/components/ui/background-lines";
-import { Spotlight } from "@/components/ui/spotlight";
+
+// Only one variant is ever active (siteConfig.ui.background is a build-time
+// constant), so each is dynamically imported into its own chunk — the other
+// 16 variants (and their dependencies, e.g. three.js / simplex-noise for
+// "wavy" and "vortex") are never bundled into the page.
+const AuroraBackground = dynamic(() =>
+  import("@/components/ui/aurora-background").then((m) => m.AuroraBackground),
+);
+const BackgroundBeams = dynamic(() =>
+  import("@/components/ui/background-beams").then((m) => m.BackgroundBeams),
+);
+const BackgroundBeamsWithCollision = dynamic(() =>
+  import("@/components/ui/background-beams-with-collision").then(
+    (m) => m.BackgroundBeamsWithCollision,
+  ),
+);
+const BackgroundGradientAnimation = dynamic(() =>
+  import("@/components/ui/background-gradient-animation").then(
+    (m) => m.BackgroundGradientAnimation,
+  ),
+);
+const BoxesCore = dynamic(() =>
+  import("@/components/ui/background-boxes").then((m) => m.BoxesCore),
+);
+const WavyBackground = dynamic(
+  () =>
+    import("@/components/ui/wavy-background").then((m) => m.WavyBackground),
+  { ssr: false },
+);
+const Vortex = dynamic(
+  () => import("@/components/ui/vortex").then((m) => m.Vortex),
+  { ssr: false },
+);
+const ShootingStars = dynamic(() =>
+  import("@/components/ui/shooting-stars").then((m) => m.ShootingStars),
+);
+const StarsBackground = dynamic(() =>
+  import("@/components/ui/stars-background").then((m) => m.StarsBackground),
+);
+const Meteors = dynamic(() =>
+  import("@/components/ui/meteors").then((m) => m.Meteors),
+);
+const BackgroundLines = dynamic(() =>
+  import("@/components/ui/background-lines").then((m) => m.BackgroundLines),
+);
+const Spotlight = dynamic(() =>
+  import("@/components/ui/spotlight").then((m) => m.Spotlight),
+);
 // spotlight-new exports Spotlight under the same name; alias to avoid collision
-import { Spotlight as SpotlightNew } from "@/components/ui/spotlight-new";
+const SpotlightNew = dynamic(() =>
+  import("@/components/ui/spotlight-new").then((m) => m.Spotlight),
+);
 
 type Props = { children: React.ReactNode };
 

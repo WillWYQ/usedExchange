@@ -96,6 +96,7 @@ export type SiteConfig = {
       makeOffer: string;
       contactSeller: string;
       soldBanner: string;
+      soldArchiveTitle: string;
     };
   };
 };

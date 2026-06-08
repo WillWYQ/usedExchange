@@ -6,11 +6,14 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { AdaptiveImage } from "@/components/common/AdaptiveImage";
 import { ConditionBadge } from "@/components/item/ConditionBadge";
 
+const soldArchiveTitle =
+  siteConfig.i18n.strings.soldArchiveTitle || "Sold Archive";
+
 export const metadata: Metadata = {
-  title: `Sold Archive — ${siteConfig.name}`,
+  title: `${soldArchiveTitle} — ${siteConfig.name}`,
   description: `Previously sold items from ${siteConfig.name}.`,
   openGraph: {
-    title: `Sold Archive — ${siteConfig.name}`,
+    title: `${soldArchiveTitle} — ${siteConfig.name}`,
     description: `Previously sold items from ${siteConfig.name}.`,
   },
 };
@@ -90,13 +93,13 @@ export default async function SoldArchivePage() {
       <Breadcrumb
         items={[
           { label: "Home", href: "/" },
-          { label: "Sold Archive" },
+          { label: soldArchiveTitle },
         ]}
       />
 
       <header className="mb-6 mt-4">
         <h1 className="text-2xl font-bold text-white sm:text-3xl">
-          Sold Archive
+          {soldArchiveTitle}
         </h1>
         <p className="mt-1.5 text-white/60">
           {items.length} item{items.length !== 1 ? "s" : ""} sold
