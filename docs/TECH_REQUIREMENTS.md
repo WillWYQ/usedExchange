@@ -1024,12 +1024,16 @@ Then passes `initialResolvedTier` as a prop to `PricingSection`:
 ```tsx
 // components/item/PricingTableToggle.tsx  — "use client"
 // Receives all tiers + resolved tier index; manages open/closed state.
-// Collapsed: shows only the "View all pricing tiers ▼" button.
-// Expanded:  renders full tier list table; resolved tier row is visually accented
-//            (e.g. Tailwind ring or bold text); button changes to "Hide ▲".
+// When price.show_tiers is false (default): shows resolved tier row only — no
+//   toggle button, no indication that other tiers exist.
+// When price.show_tiers is true:
+//   Collapsed: resolved tier row + "View all pricing tiers ▼" button.
+//   Expanded:  full tier list table; resolved tier row visually accented
+//              (e.g. Tailwind ring or bold text); button changes to "Hide ▲".
 ```
 
 - Toggle state is local (`useState`); default = `false` (collapsed)
+- `price.show_tiers` (default `false`) gates whether the toggle button is shown at all — sellers may not want buyers to know that cheaper tiers exist
 - The toggle is rendered on the item detail page only, never on item cards
 - Keyboard accessible: toggle button responds to Enter and Space
 
