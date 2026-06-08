@@ -290,7 +290,7 @@ export function ProjectIntro() {
               <CardSpotlight
                 radius={220}
                 color={spotlightColors[index % spotlightColors.length]}
-                className="h-full border-border bg-foreground/5 p-5"
+                className="h-full border-0 bg-foreground/5 p-5"
               >
                 <h3 className="relative z-20 mb-1.5 text-sm font-semibold text-foreground">
                   {slot.name}

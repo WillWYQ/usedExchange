@@ -78,7 +78,7 @@ export function ConditionGuide() {
           ref={panelRef}
           role="dialog"
           aria-label="Condition guide"
-          className="absolute left-0 top-7 z-50 w-64 rounded-xl border border-foreground/10 bg-surface p-4 shadow-xl"
+          className="absolute left-0 top-7 z-50 w-64 rounded-xl border-0 bg-surface p-4 shadow-xl"
         >
           <div className="mb-3 flex items-center justify-between">
             <span className="text-xs font-semibold text-foreground/70">

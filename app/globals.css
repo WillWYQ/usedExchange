@@ -8,14 +8,14 @@
   --background: #ffffff;
   --foreground: #0a0a0a;
   --surface: #f4f4f5;
-  --border: rgb(0 0 0 / 8%);
+  --border: transparent;
 }
 
 .dark {
   --background: #000000;
   --foreground: #ffffff;
   --surface: #18181b;
-  --border: rgb(255 255 255 / 10%);
+  --border: transparent;
 }
 
 /* Registers the variables above as Tailwind color tokens, so utilities like

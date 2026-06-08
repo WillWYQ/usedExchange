@@ -161,7 +161,7 @@ export default async function ItemDetailPage({
       {isSold && (
         <div
           role="alert"
-          className="mb-6 mt-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm font-semibold text-red-300"
+          className="mb-6 mt-2 rounded-xl border-0 bg-red-500/10 px-4 py-3 text-center text-sm font-semibold text-red-300"
         >
           {siteConfig.i18n.strings.soldBanner || "This item has been sold"}
           {itemData.soldDate && (
@@ -263,7 +263,7 @@ export default async function ItemDetailPage({
               href={itemData.youtubeLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex w-fit items-center gap-2 rounded-full border border-foreground/15 px-4 py-2 text-sm text-foreground/60 transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
+              className="inline-flex w-fit items-center gap-2 rounded-full border-0 px-4 py-2 text-sm text-foreground/60 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
             >
               ▶ Watch Demo
             </a>
@@ -313,7 +313,7 @@ export default async function ItemDetailPage({
       )}
 
       {/* Contact section */}
-      <div className="mt-10 border-t border-foreground/10 pt-8">
+      <div className="mt-10 border-t-0 pt-8">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-foreground/40">
           Contact Seller
         </h2>

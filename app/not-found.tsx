@@ -13,7 +13,7 @@ export default function NotFound() {
       </div>
       <Link
         href="/"
-        className="inline-flex items-center gap-2 rounded-full border border-foreground/20 px-5 py-2 text-sm text-foreground/60 transition-colors hover:border-foreground/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
+        className="inline-flex items-center gap-2 rounded-full border-0 px-5 py-2 text-sm text-foreground/60 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
       >
         ← Back to {siteConfig.name}
       </Link>

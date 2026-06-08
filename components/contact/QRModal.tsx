@@ -37,7 +37,7 @@ export function QRModal({ imageSrc, label, onClose }: QRModalProps) {
       ref={dialogRef}
       onClose={handleDialogClose}
       onClick={handleBackdropClick}
-      className="m-auto max-w-xs rounded-2xl border border-foreground/10 bg-background/90 p-0 text-foreground backdrop:bg-background/60 backdrop:backdrop-blur-sm"
+      className="m-auto max-w-xs rounded-2xl border-0 bg-background/90 p-0 text-foreground backdrop:bg-background/60 backdrop:backdrop-blur-sm"
     >
       <div className="relative flex flex-col items-center gap-4 p-6">
         <button

@@ -22,7 +22,7 @@ export function GalleryAdapter({ images, itemName }: Props) {
   // Empty state — identical across all modes
   if (images.length === 0) {
     return (
-      <div className="flex aspect-video w-full items-center justify-center rounded-2xl border border-foreground/10 bg-foreground/5 text-foreground/30">
+      <div className="flex aspect-video w-full items-center justify-center rounded-2xl border-0 bg-foreground/5 text-foreground/30">
         No images
       </div>
     );
