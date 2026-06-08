@@ -3,15 +3,15 @@
 
 import fs from "fs/promises";
 import path from "path";
+import { isValidSlug } from "@/lib/utils/slug";
 
 // FIX Sec 3: only allow lowercase kebab-case slugs (letters, digits, hyphens).
 // Prevents path-traversal payloads such as "../../etc/passwd" from reaching
-// any filesystem operation.  The check runs before any fs.access / fs.readFile
-// call so the error is surfaced immediately with a clear message.
-const SAFE_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
-
+// any filesystem operation, and keeps folder names URL-safe for static export
+// (see lib/utils/slug.ts — shared with generateStaticParams' own check).
+// The check runs before any fs.access / fs.readFile call so the error surfaces immediately.
 function assertSafeSlug(value: string, label: string): void {
-  if (!SAFE_SLUG_RE.test(value)) {
+  if (!isValidSlug(value)) {
     console.error(
       `Error: ${label} must be kebab-case (lowercase letters, digits, and hyphens only).\n` +
         `  Got: "${value}"`,

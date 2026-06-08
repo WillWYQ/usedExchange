@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatRelativeDate } from "./date";
+import { formatRelativeDate, formatAbsoluteDate } from "./date";
 
 // All tests that need a stable "today" inject a fixed `now` so the suite is
 // not time-sensitive and produces identical results in every environment.
@@ -86,5 +86,47 @@ describe("formatRelativeDate", () => {
     // The schema strips timestamps to YYYY-MM-DD before storing, but
     // formatRelativeDate should also be robust to raw timestamps.
     expect(formatRelativeDate("2026-06-05T10:00:00Z", now)).toBe("Today");
+  });
+});
+
+// formatAbsoluteDate is rendered in a Server Component at export time — it
+// must produce an identical string regardless of the build runner's locale or
+// timezone (the bug it replaces: `new Date(iso).toLocaleDateString()` would
+// vary by CI machine and could shift a date-only string by a day).
+describe("formatAbsoluteDate", () => {
+  it("returns '' for null", () => {
+    expect(formatAbsoluteDate(null)).toBe("");
+  });
+
+  it("returns '' for an empty string", () => {
+    expect(formatAbsoluteDate("")).toBe("");
+  });
+
+  it("returns '' for malformed input", () => {
+    expect(formatAbsoluteDate("not-a-date")).toBe("");
+    expect(formatAbsoluteDate("2026-6-5")).toBe("");
+    expect(formatAbsoluteDate("2026")).toBe("");
+  });
+
+  it("formats a YYYY-MM-DD string as a long-form English date", () => {
+    expect(formatAbsoluteDate("2026-06-05")).toBe("June 5, 2026");
+  });
+
+  it("uses only the date portion of a full ISO timestamp", () => {
+    expect(formatAbsoluteDate("2026-06-05T23:59:59Z")).toBe("June 5, 2026");
+  });
+
+  it("is stable across different process timezones (always renders the same calendar date)", () => {
+    const original = process.env.TZ;
+    try {
+      process.env.TZ = "Pacific/Kiritimati"; // UTC+14
+      const a = formatAbsoluteDate("2026-01-31");
+      process.env.TZ = "Etc/GMT+12"; // UTC-12
+      const b = formatAbsoluteDate("2026-01-31");
+      expect(a).toBe(b);
+      expect(a).toBe("January 31, 2026");
+    } finally {
+      process.env.TZ = original;
+    }
   });
 });

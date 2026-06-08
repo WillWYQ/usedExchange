@@ -26,7 +26,25 @@ async function getManifest(): Promise<Record<string, string>> {
     manifestPromise = fs
       .readFile(MANIFEST_PATH, "utf-8")
       .then((content) => JSON.parse(content) as Record<string, string>)
-      .catch(() => ({}) as Record<string, string>);
+      .catch((err: unknown) => {
+        // ENOENT (no manifest yet — e.g. local dev before the first
+        // `pnpm upload-images` run) is expected and silent. Anything else —
+        // most importantly a JSON.parse syntax error from a corrupted
+        // manifest — degrades EVERY item's image to its local fallback path
+        // for the rest of the process (manifestPromise is memoized for the
+        // build's lifetime), so it must be visible in the build log rather
+        // than silently producing a site full of broken images.
+        const code = (err as NodeJS.ErrnoException)?.code;
+        if (code !== "ENOENT") {
+          console.warn(
+            `[loader] image-manifest.json could not be read or parsed (${String(err)}); ` +
+              `falling back to local image paths for all items. If this is a production ` +
+              `build with a CDN provider, images will appear broken — re-run ` +
+              `"pnpm upload-images" and commit the regenerated manifest.`,
+          );
+        }
+        return {} as Record<string, string>;
+      });
   }
   return manifestPromise;
 }
@@ -84,6 +102,7 @@ async function parseItem(
   categorySlug: string,
   itemSlug: string,
   manifest: Record<string, string>,
+  buildDate: string,
 ): Promise<Item | null> {
   const itemDir = path.join(CONTENT_ROOT, categorySlug, itemSlug);
   const jsonPath = path.join(itemDir, "item.json");
@@ -108,10 +127,10 @@ async function parseItem(
     // Re-parse with name injected so Zod applies all defaults.
     const recovered = itemJsonSchema.safeParse({ name: rawName.trim() });
     if (!recovered.success) return null;
-    return buildItem(categorySlug, itemSlug, recovered.data, itemDir, manifest);
+    return buildItem(categorySlug, itemSlug, recovered.data, itemDir, manifest, buildDate);
   }
 
-  return buildItem(categorySlug, itemSlug, result.data, itemDir, manifest);
+  return buildItem(categorySlug, itemSlug, result.data, itemDir, manifest, buildDate);
 }
 
 async function buildItem(
@@ -120,6 +139,7 @@ async function buildItem(
   parsed: ReturnType<typeof itemJsonSchema.parse>,
   itemDir: string,
   manifest: Record<string, string>,
+  buildDate: string,
 ): Promise<Item> {
   // Collect and sort image filenames alphabetically (locale-aware, case-insensitive)
   let filenames: string[] = [];
@@ -145,7 +165,6 @@ async function buildItem(
         ? (images[0] ?? null)
         : null;
 
-  const TODAY = new Date().toISOString().slice(0, 10);
   const currency = parsed.price.currency || siteConfig.currency;
 
   return {
@@ -175,7 +194,7 @@ async function buildItem(
     originalLink: parsed.original_link,
     originalPrice: parsed.original_price,
 
-    listedDate: parsed.listed_date ?? TODAY,
+    listedDate: parsed.listed_date ?? buildDate,
     soldDate: parsed.sold_date,
 
     preferredPayment: parsed.preferred_payment,
@@ -220,6 +239,7 @@ async function buildItem(
 async function parseCategory(
   categorySlug: string,
   manifest: Record<string, string>,
+  buildDate: string,
 ): Promise<Item[]> {
   const catDir = path.join(CONTENT_ROOT, categorySlug);
 
@@ -235,7 +255,7 @@ async function parseCategory(
   );
 
   const items = await Promise.all(
-    itemFolders.map((e) => parseItem(categorySlug, e.name, manifest)),
+    itemFolders.map((e) => parseItem(categorySlug, e.name, manifest, buildDate)),
   );
 
   return items.filter((item): item is Item => item !== null);
@@ -322,13 +342,13 @@ async function buildCategoriesFromItems(
   });
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
-
 /**
- * All valid categories in display order (DESIGN.md §6 sort logic).
+ * Names of every category directory under content/items/, in filesystem order
+ * (display ordering is applied later by buildCategoriesFromItems). Filters out
+ * `_`-prefixed directories (drafts/scratch dirs) and non-directory entries.
  * Never throws; returns [] when content/items/ is missing.
  */
-export async function loadCategories(): Promise<Category[]> {
+async function listCategorySlugs(): Promise<string[]> {
   let entries: Dirent<string>[];
   try {
     entries = await fs.readdir(CONTENT_ROOT, {
@@ -339,10 +359,19 @@ export async function loadCategories(): Promise<Category[]> {
     return [];
   }
 
-  const slugs = entries
+  return entries
     .filter((e) => e.isDirectory() && !e.name.startsWith("_"))
     .map((e) => e.name);
+}
 
+// ── Public API ────────────────────────────────────────────────────────────────
+
+/**
+ * All valid categories in display order (DESIGN.md §6 sort logic).
+ * Never throws; returns [] when content/items/ is missing.
+ */
+export async function loadCategories(): Promise<Category[]> {
+  const slugs = await listCategorySlugs();
   const allItems = await loadAllItemsRaw();
   return buildCategoriesFromItems(slugs, allItems);
 }
@@ -356,7 +385,12 @@ export async function loadItemsByCategory(
   manifest?: Record<string, string>,
 ): Promise<Item[]> {
   const resolvedManifest = manifest ?? (await getManifest());
-  const items = await parseCategory(categorySlug, resolvedManifest);
+  // Computed once per call so every item parsed in this pass falls back to the
+  // same `listedDate` — previously recomputed per item, which could assign
+  // different dates to items parsed just before/after local midnight UTC
+  // during a long build, producing nondeterministic sort order.
+  const buildDate = new Date().toISOString().slice(0, 10);
+  const items = await parseCategory(categorySlug, resolvedManifest, buildDate);
   return items.filter(isItemVisible);
 }
 
@@ -369,7 +403,8 @@ export async function loadItem(
   itemSlug: string,
 ): Promise<Item | null> {
   const manifest = await getManifest();
-  return parseItem(categorySlug, itemSlug, manifest);
+  const buildDate = new Date().toISOString().slice(0, 10);
+  return parseItem(categorySlug, itemSlug, manifest, buildDate);
 }
 
 /**
@@ -390,23 +425,14 @@ export async function loadItem(
  */
 export async function loadAllItemsRaw(): Promise<Item[]> {
   const manifest = await getManifest();
+  // See loadItemsByCategory — computed once so every item across every
+  // category in this concurrent pass shares one fallback `listedDate`.
+  const buildDate = new Date().toISOString().slice(0, 10);
 
-  let entries: Dirent<string>[];
-  try {
-    entries = await fs.readdir(CONTENT_ROOT, {
-      withFileTypes: true,
-      encoding: "utf8",
-    });
-  } catch {
-    return [];
-  }
-
-  const categoryFolders = entries.filter(
-    (e) => e.isDirectory() && !e.name.startsWith("_"),
-  );
+  const slugs = await listCategorySlugs();
 
   const allItemArrays = await Promise.all(
-    categoryFolders.map((e) => parseCategory(e.name, manifest)),
+    slugs.map((slug) => parseCategory(slug, manifest, buildDate)),
   );
 
   return allItemArrays.flat();
@@ -467,20 +493,7 @@ export async function loadBrowseAllPageData(): Promise<{
   items: Item[];
   categories: Category[];
 }> {
-  let entries: Dirent<string>[];
-  try {
-    entries = await fs.readdir(CONTENT_ROOT, {
-      withFileTypes: true,
-      encoding: "utf8",
-    });
-  } catch {
-    return { items: [], categories: [] };
-  }
-
-  const slugs = entries
-    .filter((e) => e.isDirectory() && !e.name.startsWith("_"))
-    .map((e) => e.name);
-
+  const slugs = await listCategorySlugs();
   const allItems = await loadAllItemsRaw();
 
   const [categories, items] = await Promise.all([
@@ -503,19 +516,7 @@ export async function loadHomePageData(): Promise<{
   categories: Category[];
   recentItems: Item[];
 }> {
-  let entries: Dirent<string>[];
-  try {
-    entries = await fs.readdir(CONTENT_ROOT, {
-      withFileTypes: true,
-      encoding: "utf8",
-    });
-  } catch {
-    return { categories: [], recentItems: [] };
-  }
-
-  const slugs = entries
-    .filter((e) => e.isDirectory() && !e.name.startsWith("_"))
-    .map((e) => e.name);
+  const slugs = await listCategorySlugs();
 
   // Single parse pass — manifest is shared via the module-level cache.
   const allItems = await loadAllItemsRaw();

@@ -31,7 +31,14 @@ export function MakeOfferButton({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const amount = parseFloat(offerValue);
-    if (isNaN(amount) || amount < minAcceptableOffer) {
+    // Number.isFinite rejects NaN *and* ±Infinity (e.g. pasted "1e999"); the
+    // upper bound guards against absurd values that would produce a garbled
+    // prefilled message (`$Infinity` survives `isNaN`/`isFinite` checks alone).
+    if (
+      !Number.isFinite(amount) ||
+      amount < minAcceptableOffer ||
+      amount > 1_000_000
+    ) {
       setStatus("rejected");
       return;
     }
@@ -51,7 +58,10 @@ export function MakeOfferButton({
     } else if (platform?.type === "email" && platform.value) {
       const subject = encodeURIComponent(`Offer for: ${itemName}`);
       const body = encodeURIComponent(message);
-      window.open(`mailto:${platform.value}?subject=${subject}&body=${body}`);
+      // mailto: links spawn a blank tab/window when opened via window.open
+      // (the mail client takes over the new context, leaving an empty tab
+      // behind). Navigating the current document is the standard pattern.
+      window.location.href = `mailto:${platform.value}?subject=${subject}&body=${body}`;
     }
 
     setStatus("prefilled");

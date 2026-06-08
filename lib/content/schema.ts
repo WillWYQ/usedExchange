@@ -191,22 +191,3 @@ export const categoryJsonSchema = z.object({
 });
 
 export type ParsedCategoryJson = z.infer<typeof categoryJsonSchema>;
-
-// ── withDefaults helper ───────────────────────────────────────────────────────
-
-/**
- * Shallow-merges `partial` into `defaults`, skipping null/undefined in partial.
- * Used as a last-resort fallback when safeParse fails — keeps valid raw fields,
- * fills missing/invalid ones from defaults.
- */
-export function withDefaults<T extends Record<string, unknown>>(
-  partial: Partial<T>,
-  defaults: T,
-): T {
-  return {
-    ...defaults,
-    ...Object.fromEntries(
-      Object.entries(partial).filter(([, v]) => v !== null && v !== undefined),
-    ),
-  } as T;
-}

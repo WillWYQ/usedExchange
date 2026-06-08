@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { itemJsonSchema, categoryJsonSchema, withDefaults } from "./schema";
+import { itemJsonSchema, categoryJsonSchema } from "./schema";
 
 // Helper: parse and expect success
 function parse(raw: unknown) {
@@ -216,20 +216,5 @@ describe("categoryJsonSchema", () => {
       expect(r.data.display_name).toBe("");
       expect(r.data.sort_order).toBeNull();
     }
-  });
-});
-
-describe("withDefaults", () => {
-  it("merges partial into defaults, skipping null/undefined", () => {
-    const defaults = { a: 1, b: "default", c: true };
-    const partial = { a: 99, b: null, c: undefined };
-    // Cast through unknown — intentionally testing runtime behaviour with nulls
-    const result = withDefaults(
-      partial as unknown as typeof defaults,
-      defaults,
-    );
-    expect(result.a).toBe(99);
-    expect(result.b).toBe("default"); // null skipped → uses default
-    expect(result.c).toBe(true); // undefined skipped → uses default
   });
 });

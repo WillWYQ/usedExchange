@@ -5,15 +5,16 @@
 import fs from "fs/promises";
 import path from "path";
 import { spawnSync } from "child_process";
+import { isValidSlug } from "@/lib/utils/slug";
 
 // FIX Sec 3: only allow lowercase kebab-case slugs (letters, digits, hyphens).
 // This prevents path-traversal payloads such as "../../etc/cron.d" from being
-// accepted as category or item names.  The check runs before any filesystem
-// access so the error is surfaced immediately with a clear message.
-const SAFE_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
-
+// accepted as category or item names. It also keeps every folder name a
+// URL-safe static-export route — see lib/utils/slug.ts for why this same
+// pattern is enforced again at generateStaticParams time.
+// The check runs before any filesystem access so the error surfaces immediately.
 function assertSafeSlug(value: string, label: string): void {
-  if (!SAFE_SLUG_RE.test(value)) {
+  if (!isValidSlug(value)) {
     console.error(
       `Error: ${label} must be kebab-case (lowercase letters, digits, and hyphens only).\n` +
         `  Got: "${value}"`,

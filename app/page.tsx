@@ -3,12 +3,12 @@ import { cache } from "react";
 import Link from "next/link";
 import { siteConfig } from "@/content/config";
 import { loadHomePageData } from "@/lib/content/loader";
-
-// Memoised per-request so generateMetadata and HomePage share one parse pass.
-const getHomePageData = cache(loadHomePageData);
 import { CategoryGrid } from "@/components/category/CategoryGrid";
 import { RecentlyListedSection } from "@/components/home/RecentlyListedSection";
 import { RecentlyViewed } from "@/components/common/RecentlyViewed";
+
+// Memoised per-request so generateMetadata and HomePage share one parse pass.
+const getHomePageData = cache(loadHomePageData);
 
 export async function generateMetadata(): Promise<Metadata> {
   const { recentItems } = await getHomePageData();

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { siteConfig } from "@/content/config";
 import { loadCategories, loadItemsByCategory } from "@/lib/content/loader";
+import { isValidSlug } from "@/lib/utils/slug";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ItemGrid } from "@/components/item/ItemGrid";
 
@@ -19,7 +20,15 @@ const getPageData = cache(async (slug: string) => {
 
 export async function generateStaticParams() {
   const categories = await loadCategories();
-  return categories.map((c) => ({ category: c.slug }));
+  return categories
+    .filter((c) => {
+      if (!isValidSlug(c.slug)) {
+        console.warn(`[generateStaticParams] skipping category with unsafe slug: "${c.slug}"`);
+        return false;
+      }
+      return true;
+    })
+    .map((c) => ({ category: c.slug }));
 }
 
 export async function generateMetadata({
@@ -55,9 +64,13 @@ export default async function CategoryPage({
   const { category: slug } = await params;
   const { category, items } = await getPageData(slug);
 
-  // Guard: slug with no matching folder — should not occur in normal use since
-  // generateStaticParams only emits known slugs, but handles manual navigation.
-  if (category === null && items.length === 0) {
+  // In static-export mode (the default — see content/config.ts), this branch is
+  // unreachable: generateStaticParams is the sole source of truth for which paths
+  // get written to disk, and `category` is non-null for every emitted slug (it's
+  // derived from the same directory listing). The guard only matters in
+  // deploymentMode "vercel", where `dynamicParams` allows on-demand rendering of
+  // slugs that weren't pre-generated.
+  if (siteConfig.deploymentMode === "vercel" && category === null) {
     notFound();
   }
 

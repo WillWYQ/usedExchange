@@ -28,7 +28,7 @@ export function buildProductJsonLd(
     "@type": "Product",
     name: item.name,
     description: item.metaDescription || item.description,
-    image: item.images,
+    ...(item.images.length > 0 ? { image: item.images } : {}),
     url: `${baseUrl}/${item.categorySlug}/${item.itemSlug}`,
     ...(item.brand ? { brand: { "@type": "Brand", name: item.brand } } : {}),
     offers: {

@@ -5,8 +5,7 @@ import { IconMessageCircle } from "@tabler/icons-react";
 import { siteConfig } from "@/content/config";
 import type { Item } from "@/lib/content/types";
 import { resolveItemPrice } from "@/lib/utils/pricing";
-import { useGeolocation } from "@/components/pricing/useGeolocation";
-import { useDistancePricing } from "@/components/pricing/useDistancePricing";
+import { useDistancePricingContext } from "@/components/pricing/DistancePricingContext";
 import { PlatformButton } from "./PlatformButton";
 
 type ContactSectionProps = {
@@ -25,10 +24,12 @@ export function ContactSection({
   const { reveal_behavior, platforms } = siteConfig.contact;
   const [revealed, setRevealed] = useState(reveal_behavior === "always");
 
-  // Geo state for price pre-fill. The browser returns cached position instantly
-  // (maximumAge: 300_000 in useGeolocation), so there is no second permission prompt.
-  const geoState = useGeolocation();
-  const { resolved } = useDistancePricing(siteConfig.location, geoState);
+  // Distance state comes from the shared DistancePricingProvider (wrapping the
+  // item detail page) so this sibling of PricingSection reads the exact same
+  // `resolved` value rather than instantiating its own useGeolocation() call.
+  // Footer usage (no `item`, no provider in the tree) gets FALLBACK_VALUE and
+  // never triggers a geolocation permission prompt — see DistancePricingContext.
+  const { resolved } = useDistancePricingContext();
   const resolvedTier = item ? (resolveItemPrice(item.price, resolved) ?? undefined) : undefined;
 
   if (platforms.length === 0) return null;

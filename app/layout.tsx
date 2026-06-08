@@ -31,11 +31,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang={siteConfig.i18n.defaultLocale}>
       <body className="min-h-screen bg-black text-white antialiased">
         <LocaleProvider>
-        <BackgroundEffect>
-          <SiteHeader />
-          <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
-          <SiteFooter />
-        </BackgroundEffect>
+          <BackgroundEffect>
+            <SiteHeader />
+            <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+            <SiteFooter />
+          </BackgroundEffect>
         </LocaleProvider>
       </body>
     </html>

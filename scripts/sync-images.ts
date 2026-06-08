@@ -13,6 +13,7 @@ import path from "path";
 import crypto from "crypto";
 import { siteConfig } from "@/content/config";
 import type { ImageStorageAdapter } from "@/lib/images/adapter";
+import { copyIfChanged } from "@/lib/images/local";
 
 // ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -57,9 +58,40 @@ const mode = modeIdx !== -1 ? args[modeIdx + 1] : undefined;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function sha256(filePath: string): string {
-  const data = fs.readFileSync(filePath);
-  return crypto.createHash("sha256").update(data).digest("hex");
+function sha256(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash("sha256");
+    fs.createReadStream(filePath)
+      .on("data", (chunk) => hash.update(chunk))
+      .on("end", () => resolve(hash.digest("hex")))
+      .on("error", reject);
+  });
+}
+
+/**
+ * Run `fn` over `items` with at most `limit` in flight at once. CDN PUTs are
+ * network-latency bound (R2/S3 handle concurrent writes fine), so serializing
+ * them — as a plain `for…of` loop would — turns an upload of N photos into N
+ * sequential round-trips. Bounded concurrency keeps memory predictable while
+ * cutting wall-clock time roughly by `limit`x.
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+
+  async function worker(): Promise<void> {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index]!, index);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
 }
 
 async function loadJson<T>(filePath: string, fallback: T): Promise<T> {
@@ -171,24 +203,29 @@ async function runQualityChecks(
     byItem.get(itemKey)!.push(filename);
   }
 
-  // Per-image checks
-  for (const { sourcePath, manifestKey } of images) {
+  // Per-image checks — batched so the sharp metadata reads (one dynamic
+  // import + decode per image) don't serialize across hundreds of photos.
+  const QUALITY_CHECK_CONCURRENCY = 8;
+  const perImageWarnings = await mapWithConcurrency(images, QUALITY_CHECK_CONCURRENCY, async ({ sourcePath, manifestKey }) => {
+    const localWarnings: string[] = [];
     const filename = path.basename(sourcePath);
     const stat = fs.statSync(sourcePath);
 
     if (stat.size > 8 * 1024 * 1024) {
-      warnings.push(
+      localWarnings.push(
         `${filename} is large (${(stat.size / (1024 * 1024)).toFixed(1)} MB); consider resizing before upload`,
       );
     }
 
     const width = await tryGetImageWidth(sourcePath);
     if (width !== null && width < 800) {
-      warnings.push(
+      localWarnings.push(
         `${filename} in ${path.dirname(manifestKey)} may appear blurry (width: ${width}px < 800px)`,
       );
     }
-  }
+    return localWarnings;
+  });
+  for (const localWarnings of perImageWarnings) warnings.push(...localWarnings);
 
   // Per-item folder checks
   for (const [itemKey, filenames] of byItem) {
@@ -263,28 +300,35 @@ async function runUpload(): Promise<void> {
 
   const images = await scanImages(CONTENT_ITEMS);
 
-  // 5. Upload/sync each image and collect manifest URLs
-  const newManifest: Record<string, string> = {};
-  let uploaded = 0;
-  let skipped = 0;
+  // 5. Upload/sync each image (bounded concurrency) and collect manifest URLs.
+  // Each worker returns its outcome rather than mutating shared counters/objects
+  // directly, so concurrent closures can't race on `newManifest`/`uploaded`/`skipped`.
+  const UPLOAD_CONCURRENCY = 8;
+  type SyncOutcome = { manifestKey: string; manifestUrl: string; uploaded: boolean };
 
-  for (const { sourcePath, manifestKey } of images) {
-    const checksum = sha256(sourcePath);
+  const outcomes = await mapWithConcurrency(images, UPLOAD_CONCURRENCY, async ({ sourcePath, manifestKey }) => {
+    const checksum = await sha256(sourcePath);
     const url = await adapter.syncImage(sourcePath, manifestKey, checksum);
 
     if (url === "") {
       // Vercel Blob skip signal: file unchanged — preserve existing manifest URL
-      newManifest[manifestKey] = existingManifest[manifestKey] ?? "";
-      skipped++;
-    } else if (savedChecksums[manifestKey] === checksum) {
-      // Checksum match (R2 / local): file unchanged — URL reconstructed by adapter
-      newManifest[manifestKey] = url;
-      skipped++;
-    } else {
-      // New or changed file
-      newManifest[manifestKey] = url;
-      uploaded++;
+      return { manifestKey, manifestUrl: existingManifest[manifestKey] ?? "", uploaded: false } satisfies SyncOutcome;
     }
+    if (savedChecksums[manifestKey] === checksum) {
+      // Checksum match (R2 / local): file unchanged — URL reconstructed by adapter
+      return { manifestKey, manifestUrl: url, uploaded: false } satisfies SyncOutcome;
+    }
+    // New or changed file
+    return { manifestKey, manifestUrl: url, uploaded: true } satisfies SyncOutcome;
+  });
+
+  const newManifest: Record<string, string> = {};
+  let uploaded = 0;
+  let skipped = 0;
+  for (const outcome of outcomes) {
+    newManifest[outcome.manifestKey] = outcome.manifestUrl;
+    if (outcome.uploaded) uploaded++;
+    else skipped++;
   }
 
   // 6. Purge stale manifest entries (deleted item folders)
@@ -330,23 +374,16 @@ async function runDevSync(): Promise<void> {
   let copied = 0;
   let unchanged = 0;
 
+  // Delegate to the same mtime+size comparison LocalAdapter uses (see
+  // lib/images/local.ts#copyIfChanged) — this used to be reimplemented here
+  // with a `<=` comparison that silently skipped backup-restored files with
+  // an older mtime than the stale public/ copy. Sharing one implementation
+  // means `pnpm dev` and `pnpm upload-images` can never diverge again.
   for (const { sourcePath, manifestKey } of images) {
     const destPath = path.join(PUBLIC_ITEMS, manifestKey);
-    const destDir = path.dirname(destPath);
-    fs.mkdirSync(destDir, { recursive: true });
-
-    // Incremental copy: skip if mtime + size match
-    if (fs.existsSync(destPath)) {
-      const src = fs.statSync(sourcePath);
-      const dst = fs.statSync(destPath);
-      if (src.size === dst.size && src.mtimeMs <= dst.mtimeMs) {
-        unchanged++;
-        continue;
-      }
-    }
-
-    fs.copyFileSync(sourcePath, destPath);
-    copied++;
+    const { copied: didCopy } = await copyIfChanged(sourcePath, destPath);
+    if (didCopy) copied++;
+    else unchanged++;
   }
 
   const contactCount = await copyContactFiles();
@@ -374,13 +411,13 @@ async function runBuildCheck(): Promise<void> {
     }
     const images = await scanImages(CONTENT_ITEMS);
     let copied = 0;
+    // Same shared mtime+size comparison as dev-sync — previously this branch
+    // only checked file *existence*, so a changed-but-same-named file (e.g.
+    // a replaced cover.jpg) would never get recopied during a build-check run.
     for (const { sourcePath, manifestKey } of images) {
       const destPath = path.join(PUBLIC_ITEMS, manifestKey);
-      fs.mkdirSync(path.dirname(destPath), { recursive: true });
-      if (!fs.existsSync(destPath)) {
-        fs.copyFileSync(sourcePath, destPath);
-        copied++;
-      }
+      const { copied: didCopy } = await copyIfChanged(sourcePath, destPath);
+      if (didCopy) copied++;
     }
     console.log(`[build-check] local provider — copied ${copied} images to public/items/`);
     return;

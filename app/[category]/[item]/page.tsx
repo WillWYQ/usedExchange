@@ -3,7 +3,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { siteConfig } from "@/content/config";
 import { loadCategories, loadItemsByCategory } from "@/lib/content/loader";
+import { isValidSlug } from "@/lib/utils/slug";
 import { resolveItemPrice } from "@/lib/utils/pricing";
+import { formatAbsoluteDate } from "@/lib/utils/date";
+import { DistancePricingProvider } from "@/components/pricing/DistancePricingContext";
 import { buildProductJsonLd, buildBreadcrumbJsonLd } from "@/lib/utils/jsonld";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { StatusBadge } from "@/components/item/StatusBadge";
@@ -39,8 +42,21 @@ export async function generateStaticParams() {
 
   await Promise.all(
     categories.map(async (cat) => {
+      // A malformed category folder name would already have been skipped by
+      // loadCategories' own filtering in well-formed content trees, but a
+      // non-slug-safe name (spaces, parens, non-ASCII) can still slip through
+      // as a directory — guard here so we never emit a static path that won't
+      // round-trip through Next's URL encoding.
+      if (!isValidSlug(cat.slug)) {
+        console.warn(`[generateStaticParams] skipping category with unsafe slug: "${cat.slug}"`);
+        return;
+      }
       const items = await loadItemsByCategory(cat.slug);
       for (const it of items) {
+        if (!isValidSlug(it.itemSlug)) {
+          console.warn(`[generateStaticParams] skipping item with unsafe slug: "${cat.slug}/${it.itemSlug}"`);
+          continue;
+        }
         params.push({ category: cat.slug, item: it.itemSlug });
       }
     }),
@@ -119,20 +135,22 @@ export default async function ItemDetailPage({
     source: "fallback",
   });
 
-  const breadcrumbs = [
+  // Single source of truth for the trail — Breadcrumb wants the last entry
+  // href-less (rendered as plain text), JSON-LD wants every entry's href.
+  const crumbTrail = [
     { label: "Home", href: "/" },
     { label: categoryMeta?.displayName ?? category, href: `/${category}` },
-    { label: itemData.name },
+    { label: itemData.name, href: `/${category}/${item}` },
   ];
 
-  const jsonLdCrumbs = [
-    { name: "Home", href: "/" },
-    { name: categoryMeta?.displayName ?? category, href: `/${category}` },
-    { name: itemData.name, href: `/${category}/${item}` },
-  ];
+  const breadcrumbs = crumbTrail.map((c, i) =>
+    i === crumbTrail.length - 1 ? { label: c.label } : c,
+  );
+
+  const jsonLdCrumbs = crumbTrail.map((c) => ({ name: c.label, href: c.href }));
 
   return (
-    <>
+    <DistancePricingProvider sellerLocation={siteConfig.location}>
       {/* JSON-LD structured data */}
       <JsonLd data={buildProductJsonLd(itemData, siteConfig.baseUrl)} />
       <JsonLd data={buildBreadcrumbJsonLd(jsonLdCrumbs, siteConfig.baseUrl)} />
@@ -148,7 +166,13 @@ export default async function ItemDetailPage({
           {siteConfig.i18n.strings.soldBanner || "This item has been sold"}
           {itemData.soldDate && (
             <span className="ml-2 font-normal text-red-300/70">
-              on {new Date(itemData.soldDate).toLocaleDateString()}
+              {/* This is a Server Component rendered once at export time —
+                  `toLocaleDateString()` would format using the CI runner's
+                  locale/timezone (not the visitor's), the same class of bug
+                  FreshnessLabel was built to avoid. formatAbsoluteDate parses
+                  the YYYY-MM-DD components explicitly for a deterministic,
+                  locale-stable result baked into the static HTML. */}
+              on {formatAbsoluteDate(itemData.soldDate)}
             </span>
           )}
         </div>
@@ -311,6 +335,6 @@ export default async function ItemDetailPage({
         itemName={itemData.name}
         itemCoverImage={itemData.coverImage}
       />
-    </>
+    </DistancePricingProvider>
   );
 }

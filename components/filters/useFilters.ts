@@ -94,7 +94,13 @@ export function useFilters(
   // (resolvedDistanceMi is always a number — Infinity included — so it can
   // never equal null, unlike using resolvedDistanceMi itself as the initial ref value).
   const prevDistanceRef = useRef<number | null>(null);
-  if (prevDistanceRef.current !== resolvedDistanceMi) {
+  // Guard against NaN: NaN !== NaN is always true, so without this check a
+  // NaN resolvedDistanceMi (e.g. a corrupted manual-entry value) would make
+  // the condition below true on every single render — an infinite render loop.
+  if (
+    !Number.isNaN(resolvedDistanceMi) &&
+    prevDistanceRef.current !== resolvedDistanceMi
+  ) {
     prevDistanceRef.current = resolvedDistanceMi;
     setPriceRange(priceBounds);
   }

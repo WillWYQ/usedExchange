@@ -77,6 +77,14 @@ export default async function SoldArchivePage() {
   // Sorted by soldDate desc (falls back to listedDate).
   const items = await loadSoldItems();
 
+  // /sold is a permanent, ever-growing static page (no pagination at request
+  // time in a fully-exported site) — cap how many render so build time and
+  // page weight don't grow unbounded over years of use. The header count
+  // intentionally reflects the *total*, not the capped grid, so the seller
+  // can see their full sales history at a glance.
+  const limit = siteConfig.soldArchiveDisplayLimit;
+  const visibleItems = limit > 0 ? items.slice(0, limit) : items;
+
   return (
     <>
       <Breadcrumb
@@ -100,14 +108,22 @@ export default async function SoldArchivePage() {
           No sold items yet.
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {items.map((item) => (
-            <SoldItemCard
-              key={`${item.categorySlug}/${item.itemSlug}`}
-              item={item}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {visibleItems.map((item) => (
+              <SoldItemCard
+                key={`${item.categorySlug}/${item.itemSlug}`}
+                item={item}
+              />
+            ))}
+          </div>
+          {visibleItems.length < items.length && (
+            <p className="mt-6 text-center text-sm text-white/40">
+              Showing the {visibleItems.length} most recently sold items
+              ({items.length - visibleItems.length} older items not shown).
+            </p>
+          )}
+        </>
       )}
     </>
   );

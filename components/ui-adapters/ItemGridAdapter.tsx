@@ -9,6 +9,9 @@ import type { Item, PriceTier } from "@/lib/content/types";
 import { ItemCardAdapter } from "./ItemCardAdapter";
 import { BentoGrid } from "@/components/ui/bento-grid";
 import { LayoutGrid } from "@/components/ui/layout-grid";
+import { ConditionBadge } from "@/components/item/ConditionBadge";
+import { useLocale } from "@/components/i18n/useLocale";
+import { getLocalizedField } from "@/lib/utils/i18n";
 import { cn } from "@/lib/utils/index";
 
 type Props = {
@@ -23,6 +26,7 @@ function itemKey(item: Item) {
 
 export function ItemGridAdapter({ items, resolvedPrices, browseAll = false }: Props) {
   const mode = siteConfig.ui.itemGrid;
+  const { locale } = useLocale();
   const price = (item: Item) => resolvedPrices.get(itemKey(item)) ?? null;
 
   if (items.length === 0) return null;
@@ -54,11 +58,12 @@ export function ItemGridAdapter({ items, resolvedPrices, browseAll = false }: Pr
       className: i % 5 === 0 ? "md:col-span-2" : "",
       content: (
         <div className="p-1">
-          <p className="font-bold text-base text-white">{item.name}</p>
-          <p className="font-normal text-sm text-white/70">
-            {item.condition ?? ""}
-            {item.condition && price(item) ? " · " : ""}
-            {price(item) ? `$${price(item)!.amount}` : ""}
+          <p className="font-bold text-base text-white">
+            {getLocalizedField(item, "name", locale)}
+          </p>
+          <p className="flex items-center gap-1.5 font-normal text-sm text-white/70">
+            <ConditionBadge condition={item.condition} />
+            {price(item) ? `· $${price(item)!.amount}` : ""}
           </p>
         </div>
       ),

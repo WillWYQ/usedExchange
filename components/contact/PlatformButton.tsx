@@ -100,15 +100,15 @@ function buildUrl(
         : `mailto:${value}`;
     }
     case "discord":
-      return `https://discord.com/users/${value}`;
+      return `https://discord.com/users/${encodeURIComponent(value)}`;
     case "facebook":
-      return `https://facebook.com/${value}`;
+      return `https://facebook.com/${encodeURIComponent(value)}`;
     case "instagram":
-      return `https://instagram.com/${value}`;
+      return `https://instagram.com/${encodeURIComponent(value)}`;
     case "snapchat":
-      return `https://snapchat.com/add/${value}`;
+      return `https://snapchat.com/add/${encodeURIComponent(value)}`;
     case "whatsapp": {
-      const phone = value.replace(/^\+/, "");
+      const phone = encodeURIComponent(value.replace(/^\+/, ""));
       if (!item) return `https://wa.me/${phone}`;
       const text = encodeURIComponent(
         `Hi, I'm interested in your ${item.name}${priceStr}. Is it still available?`,
@@ -116,15 +116,15 @@ function buildUrl(
       return `https://wa.me/${phone}?text=${text}`;
     }
     case "twitter":
-      return `https://x.com/${value}`;
+      return `https://x.com/${encodeURIComponent(value)}`;
     case "tiktok":
-      return `https://tiktok.com/${value}`;
+      return `https://tiktok.com/${encodeURIComponent(value)}`;
     case "linkedin":
-      return `https://linkedin.com/${value}`;
+      return `https://linkedin.com/${encodeURIComponent(value)}`;
     case "youtube":
-      return `https://youtube.com/${value}`;
+      return `https://youtube.com/${encodeURIComponent(value)}`;
     case "venmo": {
-      const base = `https://venmo.com/u/${value}`;
+      const base = `https://venmo.com/u/${encodeURIComponent(value)}`;
       if (!item) return base;
       const note = encodeURIComponent(item.name);
       return `${base}?txn=pay&audience=private&note=${note}`;

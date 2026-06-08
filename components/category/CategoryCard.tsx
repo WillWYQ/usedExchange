@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Category } from "@/lib/content/types";
+import { AdaptiveImage } from "@/components/common/AdaptiveImage";
 
 type CategoryCardProps = {
   category: Category;
@@ -18,16 +19,15 @@ export function CategoryCard({ category }: CategoryCardProps) {
     >
       {/* Cover image (blurred background) */}
       {category.coverImage && (
-        <div
-          className="absolute inset-0 scale-105 bg-cover bg-center opacity-20 transition-opacity duration-300 group-hover:opacity-30"
-          style={{
-            backgroundImage: `url("${category.coverImage
-              .replace(/\\/g, "\\\\")
-              .replace(/"/g, "%22")
-              .replace(/\)/g, "%29")}")`,
-          }}
-          aria-hidden="true"
-        />
+        <div className="absolute inset-0 overflow-hidden" aria-hidden="true">
+          <AdaptiveImage
+            src={category.coverImage}
+            alt=""
+            fill
+            className="scale-105 object-cover opacity-20 transition-opacity duration-300 group-hover:opacity-30"
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+          />
+        </div>
       )}
 
       {/* Bottom-to-top gradient so text stays readable */}

@@ -40,6 +40,8 @@ export type SiteConfig = {
   currency: string;
   recentlyListedCount: number;
   soldItemRetentionDays: number;
+  // Caps how many sold items render on /sold (0 = no cap). See content/config.ts.
+  soldArchiveDisplayLimit: number;
 
   // Contact
   contact: {
