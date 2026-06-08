@@ -55,6 +55,7 @@ export function SearchBar() {
         onChange={handleChange}
         onFocus={() => query && setOpen(true)}
         onKeyDown={handleKeyDown}
+        role="combobox"
         aria-label="Search items"
         aria-expanded={showDropdown}
         aria-controls="search-results"
@@ -74,7 +75,7 @@ export function SearchBar() {
             <li className="px-4 py-3 text-sm text-white/40">No results found</li>
           ) : (
             results.map((item) => (
-              <li key={`${item.categorySlug}/${item.itemSlug}`} role="option">
+              <li key={`${item.categorySlug}/${item.itemSlug}`} role="option" aria-selected={false}>
                 <button
                   onClick={() => navigate(item.categorySlug, item.itemSlug)}
                   className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-white/10 focus-visible:bg-white/10 focus-visible:outline-none"

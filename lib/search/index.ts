@@ -14,6 +14,11 @@ export type SearchIndexEntry = {
   coverImage: string | null;
 };
 
+// Descriptions are only used as Fuse.js match fodder — SearchBar never renders
+// them — so the index keeps a prefix rather than the full text. This bounds
+// search-index.json size as the catalogue grows past hundreds of items.
+const DESCRIPTION_EXCERPT_LENGTH = 200;
+
 /**
  * Builds the fuse.js search index from all publicly visible, non-sold items.
  * Called by scripts/build-search-index.ts during the prebuild step.
@@ -37,7 +42,7 @@ export async function buildSearchIndex(): Promise<SearchIndexEntry[]> {
     .filter((item) => item.status !== "draft" && item.status !== "sold")
     .map((item) => ({
       name: item.name,
-      description: item.description,
+      description: item.description.slice(0, DESCRIPTION_EXCERPT_LENGTH),
       brand: item.brand,
       model: item.model,
       tags: item.tags,
