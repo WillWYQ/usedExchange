@@ -17,7 +17,7 @@ function makeItem(
   return {
     condition: "good",
     status: "available",
-    price: { currency: "USD", tiers: [], negotiable: false },
+    price: { currency: "USD", tiers: [], negotiable: false, show_tiers: false },
     noLowball: false,
     priceReduced: false,
     previousLowestPrice: null,
@@ -68,6 +68,7 @@ const ITEM_A = makeItem({
       { label: "Far", amount: 200 }, // open-ended
     ],
     negotiable: false,
+    show_tiers: false,
   },
   listedDate: "2026-06-01",
 });
@@ -84,6 +85,7 @@ const ITEM_B = makeItem({
       { label: "Far", amount: 120 }, // open-ended
     ],
     negotiable: false,
+    show_tiers: false,
   },
   listedDate: "2026-05-01",
 });
@@ -94,7 +96,7 @@ const ITEM_SOLD = makeItem({
   name: "Tablet",
   status: "sold",
   condition: "fair",
-  price: { currency: "USD", tiers: [], negotiable: false },
+  price: { currency: "USD", tiers: [], negotiable: false, show_tiers: false },
   listedDate: "2026-04-01",
 });
 

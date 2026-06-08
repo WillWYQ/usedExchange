@@ -196,7 +196,10 @@ content/                            ← ★ 卖家唯一需要接触的文件夹
       { "label": "16 – 30 英里",    "miles_min": 15,  "miles_max": 30, "amount": 25 },
       { "label": "邮寄",            "miles_min": 30,  "amount": 35 }
     ],
-    "negotiable": true    // 布尔值，默认 false；价格后渲染"可议"
+    "negotiable": true,   // 布尔值，默认 false；价格后渲染"可议"
+    "show_tiers": false   // 布尔值，默认 false；买家是否可在物品详情页展开
+                          //   "查看所有价格档位"。默认关闭——卖家可能不希望
+                          //   买家看到例如自提比邮寄便宜多少。
   },
 
   // ── 物品详情 ──────────────────────────────────────────────────────────────
@@ -265,6 +268,7 @@ content/                            ← ★ 卖家唯一需要接触的文件夹
 | `price.currency` | `"USD"` |
 | `price.tiers` | `[]` → 显示"联系询价" |
 | `price.negotiable` | `false` |
+| `price.show_tiers` | `false` → 对买家隐藏"查看所有价格档位"切换 |
 | `condition` | `"good"` |
 | `quantity` | `1` |
 | `status` | `"available"` |

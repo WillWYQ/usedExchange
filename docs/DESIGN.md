@@ -305,7 +305,11 @@ Only `name` is required. Every other field is optional; the build applies safe d
       { "label": "16 – 30 mi",       "miles_min": 15,  "miles_max": 30, "amount": 25 },
       { "label": "Shipping",         "miles_min": 30,  "amount": 35 }
     ],
-    "negotiable": true                        // boolean, default false; renders "OBO" on price
+    "negotiable": true,                        // boolean, default false; renders "OBO" on price
+    "show_tiers": false                        // boolean, default false; whether buyers may expand
+                                                //   "View all pricing tiers" on the item detail page.
+                                                //   Off by default — sellers may not want buyers to
+                                                //   see e.g. how much cheaper pickup is than shipping.
   },
 
   // ── Item details ──────────────────────────────────────────────────────────
@@ -420,6 +424,7 @@ Only `name` is required. Every other field is optional; the build applies safe d
 | `price.currency` | `"USD"` |
 | `price.tiers` | `[]` → shows "Contact for price" |
 | `price.negotiable` | `false` |
+| `price.show_tiers` | `false` → "View all pricing tiers" toggle hidden from buyers |
 | `condition` | `"good"` |
 | `quantity` | `1` |
 | `status` | `"available"` |
@@ -1259,9 +1264,11 @@ Only the resolved tier is shown by default. All other tiers are hidden.
 | Context | Default display | Expand available? |
 |---|---|---|
 | Item card (category grid, home page) | Resolved tier price only | No — cards are too compact |
-| Item detail page pricing table | Resolved tier row only | Yes — "View all pricing tiers ▼" collapsed toggle |
+| Item detail page pricing table | Resolved tier row only | Only if `price.show_tiers` is `true` — "View all pricing tiers ▼" collapsed toggle |
 
-The expand toggle is always present on the item detail page regardless of geo state (granted, denied, or manual). When expanded, all tiers are listed with the resolved tier visually highlighted (bold or accent colour). Collapsing returns to single-row view.
+`price.show_tiers` defaults to `false`: buyers see only the resolved tier row, with no indication that other tiers exist. Sellers may not want buyers comparing tiers (e.g. seeing that local pickup is much cheaper than shipping, which can invite haggling). Sellers opt in per item by setting `price.show_tiers: true`.
+
+When the toggle is enabled and present, it shows regardless of geo state (granted, denied, or manual). When expanded, all tiers are listed with the resolved tier visually highlighted (bold or accent colour). Collapsing returns to single-row view.
 
 ### State Architecture
 

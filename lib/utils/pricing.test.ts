@@ -13,6 +13,7 @@ const price = (tiers: PriceTier[]): Price => ({
   currency: "USD",
   tiers,
   negotiable: false,
+  show_tiers: false,
 });
 
 describe("resolveItemPrice", () => {

@@ -27,6 +27,10 @@ export type Price = {
   currency: string;
   tiers: PriceTier[];
   negotiable: boolean;
+  // Whether buyers may expand the "View all pricing tiers" toggle on the item
+  // detail page. Default false — sellers may not want buyers comparing tiers
+  // (e.g. seeing that pickup is much cheaper than shipping).
+  show_tiers: boolean;
 };
 
 // Full Item type — all camelCase fields from item.json with defaults applied by loader.

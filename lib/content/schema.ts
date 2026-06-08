@@ -99,9 +99,12 @@ const priceSchema = z
       .optional()
       .default([]),
     negotiable: z.boolean().catch(false).optional().default(false),
+    // Buyer-facing "View all pricing tiers" toggle is opt-in: sellers may not
+    // want buyers to see e.g. how much cheaper local pickup is than shipping.
+    show_tiers: z.boolean().catch(false).optional().default(false),
   })
   .optional()
-  .default({ currency: "", tiers: [], negotiable: false });
+  .default({ currency: "", tiers: [], negotiable: false, show_tiers: false });
 
 // ── Main item schema ──────────────────────────────────────────────────────────
 

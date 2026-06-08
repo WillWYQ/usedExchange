@@ -19,6 +19,7 @@ function makeItem(overrides: Partial<Item> = {}): Item {
       currency: "USD",
       tiers: [{ label: "Pickup", amount: 800 }],
       negotiable: false,
+      show_tiers: false,
     },
     noLowball: false,
     priceReduced: false,
@@ -111,7 +112,7 @@ describe("buildProductJsonLd", () => {
   });
 
   it("omits price from offers when tiers array is empty", () => {
-    const item = makeItem({ price: { currency: "USD", tiers: [], negotiable: false } });
+    const item = makeItem({ price: { currency: "USD", tiers: [], negotiable: false, show_tiers: false } });
     const ld = buildProductJsonLd(item, "https://example.com");
     const offers = ld["offers"] as Record<string, unknown>;
     expect(offers["price"]).toBeUndefined();

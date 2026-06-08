@@ -38,6 +38,7 @@ async function main() {
         { label: "Shipping", miles_min: 15, amount: 0 },
       ],
       negotiable: false,
+      show_tiers: false,
     },
     description: "Item description (GitHub-flavoured Markdown supported).",
     condition: "good",

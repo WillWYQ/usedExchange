@@ -17,6 +17,11 @@ type PricingTableToggleProps = {
 //
 // The expanded/collapsed state is intentionally preserved when resolvedTier changes
 // (i.e. when the buyer's distance updates) so the buyer's deliberate choice persists.
+//
+// price.show_tiers gates whether the toggle is offered to buyers at all — sellers
+// may not want buyers to see e.g. how much cheaper local pickup is than shipping.
+// When false (the default), buyers only ever see the resolved tier row, with no
+// indication that other tiers exist.
 export function PricingTableToggle({ price, resolvedTier }: PricingTableToggleProps) {
   const [expanded, setExpanded] = useState(false);
   const hasTiers = price.tiers.length > 0;
@@ -24,6 +29,10 @@ export function PricingTableToggle({ price, resolvedTier }: PricingTableTogglePr
   // When there's only one tier, there's nothing to toggle — just show the table.
   if (!hasTiers || price.tiers.length === 1) {
     return <PricingTable price={price} resolvedTier={resolvedTier} />;
+  }
+
+  if (!price.show_tiers) {
+    return <ResolvedTierSummary price={price} resolvedTier={resolvedTier} />;
   }
 
   return (
@@ -42,25 +51,7 @@ export function PricingTableToggle({ price, resolvedTier }: PricingTableTogglePr
         </>
       ) : (
         <>
-          {/* Collapsed summary: resolved tier price */}
-          <div className="flex items-baseline gap-2">
-            {resolvedTier !== null ? (
-              <>
-                <span className="text-2xl font-bold text-foreground">
-                  {price.currency === "USD" ? "$" : price.currency + " "}
-                  {resolvedTier.amount.toLocaleString()}
-                </span>
-                {price.negotiable && (
-                  <span className="text-sm text-foreground/50">OBO</span>
-                )}
-                {resolvedTier.label && (
-                  <span className="text-sm text-foreground/40">({resolvedTier.label})</span>
-                )}
-              </>
-            ) : (
-              <span className="text-foreground/50">Contact seller for pricing</span>
-            )}
-          </div>
+          <ResolvedTierSummary price={price} resolvedTier={resolvedTier} />
           <button
             type="button"
             onClick={() => setExpanded(true)}
@@ -70,6 +61,28 @@ export function PricingTableToggle({ price, resolvedTier }: PricingTableTogglePr
             View all pricing tiers ({price.tiers.length}) ↓
           </button>
         </>
+      )}
+    </div>
+  );
+}
+
+// Resolved tier price row, with no indication that other tiers exist.
+function ResolvedTierSummary({ price, resolvedTier }: PricingTableToggleProps) {
+  return (
+    <div className="flex items-baseline gap-2">
+      {resolvedTier !== null ? (
+        <>
+          <span className="text-2xl font-bold text-foreground">
+            {price.currency === "USD" ? "$" : price.currency + " "}
+            {resolvedTier.amount.toLocaleString()}
+          </span>
+          {price.negotiable && <span className="text-sm text-foreground/50">OBO</span>}
+          {resolvedTier.label && (
+            <span className="text-sm text-foreground/40">({resolvedTier.label})</span>
+          )}
+        </>
+      ) : (
+        <span className="text-foreground/50">Contact seller for pricing</span>
       )}
     </div>
   );
