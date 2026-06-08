@@ -80,3 +80,4 @@ public/search-index.json
 *.ntvs*
 *.njsproj
 *.sln
+.next.nosync

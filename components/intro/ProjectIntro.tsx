@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { useTheme } from "next-themes";
 import { IconBrandGithub } from "@tabler/icons-react";
 import { FlipWords } from "@/components/ui/flip-words";
 import { useLocale } from "@/components/i18n/useLocale";
@@ -11,15 +10,12 @@ import {
   getProjectIntroCopy,
   type ProjectIntroLocale,
 } from "./projectIntro.dictionary";
+import { UISlotPlayground } from "./UISlotPlayground";
 
 // Decorative effects pull in framer-motion / three.js — load client-side only,
 // same pattern as components/ui-adapters/{BackgroundEffect,ItemCardAdapter}.
 const Spotlight = dynamic(
   () => import("@/components/ui/spotlight-new").then((m) => m.Spotlight),
-  { ssr: false },
-);
-const CardSpotlight = dynamic(
-  () => import("@/components/ui/card-spotlight").then((m) => m.CardSpotlight),
   { ssr: false },
 );
 const Terminal = dynamic(
@@ -49,12 +45,6 @@ const FEATURE_CARD_TONES = [
   "bg-gradient-to-br from-[#d5d8e5]/15 via-[#99a4b0]/10 to-transparent",
   "bg-gradient-to-br from-[#a8bbd6]/15 via-[#d5a198]/10 to-transparent",
 ];
-
-// Spotlight glow colors for the UI customisability cards — cycled per item so
-// the section reads as colorful rather than a wall of identical white glows.
-// Lighter/translucent in light mode so the glow doesn't overpower a white card.
-const SPOTLIGHT_COLORS_DARK = ["#002af9", "#a8bbd6", "#d5a198", "#6d748d", "#ecbfb6", "#99a4b0"];
-const SPOTLIGHT_COLORS_LIGHT = ["#a8bbd6", "#d5d8e5", "#ecbfb6", "#aeb9c0", "#eedad4", "#d5a198"];
 
 // The documented seller pipeline (docs/DESIGN.md §14 "Build Pipeline"):
 // clone once, then hand off to an AI coding tool (Claude Code, Cursor, …) for
@@ -128,18 +118,12 @@ const LOCALE_NAMES: Record<ProjectIntroLocale, string> = {
 // site locale when that happens to be one of the six.
 export function ProjectIntro() {
   const { locale: siteLocale } = useLocale();
-  const { resolvedTheme } = useTheme();
   const [locale, setLocale] = useState<ProjectIntroLocale>(() =>
     (PROJECT_INTRO_LOCALES as readonly string[]).includes(siteLocale)
       ? (siteLocale as ProjectIntroLocale)
       : "en",
   );
   const copy = getProjectIntroCopy(locale);
-
-  // CardSpotlight's hover glow renders at full color opacity — vivid hues
-  // that read as a soft halo on a black surface would overpower a white one,
-  // so light mode gets pastel variants of the same palette.
-  const spotlightColors = resolvedTheme === "light" ? SPOTLIGHT_COLORS_LIGHT : SPOTLIGHT_COLORS_DARK;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -288,24 +272,7 @@ export function ProjectIntro() {
         <p className="mb-5 text-sm leading-relaxed text-foreground/55">
           {copy.uiDescription}
         </p>
-        <ul className="grid gap-4 sm:grid-cols-2">
-          {copy.uiSlots.map((slot, index) => (
-            <li key={slot.name}>
-              <CardSpotlight
-                radius={220}
-                color={spotlightColors[index % spotlightColors.length]}
-                className="h-full border-0 bg-foreground/5 p-5"
-              >
-                <h3 className="relative z-20 mb-1.5 text-sm font-semibold text-foreground">
-                  {slot.name}
-                </h3>
-                <p className="relative z-20 text-sm leading-relaxed text-foreground/55">
-                  {slot.description}
-                </p>
-              </CardSpotlight>
-            </li>
-          ))}
-        </ul>
+        <UISlotPlayground slots={copy.uiSlots} />
       </section>
 
       {/* ── Workflow demo ── */}

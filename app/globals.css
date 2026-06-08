@@ -39,6 +39,44 @@ body {
   color: var(--foreground);
 }
 
+/* Drives the AuroraBackground component (components/ui/aurora-background.tsx) —
+   shifts background-position so the repeating gradient sweeps continuously. */
+@keyframes aurora {
+  from {
+    background-position: 50% 50%, 50% 50%;
+  }
+  to {
+    background-position: 350% 50%, 350% 50%;
+  }
+}
+
+/* Registers animate-aurora as a Tailwind utility so after:animate-aurora works
+   in aurora-background.tsx (Tailwind v4 reads --animate-* theme vars). */
+@theme inline {
+  --animate-aurora: aurora 60s linear infinite;
+}
+
+/* Drives the Meteors component (components/ui/meteors.tsx).
+   Meteors are rotated 215deg so they fall diagonally; translateX moves them
+   along that rotated axis, producing a top-right → bottom-left streak. */
+@keyframes meteor-effect {
+  0% {
+    transform: rotate(215deg) translateX(0);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(215deg) translateX(-500px);
+    opacity: 0;
+  }
+}
+
+.animate-meteor-effect {
+  animation: meteor-effect linear infinite;
+}
+
 /* Drives the InfiniteMovingCards scroller (components/ui/infinite-moving-cards.tsx) —
    it sets --animation-direction/--animation-duration on its container and toggles
    this class once mounted, but doesn't ship the keyframes itself. */
