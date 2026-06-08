@@ -20,7 +20,7 @@ export function FreshnessLabel({ listedDate }: FreshnessLabelProps) {
   if (!label) return null;
 
   return (
-    <span className="text-xs text-white/40">
+    <span className="text-xs text-foreground/40">
       Listed {label}
     </span>
   );

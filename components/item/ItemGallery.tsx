@@ -16,7 +16,7 @@ export function ItemGallery({ images, itemName }: ItemGalleryProps) {
 
   if (images.length === 0) {
     return (
-      <div className="flex aspect-video w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white/30">
+      <div className="flex aspect-video w-full items-center justify-center rounded-2xl border border-foreground/10 bg-foreground/5 text-foreground/30">
         No images
       </div>
     );
@@ -43,7 +43,7 @@ export function ItemGallery({ images, itemName }: ItemGalleryProps) {
     <div className="flex flex-col gap-3">
       {/* Main image */}
       <div
-        className="relative overflow-hidden rounded-2xl border border-white/10 bg-black"
+        className="relative overflow-hidden rounded-2xl border border-foreground/10 bg-background"
         onKeyDown={handleKeyDown}
         tabIndex={0}
         aria-label={`Gallery image ${activeIndex + 1} of ${images.length}`}
@@ -63,7 +63,7 @@ export function ItemGallery({ images, itemName }: ItemGalleryProps) {
               onClick={prev}
               disabled={!hasPrev}
               aria-label="Previous image"
-              className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-1.5 text-white/80 transition-opacity hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 disabled:opacity-0"
+              className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-background/60 p-1.5 text-foreground/80 transition-opacity hover:bg-background/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50 disabled:opacity-0"
             >
               <IconChevronLeft size={20} />
             </button>
@@ -71,13 +71,13 @@ export function ItemGallery({ images, itemName }: ItemGalleryProps) {
               onClick={next}
               disabled={!hasNext}
               aria-label="Next image"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-1.5 text-white/80 transition-opacity hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 disabled:opacity-0"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-background/60 p-1.5 text-foreground/80 transition-opacity hover:bg-background/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50 disabled:opacity-0"
             >
               <IconChevronRight size={20} />
             </button>
 
             {/* Image counter */}
-            <span className="absolute bottom-2 right-3 rounded-full bg-black/60 px-2 py-0.5 text-xs text-white/60">
+            <span className="absolute bottom-2 right-3 rounded-full bg-background/60 px-2 py-0.5 text-xs text-foreground/60">
               {activeIndex + 1} / {images.length}
             </span>
           </>
@@ -95,10 +95,10 @@ export function ItemGallery({ images, itemName }: ItemGalleryProps) {
               aria-label={`View image ${i + 1}`}
               aria-current={i === activeIndex}
               className={clsx(
-                "h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
+                "h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50",
                 i === activeIndex
-                  ? "border-white/60"
-                  : "border-white/10 opacity-60 hover:opacity-100",
+                  ? "border-foreground/60"
+                  : "border-foreground/10 opacity-60 hover:opacity-100",
               )}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}

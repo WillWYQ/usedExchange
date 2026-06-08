@@ -8,7 +8,7 @@ type CategoryGridProps = {
 export function CategoryGrid({ categories }: CategoryGridProps) {
   if (categories.length === 0) {
     return (
-      <p className="py-8 text-center text-white/40">
+      <p className="py-8 text-center text-foreground/40">
         No categories yet — add items to <code>content/items/</code> to get started.
       </p>
     );

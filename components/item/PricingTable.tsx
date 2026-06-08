@@ -12,7 +12,7 @@ type PricingTableProps = {
 export function PricingTable({ price, resolvedTier }: PricingTableProps) {
   if (price.tiers.length === 0) {
     return (
-      <p className="text-sm text-white/50">
+      <p className="text-sm text-foreground/50">
         Contact seller for pricing details.
       </p>
     );
@@ -21,7 +21,7 @@ export function PricingTable({ price, resolvedTier }: PricingTableProps) {
   return (
     <table className="w-full text-sm">
       <thead>
-        <tr className="border-b border-white/10 text-left text-xs text-white/40">
+        <tr className="border-b border-foreground/10 text-left text-xs text-foreground/40">
           <th className="pb-2 pr-4 font-normal">Label</th>
           <th className="pb-2 pr-4 font-normal">Distance</th>
           <th className="pb-2 text-right font-normal">Price</th>
@@ -38,10 +38,10 @@ export function PricingTable({ price, resolvedTier }: PricingTableProps) {
             <tr
               key={i}
               className={[
-                "border-b border-white/5 transition-colors",
+                "border-b border-foreground/5 transition-colors",
                 isResolved
-                  ? "bg-white/10 font-semibold text-white"
-                  : "text-white/60",
+                  ? "bg-foreground/10 font-semibold text-foreground"
+                  : "text-foreground/60",
               ].join(" ")}
               aria-current={isResolved ? "true" : undefined}
             >
@@ -49,7 +49,7 @@ export function PricingTable({ price, resolvedTier }: PricingTableProps) {
                 <span className="flex items-center gap-1.5">
                   {isResolved && (
                     <span
-                      className="inline-block h-1.5 w-1.5 rounded-full bg-white"
+                      className="inline-block h-1.5 w-1.5 rounded-full bg-foreground"
                       aria-hidden="true"
                     />
                   )}
@@ -63,7 +63,7 @@ export function PricingTable({ price, resolvedTier }: PricingTableProps) {
                 {price.currency === "USD" ? "$" : price.currency + " "}
                 {tier.amount.toLocaleString()}
                 {price.negotiable && (
-                  <span className="ml-1 text-xs text-white/40">OBO</span>
+                  <span className="ml-1 text-xs text-foreground/40">OBO</span>
                 )}
               </td>
             </tr>
@@ -78,7 +78,7 @@ function TierRange({ tier }: { tier: PriceTier }) {
   const hasMin = tier.miles_min !== undefined && tier.miles_min > 0;
   const hasMax = tier.miles_max !== undefined;
 
-  if (!hasMin && !hasMax) return <span className="text-white/40">Pickup</span>;
+  if (!hasMin && !hasMax) return <span className="text-foreground/40">Pickup</span>;
   if (!hasMin && hasMax) return <span>≤ {tier.miles_max} mi</span>;
   if (hasMin && !hasMax) return <span>{">"} {tier.miles_min} mi</span>;
   return (

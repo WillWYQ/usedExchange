@@ -45,7 +45,7 @@ export function ContactSection({
         <button
           onClick={() => setRevealed(true)}
           disabled={isSold}
-          className="inline-flex w-fit items-center gap-2 rounded-full bg-white/10 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex w-fit items-center gap-2 rounded-full bg-foreground/10 px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <IconMessageCircle size={16} />
           {isSold ? "Item sold" : contactLabel}
@@ -69,9 +69,9 @@ export function ContactSection({
 
           {/* Item-level preferred payment methods */}
           {preferredPayment.length > 0 && (
-            <p className="text-xs text-white/50">
+            <p className="text-xs text-foreground/50">
               Preferred payment:{" "}
-              <span className="text-white/70">
+              <span className="text-foreground/70">
                 {preferredPayment.join(", ")}
               </span>
             </p>
@@ -79,7 +79,7 @@ export function ContactSection({
 
           {/* Item-level contact note */}
           {contactNote && (
-            <p className="text-sm text-white/60">{contactNote}</p>
+            <p className="text-sm text-foreground/60">{contactNote}</p>
           )}
         </div>
       )}

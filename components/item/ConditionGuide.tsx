@@ -68,7 +68,7 @@ export function ConditionGuide() {
         onClick={() => setOpen((o) => !o)}
         aria-label="Condition guide"
         aria-expanded={open}
-        className="inline-flex items-center text-white/40 transition-colors hover:text-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+        className="inline-flex items-center text-foreground/40 transition-colors hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
       >
         <IconHelpCircle size={15} />
       </button>
@@ -78,16 +78,16 @@ export function ConditionGuide() {
           ref={panelRef}
           role="dialog"
           aria-label="Condition guide"
-          className="absolute left-0 top-7 z-50 w-64 rounded-xl border border-white/10 bg-zinc-900 p-4 shadow-xl"
+          className="absolute left-0 top-7 z-50 w-64 rounded-xl border border-foreground/10 bg-surface p-4 shadow-xl"
         >
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-xs font-semibold text-white/70">
+            <span className="text-xs font-semibold text-foreground/70">
               Condition Guide
             </span>
             <button
               onClick={() => { setOpen(false); buttonRef.current?.focus(); }}
               aria-label="Close"
-              className="rounded p-0.5 text-white/40 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+              className="rounded p-0.5 text-foreground/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
             >
               <IconX size={14} />
             </button>
@@ -96,8 +96,8 @@ export function ConditionGuide() {
           <dl className="flex flex-col gap-2">
             {CONDITIONS.map(({ label, desc }) => (
               <div key={label}>
-                <dt className="text-xs font-medium text-white/80">{label}</dt>
-                <dd className="text-xs text-white/50">{desc}</dd>
+                <dt className="text-xs font-medium text-foreground/80">{label}</dt>
+                <dd className="text-xs text-foreground/50">{desc}</dd>
               </div>
             ))}
           </dl>

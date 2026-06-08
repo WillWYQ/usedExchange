@@ -21,7 +21,7 @@ const STATUS_CONFIG: Record<Status, { label: string; classes: string }> = {
   },
   draft: {
     label: "Draft",
-    classes: "bg-white/10 text-white/50 ring-white/20",
+    classes: "bg-foreground/10 text-foreground/50 ring-foreground/20",
   },
 };
 
@@ -33,7 +33,7 @@ type StatusBadgeProps = {
 export function StatusBadge({ status, className }: StatusBadgeProps) {
   const config = STATUS_CONFIG[status] ?? {
     label: status,
-    classes: "bg-white/10 text-white/50 ring-white/20",
+    classes: "bg-foreground/10 text-foreground/50 ring-foreground/20",
   };
   const { label, classes } = config;
   return (

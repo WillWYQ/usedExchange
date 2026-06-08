@@ -35,7 +35,7 @@ export function PricingTableToggle({ price, resolvedTier }: PricingTableTogglePr
             type="button"
             onClick={() => setExpanded(false)}
             aria-expanded={true}
-            className="self-start text-xs text-white/40 underline-offset-2 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+            className="self-start text-xs text-foreground/40 underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
           >
             Hide pricing tiers ↑
           </button>
@@ -46,26 +46,26 @@ export function PricingTableToggle({ price, resolvedTier }: PricingTableTogglePr
           <div className="flex items-baseline gap-2">
             {resolvedTier !== null ? (
               <>
-                <span className="text-2xl font-bold text-white">
+                <span className="text-2xl font-bold text-foreground">
                   {price.currency === "USD" ? "$" : price.currency + " "}
                   {resolvedTier.amount.toLocaleString()}
                 </span>
                 {price.negotiable && (
-                  <span className="text-sm text-white/50">OBO</span>
+                  <span className="text-sm text-foreground/50">OBO</span>
                 )}
                 {resolvedTier.label && (
-                  <span className="text-sm text-white/40">({resolvedTier.label})</span>
+                  <span className="text-sm text-foreground/40">({resolvedTier.label})</span>
                 )}
               </>
             ) : (
-              <span className="text-white/50">Contact seller for pricing</span>
+              <span className="text-foreground/50">Contact seller for pricing</span>
             )}
           </div>
           <button
             type="button"
             onClick={() => setExpanded(true)}
             aria-expanded={false}
-            className="self-start text-xs text-white/40 underline-offset-2 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+            className="self-start text-xs text-foreground/40 underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
           >
             View all pricing tiers ({price.tiers.length}) ↓
           </button>

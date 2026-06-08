@@ -31,7 +31,7 @@ export function TextbookBadge({
       )}
 
       {semesterListed && (
-        <span className="text-xs text-white/40">{semesterListed}</span>
+        <span className="text-xs text-foreground/40">{semesterListed}</span>
       )}
 
       {bookfinderUrl && (

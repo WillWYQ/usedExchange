@@ -87,12 +87,12 @@ export function LocationPriceBar({
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => e.key === "Escape" && closeInput()}
         placeholder="0"
-        className="w-20 rounded-md border border-white/20 bg-white/5 px-2 py-1 text-sm text-white placeholder-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+        className="w-20 rounded-md border border-foreground/20 bg-foreground/5 px-2 py-1 text-sm text-foreground placeholder-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
       />
-      <span className="text-sm text-white/50">mi</span>
+      <span className="text-sm text-foreground/50">mi</span>
       <button
         type="submit"
-        className="rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium text-white hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+        className="rounded-md bg-foreground/10 px-2.5 py-1 text-xs font-medium text-foreground hover:bg-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
       >
         Apply
       </button>
@@ -100,7 +100,7 @@ export function LocationPriceBar({
         type="button"
         onClick={closeInput}
         aria-label="Cancel"
-        className="text-xs text-white/40 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+        className="text-xs text-foreground/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
       >
         ✕
       </button>
@@ -111,11 +111,11 @@ export function LocationPriceBar({
   if (geoState.status === "idle" || geoState.status === "pending") {
     return (
       <div
-        className="flex items-center gap-2 text-sm text-white/50"
+        className="flex items-center gap-2 text-sm text-foreground/50"
         aria-live="polite"
         aria-label="Location status"
       >
-        <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/20 border-t-white/60" />
+        <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-foreground/20 border-t-foreground/60" />
         Detecting location…
       </div>
     );
@@ -131,11 +131,11 @@ export function LocationPriceBar({
         aria-live="polite"
         aria-label="Location status"
       >
-        <span className="flex items-center gap-1.5 text-white/70">
+        <span className="flex items-center gap-1.5 text-foreground/70">
           <PinIcon />
           {miles !== null ? (
             <>
-              <span className="font-medium text-white">{miles.toFixed(1)} mi</span>
+              <span className="font-medium text-foreground">{miles.toFixed(1)} mi</span>
               {" from seller"}
             </>
           ) : (
@@ -149,7 +149,7 @@ export function LocationPriceBar({
             type="button"
             onClick={openInput}
             onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openInput()}
-            className="text-xs text-white/40 underline-offset-2 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+            className="text-xs text-foreground/40 underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
           >
             Enter manually
           </button>
@@ -168,11 +168,11 @@ export function LocationPriceBar({
         aria-live="polite"
         aria-label="Location status"
       >
-        <span className="flex items-center gap-1.5 text-white/70">
+        <span className="flex items-center gap-1.5 text-foreground/70">
           <PinIcon />
           {showInput ? null : (
             <>
-              <span className="font-medium text-white">{manualMiles.toFixed(1)} mi</span>
+              <span className="font-medium text-foreground">{manualMiles.toFixed(1)} mi</span>
               {" (manual)"}
             </>
           )}
@@ -184,14 +184,14 @@ export function LocationPriceBar({
             <button
               type="button"
               onClick={openInput}
-              className="text-xs text-white/40 underline-offset-2 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+              className="text-xs text-foreground/40 underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
             >
               Edit
             </button>
             <button
               type="button"
               onClick={clearManual}
-              className="text-xs text-white/40 underline-offset-2 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+              className="text-xs text-foreground/40 underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
             >
               Clear
             </button>
@@ -208,7 +208,7 @@ export function LocationPriceBar({
       aria-live="polite"
       aria-label="Location status"
     >
-      <span className="flex items-center gap-1.5 text-white/50">
+      <span className="flex items-center gap-1.5 text-foreground/50">
         <PinIcon />
         Prices shown at pickup rate
       </span>
@@ -219,7 +219,7 @@ export function LocationPriceBar({
           type="button"
           onClick={openInput}
           onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openInput()}
-          className="text-xs text-white/60 underline underline-offset-2 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+          className="text-xs text-foreground/60 underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
         >
           Enter distance
         </button>

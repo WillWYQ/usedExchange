@@ -18,10 +18,10 @@ export function LocaleSwitcher() {
           onClick={() => setLocale(code)}
           aria-pressed={locale === code}
           className={[
-            "rounded px-2 py-0.5 text-xs font-medium uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+            "rounded px-2 py-0.5 text-xs font-medium uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             locale === code
-              ? "bg-white text-black"
-              : "text-white/60 hover:text-white",
+              ? "bg-foreground text-background"
+              : "text-foreground/60 hover:text-foreground",
           ].join(" ")}
         >
           {code}

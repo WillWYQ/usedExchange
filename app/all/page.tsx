@@ -30,10 +30,10 @@ export default async function BrowseAllPage() {
       />
 
       <header className="mb-6 mt-4">
-        <h1 className="text-2xl font-bold text-white sm:text-3xl">
+        <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
           {browseAllLabel}
         </h1>
-        <p className="mt-1.5 text-white/60">
+        <p className="mt-1.5 text-foreground/60">
           {items.length} item{items.length !== 1 ? "s" : ""} across{" "}
           {categories.length} categor{categories.length !== 1 ? "ies" : "y"}
         </p>
@@ -41,7 +41,7 @@ export default async function BrowseAllPage() {
 
       {/* browseAll={true} adds the category chip to each item card */}
       {items.length === 0 ? (
-        <p className="py-16 text-center text-white/40">No items available.</p>
+        <p className="py-16 text-center text-foreground/40">No items available.</p>
       ) : (
         <ItemGrid items={items} browseAll />
       )}

@@ -19,10 +19,10 @@ export function LocalizedItemContent({ item }: Props) {
 
   return (
     <>
-      <h1 className="text-2xl font-bold text-white sm:text-3xl">{name}</h1>
+      <h1 className="text-2xl font-bold text-foreground sm:text-3xl">{name}</h1>
 
       {description && (
-        <div className="prose prose-invert mt-4 max-w-none">
+        <div className="prose mt-4 max-w-none dark:prose-invert">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{description}</ReactMarkdown>
         </div>
       )}

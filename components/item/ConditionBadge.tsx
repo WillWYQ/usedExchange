@@ -33,7 +33,7 @@ type ConditionBadgeProps = {
 export function ConditionBadge({ condition, className }: ConditionBadgeProps) {
   const config = CONDITION_CONFIG[condition] ?? {
     label: condition,
-    classes: "bg-white/10 text-white/50 ring-white/20",
+    classes: "bg-foreground/10 text-foreground/50 ring-foreground/20",
   };
   const { label, classes } = config;
   return (

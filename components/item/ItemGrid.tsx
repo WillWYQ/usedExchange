@@ -92,12 +92,12 @@ export function ItemGrid({ items, browseAll = false }: ItemGridProps) {
               aria-hidden="true"
               className="flex justify-center py-8"
             >
-              <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white/60" />
+              <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-foreground/20 border-t-foreground/60" />
             </div>
           )}
         </>
       ) : (
-        <p className="py-16 text-center text-white/40">
+        <p className="py-16 text-center text-foreground/40">
           No items match the current filters.
         </p>
       )}

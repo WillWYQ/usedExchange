@@ -90,18 +90,18 @@ export default async function CategoryPage({
 
       {/* Category header */}
       <header className="mb-6 mt-4">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-white sm:text-3xl">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground sm:text-3xl">
           {icon && <span aria-hidden="true">{icon}</span>}
           {displayName}
         </h1>
         {description && (
-          <p className="mt-1.5 text-white/60">{description}</p>
+          <p className="mt-1.5 text-foreground/60">{description}</p>
         )}
       </header>
 
       {/* Item grid with filter bar (client) or empty state */}
       {items.length === 0 ? (
-        <p className="py-16 text-center text-white/40">
+        <p className="py-16 text-center text-foreground/40">
           No items currently available in this category.
         </p>
       ) : (
@@ -112,7 +112,7 @@ export default async function CategoryPage({
       <div className="mt-10 text-center">
         <Link
           href="/all"
-          className="inline-flex rounded-full border border-white/20 px-5 py-2 text-sm text-white/60 transition-colors hover:border-white/40 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+          className="inline-flex rounded-full border border-foreground/20 px-5 py-2 text-sm text-foreground/60 transition-colors hover:border-foreground/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
         >
           {browseAllLabel} →
         </Link>

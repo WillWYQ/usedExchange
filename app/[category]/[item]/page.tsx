@@ -200,7 +200,7 @@ export default async function ItemDetailPage({
               </span>
             )}
             {itemData.noLowball && (
-              <span className="inline-flex items-center rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-white/60 ring-1 ring-inset ring-white/20">
+              <span className="inline-flex items-center rounded-full bg-foreground/10 px-2.5 py-0.5 text-xs font-medium text-foreground/60 ring-1 ring-inset ring-foreground/20">
                 Firm Price
               </span>
             )}
@@ -239,7 +239,7 @@ export default async function ItemDetailPage({
                   href={itemData.stripePaymentLink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-full bg-violet-600/80 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+                  className="inline-flex items-center gap-2 rounded-full bg-violet-600/80 px-5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
                 >
                   Pay Deposit
                 </a>
@@ -249,7 +249,7 @@ export default async function ItemDetailPage({
                   href={itemData.venmoPaymentRequest}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-full bg-blue-600/80 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                  className="inline-flex items-center gap-2 rounded-full bg-blue-600/80 px-5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                 >
                   Pay with Venmo
                 </a>
@@ -263,7 +263,7 @@ export default async function ItemDetailPage({
               href={itemData.youtubeLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm text-white/60 transition-colors hover:border-white/30 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+              className="inline-flex w-fit items-center gap-2 rounded-full border border-foreground/15 px-4 py-2 text-sm text-foreground/60 transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
             >
               ▶ Watch Demo
             </a>
@@ -271,8 +271,8 @@ export default async function ItemDetailPage({
 
           {/* Pickup windows */}
           {itemData.pickupWindows.length > 0 && (
-            <div className="text-sm text-white/60">
-              <span className="font-medium text-white/80">Available: </span>
+            <div className="text-sm text-foreground/60">
+              <span className="font-medium text-foreground/80">Available: </span>
               {itemData.pickupWindows.join(", ")}
             </div>
           )}
@@ -304,7 +304,7 @@ export default async function ItemDetailPage({
           {itemData.tags.map((tag) => (
             <span
               key={tag}
-              className="inline-flex items-center rounded-full bg-white/5 px-3 py-1 text-xs text-white/50 ring-1 ring-inset ring-white/10"
+              className="inline-flex items-center rounded-full bg-foreground/5 px-3 py-1 text-xs text-foreground/50 ring-1 ring-inset ring-foreground/10"
             >
               #{tag}
             </span>
@@ -313,8 +313,8 @@ export default async function ItemDetailPage({
       )}
 
       {/* Contact section */}
-      <div className="mt-10 border-t border-white/10 pt-8">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-white/40">
+      <div className="mt-10 border-t border-foreground/10 pt-8">
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-foreground/40">
           Contact Seller
         </h2>
         <ContactSection

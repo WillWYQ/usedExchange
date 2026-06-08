@@ -1,2 +1,34 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+
+/* Class-based dark mode (toggled by next-themes via <html class="dark">) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --surface: #f4f4f5;
+  --border: rgb(0 0 0 / 8%);
+}
+
+.dark {
+  --background: #000000;
+  --foreground: #ffffff;
+  --surface: #18181b;
+  --border: rgb(255 255 255 / 10%);
+}
+
+/* Registers the variables above as Tailwind color tokens, so utilities like
+   bg-background, text-foreground/60, ring-border, etc. work — and pick up
+   the .dark overrides automatically since they resolve through CSS vars. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+}

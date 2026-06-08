@@ -25,10 +25,10 @@ export function ItemCard({ item, resolvedPrice, showCategoryChip = false }: Item
   return (
     <Link
       href={href}
-      className="group relative flex flex-col overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10 transition-all duration-200 hover:bg-white/10 hover:ring-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+      className="group relative flex flex-col overflow-hidden rounded-xl bg-foreground/5 ring-1 ring-foreground/10 transition-all duration-200 hover:bg-foreground/10 hover:ring-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
       {/* Cover image */}
-      <div className="relative aspect-square overflow-hidden bg-white/5">
+      <div className="relative aspect-square overflow-hidden bg-foreground/5">
         {item.coverImage ? (
           <AdaptiveImage
             src={item.coverImage}
@@ -41,7 +41,7 @@ export function ItemCard({ item, resolvedPrice, showCategoryChip = false }: Item
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-4xl text-white/20">
+          <div className="flex h-full items-center justify-center text-4xl text-foreground/20">
             📦
           </div>
         )}
@@ -49,10 +49,10 @@ export function ItemCard({ item, resolvedPrice, showCategoryChip = false }: Item
         {/* Sold overlay */}
         {isSold && (
           <div
-            className="absolute inset-0 flex items-center justify-center bg-black/50"
+            className="absolute inset-0 flex items-center justify-center bg-background/50"
             aria-hidden="true"
           >
-            <span className="rounded-full bg-red-700 px-3 py-1 text-xs font-bold uppercase tracking-widest text-white">
+            <span className="rounded-full bg-red-700 px-3 py-1 text-xs font-bold uppercase tracking-widest text-foreground">
               Sold
             </span>
           </div>
@@ -72,13 +72,13 @@ export function ItemCard({ item, resolvedPrice, showCategoryChip = false }: Item
       <div className="flex flex-1 flex-col gap-2 p-3">
         {/* Category chip (Browse All page) */}
         {showCategoryChip && (
-          <span className="w-fit rounded-full bg-white/10 px-2 py-0.5 text-xs text-white/60">
+          <span className="w-fit rounded-full bg-foreground/10 px-2 py-0.5 text-xs text-foreground/60">
             {item.categoryOverride || item.categorySlug}
           </span>
         )}
 
         {/* Item name — locale-aware, re-renders on LocaleSwitcher change */}
-        <h3 className="line-clamp-2 text-sm font-medium leading-snug text-white">
+        <h3 className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
           {displayName}
         </h3>
 
@@ -92,15 +92,15 @@ export function ItemCard({ item, resolvedPrice, showCategoryChip = false }: Item
         <div className="mt-auto pt-1 text-sm">
           {resolvedPrice !== null ? (
             <div className="flex flex-wrap items-baseline gap-1.5">
-              <span className="font-semibold text-white">
+              <span className="font-semibold text-foreground">
                 ${resolvedPrice.amount}
               </span>
               {item.price.negotiable && (
-                <span className="text-xs text-white/50">OBO</span>
+                <span className="text-xs text-foreground/50">OBO</span>
               )}
             </div>
           ) : (
-            <span className="text-white/40">Contact for price</span>
+            <span className="text-foreground/40">Contact for price</span>
           )}
         </div>
       </div>

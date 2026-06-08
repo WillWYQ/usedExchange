@@ -52,13 +52,13 @@ export default async function HomePage() {
     <>
       {/* ── Hero ── */}
       <section className="mb-16 text-center">
-        <h1 className="mb-3 text-4xl font-bold tracking-tight text-white sm:text-5xl">
+        <h1 className="mb-3 text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
           {siteConfig.name}
         </h1>
-        <p className="mb-7 text-lg text-white/60">{tagline}</p>
+        <p className="mb-7 text-lg text-foreground/60">{tagline}</p>
         <Link
           href={siteConfig.hero.cta_href}
-          className="inline-flex rounded-full bg-white px-7 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+          className="inline-flex rounded-full bg-foreground px-7 py-2.5 text-sm font-semibold text-background transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           {siteConfig.hero.cta_label}
         </Link>
@@ -72,7 +72,7 @@ export default async function HomePage() {
       >
         <h2
           id="categories-heading"
-          className="mb-4 text-xl font-semibold text-white"
+          className="mb-4 text-xl font-semibold text-foreground"
         >
           Browse by Category
         </h2>

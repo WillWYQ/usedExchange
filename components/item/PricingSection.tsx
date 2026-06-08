@@ -43,7 +43,7 @@ export function PricingSection({
 
       {/* Struck-through previous price — shown alongside current when price_reduced */}
       {previousLowestPrice !== null && previousLowestPrice !== undefined && resolvedTier && (
-        <p className="text-sm text-white/50">
+        <p className="text-sm text-foreground/50">
           Was:{" "}
           <span className="line-through">
             {price.currency === "USD" ? "$" : price.currency + " "}

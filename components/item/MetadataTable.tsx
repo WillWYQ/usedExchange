@@ -53,20 +53,20 @@ export function MetadataTable({ item }: MetadataTableProps) {
   if (visibleRows.length === 0) return null;
 
   return (
-    <dl className="divide-y divide-white/10">
+    <dl className="divide-y divide-foreground/10">
       {visibleRows.map((row) => (
         <div
           key={row.label}
           className="flex items-baseline justify-between gap-4 py-2.5 text-sm"
         >
-          <dt className="shrink-0 text-white/50">{row.label}</dt>
-          <dd className="text-right text-white/90">
+          <dt className="shrink-0 text-foreground/50">{row.label}</dt>
+          <dd className="text-right text-foreground/90">
             {row.href ? (
               <a
                 href={row.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="underline underline-offset-2 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                className="underline underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
               >
                 {row.value}
               </a>

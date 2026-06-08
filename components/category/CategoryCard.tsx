@@ -15,7 +15,7 @@ export function CategoryCard({ category }: CategoryCardProps) {
   return (
     <Link
       href={`/${category.slug}`}
-      className="group relative flex min-h-40 flex-col justify-end overflow-hidden rounded-xl bg-white/5 p-4 ring-1 ring-white/10 transition-all duration-200 hover:bg-white/10 hover:ring-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+      className="group relative flex min-h-40 flex-col justify-end overflow-hidden rounded-xl bg-foreground/5 p-4 ring-1 ring-foreground/10 transition-all duration-200 hover:bg-foreground/10 hover:ring-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
       {/* Cover image (blurred background) */}
       {category.coverImage && (
@@ -43,8 +43,8 @@ export function CategoryCard({ category }: CategoryCardProps) {
             {category.icon}
           </span>
         )}
-        <h3 className="font-semibold text-white">{category.displayName}</h3>
-        <p className="mt-0.5 text-xs text-white/60">{countLabel}</p>
+        <h3 className="font-semibold text-foreground">{category.displayName}</h3>
+        <p className="mt-0.5 text-xs text-foreground/60">{countLabel}</p>
       </div>
     </Link>
   );

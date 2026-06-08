@@ -39,7 +39,7 @@ export function ShareButton({ title, url }: ShareButtonProps) {
     <button
       onClick={handleShare}
       aria-label={copied ? "Link copied!" : "Share this item"}
-      className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm text-white/60 transition-colors hover:border-white/30 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+      className="inline-flex items-center gap-2 rounded-full border border-foreground/15 px-4 py-2 text-sm text-foreground/60 transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
     >
       {copied ? <IconCheck size={15} /> : <IconShare size={15} />}
       {copied ? "Copied!" : "Share"}

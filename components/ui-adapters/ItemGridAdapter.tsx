@@ -58,10 +58,10 @@ export function ItemGridAdapter({ items, resolvedPrices, browseAll = false }: Pr
       className: i % 5 === 0 ? "md:col-span-2" : "",
       content: (
         <div className="p-1">
-          <p className="font-bold text-base text-white">
+          <p className="font-bold text-base text-foreground">
             {getLocalizedField(item, "name", locale)}
           </p>
-          <p className="flex items-center gap-1.5 font-normal text-sm text-white/70">
+          <p className="flex items-center gap-1.5 font-normal text-sm text-foreground/70">
             <ConditionBadge condition={item.condition} />
             {price(item) ? `· $${price(item)!.amount}` : ""}
           </p>

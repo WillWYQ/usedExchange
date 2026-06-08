@@ -71,7 +71,7 @@ export function RecentlyViewed({ itemSlug, itemName, itemCoverImage }: RecentlyV
     <section aria-labelledby="recently-viewed-heading" className="mt-10">
       <h2
         id="recently-viewed-heading"
-        className="mb-3 text-xs font-medium uppercase tracking-widest text-white/40"
+        className="mb-3 text-xs font-medium uppercase tracking-widest text-foreground/40"
       >
         Recently Viewed
       </h2>
@@ -87,7 +87,7 @@ export function RecentlyViewed({ itemSlug, itemName, itemCoverImage }: RecentlyV
               className="group shrink-0 focus-visible:outline-none"
               aria-label={entry.name}
             >
-              <div className="relative h-20 w-20 overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/10 transition-all group-hover:ring-white/30 group-focus-visible:ring-2 group-focus-visible:ring-white">
+              <div className="relative h-20 w-20 overflow-hidden rounded-lg bg-foreground/5 ring-1 ring-foreground/10 transition-all group-hover:ring-foreground/30 group-focus-visible:ring-2 group-focus-visible:ring-foreground">
                 {entry.coverImage ? (
                   <AdaptiveImage
                     src={entry.coverImage}
@@ -97,12 +97,12 @@ export function RecentlyViewed({ itemSlug, itemName, itemCoverImage }: RecentlyV
                     sizes="80px"
                   />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-xl text-white/20">
+                  <div className="flex h-full items-center justify-center text-xl text-foreground/20">
                     📦
                   </div>
                 )}
               </div>
-              <p className="mt-1 w-20 truncate text-xs text-white/50 transition-colors group-hover:text-white/80">
+              <p className="mt-1 w-20 truncate text-xs text-foreground/50 transition-colors group-hover:text-foreground/80">
                 {entry.name}
               </p>
             </Link>

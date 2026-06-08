@@ -82,7 +82,7 @@ export function ItemCardAdapter({ item, resolvedPrice, showCategoryChip = false 
       return (
         <DirectionAwareHover imageUrl={imageUrl} className="rounded-xl w-full h-full cursor-pointer">
           {/* Children are shown as an overlay label on hover */}
-          <p className="font-semibold text-sm text-white line-clamp-2">{item.name}</p>
+          <p className="font-semibold text-sm text-foreground line-clamp-2">{item.name}</p>
         </DirectionAwareHover>
       );
     }
@@ -91,7 +91,7 @@ export function ItemCardAdapter({ item, resolvedPrice, showCategoryChip = false 
     // is not suitable as a single-card wrapper. Use a subtle ring-on-hover CSS effect.
     case "card-hover-effect":
       return (
-        <div className="transition-all duration-200 hover:ring-2 hover:ring-white/30 rounded-xl">
+        <div className="transition-all duration-200 hover:ring-2 hover:ring-foreground/30 rounded-xl">
           {card}
         </div>
       );

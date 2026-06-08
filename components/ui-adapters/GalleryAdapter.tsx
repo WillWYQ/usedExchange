@@ -22,7 +22,7 @@ export function GalleryAdapter({ images, itemName }: Props) {
   // Empty state — identical across all modes
   if (images.length === 0) {
     return (
-      <div className="flex aspect-video w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white/30">
+      <div className="flex aspect-video w-full items-center justify-center rounded-2xl border border-foreground/10 bg-foreground/5 text-foreground/30">
         No images
       </div>
     );
@@ -56,7 +56,7 @@ export function GalleryAdapter({ images, itemName }: Props) {
     return (
       <ImagesSlider images={images} className="rounded-2xl overflow-hidden aspect-[4/3]">
         {/* Slim label at the bottom so the slider has required children */}
-        <div className="absolute bottom-4 left-4 rounded-full bg-black/50 px-3 py-1 text-sm text-white/80 backdrop-blur-sm">
+        <div className="absolute bottom-4 left-4 rounded-full bg-background/50 px-3 py-1 text-sm text-foreground/80 backdrop-blur-sm">
           {itemName}
         </div>
       </ImagesSlider>

@@ -26,7 +26,7 @@ export function RecentlyListedSection({ items }: RecentlyListedSectionProps) {
     <section aria-labelledby="recently-listed-heading">
       <h2
         id="recently-listed-heading"
-        className="mb-4 text-xl font-semibold text-white"
+        className="mb-4 text-xl font-semibold text-foreground"
       >
         {heading}
       </h2>

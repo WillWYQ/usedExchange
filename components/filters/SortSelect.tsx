@@ -23,7 +23,7 @@ export function SortSelect({ value, onChange }: SortSelectProps) {
     <div className="flex items-center gap-2">
       <label
         htmlFor={id}
-        className="whitespace-nowrap text-xs text-white/50"
+        className="whitespace-nowrap text-xs text-foreground/50"
       >
         Sort by
       </label>
@@ -31,10 +31,10 @@ export function SortSelect({ value, onChange }: SortSelectProps) {
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value as SortKey)}
-        className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+        className="rounded-md border border-foreground/10 bg-foreground/5 px-2.5 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
       >
         {SORT_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value} className="bg-zinc-900 text-white">
+          <option key={opt.value} value={opt.value} className="bg-surface text-foreground">
             {opt.label}
           </option>
         ))}

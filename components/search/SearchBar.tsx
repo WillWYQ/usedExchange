@@ -61,7 +61,7 @@ export function SearchBar() {
         aria-controls="search-results"
         aria-autocomplete="list"
         autoComplete="off"
-        className="w-40 rounded-full border border-white/20 bg-white/5 px-3 py-1 text-sm text-white placeholder-white/40 outline-none transition-all focus:w-56 focus:border-white/40 focus:bg-white/10 focus-visible:ring-1 focus-visible:ring-white/50 sm:w-48 sm:focus:w-64"
+        className="w-40 rounded-full border border-foreground/20 bg-foreground/5 px-3 py-1 text-sm text-foreground placeholder-foreground/40 outline-none transition-all focus:w-56 focus:border-foreground/40 focus:bg-foreground/10 focus-visible:ring-1 focus-visible:ring-foreground/50 sm:w-48 sm:focus:w-64"
       />
 
       {showDropdown && (
@@ -69,16 +69,16 @@ export function SearchBar() {
           id="search-results"
           role="listbox"
           aria-label="Search results"
-          className="absolute right-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-xl border border-white/10 bg-black/95 shadow-2xl backdrop-blur-md"
+          className="absolute right-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-xl border border-foreground/10 bg-background/95 shadow-2xl backdrop-blur-md"
         >
           {results.length === 0 ? (
-            <li className="px-4 py-3 text-sm text-white/40">No results found</li>
+            <li className="px-4 py-3 text-sm text-foreground/40">No results found</li>
           ) : (
             results.map((item) => (
               <li key={`${item.categorySlug}/${item.itemSlug}`} role="option" aria-selected={false}>
                 <button
                   onClick={() => navigate(item.categorySlug, item.itemSlug)}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-white/10 focus-visible:bg-white/10 focus-visible:outline-none"
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-foreground/10 focus-visible:bg-foreground/10 focus-visible:outline-none"
                 >
                   {/* Cover image thumbnail */}
                   {item.coverImage ? (
@@ -90,14 +90,14 @@ export function SearchBar() {
                       className="h-10 w-10 flex-shrink-0 rounded-lg object-cover"
                     />
                   ) : (
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-white/5 text-lg">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-lg">
                       📦
                     </div>
                   )}
 
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-white">{item.name}</p>
-                    <p className="truncate text-xs text-white/40 capitalize">
+                    <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
+                    <p className="truncate text-xs text-foreground/40 capitalize">
                       {item.categorySlug.replace(/-/g, " ")}
                       {item.brand ? ` · ${item.brand}` : ""}
                     </p>

@@ -10,7 +10,7 @@ export function SiteFooter() {
   });
 
   return (
-    <footer className="mt-16 border-t border-white/10 bg-black/60 px-4 py-10 text-sm text-white/50">
+    <footer className="mt-16 border-t border-border bg-background/60 px-4 py-10 text-sm text-foreground/50">
       {/* Footer contact — no item context, no preferred payment or note */}
       <div className="mx-auto mb-6 flex max-w-2xl justify-center">
         <ContactSection preferredPayment={[]} contactNote="" />

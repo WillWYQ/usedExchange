@@ -29,9 +29,9 @@ function PriceRangeSlider({ bounds, value, onChange }: SliderProps) {
   return (
     <div className="relative flex h-6 w-full items-center">
       {/* Custom track */}
-      <div className="pointer-events-none absolute inset-x-0 h-1.5 rounded-full bg-white/15">
+      <div className="pointer-events-none absolute inset-x-0 h-1.5 rounded-full bg-foreground/15">
         <div
-          className="absolute h-full rounded-full bg-white/60"
+          className="absolute h-full rounded-full bg-foreground/60"
           style={{
             left: `${loFrac * 100}%`,
             right: `${(1 - hiFrac) * 100}%`,
@@ -48,7 +48,7 @@ function PriceRangeSlider({ bounds, value, onChange }: SliderProps) {
         value={lo}
         onChange={(e) => onChange([Math.min(+e.target.value, hi - 1), hi])}
         aria-label="Minimum price"
-        className="pointer-events-none absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-grab [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white [&::-moz-range-track]:opacity-0 [&::-webkit-slider-runnable-track]:h-0 [&::-webkit-slider-runnable-track]:opacity-0 [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-sm [&::-webkit-slider-thumb]:active:cursor-grabbing"
+        className="pointer-events-none absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-grab [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-foreground [&::-moz-range-track]:opacity-0 [&::-webkit-slider-runnable-track]:h-0 [&::-webkit-slider-runnable-track]:opacity-0 [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-foreground [&::-webkit-slider-thumb]:shadow-sm [&::-webkit-slider-thumb]:active:cursor-grabbing"
         style={{ zIndex: loZ }}
       />
 
@@ -61,7 +61,7 @@ function PriceRangeSlider({ bounds, value, onChange }: SliderProps) {
         value={hi}
         onChange={(e) => onChange([lo, Math.max(+e.target.value, lo + 1)])}
         aria-label="Maximum price"
-        className="pointer-events-none absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-grab [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white [&::-moz-range-track]:opacity-0 [&::-webkit-slider-runnable-track]:h-0 [&::-webkit-slider-runnable-track]:opacity-0 [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-sm [&::-webkit-slider-thumb]:active:cursor-grabbing"
+        className="pointer-events-none absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-grab [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-foreground [&::-moz-range-track]:opacity-0 [&::-webkit-slider-runnable-track]:h-0 [&::-webkit-slider-runnable-track]:opacity-0 [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-foreground [&::-webkit-slider-thumb]:shadow-sm [&::-webkit-slider-thumb]:active:cursor-grabbing"
         style={{ zIndex: loZ === 5 ? 4 : 5 }}
       />
     </div>
@@ -111,7 +111,7 @@ export function FilterBar({
     priceBounds[0] !== priceBounds[1];
 
   return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl bg-white/5 px-4 py-3">
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl bg-foreground/5 px-4 py-3">
       {/* Condition chips */}
       {availableConditions.length > 0 && (
         <div
@@ -128,10 +128,10 @@ export function FilterBar({
                 onClick={() => onToggleCondition(c)}
                 aria-pressed={active}
                 className={[
-                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
+                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50",
                   active
-                    ? "border-white bg-white text-black"
-                    : "border-white/20 text-white/60 hover:border-white/40 hover:text-white",
+                    ? "border-foreground bg-foreground text-background"
+                    : "border-foreground/20 text-foreground/60 hover:border-foreground/40 hover:text-foreground",
                 ].join(" ")}
               >
                 {CONDITION_LABELS[c]}
@@ -144,7 +144,7 @@ export function FilterBar({
       {/* Price range slider — hidden when no items have tiers or all same price */}
       {showSlider && (
         <div className="flex min-w-44 flex-col gap-1.5">
-          <div className="flex items-center justify-between text-xs text-white/50">
+          <div className="flex items-center justify-between text-xs text-foreground/50">
             <span>Price</span>
             <span>
               ${priceRange![0].toLocaleString()} – ${priceRange![1].toLocaleString()}
@@ -159,12 +159,12 @@ export function FilterBar({
       )}
 
       {/* Show sold toggle */}
-      <label className="flex cursor-pointer items-center gap-2 text-sm text-white/60 hover:text-white">
+      <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground/60 hover:text-foreground">
         <input
           type="checkbox"
           checked={showSold}
           onChange={onToggleShowSold}
-          className="h-4 w-4 cursor-pointer rounded accent-white focus-visible:ring-2 focus-visible:ring-white/50"
+          className="h-4 w-4 cursor-pointer rounded accent-foreground focus-visible:ring-2 focus-visible:ring-foreground/50"
         />
         Show sold
       </label>

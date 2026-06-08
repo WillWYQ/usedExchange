@@ -37,18 +37,18 @@ export function QRModal({ imageSrc, label, onClose }: QRModalProps) {
       ref={dialogRef}
       onClose={handleDialogClose}
       onClick={handleBackdropClick}
-      className="m-auto max-w-xs rounded-2xl border border-white/10 bg-black/90 p-0 text-white backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+      className="m-auto max-w-xs rounded-2xl border border-foreground/10 bg-background/90 p-0 text-foreground backdrop:bg-background/60 backdrop:backdrop-blur-sm"
     >
       <div className="relative flex flex-col items-center gap-4 p-6">
         <button
           onClick={handleDialogClose}
           aria-label="Close"
-          className="absolute right-3 top-3 rounded-full p-1 text-white/60 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+          className="absolute right-3 top-3 rounded-full p-1 text-foreground/60 transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
         >
           <IconX size={18} />
         </button>
 
-        <p className="text-sm font-semibold text-white/80">{label}</p>
+        <p className="text-sm font-semibold text-foreground/80">{label}</p>
 
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -57,7 +57,7 @@ export function QRModal({ imageSrc, label, onClose }: QRModalProps) {
           className="h-48 w-48 rounded-lg object-contain"
         />
 
-        <p className="text-xs text-white/40">Scan to connect</p>
+        <p className="text-xs text-foreground/40">Scan to connect</p>
       </div>
     </dialog>
   );

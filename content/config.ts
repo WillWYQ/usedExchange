@@ -12,7 +12,8 @@ export const siteConfig: SiteConfig = {
 
   // ── Deployment ───────────────────────────────────────────────────────────
   deploymentMode: "static", // "static" (GitHub Pages / any host) | "vercel"
-  baseUrl: "https://your-domain.com", // update before first deploy
+  baseUrl: "https://usedexchangeproject.willsleep.dev", // update before first deploy
+  // baseUrl: "https://your-domain.com", // update before first deploy
 
   // ── Image Storage ─────────────────────────────────────────────────────────
   imageStorage: {

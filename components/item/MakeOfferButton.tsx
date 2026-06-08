@@ -76,7 +76,7 @@ export function MakeOfferButton({
     <div>
       <button
         onClick={() => { setOpen((o) => !o); setStatus("idle"); }}
-        className="inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-2 text-sm text-white/70 transition-colors hover:border-white/40 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+        className="inline-flex items-center gap-2 rounded-full border border-foreground/20 px-4 py-2 text-sm text-foreground/70 transition-colors hover:border-foreground/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
       >
         <IconTag size={15} />
         {makeOfferLabel}
@@ -85,17 +85,17 @@ export function MakeOfferButton({
       {open && (
         <form
           onSubmit={handleSubmit}
-          className="mt-3 flex flex-col gap-2 rounded-xl border border-white/10 bg-white/5 p-4"
+          className="mt-3 flex flex-col gap-2 rounded-xl border border-foreground/10 bg-foreground/5 p-4"
         >
           <label
             htmlFor="offer-amount"
-            className="text-xs text-white/60"
+            className="text-xs text-foreground/60"
           >
             Your offer{priceHint}
           </label>
 
           <div className="flex items-center gap-2">
-            <span className="text-sm text-white/50">{currency === "USD" ? "$" : currency}</span>
+            <span className="text-sm text-foreground/50">{currency === "USD" ? "$" : currency}</span>
             <input
               id="offer-amount"
               type="number"
@@ -104,11 +104,11 @@ export function MakeOfferButton({
               value={offerValue}
               onChange={(e) => { setOfferValue(e.target.value); setStatus("idle"); }}
               placeholder="Enter amount"
-              className="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-sm text-white placeholder:text-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+              className="flex-1 rounded-lg border border-foreground/10 bg-background/40 px-3 py-1.5 text-sm text-foreground placeholder:text-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30"
             />
             <button
               type="submit"
-              className="rounded-lg bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+              className="rounded-lg bg-foreground/10 px-3 py-1.5 text-sm text-foreground hover:bg-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
             >
               Send
             </button>
