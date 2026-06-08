@@ -6,9 +6,10 @@ import type { SiteConfig } from "@/lib/config/types";
 
 export const siteConfig: SiteConfig = {
   // ── Identity ─────────────────────────────────────────────────────────────
-  name: "Will's Used Exchange",
+  name: "UsedExchange",
   tagline: "Quality second-hand items — local pickup preferred.",
-  logo: "", // path in /public, or "" for text logo
+  logo: "/logo.svg", // path in /public, or "" for text logo
+  // logo: "", // path in /public, or "" for text logo
 
   // ── Deployment ───────────────────────────────────────────────────────────
   deploymentMode: "static", // "static" (GitHub Pages / any host) | "vercel"

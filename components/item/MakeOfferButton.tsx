@@ -115,7 +115,7 @@ export function MakeOfferButton({
           </div>
 
           {status === "rejected" && (
-            <p className="text-xs text-red-400">
+            <p className="text-xs text-[#a8584a] dark:text-accent-soft">
               That offer is below the minimum we can accept. Please try a higher amount.
             </p>
           )}

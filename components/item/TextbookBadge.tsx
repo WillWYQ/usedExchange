@@ -24,7 +24,7 @@ export function TextbookBadge({
   return (
     <div className="flex flex-wrap items-center gap-3">
       {label && (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-medium text-amber-300 ring-1 ring-inset ring-amber-500/30">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-500/30 dark:text-amber-300">
           <IconBook size={13} />
           {label}
         </span>
@@ -39,7 +39,7 @@ export function TextbookBadge({
           href={bookfinderUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs text-blue-400 underline underline-offset-2 hover:text-blue-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50"
+          className="text-xs text-accent underline underline-offset-2 hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
         >
           Compare prices →
         </a>

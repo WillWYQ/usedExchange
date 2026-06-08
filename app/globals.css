@@ -5,17 +5,21 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #0a0a0a;
-  --surface: #f4f4f5;
-  --border: transparent;
+  --background: #f8f4ec;
+  --foreground: #231f20;
+  --surface: #eedad4;
+  --border: #d5d8e5;
+  --accent: #002af9;
+  --accent-soft: #d5a198;
 }
 
 .dark {
-  --background: #000000;
-  --foreground: #ffffff;
-  --surface: #18181b;
-  --border: transparent;
+  --background: #231f20;
+  --foreground: #f8f4ec;
+  --surface: #52596b;
+  --border: #6d748d;
+  --accent: #a8bbd6;
+  --accent-soft: #d5a198;
 }
 
 /* Registers the variables above as Tailwind color tokens, so utilities like
@@ -26,6 +30,8 @@
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
   --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
 }
 
 body {

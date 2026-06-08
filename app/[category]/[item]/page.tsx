@@ -161,11 +161,11 @@ export default async function ItemDetailPage({
       {isSold && (
         <div
           role="alert"
-          className="mb-6 mt-2 rounded-xl border-0 bg-red-500/10 px-4 py-3 text-center text-sm font-semibold text-red-300"
+          className="mb-6 mt-2 rounded-xl border-0 bg-accent-soft/15 px-4 py-3 text-center text-sm font-semibold text-[#a8584a] dark:text-accent-soft"
         >
           {siteConfig.i18n.strings.soldBanner || "This item has been sold"}
           {itemData.soldDate && (
-            <span className="ml-2 font-normal text-red-300/70">
+            <span className="ml-2 font-normal text-[#a8584a]/70 dark:text-accent-soft/70">
               {/* This is a Server Component rendered once at export time —
                   `toLocaleDateString()` would format using the CI runner's
                   locale/timezone (not the visitor's), the same class of bug
@@ -195,7 +195,7 @@ export default async function ItemDetailPage({
             </span>
             <QuantityBadge quantity={itemData.quantity} />
             {itemData.priceReduced && (
-              <span className="inline-flex items-center rounded-full bg-orange-500/20 px-2.5 py-0.5 text-xs font-medium text-orange-300 ring-1 ring-inset ring-orange-500/30">
+              <span className="inline-flex items-center rounded-full bg-accent-soft/20 px-2.5 py-0.5 text-xs font-medium text-[#a8584a] ring-1 ring-inset ring-accent-soft/40 dark:text-accent-soft">
                 Price Reduced
               </span>
             )}
@@ -239,7 +239,7 @@ export default async function ItemDetailPage({
                   href={itemData.stripePaymentLink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-full bg-violet-600/80 px-5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+                  className="inline-flex items-center gap-2 rounded-full bg-accent-soft/80 px-5 py-2 text-sm font-medium text-[#231f20] transition-colors hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft/50"
                 >
                   Pay Deposit
                 </a>
@@ -249,7 +249,7 @@ export default async function ItemDetailPage({
                   href={itemData.venmoPaymentRequest}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-full bg-blue-600/80 px-5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                  className="inline-flex items-center gap-2 rounded-full bg-accent/80 px-5 py-2 text-sm font-medium text-[#f8f4ec] transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                 >
                   Pay with Venmo
                 </a>

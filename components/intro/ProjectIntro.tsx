@@ -35,23 +35,23 @@ const WobbleCard = dynamic(
 // sit on either a white or black surface, so the bento grid stays colorful
 // (rather than monochrome) across both light and dark themes.
 const FEATURE_CARD_TONES = [
-  "bg-gradient-to-br from-violet-500/15 via-fuchsia-500/10 to-transparent",
-  "bg-gradient-to-br from-cyan-500/15 via-sky-500/10 to-transparent",
-  "bg-gradient-to-br from-emerald-500/15 via-teal-500/10 to-transparent",
-  "bg-gradient-to-br from-amber-500/15 via-orange-500/10 to-transparent",
-  "bg-gradient-to-br from-rose-500/15 via-pink-500/10 to-transparent",
+  "bg-gradient-to-br from-[#002af9]/15 via-[#a8bbd6]/10 to-transparent",
+  "bg-gradient-to-br from-[#d5a198]/15 via-[#ecbfb6]/10 to-transparent",
+  "bg-gradient-to-br from-[#52596b]/15 via-[#6d748d]/10 to-transparent",
+  "bg-gradient-to-br from-[#d5d8e5]/15 via-[#99a4b0]/10 to-transparent",
+  "bg-gradient-to-br from-[#a8bbd6]/15 via-[#d5a198]/10 to-transparent",
 ];
 
 // Spotlight glow colors for the UI customisability cards — cycled per item so
 // the section reads as colorful rather than a wall of identical white glows.
 // Lighter/translucent in light mode so the glow doesn't overpower a white card.
-const SPOTLIGHT_COLORS_DARK = ["#8b5cf6", "#06b6d4", "#10b981", "#f59e0b", "#f43f5e", "#ec4899"];
-const SPOTLIGHT_COLORS_LIGHT = ["#c4b5fd", "#a5f3fc", "#a7f3d0", "#fde68a", "#fecdd3", "#fbcfe8"];
+const SPOTLIGHT_COLORS_DARK = ["#002af9", "#a8bbd6", "#d5a198", "#6d748d", "#ecbfb6", "#99a4b0"];
+const SPOTLIGHT_COLORS_LIGHT = ["#a8bbd6", "#d5d8e5", "#ecbfb6", "#aeb9c0", "#eedad4", "#d5a198"];
 
 // Top-edge accent gradients for the comparison cards — cycled per card.
 const COMPARISON_ACCENTS = [
-  "from-violet-500 to-fuchsia-500",
-  "from-cyan-500 to-sky-500",
+  "from-[#002af9] to-[#a8bbd6]",
+  "from-[#d5a198] to-[#ecbfb6]",
 ];
 
 // The documented seller pipeline (docs/DESIGN.md §14 "Build Pipeline"):
@@ -140,7 +140,7 @@ export function ProjectIntro() {
         />
         <Spotlight />
         <div className="relative z-10">
-          <p className="mb-3 inline-block bg-gradient-to-r from-violet-700 via-fuchsia-700 to-cyan-700 bg-clip-text text-xs font-semibold uppercase tracking-widest text-transparent dark:from-violet-300 dark:via-fuchsia-300 dark:to-cyan-300">
+          <p className="mb-3 inline-block bg-gradient-to-r from-[#231f20] via-[#52596b] to-[#002af9] bg-clip-text text-xs font-semibold uppercase tracking-widest text-transparent dark:from-[#f8f4ec] dark:via-[#d5d8e5] dark:to-[#a8bbd6]">
             {copy.eyebrow}
           </p>
           <h1 className="mb-4 text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
@@ -155,7 +155,7 @@ export function ProjectIntro() {
             href={TEMPLATE_REPO_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="mb-8 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-cyan-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/20 transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="mb-8 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-accent-soft to-accent px-6 py-2.5 text-sm font-semibold text-[#f8f4ec] shadow-lg shadow-accent/20 transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <IconBrandGithub size={18} stroke={2} aria-hidden="true" />
             {copy.githubLabel}
@@ -180,7 +180,7 @@ export function ProjectIntro() {
                   className={[
                     "rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                     locale === code
-                      ? "bg-gradient-to-r from-violet-500 to-cyan-500 text-white"
+                      ? "bg-gradient-to-r from-accent-soft to-accent text-[#f8f4ec]"
                       : "bg-foreground/5 text-foreground/60 ring-1 ring-border hover:text-foreground",
                   ].join(" ")}
                 >
@@ -202,7 +202,7 @@ export function ProjectIntro() {
               <FlipWords
                 key={locale}
                 words={copy.whyWords}
-                className="text-violet-700 dark:text-violet-300"
+                className="text-[#a8584a] dark:text-accent"
               />
             </div>
           </div>
@@ -330,7 +330,7 @@ export function ProjectIntro() {
           {copy.getStartedSteps.map((step, index) => (
             <li key={step} className="flex gap-4 text-sm text-foreground/60">
               <span
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 text-xs font-semibold text-white"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent-soft to-accent text-xs font-semibold text-[#f8f4ec]"
                 aria-hidden="true"
               >
                 {index + 1}

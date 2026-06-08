@@ -45,7 +45,7 @@ function SoldItemCard({ item }: { item: Item }) {
           className="absolute inset-0 flex items-center justify-center bg-background/40"
           aria-hidden="true"
         >
-          <span className="rounded-full bg-red-700 px-3 py-1 text-xs font-bold uppercase tracking-widest text-foreground">
+          <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-bold uppercase tracking-widest text-[#231f20]">
             Sold
           </span>
         </div>

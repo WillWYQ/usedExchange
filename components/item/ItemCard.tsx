@@ -52,7 +52,7 @@ export function ItemCard({ item, resolvedPrice, showCategoryChip = false }: Item
             className="absolute inset-0 flex items-center justify-center bg-background/50"
             aria-hidden="true"
           >
-            <span className="rounded-full bg-red-700 px-3 py-1 text-xs font-bold uppercase tracking-widest text-foreground">
+            <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-bold uppercase tracking-widest text-[#231f20]">
               Sold
             </span>
           </div>
@@ -61,7 +61,7 @@ export function ItemCard({ item, resolvedPrice, showCategoryChip = false }: Item
         {/* Price-reduced chip */}
         {item.priceReduced && !isSold && (
           <div className="absolute left-2 top-2">
-            <span className="rounded-full bg-amber-500/90 px-2 py-0.5 text-xs font-semibold text-black">
+            <span className="rounded-full bg-accent-soft/90 px-2 py-0.5 text-xs font-semibold text-[#231f20]">
               Price Reduced
             </span>
           </div>
