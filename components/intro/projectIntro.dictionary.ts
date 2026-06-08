@@ -15,6 +15,8 @@ export type ProjectIntroCopy = {
   eyebrow: string;
   title: string;
   tagline: string;
+  githubLabel: string;
+  languageLabel: string;
   intro: string;
   featuresTitle: string;
   features: { title: string; description: string }[];
@@ -31,6 +33,8 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     title: "UsedExchange",
     tagline:
       "A file-driven, database-free storefront for selling your second-hand things — fork it, fill in a folder, and ship a fast static site.",
+    githubLabel: "View on GitHub",
+    languageLabel: "Language",
     intro:
       "You're seeing this page because the store hasn't been configured yet. Once someone points baseUrl at a real domain in content/config.ts, the catalog takes over the home page automatically, and this introduction moves to /about so visitors can still learn what the project is.",
     featuresTitle: "What you get",
@@ -82,6 +86,8 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     title: "UsedExchange",
     tagline:
       "一个以文件驱动、无需数据库的二手物品商店模板——复刻仓库、填好一个文件夹，即可上线一个快速的静态网站。",
+    githubLabel: "在 GitHub 上查看",
+    languageLabel: "语言",
     intro:
       "你现在看到的是商店尚未配置完成时显示的页面。当有人在 content/config.ts 中把 baseUrl 改成真实域名后，目录页会自动接管首页，这篇介绍则会移动到 /about，方便访客继续了解这个项目。",
     featuresTitle: "你将获得什么",
@@ -133,6 +139,8 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     title: "UsedExchange",
     tagline:
       "Une boutique pilotée par fichiers, sans base de données, pour vendre vos articles d'occasion — clonez le dépôt, remplissez un dossier, et publiez un site statique rapide.",
+    githubLabel: "Voir sur GitHub",
+    languageLabel: "Langue",
     intro:
       "Vous voyez cette page parce que la boutique n'a pas encore été configurée. Dès que quelqu'un renseigne un vrai domaine dans baseUrl (content/config.ts), le catalogue prend automatiquement la place de la page d'accueil, et cette présentation est déplacée vers /about afin que les visiteurs puissent toujours découvrir le projet.",
     featuresTitle: "Ce que vous obtenez",
@@ -184,6 +192,8 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     title: "UsedExchange",
     tagline:
       "Una tienda basada en archivos, sin base de datos, para vender tus artículos de segunda mano: bifurca el repositorio, completa una carpeta y publica un sitio estático rápido.",
+    githubLabel: "Ver en GitHub",
+    languageLabel: "Idioma",
     intro:
       "Estás viendo esta página porque la tienda todavía no se ha configurado. En cuanto alguien indique un dominio real en baseUrl (content/config.ts), el catálogo ocupará automáticamente la página de inicio y esta introducción se trasladará a /about para que los visitantes puedan seguir conociendo el proyecto.",
     featuresTitle: "Qué obtienes",
@@ -235,6 +245,8 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     title: "UsedExchange",
     tagline:
       "データベース不要、ファイルだけで動く中古品販売ストア——リポジトリをフォークし、フォルダを埋めるだけで、高速な静的サイトを公開できます。",
+    githubLabel: "GitHub で見る",
+    languageLabel: "言語",
     intro:
       "このページが表示されているのは、ストアがまだ設定されていないためです。content/config.ts の baseUrl に実際のドメインを設定すると、カタログが自動的にホームページを引き継ぎ、この紹介ページは /about に移動します。これにより訪問者はいつでもこのプロジェクトについて知ることができます。",
     featuresTitle: "得られるもの",
@@ -286,6 +298,8 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     title: "UsedExchange",
     tagline:
       "데이터베이스 없이 파일만으로 운영되는 중고 물품 판매 스토어 — 저장소를 포크하고 폴더 하나만 채우면 빠른 정적 사이트를 바로 배포할 수 있습니다.",
+    githubLabel: "GitHub에서 보기",
+    languageLabel: "언어",
     intro:
       "이 페이지가 보이는 이유는 스토어가 아직 설정되지 않았기 때문입니다. content/config.ts의 baseUrl에 실제 도메인을 입력하면 카탈로그가 자동으로 홈페이지 자리를 차지하고, 이 소개 페이지는 /about으로 이동하여 방문자가 계속해서 프로젝트에 대해 알아볼 수 있습니다.",
     featuresTitle: "제공되는 기능",
