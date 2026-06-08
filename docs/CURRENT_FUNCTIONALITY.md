@@ -9,7 +9,7 @@
 ## Who Is This For
 
 ### Primary — College Students with a CS Background
-Comfortable with git, the terminal, and JSON. Wants a personal, polished storefront to sell items in their campus area. Runs `pnpm upload-images` and `git push` without hesitation.
+Comfortable with git, the terminal, and JSON. Wants a personal, polished storefront to sell items in their campus area. Runs `pnpm upload-images` and `pnpm push` without hesitation.
 
 **Typical items:** Textbooks, GPUs, keyboards, monitors, furniture, bikes  
 **Typical contact:** Discord, Instagram, Venmo, Zelle, WeChat  
@@ -312,6 +312,7 @@ Scripts run on the seller's machine. All write only to `content/`.
 | Command | What it does |
 |---|---|
 | `pnpm upload-images` | Upload photos to CDN, update manifest, print backup reminder |
+| `pnpm push` | Stage `content/` + manifest, commit with default message, and push |
 | `pnpm mark-sold <cat>/<name>` | Set `status: "sold"` and `sold_date: today` without editing JSON |
 | `pnpm create-item <cat>/<name>` | Create new item folder + `item.json` from template |
 | `pnpm new <cat>/<name>` | Shorthand for `create-item` |

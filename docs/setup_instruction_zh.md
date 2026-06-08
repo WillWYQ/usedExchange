@@ -152,10 +152,8 @@ imageStorage: {
 # 2. 上传到 CDN（仅在本机运行）：
 pnpm upload-images
 
-# 3. 提交更新后的清单：
-git add lib/generated/image-manifest.json content/**/*.json
-git commit -m "chore: update listings"
-git push
+# 3. 暂存、提交并推送，一步完成：
+pnpm push
 ```
 
 ### 本地开发

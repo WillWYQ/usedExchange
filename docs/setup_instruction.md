@@ -152,10 +152,8 @@ imageStorage: {
 # 2. Upload to CDN (runs on your machine only):
 pnpm upload-images
 
-# 3. Commit the updated manifest:
-git add lib/generated/image-manifest.json content/**/*.json
-git commit -m "chore: update listings"
-git push
+# 3. Stage, commit, and push in one step:
+pnpm push
 ```
 
 ### Local Development

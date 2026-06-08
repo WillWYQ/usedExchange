@@ -71,7 +71,7 @@ const WORKFLOW_COMMANDS = [
   "# drop photos into content/items/furniture/ikea-desk/, then type:",
   "/update-items",
   "pnpm upload-images",
-  "git add content lib/generated/image-manifest.json && git push",
+  "pnpm push",
 ];
 const WORKFLOW_OUTPUTS: Record<number, string[]> = {
   3: [
