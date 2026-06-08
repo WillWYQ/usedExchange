@@ -3,6 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { IconBrandGithub } from "@tabler/icons-react";
+import { FlipWords } from "@/components/ui/flip-words";
 import { useLocale } from "@/components/i18n/useLocale";
 import {
   PROJECT_INTRO_LOCALES,
@@ -149,7 +150,48 @@ export function ProjectIntro() {
               ))}
             </div>
           </div>
+
+          {/* ── Why use this template ── */}
+          <div className="mt-12">
+            <h2 className="mb-4 text-center text-xl font-semibold text-white">
+              {copy.whyTitle}
+            </h2>
+            <p className="text-center text-2xl font-medium leading-relaxed text-white/70 sm:text-3xl">
+              {copy.whyPrefix}
+            </p>
+            <div className="flex justify-center text-2xl font-semibold leading-relaxed sm:text-3xl">
+              <FlipWords
+                key={locale}
+                words={copy.whyWords}
+                className="text-white"
+              />
+            </div>
+          </div>
         </div>
+      </section>
+
+      {/* ── Why not just use a spreadsheet or marketplace app ── */}
+      <section className="mb-16">
+        <h2 className="mb-5 text-xl font-semibold text-white">
+          {copy.whyComparisonsTitle}
+        </h2>
+        <ul className="grid gap-4 sm:grid-cols-2">
+          {copy.whyComparisons.map((comparison) => (
+            <li
+              key={comparison.title}
+              className="rounded-xl bg-white/5 p-5 ring-1 ring-white/10"
+            >
+              <h3 className="mb-2 text-sm font-semibold text-white">
+                {comparison.title}
+              </h3>
+              <ul className="space-y-1.5 text-sm leading-relaxed text-white/55">
+                {comparison.points.map((point) => (
+                  <li key={point}>{point}</li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
       </section>
 
       {/* ── About this page ── */}

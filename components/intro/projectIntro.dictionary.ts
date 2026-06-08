@@ -15,6 +15,11 @@ export type ProjectIntroCopy = {
   eyebrow: string;
   title: string;
   tagline: string;
+  whyTitle: string;
+  whyPrefix: string;
+  whyWords: string[];
+  whyComparisonsTitle: string;
+  whyComparisons: { title: string; points: string[] }[];
   githubLabel: string;
   languageLabel: string;
   intro: string;
@@ -35,6 +40,34 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     title: "UsedExchange",
     tagline:
       "A file-driven, database-free storefront for selling your second-hand things — fork it, fill in a folder, and ship a fast static site.",
+    whyTitle: "Why fork this template?",
+    whyPrefix: "Because your storefront should be",
+    whyWords: [
+      "free to host",
+      "yours to keep — forever",
+      "fast as plain HTML",
+      "simple to translate",
+      "easy to reshape",
+    ],
+    whyComparisonsTitle: "Why not just use a spreadsheet or a marketplace app?",
+    whyComparisons: [
+      {
+        title: "Instead of a spreadsheet and group chats",
+        points: [
+          "A real storefront buyers can search and filter by category, price, and distance — not a scroll of chat messages.",
+          "Indexed by Google, with link previews, sold-item history, and translations handled automatically.",
+          "Share a link, not your phone number — keep contact details for buyers who are serious.",
+        ],
+      },
+      {
+        title: "Instead of eBay or Facebook Marketplace",
+        points: [
+          "No listing fees and no cut of your sale — a free static site, not a platform that takes a percentage.",
+          "Your listings and photos live in your own git repo — yours to keep, export, or move, immune to algorithm or policy changes.",
+          "Reshape the whole look — background, grid, gallery, and card — and run it on your own domain, not buried in someone else's feed.",
+        ],
+      },
+    ],
     githubLabel: "View on GitHub",
     languageLabel: "Language",
     intro:
@@ -91,6 +124,34 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     title: "UsedExchange",
     tagline:
       "一个以文件驱动、无需数据库的二手物品商店模板——复刻仓库、填好一个文件夹，即可上线一个快速的静态网站。",
+    whyTitle: "为什么要复刻这个模板？",
+    whyPrefix: "因为你的商店理应",
+    whyWords: [
+      "免费托管",
+      "完全归你所有",
+      "和纯静态网页一样快",
+      "轻松支持多语言",
+      "随心所欲地换装",
+    ],
+    whyComparisonsTitle: "为什么不直接用表格或电商平台？",
+    whyComparisons: [
+      {
+        title: "比起 Excel 表格和群聊",
+        points: [
+          "买家能搜索、按分类、价格、距离筛选，看到真正的相册——而不是在聊天记录里来回翻找。",
+          "页面会被 Google 收录，分享时自带链接预览，已售记录和多语言翻译也都自动处理。",
+          "你分享的是一个链接，而不是手机号——只在买家认真时才交换联系方式。",
+        ],
+      },
+      {
+        title: "比起 eBay 或 Facebook Marketplace",
+        points: [
+          "没有上架费，也不抽成——这是一个免费的静态网站，而不是要分走你利润的平台。",
+          "你的商品和照片都保存在自己的 git 仓库里——可以随时导出、迁移，不受平台算法或规则变化影响。",
+          "界面完全由你重塑——背景、网格、相册、卡片都能自由组合，跑在你自己的域名上，而不是淹没在别人的信息流里。",
+        ],
+      },
+    ],
     githubLabel: "在 GitHub 上查看",
     languageLabel: "语言",
     intro:
@@ -146,6 +207,35 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     title: "UsedExchange",
     tagline:
       "Une boutique pilotée par fichiers, sans base de données, pour vendre vos articles d'occasion — clonez le dépôt, remplissez un dossier, et publiez un site statique rapide.",
+    whyTitle: "Pourquoi forker ce modèle ?",
+    whyPrefix: "Parce que votre boutique mérite d'être",
+    whyWords: [
+      "gratuite à héberger",
+      "entièrement à vous, pour de bon",
+      "aussi rapide qu'une page statique",
+      "facile à traduire",
+      "simple à personnaliser",
+    ],
+    whyComparisonsTitle:
+      "Pourquoi ne pas simplement utiliser un tableur ou une appli de petites annonces ?",
+    whyComparisons: [
+      {
+        title: "Plutôt qu'un tableur et des groupes de discussion",
+        points: [
+          "Une vraie boutique que les acheteurs peuvent parcourir et filtrer par catégorie, prix et distance — pas un défilement de messages.",
+          "Indexée par Google, avec aperçus de liens, historique des articles vendus et traductions gérés automatiquement.",
+          "Vous partagez un lien, pas votre numéro — gardez vos coordonnées pour les acheteurs sérieux.",
+        ],
+      },
+      {
+        title: "Plutôt qu'eBay ou Facebook Marketplace",
+        points: [
+          "Aucuns frais de mise en vente ni commission — un site statique gratuit, pas une plateforme qui prend sa part.",
+          "Vos annonces et photos vivent dans votre propre dépôt git — à vous de les garder, exporter ou déplacer, à l'abri des changements d'algorithme ou de règles.",
+          "Redessinez tout l'aspect — fond, grille, galerie et cartes — et publiez sous votre propre domaine, pas noyé dans le fil d'un autre.",
+        ],
+      },
+    ],
     githubLabel: "Voir sur GitHub",
     languageLabel: "Langue",
     intro:
@@ -202,6 +292,35 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     title: "UsedExchange",
     tagline:
       "Una tienda basada en archivos, sin base de datos, para vender tus artículos de segunda mano: bifurca el repositorio, completa una carpeta y publica un sitio estático rápido.",
+    whyTitle: "¿Por qué bifurcar esta plantilla?",
+    whyPrefix: "Porque tu tienda merece ser",
+    whyWords: [
+      "gratuita de alojar",
+      "completamente tuya, para siempre",
+      "tan rápida como HTML estático",
+      "fácil de traducir",
+      "sencilla de personalizar",
+    ],
+    whyComparisonsTitle:
+      "¿Por qué no usar simplemente una hoja de cálculo o una app de mercado?",
+    whyComparisons: [
+      {
+        title: "En lugar de una hoja de cálculo y chats grupales",
+        points: [
+          "Una tienda de verdad que los compradores pueden buscar y filtrar por categoría, precio y distancia, no un chat interminable.",
+          "Indexada por Google, con vistas previas al compartir, historial de artículos vendidos y traducciones automáticas.",
+          "Compartes un enlace, no tu número — guarda tus datos de contacto para compradores serios.",
+        ],
+      },
+      {
+        title: "En lugar de eBay o Facebook Marketplace",
+        points: [
+          "Sin comisiones ni cuotas por publicar — un sitio estático gratuito, no una plataforma que se queda con un porcentaje.",
+          "Tus anuncios y fotos viven en tu propio repositorio git — tuyos para conservar, exportar o mover, a salvo de cambios de algoritmo o normas.",
+          "Rediseña todo el aspecto — fondo, cuadrícula, galería y tarjetas — y publícalo en tu propio dominio, no escondido en el feed de otro.",
+        ],
+      },
+    ],
     githubLabel: "Ver en GitHub",
     languageLabel: "Idioma",
     intro:
@@ -258,6 +377,35 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     title: "UsedExchange",
     tagline:
       "データベース不要、ファイルだけで動く中古品販売ストア——リポジトリをフォークし、フォルダを埋めるだけで、高速な静的サイトを公開できます。",
+    whyTitle: "なぜこのテンプレートをフォークするのか？",
+    whyPrefix: "あなたのストアは、こうあるべきだから——",
+    whyWords: [
+      "ホスティング費用ゼロ",
+      "ずっと自分だけのもの",
+      "静的サイト並みに高速",
+      "翻訳もかんたん",
+      "見た目を自由に着せ替え",
+    ],
+    whyComparisonsTitle:
+      "なぜスプレッドシートやマーケットプレイスアプリではダメなのか？",
+    whyComparisons: [
+      {
+        title: "スプレッドシートやグループチャットの代わりに",
+        points: [
+          "買い手はカテゴリ・価格・距離で検索やフィルターができ、チャット履歴をたどる必要のない、本物のギャラリー付きストアに。",
+          "Google に検索され、共有時にはリンクプレビューが表示され、売却履歴や多言語対応も自動で処理されます。",
+          "教えるのは電話番号ではなくリンク——本気の買い手とだけ連絡先を交換できます。",
+        ],
+      },
+      {
+        title: "eBay や Facebook Marketplace の代わりに",
+        points: [
+          "出品料も手数料もゼロ——利益の一部を持っていくプラットフォームではなく、無料の静的サイトです。",
+          "出品データや写真は自分の git リポジトリに保存——いつでもエクスポート・移行でき、アルゴリズムや規約変更に左右されません。",
+          "見た目は丸ごと作り変え可能——背景・グリッド・ギャラリー・カードを自由に組み合わせ、自分のドメインで公開できます。",
+        ],
+      },
+    ],
     githubLabel: "GitHub で見る",
     languageLabel: "言語",
     intro:
@@ -314,6 +462,34 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     title: "UsedExchange",
     tagline:
       "데이터베이스 없이 파일만으로 운영되는 중고 물품 판매 스토어 — 저장소를 포크하고 폴더 하나만 채우면 빠른 정적 사이트를 바로 배포할 수 있습니다.",
+    whyTitle: "왜 이 템플릿을 포크해야 할까요?",
+    whyPrefix: "당신의 스토어는 이래야 하니까요 —",
+    whyWords: [
+      "호스팅 비용 무료",
+      "영원히 온전한 내 것",
+      "정적 HTML만큼 빠르게",
+      "번역도 손쉽게",
+      "마음대로 모습을 바꾸기",
+    ],
+    whyComparisonsTitle: "왜 그냥 스프레드시트나 마켓플레이스 앱을 쓰지 않을까요?",
+    whyComparisons: [
+      {
+        title: "스프레드시트와 단체 채팅 대신",
+        points: [
+          "구매자가 카테고리·가격·거리로 검색하고 필터링할 수 있는 진짜 스토어 — 채팅 기록을 뒤적이지 않아도 됩니다.",
+          "Google에 색인되고, 공유 시 링크 미리보기가 표시되며, 판매 완료 기록과 다국어 번역도 자동으로 처리됩니다.",
+          "전화번호가 아닌 링크를 공유하세요 — 진지한 구매자와만 연락처를 주고받으면 됩니다.",
+        ],
+      },
+      {
+        title: "eBay나 Facebook 마켓플레이스 대신",
+        points: [
+          "등록비도 수수료도 없습니다 — 수익의 일부를 가져가는 플랫폼이 아니라 무료 정적 사이트니까요.",
+          "상품과 사진은 자신의 git 저장소에 저장되어 — 언제든 내보내거나 옮길 수 있고, 알고리즘이나 정책 변경에 영향받지 않습니다.",
+          "배경·그리드·갤러리·카드까지 전체 모습을 자유롭게 바꾸고, 자신의 도메인에서 운영할 수 있습니다.",
+        ],
+      },
+    ],
     githubLabel: "GitHub에서 보기",
     languageLabel: "언어",
     intro:
