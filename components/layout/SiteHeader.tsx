@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { siteConfig } from "@/content/config";
+import { isTemplateConfigured } from "@/lib/utils/templateStatus";
 import { LocaleSwitcher } from "@/components/i18n/LocaleSwitcher";
 import { SearchBarClient } from "@/components/search/SearchBarClient";
 
@@ -39,6 +40,18 @@ export function SiteHeader() {
           >
             {siteConfig.i18n.strings.browseAll || "Browse All"}
           </Link>
+
+          {/* Once configured, "/" is the catalog and the project intro lives
+              at /about — link to it. While unconfigured, "/" already *is*
+              the intro, so a separate link would be redundant. */}
+          {isTemplateConfigured() && (
+            <Link
+              href="/about"
+              className="transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+              About
+            </Link>
+          )}
 
           <LocaleSwitcher />
         </nav>

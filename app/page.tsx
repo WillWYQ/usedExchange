@@ -3,14 +3,26 @@ import { cache } from "react";
 import Link from "next/link";
 import { siteConfig } from "@/content/config";
 import { loadHomePageData } from "@/lib/content/loader";
+import { isTemplateConfigured } from "@/lib/utils/templateStatus";
 import { CategoryGrid } from "@/components/category/CategoryGrid";
 import { RecentlyListedSection } from "@/components/home/RecentlyListedSection";
 import { RecentlyViewed } from "@/components/common/RecentlyViewed";
+import { ProjectIntro } from "@/components/intro/ProjectIntro";
 
 // Memoised per-request so generateMetadata and HomePage share one parse pass.
 const getHomePageData = cache(loadHomePageData);
 
 export async function generateMetadata(): Promise<Metadata> {
+  // Before the seller configures their store, "/" shows the project intro —
+  // describe that page rather than an (empty) catalog in metadata.
+  if (!isTemplateConfigured()) {
+    return {
+      title: `${siteConfig.name} — UsedExchange template`,
+      description:
+        "An open-source, file-driven, database-free storefront template for selling second-hand items.",
+    };
+  }
+
   const { recentItems } = await getHomePageData();
   const ogImage = recentItems[0]?.coverImage ?? (siteConfig.logo || undefined);
 
@@ -26,6 +38,12 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
+  // Show the project introduction until the seller points baseUrl at a real
+  // domain — see lib/utils/templateStatus.ts. Afterwards it lives at /about.
+  if (!isTemplateConfigured()) {
+    return <ProjectIntro />;
+  }
+
   const { categories, recentItems } = await getHomePageData();
 
   const tagline = siteConfig.i18n.strings.heroTagline || siteConfig.tagline;

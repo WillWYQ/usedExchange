@@ -10,15 +10,14 @@
 // notice). Run this before every build to catch that class of mistake loudly.
 
 import { siteConfig } from "@/content/config";
-
-const PLACEHOLDER = "your-domain.com";
+import { PLACEHOLDER_DOMAIN } from "@/lib/utils/templateStatus";
 
 function main(): void {
-  if (siteConfig.baseUrl.includes(PLACEHOLDER)) {
+  if (siteConfig.baseUrl.includes(PLACEHOLDER_DOMAIN)) {
     console.error(
       `\n[check-config] siteConfig.baseUrl is still the placeholder ("${siteConfig.baseUrl}").\n` +
         `  Set it to your real deployed domain in content/config.ts before building for production —\n` +
-        `  otherwise canonical URLs, Open Graph tags, and JSON-LD will all point at "${PLACEHOLDER}".\n`,
+        `  otherwise canonical URLs, Open Graph tags, and JSON-LD will all point at "${PLACEHOLDER_DOMAIN}".\n`,
     );
     process.exit(1);
   }
