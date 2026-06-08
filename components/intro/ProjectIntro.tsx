@@ -25,6 +25,21 @@ const Terminal = dynamic(
   () => import("@/components/ui/terminal").then((m) => m.Terminal),
   { ssr: false },
 );
+const WobbleCard = dynamic(
+  () => import("@/components/ui/wobble-card").then((m) => m.WobbleCard),
+  { ssr: false },
+);
+
+// Background tones for the "What you get" wobble cards — kept in the page's
+// neutral dark palette (vs. the demo's indigo/pink defaults) so the bento grid
+// reads as part of the same monochrome theme as the rest of the intro.
+const FEATURE_CARD_TONES = [
+  "bg-neutral-900",
+  "bg-neutral-800",
+  "bg-neutral-800",
+  "bg-neutral-900",
+  "bg-neutral-800",
+];
 
 // The documented seller pipeline (docs/DESIGN.md §14 "Build Pipeline"):
 // clone once, then hand off to an AI coding tool (Claude Code, Cursor, …) for
@@ -204,21 +219,28 @@ export function ProjectIntro() {
         <h2 className="mb-5 text-xl font-semibold text-white">
           {copy.featuresTitle}
         </h2>
-        <ul className="grid gap-4 sm:grid-cols-2">
-          {copy.features.map((feature) => (
-            <li
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {copy.features.map((feature, index) => (
+            <WobbleCard
               key={feature.title}
-              className="rounded-xl bg-white/5 p-5 ring-1 ring-white/10 transition-all duration-200 hover:bg-white/[0.07] hover:ring-white/25"
+              containerClassName={[
+                "ring-1 ring-white/10",
+                FEATURE_CARD_TONES[index % FEATURE_CARD_TONES.length],
+                index === 0 ? "sm:col-span-2" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              className="px-5 py-8 sm:px-8"
             >
-              <h3 className="mb-1.5 text-sm font-semibold text-white">
+              <h3 className="mb-1.5 max-w-sm text-base font-semibold text-white sm:text-lg">
                 {feature.title}
               </h3>
-              <p className="text-sm leading-relaxed text-white/55">
+              <p className="max-w-sm text-sm leading-relaxed text-white/55">
                 {feature.description}
               </p>
-            </li>
+            </WobbleCard>
           ))}
-        </ul>
+        </div>
       </section>
 
       {/* ── UI customisability spotlight ── */}
