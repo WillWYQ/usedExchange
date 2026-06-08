@@ -1,13 +1,7 @@
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { siteConfig } from "@/content/config";
 import { LocaleSwitcher } from "@/components/i18n/LocaleSwitcher";
-
-// SearchBar is dynamically imported (ssr: false) — keeps it out of the SSG bundle.
-const SearchBar = dynamic(
-  () => import("@/components/search/SearchBar").then((m) => m.SearchBar),
-  { ssr: false },
-);
+import { SearchBarClient } from "@/components/search/SearchBarClient";
 
 export function SiteHeader() {
   return (
@@ -31,7 +25,7 @@ export function SiteHeader() {
           className="flex items-center gap-5 text-sm text-white/70"
           aria-label="Main navigation"
         >
-          {siteConfig.search.enabled && <SearchBar />}
+          {siteConfig.search.enabled && <SearchBarClient />}
 
           <Link
             href="/"
