@@ -20,6 +20,46 @@ const CardSpotlight = dynamic(
   () => import("@/components/ui/card-spotlight").then((m) => m.CardSpotlight),
   { ssr: false },
 );
+const Terminal = dynamic(
+  () => import("@/components/ui/terminal").then((m) => m.Terminal),
+  { ssr: false },
+);
+
+// The documented seller pipeline (docs/DESIGN.md §14 "Build Pipeline"):
+// clone once, then hand off to an AI coding tool (Claude Code, Cursor, …) for
+// the /setup and /update-items skills — those are slash commands typed into
+// the AI's chat, not shell commands, so "# …" lines narrate the hand-off
+// rather than pretending bash understands them. Sync photos, push, and CI
+// builds + deploys automatically. Stays in English regardless of page locale,
+// like any terminal a seller would actually run.
+const WORKFLOW_COMMANDS = [
+  "git clone https://github.com/WillWYQ/usedExchange.git my-store && cd my-store",
+  "pnpm install",
+  "claude # open Claude Code (or Cursor, etc.) in this folder, then type:",
+  "/setup",
+  "# drop photos into content/items/furniture/ikea-desk/, then type:",
+  "/update-items",
+  "pnpm upload-images",
+  "git add content lib/generated/image-manifest.json && git push",
+];
+const WORKFLOW_OUTPUTS: Record<number, string[]> = {
+  3: [
+    "→ AI asks a few questions — store name, location, currency, contact…",
+    "✓ Generated content/config.ts + category scaffolding",
+  ],
+  5: [
+    "→ Reading photos + notes from content/items/furniture/ikea-desk/",
+    "✓ Generated item.json — review and confirm before saving",
+  ],
+  6: [
+    "[upload-images] provider=cloudflare-r2  uploaded=5  skipped=0  purged=0  total=5  warnings=0",
+    "✓ lib/generated/image-manifest.json updated — commit this file",
+  ],
+  7: [
+    "✓ Pushed to origin/main",
+    "→ GitHub Actions builds and deploys to GitHub Pages automatically",
+  ],
+};
 
 // Canonical source repo for the template — shown as a "fork this" link before
 // setup, and as a "view the source" link from /about afterwards.
@@ -165,6 +205,23 @@ export function ProjectIntro() {
             </li>
           ))}
         </ul>
+      </section>
+
+      {/* ── Workflow demo ── */}
+      <section className="mb-16">
+        <h2 className="mb-2 text-xl font-semibold text-white">
+          {copy.workflowTitle}
+        </h2>
+        <p className="mb-5 text-sm leading-relaxed text-white/55">
+          {copy.workflowCaption}
+        </p>
+        <Terminal
+          commands={WORKFLOW_COMMANDS}
+          outputs={WORKFLOW_OUTPUTS}
+          username="seller"
+          enableSound={false}
+          className="max-w-none px-0"
+        />
       </section>
 
       {/* ── Get started ── */}

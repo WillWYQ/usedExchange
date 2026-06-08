@@ -23,6 +23,8 @@ export type ProjectIntroCopy = {
   uiTitle: string;
   uiDescription: string;
   uiSlots: { name: string; description: string }[];
+  workflowTitle: string;
+  workflowCaption: string;
   getStartedTitle: string;
   getStartedSteps: string[];
 };
@@ -74,6 +76,9 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       { name: "Gallery", description: "Lightboxes, carousels, or focus-card viewers for item photos." },
       { name: "Item card", description: "Minimal, glass-morphic, or hover-animated tiles for each listing." },
     ],
+    workflowTitle: "See the seller's workflow",
+    workflowCaption:
+      "From a fresh clone to a published listing — no code, just a few commands.",
     getStartedTitle: "Make it your own",
     getStartedSteps: [
       "Fork or clone the repository and install dependencies.",
@@ -127,6 +132,8 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       { name: "图片画廊", description: "灯箱、轮播，或聚焦卡片式的商品照片浏览方式。" },
       { name: "商品卡片", description: "极简、玻璃拟态，或带悬停动画的商品列表卡片样式。" },
     ],
+    workflowTitle: "看看卖家的操作流程",
+    workflowCaption: "从克隆仓库到发布商品——全程无需写代码，只需几条命令。",
     getStartedTitle: "把它变成你自己的商店",
     getStartedSteps: [
       "复刻或克隆这个仓库，并安装依赖。",
@@ -180,6 +187,9 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       { name: "Galerie", description: "Visionneuses en lightbox, carrousel ou cartes en gros plan pour les photos d'articles." },
       { name: "Carte d'article", description: "Vignettes minimalistes, en verre dépoli, ou animées au survol pour chaque annonce." },
     ],
+    workflowTitle: "Découvrez le flux de travail du vendeur",
+    workflowCaption:
+      "Du clonage du dépôt à la publication d'une annonce — sans code, juste quelques commandes.",
     getStartedTitle: "Faites-en votre propre boutique",
     getStartedSteps: [
       "Clonez le dépôt et installez les dépendances.",
@@ -233,6 +243,9 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       { name: "Galería", description: "Visores tipo lightbox, carrusel o tarjetas de enfoque para las fotos de los artículos." },
       { name: "Tarjeta de artículo", description: "Tarjetas minimalistas, de vidrio esmerilado o con animación al pasar el cursor para cada anuncio." },
     ],
+    workflowTitle: "Descubre el flujo de trabajo del vendedor",
+    workflowCaption:
+      "Desde clonar el repositorio hasta publicar un anuncio — sin código, solo unos pocos comandos.",
     getStartedTitle: "Haz que sea tuya",
     getStartedSteps: [
       "Bifurca o clona el repositorio e instala las dependencias.",
@@ -286,6 +299,9 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       { name: "ギャラリー", description: "ライトボックス、カルーセル、フォーカスカード形式の商品写真ビューア。" },
       { name: "商品カード", description: "ミニマル、グラスモーフィズム、ホバーアニメーション付きなど、出品タイルの見た目。" },
     ],
+    workflowTitle: "出品者のワークフローを見る",
+    workflowCaption:
+      "リポジトリをクローンしてから出品を公開するまで——コードを書く必要はなく、いくつかのコマンドだけです。",
     getStartedTitle: "自分だけのストアにする",
     getStartedSteps: [
       "リポジトリをフォークまたはクローンし、依存関係をインストールします。",
@@ -339,6 +355,9 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       { name: "갤러리", description: "상품 사진을 위한 라이트박스, 캐러셀, 또는 포커스 카드 뷰어." },
       { name: "상품 카드", description: "미니멀하거나 글래스모피즘, 또는 호버 애니메이션이 적용된 상품 타일." },
     ],
+    workflowTitle: "판매자의 작업 흐름 보기",
+    workflowCaption:
+      "저장소를 클론하는 것부터 상품을 게시하는 것까지 — 코드 작성 없이 몇 가지 명령어만으로.",
     getStartedTitle: "나만의 스토어로 만들기",
     getStartedSteps: [
       "저장소를 포크하거나 클론한 뒤 의존성을 설치하세요.",
