@@ -38,3 +38,16 @@ body {
   background-color: var(--background);
   color: var(--foreground);
 }
+
+/* Drives the InfiniteMovingCards scroller (components/ui/infinite-moving-cards.tsx) —
+   it sets --animation-direction/--animation-duration on its container and toggles
+   this class once mounted, but doesn't ship the keyframes itself. */
+@keyframes scroll {
+  to {
+    transform: translate(calc(-50% - 0.5rem));
+  }
+}
+
+.animate-scroll {
+  animation: scroll var(--animation-duration, 40s) var(--animation-direction, forwards) linear infinite;
+}

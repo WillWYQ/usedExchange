@@ -30,6 +30,14 @@ const WobbleCard = dynamic(
   () => import("@/components/ui/wobble-card").then((m) => m.WobbleCard),
   { ssr: false },
 );
+const InfiniteMovingCards = dynamic(
+  () => import("@/components/ui/infinite-moving-cards").then((m) => m.InfiniteMovingCards),
+  { ssr: false },
+);
+const Highlight = dynamic(
+  () => import("@/components/ui/hero-highlight").then((m) => m.Highlight),
+  { ssr: false },
+);
 
 // Gradient tints for the "What you get" wobble cards — translucent enough to
 // sit on either a white or black surface, so the bento grid stays colorful
@@ -47,12 +55,6 @@ const FEATURE_CARD_TONES = [
 // Lighter/translucent in light mode so the glow doesn't overpower a white card.
 const SPOTLIGHT_COLORS_DARK = ["#002af9", "#a8bbd6", "#d5a198", "#6d748d", "#ecbfb6", "#99a4b0"];
 const SPOTLIGHT_COLORS_LIGHT = ["#a8bbd6", "#d5d8e5", "#ecbfb6", "#aeb9c0", "#eedad4", "#d5a198"];
-
-// Top-edge accent gradients for the comparison cards — cycled per card.
-const COMPARISON_ACCENTS = [
-  "from-[#002af9] to-[#a8bbd6]",
-  "from-[#d5a198] to-[#ecbfb6]",
-];
 
 // The documented seller pipeline (docs/DESIGN.md §14 "Build Pipeline"):
 // clone once, then hand off to an AI coding tool (Claude Code, Cursor, …) for
@@ -93,6 +95,16 @@ const WORKFLOW_OUTPUTS: Record<number, string[]> = {
 // Canonical source repo for the template — shown as a "fork this" link before
 // setup, and as a "view the source" link from /about afterwards.
 const TEMPLATE_REPO_URL = "https://github.com/WillWYQ/usedExchange";
+
+// Marks `{{keyword}}` spans in comparison copy for <Highlight> emphasis —
+// lets the dictionary call out the specific selling point in each short
+// sentence rather than highlighting the sentence (or section title) wholesale.
+const HIGHLIGHT_PATTERN = /\{\{(.+?)\}\}/g;
+function withKeywordHighlights(text: string): React.ReactNode {
+  return text.split(HIGHLIGHT_PATTERN).map((segment, index) =>
+    index % 2 === 1 ? <Highlight key={index}>{segment}</Highlight> : segment,
+  );
+}
 
 const LOCALE_NAMES: Record<ProjectIntroLocale, string> = {
   en: "English",
@@ -211,41 +223,33 @@ export function ProjectIntro() {
 
       {/* ── Why not just use a spreadsheet or marketplace app ── */}
       <section className="mb-16">
-        <h2 className="mb-5 text-xl font-semibold text-foreground">
+        <h2 className="mb-8  text-xl font-semibold text-foreground">
           {copy.whyComparisonsTitle}
         </h2>
-        <ul className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-8">
           {copy.whyComparisons.map((comparison, index) => (
-            <li
-              key={comparison.title}
-              className="overflow-hidden rounded-xl bg-foreground/5 ring-1 ring-border"
-            >
-              <div
-                className={[
-                  "h-1 w-full bg-gradient-to-r",
-                  COMPARISON_ACCENTS[index % COMPARISON_ACCENTS.length],
-                ].join(" ")}
-                aria-hidden="true"
+            <div key={comparison.title}>
+              <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-foreground/50">
+                {comparison.title}
+              </h3>
+              {/* key includes locale so the scroller remounts on language
+                  switch — it clones its DOM nodes once on mount for the
+                  seamless loop, so a prop-only update would leave stale
+                  clones showing the previous locale's text. */}
+              <InfiniteMovingCards
+                key={`${locale}-${index}`}
+                direction={index % 2 === 0 ? "left" : "right"}
+                speed="slow"
+                items={comparison.points.map((point) => ({
+                  quote: withKeywordHighlights(point),
+                  name: "",
+                  title: "",
+                }))}
               />
-              <div className="p-5">
-                <h3 className="mb-2 text-sm font-semibold text-foreground">
-                  {comparison.title}
-                </h3>
-                <ul className="space-y-1.5 text-sm leading-relaxed text-foreground/55">
-                  {comparison.points.map((point) => (
-                    <li key={point}>{point}</li>
-                  ))}
-                </ul>
-              </div>
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
       </section>
-
-      {/* ── About this page ── */}
-      <p className="mx-auto mb-16 max-w-xl rounded-xl bg-foreground/5 px-5 py-4 text-center text-sm text-foreground/50 ring-1 ring-border">
-        {copy.intro}
-      </p>
 
       {/* ── Features ── */}
       <section className="mb-16">
@@ -321,6 +325,8 @@ export function ProjectIntro() {
         />
       </section>
 
+
+
       {/* ── Get started ── */}
       <section>
         <h2 className="mb-5 text-xl font-semibold text-foreground">
@@ -340,6 +346,18 @@ export function ProjectIntro() {
           ))}
         </ol>
       </section>
+      <section className="mt-12 text-center">
+
+
+        {/* ── About this page ── */}
+        <p className="mx-auto mb-16 max-w-xl rounded-xl bg-foreground/5 px-5 py-4 text-center text-sm text-foreground/50 ring-1 ring-border">
+          {copy.intro}
+        </p>
+
+      </section>
+
+
+
     </div>
   );
 }
