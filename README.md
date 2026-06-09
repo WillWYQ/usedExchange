@@ -4,6 +4,19 @@
 
 A statically-generated personal storefront for listing second-hand items. No database, no CMS — content lives entirely in one folder.
 
+---
+
+## First time? Start here
+
+**→ [Complete Setup Guide](SETUP_GUIDE.md)** — plain-language walkthrough, no coding required.
+
+Two one-time steps before your site goes live:
+
+1. **Enable GitHub Pages** — go to your repository on GitHub → **Settings → Pages → Source → set to "GitHub Actions"**. Without this, pushes will build but never publish.
+2. **Set up image hosting** — follow the [CDN setup guide](docs/setup_instruction.md) to configure where photos are stored (Cloudflare R2 recommended for GitHub Pages).
+
+---
+
 ## How it works
 
 Drop photos and a `item.json` file into `content/items/<category>/<item-name>/`, run one command, push to git. GitHub Actions builds and publishes the page automatically.

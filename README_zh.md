@@ -4,6 +4,19 @@
 
 一个静态生成的个人二手物品销售平台。无需数据库，无需 CMS——所有内容都存放在一个文件夹中。
 
+---
+
+## 第一次使用？从这里开始
+
+**→ [完整使用指南](SETUP_GUIDE.md)** — 无需编程基础的全程说明。
+
+上线前需要完成两个一次性步骤：
+
+1. **开启 GitHub Pages** — 在 GitHub 仓库页面进入 **Settings → Pages → Source → 选择 "GitHub Actions"**。不做这一步，代码推送后会构建但不会发布。
+2. **配置图片存储** — 参照 [CDN 配置指南](docs/setup_instruction_zh.md) 设置照片托管服务（GitHub Pages 推荐使用 Cloudflare R2）。
+
+---
+
 ## 工作原理
 
 将照片和 `item.json` 文件放入 `content/items/<分类>/<物品名称>/`，运行一条命令，推送到 git。GitHub Actions 会自动构建并发布页面。
