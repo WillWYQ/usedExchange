@@ -4,6 +4,7 @@ import { useState } from "react";
 import { IconTag } from "@tabler/icons-react";
 import { siteConfig } from "@/content/config";
 import type { PriceTier } from "@/lib/content/types";
+import { useT } from "@/components/i18n/useT";
 
 type MakeOfferButtonProps = {
   itemName: string;
@@ -20,13 +21,14 @@ export function MakeOfferButton({
   currency,
   resolvedTier,
 }: MakeOfferButtonProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [offerValue, setOfferValue] = useState("");
   const [status, setStatus] = useState<"idle" | "rejected" | "prefilled">(
     "idle",
   );
 
-  const makeOfferLabel = siteConfig.i18n.strings.makeOffer || "Make an Offer";
+  const makeOfferLabel = t.makeOffer;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -91,7 +93,7 @@ export function MakeOfferButton({
             htmlFor="offer-amount"
             className="text-xs text-foreground/60"
           >
-            Your offer{priceHint}
+            {t.yourOffer}{priceHint}
           </label>
 
           <div className="flex items-center gap-2">
@@ -110,13 +112,13 @@ export function MakeOfferButton({
               type="submit"
               className="rounded-lg bg-foreground/10 px-3 py-1.5 text-sm text-foreground hover:bg-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
             >
-              Send
+              {t.send}
             </button>
           </div>
 
           {status === "rejected" && (
             <p className="text-xs text-[#a8584a] dark:text-accent-soft">
-              That offer is below the minimum we can accept. Please try a higher amount.
+              {t.belowMinimumOffer}
             </p>
           )}
         </form>

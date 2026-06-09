@@ -1,28 +1,16 @@
+"use client";
+
 import type { Status } from "@/lib/content/types";
 import { clsx } from "clsx";
+import { useT } from "@/components/i18n/useT";
 
-// Text label is always rendered — colour alone is never the sole differentiator (a11y).
-const STATUS_CONFIG: Record<Status, { label: string; classes: string }> = {
-  available: {
-    label: "Available",
-    classes: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-300",
-  },
-  pending: {
-    label: "Pending",
-    classes: "bg-yellow-500/15 text-yellow-700 ring-yellow-500/30 dark:text-yellow-300",
-  },
-  reserved: {
-    label: "Reserved",
-    classes: "bg-accent/15 text-accent ring-accent/30",
-  },
-  sold: {
-    label: "Sold",
-    classes: "bg-accent-soft/20 text-[#a8584a] ring-accent-soft/40 dark:text-accent-soft",
-  },
-  draft: {
-    label: "Draft",
-    classes: "bg-foreground/10 text-foreground/50 ring-foreground/20",
-  },
+// Colour classes are locale-independent; labels come from useT().
+const STATUS_CLASSES: Record<Status, string> = {
+  available: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-300",
+  pending: "bg-yellow-500/15 text-yellow-700 ring-yellow-500/30 dark:text-yellow-300",
+  reserved: "bg-accent/15 text-accent ring-accent/30",
+  sold: "bg-accent-soft/20 text-[#a8584a] ring-accent-soft/40 dark:text-accent-soft",
+  draft: "bg-foreground/10 text-foreground/50 ring-foreground/20",
 };
 
 type StatusBadgeProps = {
@@ -31,11 +19,17 @@ type StatusBadgeProps = {
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const config = STATUS_CONFIG[status] ?? {
-    label: status,
-    classes: "bg-foreground/10 text-foreground/50 ring-foreground/20",
+  const t = useT();
+  const statusLabels: Record<Status, string> = {
+    available: t.statusAvailable,
+    pending: t.statusPending,
+    reserved: t.statusReserved,
+    sold: t.statusSold,
+    draft: t.statusDraft,
   };
-  const { label, classes } = config;
+  const label = statusLabels[status] ?? status;
+  const classes =
+    STATUS_CLASSES[status] ?? "bg-foreground/10 text-foreground/50 ring-foreground/20";
   return (
     <span
       className={clsx(

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useId } from "react";
 import type { GeolocationState, ResolvedDistance } from "@/lib/content/types";
+import { useT } from "@/components/i18n/useT";
 
 // Earth's antipodal distance (~12,450 mi) — any larger value is meaningless
 // for a buyer/seller distance and would push resolveItemPrice into degenerate
@@ -37,6 +38,7 @@ export function LocationPriceBar({
   resolved,
   onManualMiles,
 }: LocationPriceBarProps) {
+  const t = useT();
   const [showInput, setShowInput] = useState(false);
   const [draft, setDraft] = useState("");
   const inputId = useId();
@@ -74,7 +76,7 @@ export function LocationPriceBar({
   const distanceInput = showInput && (
     <form onSubmit={handleSubmit} className="flex items-center gap-2">
       <label htmlFor={inputId} className="sr-only">
-        Distance in miles
+        {t.pricingDistanceHeader}
       </label>
       <input
         id={inputId}
@@ -89,12 +91,12 @@ export function LocationPriceBar({
         placeholder="0"
         className="w-20 rounded-md border border-foreground/20 bg-foreground/5 px-2 py-1 text-sm text-foreground placeholder-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
       />
-      <span className="text-sm text-foreground/50">mi</span>
+      <span className="text-sm text-foreground/50">{t.distanceUnit}</span>
       <button
         type="submit"
         className="rounded-md bg-foreground/10 px-2.5 py-1 text-xs font-medium text-foreground hover:bg-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
       >
-        Apply
+        {t.apply}
       </button>
       <button
         type="button"
@@ -116,7 +118,7 @@ export function LocationPriceBar({
         aria-label="Location status"
       >
         <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-foreground/20 border-t-foreground/60" />
-        Detecting location…
+        {t.detectingLocation}
       </div>
     );
   }
@@ -135,11 +137,11 @@ export function LocationPriceBar({
           <PinIcon />
           {miles !== null ? (
             <>
-              <span className="font-medium text-foreground">{miles.toFixed(1)} mi</span>
-              {" from seller"}
+              <span className="font-medium text-foreground">{miles.toFixed(1)} {t.distanceUnit}</span>
+              {" "}{t.fromSeller}
             </>
           ) : (
-            "Location detected"
+            t.locationDetected
           )}
         </span>
         {showInput ? (
@@ -151,7 +153,7 @@ export function LocationPriceBar({
             onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openInput()}
             className="text-xs text-foreground/40 underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
           >
-            Enter manually
+            {t.enterManually}
           </button>
         )}
       </div>
@@ -172,8 +174,8 @@ export function LocationPriceBar({
           <PinIcon />
           {showInput ? null : (
             <>
-              <span className="font-medium text-foreground">{manualMiles.toFixed(1)} mi</span>
-              {" (manual)"}
+              <span className="font-medium text-foreground">{manualMiles.toFixed(1)} {t.distanceUnit}</span>
+              {" "}{t.distanceManualLabel}
             </>
           )}
         </span>
@@ -186,14 +188,14 @@ export function LocationPriceBar({
               onClick={openInput}
               className="text-xs text-foreground/40 underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
             >
-              Edit
+              {t.edit}
             </button>
             <button
               type="button"
               onClick={clearManual}
               className="text-xs text-foreground/40 underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
             >
-              Clear
+              {t.clear}
             </button>
           </div>
         )}
@@ -210,7 +212,7 @@ export function LocationPriceBar({
     >
       <span className="flex items-center gap-1.5 text-foreground/50">
         <PinIcon />
-        Prices shown at pickup rate
+        {t.pricesAtPickupRate}
       </span>
       {showInput ? (
         distanceInput
@@ -221,7 +223,7 @@ export function LocationPriceBar({
           onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openInput()}
           className="text-xs text-foreground/60 underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
         >
-          Enter distance
+          {t.enterDistance}
         </button>
       )}
     </div>

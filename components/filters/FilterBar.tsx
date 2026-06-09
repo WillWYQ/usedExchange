@@ -3,6 +3,7 @@
 import type { Condition } from "@/lib/content/types";
 import { SortSelect } from "./SortSelect";
 import type { SortKey } from "./SortSelect";
+import { useT } from "@/components/i18n/useT";
 
 // ── PriceRangeSlider ─────────────────────────────────────────────────────────
 // Dual-thumb range slider using two overlapping <input type="range"> elements.
@@ -72,14 +73,6 @@ function PriceRangeSlider({ bounds, value, onChange }: SliderProps) {
 // Controlled component — all state lives in the caller (typically ItemGrid via
 // useFilters). Pass the return value of useFilters spread into these props.
 
-const CONDITION_LABELS: Record<Condition, string> = {
-  new: "New",
-  "like-new": "Like New",
-  good: "Good",
-  fair: "Fair",
-  "for-parts": "For Parts",
-};
-
 export type FilterBarProps = {
   availableConditions: Condition[];
   activeConditions: Set<Condition>;
@@ -105,6 +98,14 @@ export function FilterBar({
   sortKey,
   onSortKeyChange,
 }: FilterBarProps) {
+  const t = useT();
+  const conditionLabels: Record<Condition, string> = {
+    new: t.conditionNew,
+    "like-new": t.conditionLikeNew,
+    good: t.conditionGood,
+    fair: t.conditionFair,
+    "for-parts": t.conditionForParts,
+  };
   const showSlider =
     priceBounds !== null &&
     priceRange !== null &&
@@ -134,7 +135,7 @@ export function FilterBar({
                     : "border-foreground/20 text-foreground/60 hover:border-foreground/40 hover:text-foreground",
                 ].join(" ")}
               >
-                {CONDITION_LABELS[c]}
+                {conditionLabels[c]}
               </button>
             );
           })}
@@ -145,7 +146,7 @@ export function FilterBar({
       {showSlider && (
         <div className="flex min-w-44 flex-col gap-1.5">
           <div className="flex items-center justify-between text-xs text-foreground/50">
-            <span>Price</span>
+            <span>{t.filterPrice}</span>
             <span>
               ${priceRange![0].toLocaleString()} – ${priceRange![1].toLocaleString()}
             </span>
@@ -166,7 +167,7 @@ export function FilterBar({
           onChange={onToggleShowSold}
           className="h-4 w-4 cursor-pointer rounded accent-foreground focus-visible:ring-2 focus-visible:ring-foreground/50"
         />
-        Show sold
+        {t.filterShowSold}
       </label>
 
       {/* Sort — pushed to far right */}

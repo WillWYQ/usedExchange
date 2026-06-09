@@ -972,23 +972,36 @@ if (siteConfig.sitemap.enabled) {
 
 **设计：** 单次部署多语区。所有语区变体打包进一次部署。访客通过 `SiteHeader` 中的 `LocaleSwitcher` 组件在运行时切换语言。所选语区存储在 `localStorage` 中；SSG 静态 HTML 始终渲染 `defaultLocale`。
 
-**SiteConfig i18n 类型：**
+### 两层翻译体系
+
+| 层 | 覆盖内容 | 存储位置 | 填写者 |
+|---|---|---|---|
+| **UI 字符串** | 全部 67 个按钮/标签/徽章/标题文本 | `content/config.ts` → `i18n.translations.{locale}` | 卖家（通过 `/setup` 或手动编辑） |
+| **物品内容** | 每件物品的 `name` 和 `description` | `content/items/**/item.json` → `name_{locale}`、`description_{locale}` | `/translate-items` AI 技能或手动编辑 |
+
+**SiteConfig i18n 类型（`lib/config/types.ts`）：**
 
 ```ts
 export type I18nConfig = {
-  defaultLocale: string;           // ISO 639-1；在静态 HTML（SSG）中渲染
-  availableLocales: string[];      // 所有支持的语区；长度 > 1 时显示 LocaleSwitcher
-  showLocaleSwitcher: boolean;     // 在 SiteHeader 中显示切换器
-  strings: UIStrings;              // 每个 defaultLocale 的 UI 字符串覆盖
+  defaultLocale: string;                          // ISO 639-1；在静态 HTML（SSG）中渲染
+  availableLocales: string[];                     // 所有支持的语区；长度 > 1 时显示 LocaleSwitcher
+  showLocaleSwitcher: boolean;                    // 在 SiteHeader 中显示切换器
+  translations: Record<string, Partial<UIStrings>>; // 每语区 UI 字符串字典
 };
 ```
 
-**运行时架构：**
+**`UIStrings` 类型（67 个键，`lib/config/types.ts`）：**
+
+涵盖所有可见 UI 标签：导航链接、板块标题、联系标签、出价表单、分享按钮、元数据表头、成色/状态徽章、筛选/排序选项、新鲜度标签、页面横幅、成色说明、位置栏文本、定价表头。
+
+`lib/i18n/translations.ts` 中的 `EN_FALLBACK` 常量为每个键提供内置英文默认值，确保即使 `content/config.ts` 配置有误，UI 标签也不会为空。
+
+**运行时架构 — 语言切换：**
 
 ```
 访客加载页面
   │
-  ├── SSG HTML 以 defaultLocale 内容渲染（如 item.name，而非 item.name_zh）
+  ├── SSG HTML 以 defaultLocale 内容渲染（item.name，而非 item.name_zh）
   │
   └── LocaleProvider（客户端组件，包装 app/layout.tsx children）
         ├── 读取 localStorage.getItem("locale")
@@ -998,9 +1011,29 @@ export type I18nConfig = {
 LocaleSwitcher（SiteHeader 中的客户端组件）
   ├── siteConfig.i18n.availableLocales.length <= 1 时隐藏
   └── 更改时：调用 setLocale(newLocale) + localStorage.setItem("locale", newLocale)
+
+useLocale() hook — 从 LocaleProvider context 读取当前语区
+useT() hook     — 返回当前语区的 UIStrings 字典（合并顺序：EN_FALLBACK → defaultLocale 字典 → 当前语区字典）
 ```
 
-**`lib/utils/i18n.ts`：**
+**`lib/i18n/` 模块：**
+
+```ts
+// lib/i18n/translations.ts
+// EN_FALLBACK: UIStrings — 所有 67 个键的内置英文默认值
+// 被 useT()（客户端）和 getTranslations()（服务端）用作安全兜底
+
+// lib/i18n/getTranslations.ts
+// 服务端字符串解析。始终基于 defaultLocale 解析。
+// 供无法调用 hook 的 Server Component（app 页面）使用。
+export function getTranslations(): UIStrings
+
+// components/i18n/useT.ts（客户端）
+// 解析顺序：EN_FALLBACK → defaultLocale 字典 → 当前语区字典
+export function useT(): UIStrings
+```
+
+**`lib/utils/i18n.ts` — 物品级语区解析：**
 
 ```ts
 // 返回给定语区的本地化字段值，回退到英文默认值
@@ -1010,12 +1043,27 @@ export function getLocalizedField(
   field: string,    // 如 "name"、"description"
   locale: string    // 如 "zh"、"es"
 ): string
-
-// 从 siteConfig.i18n.strings 返回 UI 字符串，回退到内置英文默认值
-export function t(key: keyof UIStrings, locale?: string): string
 ```
 
+**客户端与服务端渲染面：**
+
+`name` 和 `description` 的访客渲染存在于**客户端**组件（`ItemCard`、`LocalizedItemContent`）中，调用 `getLocalizedField(item, …, locale)`。所有其他客户端组件通过 `useT()` 获取 UI 标签。Server Component（`generateMetadata`、`<title>`、OG 标签、JSON-LD）调用 `getTranslations()`，始终返回 `defaultLocale` 字典，**不支持**运行时切换。
+
 > **SEO 说明（v1 有意限制）：** 只有 `defaultLocale` 内容出现在静态 HTML 和可爬取的元数据/JSON-LD 中。非默认语区在访客切换后在客户端渲染，不单独索引。
+
+**构建时完整性校验：**
+
+`scripts/check-config.ts` 在每次构建时验证 `availableLocales` 中的每个语区都有包含全部 67 个必需键的 `translations` 条目。如有语区缺失或不完整，构建将以描述性错误信息失败。
+
+**添加新语区步骤：**
+
+1. 将语区代码加入 `content/config.ts` 的 `siteConfig.i18n.availableLocales`。
+2. 添加包含全部 67 个 `UIStrings` 键（已翻译）的 `translations.{locale}` 块。
+3. 在 Zod schema（`lib/content/schema.ts`）和 `Item` 类型（`lib/content/types.ts`）中添加 `name_{locale}` 和 `description_{locale}`——与现有的 `name_zh` / `description_zh` 模式相同。
+4. 运行 `/translate-items` AI 技能批量填充各 `item.json` 中的 `name_{locale}` / `description_{locale}`，或手动添加。
+5. `availableLocales.length > 1` 时，`LocaleSwitcher` 自动出现。
+
+> **语区回退：** `getLocalizedField` 对缺少 `name_{locale}` 字段的物品静默回退到英文，不崩溃、不空渲染。`useT()` / `getTranslations()` 通过 `EN_FALLBACK` 回退，确保 UI 标签永不为空。
 
 ### 22.9 支付平台——Venmo 与 Zelle
 

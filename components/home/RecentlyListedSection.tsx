@@ -2,6 +2,7 @@
 
 import type { Item } from "@/lib/content/types";
 import { siteConfig } from "@/content/config";
+import { useT } from "@/components/i18n/useT";
 import { useGeolocation } from "@/components/pricing/useGeolocation";
 import { useDistancePricing } from "@/components/pricing/useDistancePricing";
 import { resolveItemPrice } from "@/lib/utils/pricing";
@@ -15,12 +16,13 @@ type RecentlyListedSectionProps = {
 // Prices update silently as geo resolves — no LocationPriceBar on the home page
 // (DESIGN.md §17 "Home page LocationPriceBar decision").
 export function RecentlyListedSection({ items }: RecentlyListedSectionProps) {
+  const t = useT();
   const geoState = useGeolocation();
   const { resolved } = useDistancePricing(siteConfig.location, geoState);
 
   if (items.length === 0) return null;
 
-  const heading = siteConfig.i18n.strings.recentlyListed || "Recently Listed";
+  const heading = t.recentlyListed;
 
   return (
     <section aria-labelledby="recently-listed-heading">

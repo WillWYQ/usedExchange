@@ -72,7 +72,7 @@ Ask:
 
 Map to: `imageStorage.provider` (`"cloudflare-r2"` / `"vercel-blob"` / `"local"`)
 
-If they choose Cloudflare R2 or Vercel Blob, remind them: "You'll need to add your API keys to a `.env.local` file. See SETUP_GUIDE.md for instructions."
+If they choose Cloudflare R2 or Vercel Blob, offer: "Would you like me to walk you through the R2 setup step by step right now, or will you follow the guide in `docs/setup_instruction.md` on your own?"
 
 ---
 
@@ -206,9 +206,11 @@ If yes:
 
 > For Chinese: do you want Simplified Chinese (简体, mainland China standard) or Traditional Chinese (繁體, Taiwan/HK standard)?
 
-Note: If multiple locales are configured, a language switcher will appear in the site header. Sellers then use `/translate-items` to add translations to their listings.
+Note: If multiple locales are configured, a language switcher will appear in the site header.
 
-Map to: `i18n.defaultLocale`, `i18n.availableLocales`
+> **UI strings vs item translations:** The `translations` block in `content/config.ts` controls all 67 UI labels (buttons, headers, badges, filters). If the seller adds a locale (e.g. `"zh"`), they must add a `translations.zh` block with every key translated — the build will fail otherwise. Item-level translations (`name_zh`, `description_zh`) are separate and handled by `/translate-items`.
+
+Map to: `i18n.defaultLocale`, `i18n.availableLocales`, `i18n.translations`
 
 ---
 
@@ -219,7 +221,7 @@ After the config questions, ask:
 
 For each category name the seller provides:
 1. Suggest a URL-friendly slug (lowercase, hyphens): "Outdoor Gear" → `outdoor-gear`
-2. Suggest a display name and an icon from the Tabler Icons set
+2. Suggest a display name and a matching emoji icon
 3. Confirm the list before creating folders
 
 Then generate a `_category.json` for each new category that doesn't already exist:
@@ -321,17 +323,103 @@ export const siteConfig: SiteConfig = {
   },
 
   // ── Internationalisation ──────────────────────────────────────────────────
+  // To add a language: add its code to availableLocales, add a matching
+  // translations.{locale} block below with all 67 keys translated, then
+  // run /translate-items to batch-fill name_{locale} / description_{locale}
+  // on each item.json. The build fails if a locale is in availableLocales
+  // but its translations entry is missing or incomplete.
   i18n: {
     defaultLocale: "{{i18n.defaultLocale}}",
     availableLocales: [{{i18n.availableLocales}}],
     showLocaleSwitcher: true,
-    strings: {
-      heroTagline:    "",
-      recentlyListed: "",
-      browseAll:      "",
-      makeOffer:      "",
-      contactSeller:  "",
-      soldBanner:     "",
+    translations: {
+      "{{i18n.defaultLocale}}": {
+        // ── Navigation ────────────────────────────────────────────────────
+        home: "Home",
+        about: "About",
+        browseAll: "Browse All",
+        // ── Section headings ──────────────────────────────────────────────
+        recentlyListed: "Recently Listed",
+        recentlyViewed: "Recently Viewed",
+        // ── Contact ───────────────────────────────────────────────────────
+        contactSeller: "Contact Seller",
+        itemSold: "Item sold",
+        preferredPayment: "Preferred payment",
+        // ── Make-offer form ───────────────────────────────────────────────
+        makeOffer: "Make an Offer",
+        yourOffer: "Your offer",
+        send: "Send",
+        belowMinimumOffer: "That offer is below the minimum we can accept. Please try a higher amount.",
+        // ── Share button ──────────────────────────────────────────────────
+        share: "Share",
+        copied: "Copied!",
+        linkCopied: "Link copied!",
+        // ── Item metadata labels ───────────────────────────────────────────
+        brand: "Brand",
+        model: "Model",
+        age: "Age",
+        color: "Color",
+        dimensions: "Dimensions",
+        weight: "Weight",
+        originalSource: "Original Source",
+        originalPrice: "Original Price",
+        // ── Condition badge labels ─────────────────────────────────────────
+        conditionNew: "New",
+        conditionLikeNew: "Like New",
+        conditionGood: "Good",
+        conditionFair: "Fair",
+        conditionForParts: "For Parts",
+        // ── Status badge labels ────────────────────────────────────────────
+        statusAvailable: "Available",
+        statusPending: "Pending",
+        statusReserved: "Reserved",
+        statusSold: "Sold",
+        statusDraft: "Draft",
+        // ── Filter / sort bar ──────────────────────────────────────────────
+        filterShowSold: "Show sold",
+        filterPrice: "Price",
+        sortBy: "Sort by",
+        sortNewestFirst: "Newest first",
+        sortPriceLow: "Price: low → high",
+        sortPriceHigh: "Price: high → low",
+        sortConditionBest: "Condition: best first",
+        // ── Freshness label ────────────────────────────────────────────────
+        listed: "Listed",
+        // ── Page titles and banners ────────────────────────────────────────
+        soldBanner: "This item has been sold",
+        soldArchiveTitle: "Sold Archive",
+        // ── Condition guide panel ──────────────────────────────────────────
+        conditionGuideTitle: "Condition Guide",
+        conditionNewDesc: "Unopened, unused. Original packaging intact.",
+        conditionLikeNewDesc: "Used briefly. No visible wear. May be without original box.",
+        conditionGoodDesc: "Normal signs of use. Fully functional. Minor cosmetic marks.",
+        conditionFairDesc: "Visible wear or light damage. Works as expected.",
+        conditionForPartsDesc: "Not fully functional. Sold as-is for repair or parts.",
+        // ── Location / distance price bar ──────────────────────────────────
+        detectingLocation: "Detecting location…",
+        fromSeller: "from seller",
+        locationDetected: "Location detected",
+        enterManually: "Enter manually",
+        distanceManualLabel: "(manual)",
+        distanceUnit: "mi",
+        apply: "Apply",
+        pricesAtPickupRate: "Prices shown at pickup rate",
+        enterDistance: "Enter distance",
+        edit: "Edit",
+        clear: "Clear",
+        // ── Pricing table ──────────────────────────────────────────────────
+        contactForPrice: "Contact seller for pricing details.",
+        contactForPricingShort: "Contact seller for pricing",
+        pricingLabelHeader: "Label",
+        pricingDistanceHeader: "Distance",
+        pricingPriceHeader: "Price",
+        pickup: "Pickup",
+        obo: "OBO",
+        hidePricingTiers: "Hide pricing tiers",
+        viewAllPricingTiers: "View all pricing tiers",
+      },
+      // Add more locales here — uncomment and translate all keys, e.g.:
+      // zh: { home: "首頁", about: "關於", browseAll: "瀏覽全部", ... },
     },
   },
 };

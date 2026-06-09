@@ -3,6 +3,7 @@ import { siteConfig } from "@/content/config";
 import { loadBrowseAllPageData } from "@/lib/content/loader";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ItemGrid } from "@/components/item/ItemGrid";
+import { getTranslations } from "@/lib/i18n/getTranslations";
 
 export const metadata: Metadata = {
   title: `Browse All — ${siteConfig.name}`,
@@ -18,7 +19,7 @@ export default async function BrowseAllPage() {
   // visible cross-category item list and category metadata for the header count.
   const { items, categories } = await loadBrowseAllPageData();
 
-  const browseAllLabel = siteConfig.i18n.strings.browseAll || "Browse All";
+  const browseAllLabel = getTranslations().browseAll;
 
   return (
     <>

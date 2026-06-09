@@ -2,36 +2,24 @@
 
 import { useState, useEffect, useRef } from "react";
 import { IconHelpCircle, IconX } from "@tabler/icons-react";
-
-const CONDITIONS = [
-  {
-    label: "New",
-    desc: "Unopened, unused. Original packaging intact.",
-  },
-  {
-    label: "Like New",
-    desc: "Used briefly. No visible wear. May be without original box.",
-  },
-  {
-    label: "Good",
-    desc: "Normal signs of use. Fully functional. Minor cosmetic marks.",
-  },
-  {
-    label: "Fair",
-    desc: "Visible wear or light damage. Works as expected.",
-  },
-  {
-    label: "For Parts",
-    desc: "Not fully functional. Sold as-is for repair or parts.",
-  },
-];
+import { useT } from "@/components/i18n/useT";
+import type { Condition } from "@/lib/content/types";
 
 // Opens a tooltip/modal explaining each condition value.
 // Closes on Escape; keyboard accessible.
 export function ConditionGuide() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const conditions: { condition: Condition; label: string; desc: string }[] = [
+    { condition: "new",       label: t.conditionNew,      desc: t.conditionNewDesc },
+    { condition: "like-new",  label: t.conditionLikeNew,  desc: t.conditionLikeNewDesc },
+    { condition: "good",      label: t.conditionGood,     desc: t.conditionGoodDesc },
+    { condition: "fair",      label: t.conditionFair,     desc: t.conditionFairDesc },
+    { condition: "for-parts", label: t.conditionForParts, desc: t.conditionForPartsDesc },
+  ];
 
   useEffect(() => {
     if (!open) return;
@@ -45,7 +33,6 @@ export function ConditionGuide() {
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     function onClickOutside(e: MouseEvent) {
@@ -66,7 +53,7 @@ export function ConditionGuide() {
       <button
         ref={buttonRef}
         onClick={() => setOpen((o) => !o)}
-        aria-label="Condition guide"
+        aria-label={t.conditionGuideTitle}
         aria-expanded={open}
         className="inline-flex items-center text-foreground/40 transition-colors hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
       >
@@ -77,12 +64,12 @@ export function ConditionGuide() {
         <div
           ref={panelRef}
           role="dialog"
-          aria-label="Condition guide"
+          aria-label={t.conditionGuideTitle}
           className="absolute left-0 top-7 z-50 w-64 rounded-xl border-0 bg-surface p-4 shadow-xl"
         >
           <div className="mb-3 flex items-center justify-between">
             <span className="text-xs font-semibold text-foreground/70">
-              Condition Guide
+              {t.conditionGuideTitle}
             </span>
             <button
               onClick={() => { setOpen(false); buttonRef.current?.focus(); }}
@@ -94,8 +81,8 @@ export function ConditionGuide() {
           </div>
 
           <dl className="flex flex-col gap-2">
-            {CONDITIONS.map(({ label, desc }) => (
-              <div key={label}>
+            {conditions.map(({ condition, label, desc }) => (
+              <div key={condition}>
                 <dt className="text-xs font-medium text-foreground/80">{label}</dt>
                 <dd className="text-xs text-foreground/50">{desc}</dd>
               </div>

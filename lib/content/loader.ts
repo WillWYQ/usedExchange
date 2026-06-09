@@ -168,6 +168,18 @@ async function buildItem(
     // Item folder might not be readable in all environments
   }
 
+  // CI builders only have item.json checked out; image files live on the CDN.
+  // When readdir finds nothing, derive filenames from manifest keys so images
+  // resolve correctly without the local files being present.
+  if (filenames.length === 0) {
+    const prefix = `${categorySlug}/${itemSlug}/`;
+    filenames = Object.keys(manifest)
+      .filter((k) => k.startsWith(prefix))
+      .map((k) => k.slice(prefix.length))
+      .filter((f) => IMAGE_EXT.test(f))
+      .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  }
+
   const images = filenames.map((f) =>
     resolveImageUrl(manifest, `${categorySlug}/${itemSlug}/${f}`),
   );

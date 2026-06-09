@@ -60,12 +60,12 @@ After finishing each phase's implementation, **update `docs/IMPLEMENTATION_PLAN.
 
 | File | Version | Date |
 |---|---|---|
-| docs/DESIGN.md / docs/DESIGN_zh.md | v0.9.1 | 2026-06-01 |
-| docs/TECH_REQUIREMENTS.md / docs/TECH_REQUIREMENTS_zh.md | v0.9.1 | 2026-06-01 |
+| docs/DESIGN.md / docs/DESIGN_zh.md | v0.9.2 | 2026-06-09 |
+| docs/TECH_REQUIREMENTS.md / docs/TECH_REQUIREMENTS_zh.md | v0.9.2 | 2026-06-09 |
 | docs/IMPLEMENTATION_PLAN.md / docs/IMPLEMENTATION_PLAN_zh.md | **v1.4** | 2026-06-03 |
 | docs/FEATURES_ROADMAP.md / docs/FEATURES_ROADMAP_zh.md | — | 2026-06-01 |
-| docs/CURRENT_FUNCTIONALITY.md / docs/CURRENT_FUNCTIONALITY_zh.md | — | 2026-06-03 |
-| docs/ARCHITECTURE.md / docs/ARCHITECTURE_zh.md | v1.0 | 2026-06-08 |
+| docs/CURRENT_FUNCTIONALITY.md / docs/CURRENT_FUNCTIONALITY_zh.md | — | 2026-06-09 |
+| docs/ARCHITECTURE.md / docs/ARCHITECTURE_zh.md | v1.1 | 2026-06-09 |
 | docs/setup_instruction.md / docs/setup_instruction_zh.md | — | 2026-06-08 |
 
 ---
@@ -74,9 +74,9 @@ After finishing each phase's implementation, **update `docs/IMPLEMENTATION_PLAN.
 
 | Task | Skill / Command |
 |---|---|
-| First-time site setup | `/setup` (`.claude/skills/setup-wizard.md`) |
-| Generate `item.json` from photos | `/update-items` (`.claude/skills/update-items.md`) |
-| Translate listings into another locale | `/translate-items` (`.claude/skills/translate-items.md`) |
+| First-time site setup | `/setup` (`.claude/commands/setup.md`) |
+| Generate `item.json` from photos | `/update-items` (`.claude/commands/update-items.md`) |
+| Translate listings into another locale | `/translate-items` (`.claude/commands/translate-items.md`) |
 | Mark an item sold | `pnpm mark-sold <category>/<name>` |
 | Create a new item | `pnpm create-item <category>/<name>` |
 | Upload photos to CDN | `pnpm upload-images` |
@@ -95,7 +95,7 @@ After finishing each phase's implementation, **update `docs/IMPLEMENTATION_PLAN.
 | Distance-tiered pricing algorithm | docs/DESIGN.md §17 |
 | Component architecture + `"use client"` list | docs/DESIGN.md §12, docs/ARCHITECTURE.md |
 | UI slot options (27 Aceternity components) | docs/DESIGN.md §18 |
-| i18n runtime (LocaleProvider / LocaleSwitcher) | docs/DESIGN.md §12, docs/TECH_REQUIREMENTS.md §22.8 |
+| i18n runtime (useT / getTranslations / UIStrings) | docs/DESIGN.md §12, docs/TECH_REQUIREMENTS.md §22.8 |
 | 16-phase build plan (Phases 0–15) | docs/IMPLEMENTATION_PLAN.md |
 | Deployment checklist (GitHub Pages + R2) | docs/TECH_REQUIREMENTS.md §19 |
 | AI skill file specs | docs/TECH_REQUIREMENTS.md §23 |

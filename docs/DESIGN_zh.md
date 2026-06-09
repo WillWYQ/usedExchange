@@ -532,6 +532,9 @@ components/
 - Prop 类型从 `lib/content/types.ts` 派生；不向组件传递原始 JSON 对象
 - 访客坐标**绝不传出浏览器**——所有距离计算在 `useDistancePricing.ts` 中运行
 - **`content/config.ts` 由客户端组件导入**，因此不得使用任何仅 Node.js API
+- **UI 字符串由两种方式解析：**
+  - 客户端组件（包括 `SiteHeader`、`MetadataTable`、`ConditionBadge`、`StatusBadge`、`PricingTable`、`ConditionGuide` 等所有渲染 UI 标签的组件）调用 `useT()` hook，返回当前语区的 UIStrings 字典。任何调用 `useT()` 的组件都必须标注 `"use client"`。
+  - 服务器组件（`app/*/page.tsx`）调用 `getTranslations()`（来自 `lib/i18n/getTranslations.ts`），始终返回 `defaultLocale` 的字典。
 - 所有其他组件是 React 服务器组件
 
 ---
@@ -607,17 +610,106 @@ export const siteConfig: SiteConfig = {
     enabled: true,
   },
 
+  // ── 国际化 ──────────────────────────────────────────────────────────────────
+  // 两层翻译体系：
+  //   1. UI 字符串 — 67 个按钮/标签/徽章文本，在 translations.{locale} 中定义
+  //   2. 物品内容 — 各 item.json 中的 name_{locale} / description_{locale}；
+  //                 运行 /translate-items 批量填充
+  //
+  // 如果某语区在 availableLocales 中但 translations 条目缺失或键不完整，
+  // 构建将失败（check-config）。
   i18n: {
     defaultLocale: "en",
     availableLocales: ["en"],
     showLocaleSwitcher: true,
-    strings: {
-      heroTagline:     "",
-      recentlyListed:  "",
-      browseAll:       "",
-      makeOffer:       "",
-      contactSeller:   "",
-      soldBanner:      "",
+    translations: {
+      en: {
+        // ── 导航 ──────────────────────────────────────────────────────────
+        home: "Home",
+        about: "About",
+        browseAll: "Browse All",
+        // ── 板块标题 ────────────────────────────────────────────────────────
+        recentlyListed: "Recently Listed",
+        recentlyViewed: "Recently Viewed",
+        // ── 联系 ──────────────────────────────────────────────────────────
+        contactSeller: "Contact Seller",
+        itemSold: "Item sold",
+        preferredPayment: "Preferred payment",
+        // ── 出价表单 ────────────────────────────────────────────────────────
+        makeOffer: "Make an Offer",
+        yourOffer: "Your offer",
+        send: "Send",
+        belowMinimumOffer: "That offer is below the minimum we can accept. Please try a higher amount.",
+        // ── 分享按钮 ────────────────────────────────────────────────────────
+        share: "Share",
+        copied: "Copied!",
+        linkCopied: "Link copied!",
+        // ── 物品元数据标签 ──────────────────────────────────────────────────
+        brand: "Brand",
+        model: "Model",
+        age: "Age",
+        color: "Color",
+        dimensions: "Dimensions",
+        weight: "Weight",
+        originalSource: "Original Source",
+        originalPrice: "Original Price",
+        // ── 成色徽章标签 ────────────────────────────────────────────────────
+        conditionNew: "New",
+        conditionLikeNew: "Like New",
+        conditionGood: "Good",
+        conditionFair: "Fair",
+        conditionForParts: "For Parts",
+        // ── 状态徽章标签 ────────────────────────────────────────────────────
+        statusAvailable: "Available",
+        statusPending: "Pending",
+        statusReserved: "Reserved",
+        statusSold: "Sold",
+        statusDraft: "Draft",
+        // ── 筛选/排序栏 ─────────────────────────────────────────────────────
+        filterShowSold: "Show sold",
+        filterPrice: "Price",
+        sortBy: "Sort by",
+        sortNewestFirst: "Newest first",
+        sortPriceLow: "Price: low → high",
+        sortPriceHigh: "Price: high → low",
+        sortConditionBest: "Condition: best first",
+        // ── 新鲜度标签 ──────────────────────────────────────────────────────
+        listed: "Listed",
+        // ── 页面标题与横幅 ──────────────────────────────────────────────────
+        soldBanner: "This item has been sold",
+        soldArchiveTitle: "Sold Archive",
+        // ── 成色说明面板 ────────────────────────────────────────────────────
+        conditionGuideTitle: "Condition Guide",
+        conditionNewDesc: "Unopened, unused. Original packaging intact.",
+        conditionLikeNewDesc: "Used briefly. No visible wear. May be without original box.",
+        conditionGoodDesc: "Normal signs of use. Fully functional. Minor cosmetic marks.",
+        conditionFairDesc: "Visible wear or light damage. Works as expected.",
+        conditionForPartsDesc: "Not fully functional. Sold as-is for repair or parts.",
+        // ── 位置/距离价格栏 ─────────────────────────────────────────────────
+        detectingLocation: "Detecting location…",
+        fromSeller: "from seller",
+        locationDetected: "Location detected",
+        enterManually: "Enter manually",
+        distanceManualLabel: "(manual)",
+        distanceUnit: "mi",
+        apply: "Apply",
+        pricesAtPickupRate: "Prices shown at pickup rate",
+        enterDistance: "Enter distance",
+        edit: "Edit",
+        clear: "Clear",
+        // ── 定价表 ──────────────────────────────────────────────────────────
+        contactForPrice: "Contact seller for pricing details.",
+        contactForPricingShort: "Contact seller for pricing",
+        pricingLabelHeader: "Label",
+        pricingDistanceHeader: "Distance",
+        pricingPriceHeader: "Price",
+        pickup: "Pickup",
+        obo: "OBO",
+        hidePricingTiers: "Hide pricing tiers",
+        viewAllPricingTiers: "View all pricing tiers",
+      },
+      // 启用中文时，取消注释并翻译全部 67 个键，并将 "zh" 加入 availableLocales：
+      // zh: { home: "首頁", about: "關於", browseAll: "瀏覽全部", ... },
     },
   },
 };

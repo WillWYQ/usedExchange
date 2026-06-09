@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { AdaptiveImage } from "@/components/common/AdaptiveImage";
+import { useT } from "@/components/i18n/useT";
 
 const STORAGE_KEY = "ue_recently_viewed";
 const MAX_ITEMS = 5;
@@ -39,6 +40,7 @@ function saveEntries(entries: ViewedEntry[]): void {
 }
 
 export function RecentlyViewed({ itemSlug, itemName, itemCoverImage }: RecentlyViewedProps) {
+  const t = useT();
   const [entries, setEntries] = useState<ViewedEntry[]>([]);
 
   useEffect(() => {
@@ -73,7 +75,7 @@ export function RecentlyViewed({ itemSlug, itemName, itemCoverImage }: RecentlyV
         id="recently-viewed-heading"
         className="mb-3 text-xs font-medium uppercase tracking-widest text-foreground/40"
       >
-        Recently Viewed
+        {t.recentlyViewed}
       </h2>
       <div className="flex gap-3 overflow-x-auto pb-2">
         {entries.map((entry) => {

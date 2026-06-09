@@ -267,17 +267,20 @@ The AI asks about 8 areas: store name, location (lat/lng resolved from a place d
 
 ### Skill 3 — Item Translator (`/translate-items`)
 
-Batch-translates item listings into additional locales. After adding a locale to `siteConfig.i18n.availableLocales`, invoke this skill in your AI tool.
+Batch-translates item listings into additional locales. After adding a locale, invoke this skill in your AI tool.
 
 ```
-1. Add the target locale to siteConfig.i18n.availableLocales  (e.g. ["en", "zh"])
-2. Open Claude Code (or similar AI tool) in the project directory
-3. Type: /translate-items   (or "translate my items into zh")
-4. Review the proposed translations shown per item
-5. Confirm → AI writes name_{locale} / description_{locale} into each item.json
+1. Add the locale code to siteConfig.i18n.availableLocales  (e.g. ["en", "zh"])
+2. Add a translations.{locale} block to content/config.ts with all 67 UI string keys translated
+3. Open Claude Code (or similar AI tool) in the project directory
+4. Type: /translate-items   (or "translate my items into zh")
+5. Review the proposed translations shown per item
+6. Confirm → AI writes name_{locale} / description_{locale} into each item.json
 ```
 
 Translates `name` → `name_{locale}` and `description` → `description_{locale}` only; preserves brand, model, tags, prices, dates, and all Markdown syntax verbatim. Skips items that already have a non-empty translation. Writes only to `content/items/*/item.json`.
+
+> **Note:** `/translate-items` handles item-level translations only. The `translations.{locale}` UI strings block (buttons, badges, headers — 67 keys) must be filled in manually in `content/config.ts` before running this skill.
 
 ### No API Key Required
 
@@ -289,9 +292,11 @@ All three skills are Markdown instruction files, not code. The AI tool uses its 
 
 Visitors can read listings in more than one language and switch on the fly.
 
-- **For visitors:** a language toggle (`LocaleSwitcher`) appears in the site header whenever more than one locale is configured. Switching language instantly updates item names (on cards and detail pages) and the item description — no page reload. The choice is remembered in the browser (`localStorage`) across pages and visits.
-- **For sellers:** add locale codes to `siteConfig.i18n.availableLocales` (e.g. `["en", "zh"]`), then fill in `name_zh` / `description_zh` on each item — by hand or with the `/translate-items` AI skill. v1 ships concrete Chinese (`zh`) fields; other locales follow the same `name_{locale}` / `description_{locale}` pattern.
-- **Graceful fallback:** any item without a translation shows the default language — never a blank or an error.
+- **For visitors:** a language toggle (`LocaleSwitcher`) appears in the site header whenever more than one locale is configured. Switching language instantly updates item names, descriptions, and all UI labels (buttons, badges, headers) — no page reload. The choice is remembered in the browser (`localStorage`) across pages and visits.
+- **For sellers:** two steps to add a language:
+  1. Add the locale code to `siteConfig.i18n.availableLocales` (e.g. `["en", "zh"]`) **and** add a `translations.{locale}` block in `content/config.ts` with all 67 UI string keys translated. The build fails if this block is missing or incomplete.
+  2. Fill in `name_zh` / `description_zh` on each item — by hand or with the `/translate-items` AI skill.
+- **Graceful fallback:** any item without a translation shows the default language — never a blank or an error. Any missing UI string key falls back to the built-in English default.
 - **Single deployment:** all languages ship in one build; there are no separate per-language sites.
 - **What stays in the default language:** the page `<title>`, social-share (OG) tags, and search-engine structured data render in `defaultLocale` — that is the version crawlers index. The on-page switch is a reading convenience; per-language URLs are a future enhancement.
 
@@ -364,7 +369,7 @@ Set any option in `content/config.ts`. All 27 Aceternity components are pre-inst
 | Analytics | `analytics.vercel`, `analytics.speedInsights` |
 | Search | `search.enabled`, `search.placeholder` |
 | Sitemap | `sitemap.enabled` |
-| i18n | `i18n.defaultLocale`, `i18n.availableLocales`, `i18n.showLocaleSwitcher`, `i18n.strings.*` |
+| i18n | `i18n.defaultLocale`, `i18n.availableLocales`, `i18n.showLocaleSwitcher`, `i18n.translations.{locale}.*` (67 UI string keys) |
 
 ---
 

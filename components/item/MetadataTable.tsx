@@ -1,4 +1,7 @@
+"use client";
+
 import type { Item } from "@/lib/content/types";
+import { useT } from "@/components/i18n/useT";
 
 type MetadataTableProps = {
   item: Item;
@@ -22,26 +25,27 @@ function formatWeight(item: Item): string | null {
 }
 
 export function MetadataTable({ item }: MetadataTableProps) {
+  const t = useT();
   const rows: Row[] = [
-    { label: "Brand", value: item.brand || null },
-    { label: "Model", value: item.model || null },
+    { label: t.brand, value: item.brand || null },
+    { label: t.model, value: item.model || null },
     {
-      label: "Age",
+      label: t.age,
       value:
         item.ageYears != null
           ? `~${item.ageYears} year${item.ageYears !== 1 ? "s" : ""}`
           : null,
     },
-    { label: "Color", value: item.color || null },
-    { label: "Dimensions", value: formatDimensions(item) },
-    { label: "Weight", value: formatWeight(item) },
+    { label: t.color, value: item.color || null },
+    { label: t.dimensions, value: formatDimensions(item) },
+    { label: t.weight, value: formatWeight(item) },
     {
-      label: "Original Source",
+      label: t.originalSource,
       value: item.originalSource || null,
       href: item.originalLink || undefined,
     },
     {
-      label: "Original Price",
+      label: t.originalPrice,
       value:
         item.originalPrice != null
           ? `$${item.originalPrice.toFixed(2)}`

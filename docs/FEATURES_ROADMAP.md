@@ -33,7 +33,7 @@ The following features were initially on the roadmap and have been moved into th
 | Twitter/X + Pinterest rich cards 🎓👤 | `twitter:card: "summary_large_image"` + `og:type: "product"` |
 | Textbook-specific fields & category 🎓 | isbn, course, edition, semester_listed; Compare prices link |
 | Non-technical user setup guide 👤 | `SETUP_GUIDE.md` in plain English; only `content/` operations |
-| i18n — multi-language support 🎓👤 | Single-instance multi-locale (runtime LocaleSwitcher); `name_zh`/`description_zh` pattern; `defaultLocale` + `availableLocales` + `siteConfig.i18n.strings`; `/translate-items` skill |
+| i18n — multi-language support 🎓👤 | Single-instance multi-locale (runtime LocaleSwitcher); `name_zh`/`description_zh` pattern; `defaultLocale` + `availableLocales` + `siteConfig.i18n.translations.{locale}` (67 UIStrings keys); `useT()` hook; `/translate-items` skill |
 | Venmo + Zelle payment (QR or link) 🎓👤 | Venmo: link-based or QR; Zelle: QR-only |
 
 ---

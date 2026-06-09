@@ -27,7 +27,7 @@ usedExchange/
 │   ├── contact/                      ← ContactSection, PlatformButton, QRModal
 │   ├── filters/                      ← FilterBar, SortSelect, useFilters
 │   ├── home/                         ← RecentlyListedSection
-│   ├── i18n/                         ← LocaleProvider, LocaleSwitcher, useLocale
+│   ├── i18n/                         ← LocaleProvider, LocaleSwitcher, useLocale, useT
 │   ├── intro/                        ← ProjectIntro (shown before seller configures baseUrl)
 │   ├── item/                         ← All item-rendering components (see §Item Components)
 │   ├── layout/                       ← Breadcrumb, SiteHeader, SiteFooter
@@ -61,6 +61,9 @@ usedExchange/
 │   │   ├── local.ts                  ← LocalAdapter + copyIfChanged helper
 │   │   ├── normalizeR2Url.ts         ← Strips trailing slash from R2 public URL
 │   │   └── vercel-blob.ts            ← VercelBlobAdapter
+│   ├── i18n/
+│   │   ├── translations.ts           ← EN_FALLBACK: UIStrings — built-in English defaults for all 67 keys
+│   │   └── getTranslations.ts        ← getTranslations(): UIStrings — server-side resolution (always defaultLocale)
 │   ├── search/index.ts               ← buildSearchIndex(): SearchIndexEntry[]
 │   ├── ui/types.ts                   ← UIConfig type (background, itemGrid, gallery, itemCard slots)
 │   └── utils/
@@ -287,19 +290,20 @@ Server Components render static HTML during `next build`. The client boundary is
 
 **Always Client Components** (`"use client"` at the top):
 - All pricing: `DistancePricingContext`, `LocationPriceBar`, `useDistancePricing`, `useGeolocation`
-- All i18n runtime: `LocaleProvider`, `LocaleSwitcher`, `useLocale`
+- All i18n runtime: `LocaleProvider`, `LocaleSwitcher`, `useLocale`, `useT`
 - All filtering: `FilterBar`, `SortSelect`, `useFilters`
 - Search: `SearchBarClient`, `useSearch`
 - `RecentlyViewed`, `ShareButton`, `MakeOfferButton`, `QRModal`
 - `ThemeProvider`, `ThemeToggle`
+- UI-string consumers: `SiteHeader`, `MetadataTable`, `ConditionBadge`, `StatusBadge`, `ConditionGuide`, `PricingTable`, `PricingTableToggle`, `FreshnessLabel`, `RecentlyListedSection`, `ContactSection`
 - All `components/ui/*` (Aceternity) components
 
 **Server Components** (no `"use client"`):
-- All `app/*/page.tsx` files
+- All `app/*/page.tsx` files (use `getTranslations()` for any UI strings needed server-side)
 - `CategoryGrid`, `CategoryCard`
 - `ItemGrid`, `ItemCard`
-- `Breadcrumb`, `SiteHeader`, `SiteFooter`
-- `MetadataTable`, `StatusBadge`, `ConditionBadge`, `QuantityBadge`, `TextbookBadge`, `FreshnessLabel`
+- `Breadcrumb`, `SiteFooter`
+- `QuantityBadge`, `TextbookBadge`
 - `JsonLd`, `AdaptiveImage`
 
 ### UI Slot Adapters (`components/ui-adapters/`)

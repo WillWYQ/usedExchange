@@ -1,11 +1,15 @@
+"use client";
+
 import Link from "next/link";
 import { siteConfig } from "@/content/config";
 import { isTemplateConfigured } from "@/lib/utils/templateStatus";
 import { LocaleSwitcher } from "@/components/i18n/LocaleSwitcher";
 import { SearchBarClient } from "@/components/search/SearchBarClient";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { useT } from "@/components/i18n/useT";
 
 export function SiteHeader() {
+  const t = useT();
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
@@ -33,13 +37,13 @@ export function SiteHeader() {
             href="/"
             className="transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
           >
-            Home
+            {t.home}
           </Link>
           <Link
             href="/all"
             className="transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
           >
-            {siteConfig.i18n.strings.browseAll || "Browse All"}
+            {t.browseAll}
           </Link>
 
           {/* Once configured, "/" is the catalog and the project intro lives
@@ -50,7 +54,7 @@ export function SiteHeader() {
               href="/about"
               className="transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
             >
-              About
+              {t.about}
             </Link>
           )}
 

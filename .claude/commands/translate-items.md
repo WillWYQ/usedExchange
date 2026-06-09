@@ -23,7 +23,7 @@ Detects which locales are configured in `siteConfig.i18n.availableLocales`, scan
 
 Read `content/config.ts` and extract `siteConfig.i18n.availableLocales`.
 
-- If `availableLocales` is `["en"]` (English only): tell the seller "Your site is set to English only. To add another language, first update `i18n.availableLocales` in `content/config.ts` via `/setup`, then run `/translate-items` again."
+- If `availableLocales` is `["en"]` (English only): tell the seller "Your site is set to English only. To add another language: (1) add the locale code to `i18n.availableLocales` in `content/config.ts`, (2) add a matching `i18n.translations.{locale}` block with all 67 UI string keys translated — the build will fail if this is missing, (3) then run `/translate-items` to fill in item-level `name_{locale}` / `description_{locale}` fields."
 - If `availableLocales` contains exactly one non-English locale (e.g. `["en", "zh"]`): target that locale automatically, no need to ask.
 - If `availableLocales` contains multiple non-English locales (e.g. `["en", "zh", "es"]`): ask the seller which locale(s) to target, or confirm "all".
 
@@ -208,8 +208,9 @@ Next steps:
 • Run `pnpm type-check` to confirm no errors
 • Items with translations will show the translated name and description
   when a buyer selects that language via the language switcher
-• To add more locales, update `i18n.availableLocales` in content/config.ts
-  and run /translate-items again
+• To add more locales: add the code to `i18n.availableLocales` AND add a
+  `i18n.translations.{locale}` block (all 67 UI keys) in content/config.ts,
+  then run /translate-items again for the item-level translations
 ```
 
 ---
@@ -222,6 +223,6 @@ Next steps:
 | `description` is empty | Translate `name` only; leave `description_{locale}` as `""` |
 | Item status is `"draft"` or `"sold"` | Translate it anyway — translations persist and are useful when items are re-listed or viewed in the sold archive |
 | `availableLocales` has `["en"]` only | Halt immediately with instructions to add a locale first (see Step 0) |
-| Seller asks to translate to a locale not in `availableLocales` | Remind them to add it to `content/config.ts` first, then re-run |
+| Seller asks to translate to a locale not in `availableLocales` | Remind them to add the locale code to `i18n.availableLocales` AND add a `translations.{locale}` block with all 67 UI keys to `content/config.ts`, then re-run |
 | Description contains HTML tags | Preserve them as-is; translate only the surrounding prose |
 | Item has `name_zh` set but `description_zh` empty | Only fill `description_zh`; do not touch `name_zh` |

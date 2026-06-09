@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Price, PriceTier } from "@/lib/content/types";
 import { PricingTable } from "./PricingTable";
+import { useT } from "@/components/i18n/useT";
 
 type PricingTableToggleProps = {
   price: Price;
@@ -23,6 +24,7 @@ type PricingTableToggleProps = {
 // When false (the default), buyers only ever see the resolved tier row, with no
 // indication that other tiers exist.
 export function PricingTableToggle({ price, resolvedTier }: PricingTableToggleProps) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   const hasTiers = price.tiers.length > 0;
 
@@ -46,7 +48,7 @@ export function PricingTableToggle({ price, resolvedTier }: PricingTableTogglePr
             aria-expanded={true}
             className="self-start text-xs text-foreground/40 underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
           >
-            Hide pricing tiers ↑
+            {t.hidePricingTiers} ↑
           </button>
         </>
       ) : (
@@ -58,7 +60,7 @@ export function PricingTableToggle({ price, resolvedTier }: PricingTableTogglePr
             aria-expanded={false}
             className="self-start text-xs text-foreground/40 underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
           >
-            View all pricing tiers ({price.tiers.length}) ↓
+            {t.viewAllPricingTiers} ({price.tiers.length}) ↓
           </button>
         </>
       )}
@@ -68,6 +70,7 @@ export function PricingTableToggle({ price, resolvedTier }: PricingTableTogglePr
 
 // Resolved tier price row, with no indication that other tiers exist.
 function ResolvedTierSummary({ price, resolvedTier }: PricingTableToggleProps) {
+  const t = useT();
   return (
     <div className="flex items-baseline gap-2">
       {resolvedTier !== null ? (
@@ -76,13 +79,13 @@ function ResolvedTierSummary({ price, resolvedTier }: PricingTableToggleProps) {
             {price.currency === "USD" ? "$" : price.currency + " "}
             {resolvedTier.amount.toLocaleString()}
           </span>
-          {price.negotiable && <span className="text-sm text-foreground/50">OBO</span>}
+          {price.negotiable && <span className="text-sm text-foreground/50">{t.obo}</span>}
           {resolvedTier.label && (
             <span className="text-sm text-foreground/40">({resolvedTier.label})</span>
           )}
         </>
       ) : (
-        <span className="text-foreground/50">Contact seller for pricing</span>
+        <span className="text-foreground/50">{t.contactForPricingShort}</span>
       )}
     </div>
   );

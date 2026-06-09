@@ -102,20 +102,190 @@ export const siteConfig: SiteConfig = {
   },
 
   // ── Internationalisation ──────────────────────────────────────────────────
-  // Add "zh" to availableLocales to enable the LocaleSwitcher.
-  // Run /translate-items to batch-fill name_zh / description_zh in item.json.
+  // To add a language:
+  //   1. Add its code to availableLocales (e.g. "zh", "ja", "ko").
+  //   2. Add a matching entry under translations with every key translated.
+  //   3. Run /translate-items to batch-fill name_zh / description_zh in item.json.
+  //
+  // The build will fail (check-config) if a locale is listed in availableLocales
+  // but its translations entry is missing or has incomplete keys.
   i18n: {
     defaultLocale: "en",
     availableLocales: ["en"],
     showLocaleSwitcher: true,
-    strings: {
-      heroTagline: "",
-      recentlyListed: "",
-      browseAll: "",
-      makeOffer: "",
-      contactSeller: "",
-      soldBanner: "",
-      soldArchiveTitle: "",
+    translations: {
+      en: {
+        // ── Navigation ──────────────────────────────────────────────────────
+        home: "Home",
+        about: "About",
+        browseAll: "Browse All",
+
+        // ── Section headings ────────────────────────────────────────────────
+        recentlyListed: "Recently Listed",
+        recentlyViewed: "Recently Viewed",
+
+        // ── Contact ─────────────────────────────────────────────────────────
+        contactSeller: "Contact Seller",
+        itemSold: "Item sold",
+        preferredPayment: "Preferred payment",
+
+        // ── Make-offer form ─────────────────────────────────────────────────
+        makeOffer: "Make an Offer",
+        yourOffer: "Your offer",
+        send: "Send",
+        belowMinimumOffer:
+          "That offer is below the minimum we can accept. Please try a higher amount.",
+
+        // ── Share button ────────────────────────────────────────────────────
+        share: "Share",
+        copied: "Copied!",
+        linkCopied: "Link copied!",
+
+        // ── Item metadata labels ─────────────────────────────────────────────
+        brand: "Brand",
+        model: "Model",
+        age: "Age",
+        color: "Color",
+        dimensions: "Dimensions",
+        weight: "Weight",
+        originalSource: "Original Source",
+        originalPrice: "Original Price",
+
+        // ── Condition badge labels ───────────────────────────────────────────
+        conditionNew: "New",
+        conditionLikeNew: "Like New",
+        conditionGood: "Good",
+        conditionFair: "Fair",
+        conditionForParts: "For Parts",
+
+        // ── Status badge labels ──────────────────────────────────────────────
+        statusAvailable: "Available",
+        statusPending: "Pending",
+        statusReserved: "Reserved",
+        statusSold: "Sold",
+        statusDraft: "Draft",
+
+        // ── Filter / sort bar ────────────────────────────────────────────────
+        filterShowSold: "Show sold",
+        filterPrice: "Price",
+        sortBy: "Sort by",
+        sortNewestFirst: "Newest first",
+        sortPriceLow: "Price: low → high",
+        sortPriceHigh: "Price: high → low",
+        sortConditionBest: "Condition: best first",
+
+        // ── Freshness label ──────────────────────────────────────────────────
+        listed: "Listed",
+
+        // ── Page titles and banners ──────────────────────────────────────────
+        soldBanner: "This item has been sold",
+        soldArchiveTitle: "Sold Archive",
+
+        // ── Condition guide panel ────────────────────────────────────────────
+        conditionGuideTitle: "Condition Guide",
+        conditionNewDesc: "Unopened, unused. Original packaging intact.",
+        conditionLikeNewDesc: "Used briefly. No visible wear. May be without original box.",
+        conditionGoodDesc: "Normal signs of use. Fully functional. Minor cosmetic marks.",
+        conditionFairDesc: "Visible wear or light damage. Works as expected.",
+        conditionForPartsDesc: "Not fully functional. Sold as-is for repair or parts.",
+
+        // ── Location / distance price bar ────────────────────────────────────
+        detectingLocation: "Detecting location…",
+        fromSeller: "from seller",
+        locationDetected: "Location detected",
+        enterManually: "Enter manually",
+        distanceManualLabel: "(manual)",
+        distanceUnit: "mi",
+        apply: "Apply",
+        pricesAtPickupRate: "Prices shown at pickup rate",
+        enterDistance: "Enter distance",
+        edit: "Edit",
+        clear: "Clear",
+
+        // ── Pricing table ────────────────────────────────────────────────────
+        contactForPrice: "Contact seller for pricing details.",
+        contactForPricingShort: "Contact seller for pricing",
+        pricingLabelHeader: "Label",
+        pricingDistanceHeader: "Distance",
+        pricingPriceHeader: "Price",
+        pickup: "Pickup",
+        obo: "OBO",
+        hidePricingTiers: "Hide pricing tiers",
+        viewAllPricingTiers: "View all pricing tiers",
+      },
+
+      // ── Add other locales below ────────────────────────────────────────────
+      // zh: {
+      //   home: "首頁",
+      //   about: "關於",
+      //   browseAll: "瀏覽全部",
+      //   recentlyListed: "最新上架",
+      //   recentlyViewed: "最近瀏覽",
+      //   contactSeller: "聯繫賣家",
+      //   itemSold: "已售出",
+      //   preferredPayment: "偏好付款方式",
+      //   makeOffer: "出價",
+      //   yourOffer: "您的出價",
+      //   send: "送出",
+      //   belowMinimumOffer: "出價低於最低可接受價格，請提高金額。",
+      //   share: "分享",
+      //   copied: "已複製！",
+      //   linkCopied: "連結已複製！",
+      //   brand: "品牌",
+      //   model: "型號",
+      //   age: "使用年限",
+      //   color: "顏色",
+      //   dimensions: "尺寸",
+      //   weight: "重量",
+      //   originalSource: "購買來源",
+      //   originalPrice: "原始售價",
+      //   conditionNew: "全新",
+      //   conditionLikeNew: "近全新",
+      //   conditionGood: "良好",
+      //   conditionFair: "一般",
+      //   conditionForParts: "零件用",
+      //   statusAvailable: "在售",
+      //   statusPending: "待確認",
+      //   statusReserved: "已保留",
+      //   statusSold: "已售出",
+      //   statusDraft: "草稿",
+      //   filterShowSold: "顯示已售",
+      //   filterPrice: "價格",
+      //   sortBy: "排序方式",
+      //   sortNewestFirst: "最新上架",
+      //   sortPriceLow: "價格：由低到高",
+      //   sortPriceHigh: "價格：由高到低",
+      //   sortConditionBest: "狀態：最佳優先",
+      //   listed: "刊登",
+      //   soldBanner: "此商品已售出",
+      //   soldArchiveTitle: "已售出紀錄",
+      //   conditionGuideTitle: "狀態說明",
+      //   conditionNewDesc: "未開封，全新未使用。原始包裝完整。",
+      //   conditionLikeNewDesc: "短暫使用。無明顯磨損。可能無原裝包裝。",
+      //   conditionGoodDesc: "正常使用痕跡。功能完整。輕微外觀瑕疵。",
+      //   conditionFairDesc: "明顯磨損或輕微損傷。功能正常。",
+      //   conditionForPartsDesc: "功能不完整。原樣出售，供維修或取件用。",
+      //   detectingLocation: "正在偵測位置…",
+      //   fromSeller: "距離賣家",
+      //   locationDetected: "已偵測到位置",
+      //   enterManually: "手動輸入",
+      //   distanceManualLabel: "（手動）",
+      //   distanceUnit: "英里",
+      //   apply: "套用",
+      //   pricesAtPickupRate: "顯示自取價格",
+      //   enterDistance: "輸入距離",
+      //   edit: "編輯",
+      //   clear: "清除",
+      //   contactForPrice: "請聯繫賣家詢問價格。",
+      //   contactForPricingShort: "請聯繫賣家詢問價格",
+      //   pricingLabelHeader: "方案",
+      //   pricingDistanceHeader: "距離",
+      //   pricingPriceHeader: "售價",
+      //   pickup: "自取",
+      //   obo: "可議價",
+      //   hidePricingTiers: "隱藏費率",
+      //   viewAllPricingTiers: "查看所有費率",
+      // },
     },
   },
 };

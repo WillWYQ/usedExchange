@@ -5,9 +5,9 @@ import type { Item } from "@/lib/content/types";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { AdaptiveImage } from "@/components/common/AdaptiveImage";
 import { ConditionBadge } from "@/components/item/ConditionBadge";
+import { getTranslations } from "@/lib/i18n/getTranslations";
 
-const soldArchiveTitle =
-  siteConfig.i18n.strings.soldArchiveTitle || "Sold Archive";
+const soldArchiveTitle = getTranslations().soldArchiveTitle;
 
 export const metadata: Metadata = {
   title: `${soldArchiveTitle} — ${siteConfig.name}`,

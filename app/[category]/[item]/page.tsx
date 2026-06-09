@@ -8,6 +8,7 @@ import { resolveItemPrice } from "@/lib/utils/pricing";
 import { formatAbsoluteDate } from "@/lib/utils/date";
 import { DistancePricingProvider } from "@/components/pricing/DistancePricingContext";
 import { buildProductJsonLd, buildBreadcrumbJsonLd } from "@/lib/utils/jsonld";
+import { getTranslations } from "@/lib/i18n/getTranslations";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { StatusBadge } from "@/components/item/StatusBadge";
 import { ConditionBadge } from "@/components/item/ConditionBadge";
@@ -163,7 +164,7 @@ export default async function ItemDetailPage({
           role="alert"
           className="mb-6 mt-2 rounded-xl border-0 bg-accent-soft/15 px-4 py-3 text-center text-sm font-semibold text-[#a8584a] dark:text-accent-soft"
         >
-          {siteConfig.i18n.strings.soldBanner || "This item has been sold"}
+          {getTranslations().soldBanner}
           {itemData.soldDate && (
             <span className="ml-2 font-normal text-[#a8584a]/70 dark:text-accent-soft/70">
               {/* This is a Server Component rendered once at export time —

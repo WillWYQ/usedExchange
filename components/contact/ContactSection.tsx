@@ -7,6 +7,7 @@ import type { Item } from "@/lib/content/types";
 import { resolveItemPrice } from "@/lib/utils/pricing";
 import { useDistancePricingContext } from "@/components/pricing/DistancePricingContext";
 import { PlatformButton } from "./PlatformButton";
+import { useT } from "@/components/i18n/useT";
 
 type ContactSectionProps = {
   // Item context — omit for footer usage. Never pass reserved_for.
@@ -21,6 +22,7 @@ export function ContactSection({
   preferredPayment = [],
   contactNote = "",
 }: ContactSectionProps) {
+  const t = useT();
   const { reveal_behavior, platforms } = siteConfig.contact;
   const [revealed, setRevealed] = useState(reveal_behavior === "always");
 
@@ -35,8 +37,7 @@ export function ContactSection({
   if (platforms.length === 0) return null;
 
   const isSold = item?.status === "sold";
-  const contactLabel =
-    siteConfig.i18n.strings.contactSeller || "Contact Seller";
+  const contactLabel = t.contactSeller;
 
   return (
     <div className="flex flex-col gap-4">
@@ -48,7 +49,7 @@ export function ContactSection({
           className="inline-flex w-fit items-center gap-2 rounded-full bg-foreground/10 px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <IconMessageCircle size={16} />
-          {isSold ? "Item sold" : contactLabel}
+          {isSold ? t.itemSold : contactLabel}
         </button>
       )}
 
@@ -70,7 +71,7 @@ export function ContactSection({
           {/* Item-level preferred payment methods */}
           {preferredPayment.length > 0 && (
             <p className="text-xs text-foreground/50">
-              Preferred payment:{" "}
+              {t.preferredPayment}:{" "}
               <span className="text-foreground/70">
                 {preferredPayment.join(", ")}
               </span>

@@ -33,7 +33,7 @@
 | Twitter/X + Pinterest 富卡片 🎓👤 | `twitter:card: "summary_large_image"` + `og:type: "product"` |
 | 教材专属字段和分类 🎓 | isbn、course、edition、semester_listed；比价链接 |
 | 非技术用户设置指南 👤 | `SETUP_GUIDE.md`，纯英文；仅涉及 `content/` 操作 |
-| 国际化——多语言支持 🎓👤 | 单次部署多语区（运行时 LocaleSwitcher）；`name_zh`/`description_zh` 模式；`/translate-items` 技能 |
+| 国际化——多语言支持 🎓👤 | 单次部署多语区（运行时 LocaleSwitcher）；`name_zh`/`description_zh` 模式；`siteConfig.i18n.translations.{locale}`（67 个 UIStrings 键）；`useT()` hook；`/translate-items` 技能 |
 | Venmo + Zelle 支付（二维码或链接）🎓👤 | Venmo：链接式或二维码；Zelle：仅二维码 |
 
 ---

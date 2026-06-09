@@ -813,7 +813,7 @@ components/
 ### Component Rules
 - `ui/` — Aceternity originals; extend by wrapping, never modifying in place
 - Prop types derived from `lib/content/types.ts`; no raw JSON objects passed to components
-- `"use client"` on: `RecentlyListedSection`, `ItemGrid`, `PricingSection`, `ItemGallery`, `FilterBar`, `SortSelect`, `ContactSection`, `PlatformButton`, `QRModal`, `LocationPriceBar`, `PricingTableToggle`, `MakeOfferButton`, `ConditionGuide`, `SearchBar`, `ShareButton`, `RecentlyViewed`, `FreshnessLabel`, `ItemCard`, `LocalizedItemContent`, `LocaleProvider`, `LocaleSwitcher`
+- `"use client"` on: `RecentlyListedSection`, `ItemGrid`, `PricingSection`, `ItemGallery`, `FilterBar`, `SortSelect`, `ContactSection`, `PlatformButton`, `QRModal`, `LocationPriceBar`, `PricingTableToggle`, `PricingTable`, `MakeOfferButton`, `ConditionGuide`, `SearchBar`, `ShareButton`, `RecentlyViewed`, `FreshnessLabel`, `ItemCard`, `LocalizedItemContent`, `LocaleProvider`, `LocaleSwitcher`, `SiteHeader`, `MetadataTable`, `ConditionBadge`, `StatusBadge`
   - `PlatformButton` requires `"use client"` because it receives an `onClick` function prop (state setter from `ContactSection`) — function props are not serialisable across the server/client boundary.
   - `SearchBar` is loaded via `next/dynamic({ ssr: false })` to avoid hydration mismatch from fuse.js.
   - `ShareButton` uses `navigator.share()` and `navigator.clipboard` — browser-only APIs.
@@ -826,11 +826,11 @@ components/
   - `LocaleSwitcher` calls `setLocale()` from `LocaleProvider` context on user interaction. Hidden when `siteConfig.i18n.availableLocales.length <= 1`.
   - `ItemCard` calls `useLocale()` to localise its title. It is always rendered inside a client parent (`ItemGrid` / `RecentlyListedSection`), so the card title updates the moment the visitor switches locale.
   - `LocalizedItemContent` renders the item detail `<h1>` name and the react-markdown description, reading `useLocale()`. Both the name and the Markdown body re-render on a locale switch without a page reload. react-markdown runs client-side here; the SSG pass still emits the `defaultLocale` description into the static HTML.
-  - Note: `PricingTable` is NOT in this list. It is a presentational component (no hooks, no `"use client"`). However, it always renders inside `PricingSection` (a client component) in practice because it renders `PricingTableToggle` (a client component) as a child. `PricingTable` alone (without its toggle child) could be rendered in a server context, but this is not used in v1.
+  - `SiteHeader`, `MetadataTable`, `ConditionBadge`, `StatusBadge`, `PricingTable`, `ConditionGuide` all call `useT()` to render locale-reactive UI labels. Any component that calls `useT()` must be `"use client"` because `useT()` calls `useLocale()` (a React context hook). Server Components use `getTranslations()` from `lib/i18n/getTranslations.ts` instead.
 - All other components are React Server Components
 - Visitor coordinates are **never passed outside the browser** — all distance math runs in `useDistancePricing.ts`
 - **`content/config.ts` is imported by client components** (e.g., `AdaptiveImage`, `PricingSection`). Therefore it must not use any Node.js-only APIs (`fs`, `path`, `process.env` at module level). All values must be static, serialisable constants.
-- **Localised fields render in client components.** Every visitor-facing render of `name` or `description` (`ItemCard`, `LocalizedItemContent`) calls `getLocalizedField(item, …, locale)` with `locale` from `useLocale()`. During SSG these render `siteConfig.i18n.defaultLocale` (the `LocaleProvider`'s initial value), so the static HTML — and therefore crawlers, OG tags, and JSON-LD — always carry the default language; non-default locales appear only after hydration when the visitor selects one. Server-only surfaces (`generateMetadata`, `<title>`, OG, JSON-LD, the breadcrumb leaf) intentionally stay on `defaultLocale` and are not runtime-switchable. See TECH_REQUIREMENTS.md §22.8.
+- **Localised fields render in client components.** Every visitor-facing render of `name` or `description` (`ItemCard`, `LocalizedItemContent`) calls `getLocalizedField(item, …, locale)` with `locale` from `useLocale()`. All UI labels (buttons, badges, headers) are resolved via `useT()` in client components or `getTranslations()` in server components — both drawing from `siteConfig.i18n.translations`. During SSG these render `siteConfig.i18n.defaultLocale` (the `LocaleProvider`'s initial value), so the static HTML — and therefore crawlers, OG tags, and JSON-LD — always carry the default language; non-default locales appear only after hydration when the visitor selects one. Server-only surfaces (`generateMetadata`, `<title>`, OG, JSON-LD, the breadcrumb leaf) call `getTranslations()` and intentionally stay on `defaultLocale`. See TECH_REQUIREMENTS.md §22.8.
 - **Cross-folder dependency:** `components/filters/useFilters.ts` imports `resolveItemPrice` from `lib/utils/pricing.ts`. This cross-package import is intentional and documented.
 - **`resolveItemPrice` performance:** Calling `resolveItemPrice` per item on every distance change re-renders the entire item list. The function is intentionally cheap (simple array scan). No `useMemo` is required for typical collections (< 100 items). If performance issues arise with large collections, memoize in `ItemGrid`/`RecentlyListedSection` with `useMemo([items, resolvedDistance])`.
 - **`FilterBar` prop type for fallback:** When `resolved.source === "fallback"` (no location), `ItemGrid` passes `resolvedDistanceMi={Infinity}` to `FilterBar`. The slider then initialises using fallback (highest) prices, which is the conservative maximum.
@@ -947,21 +947,106 @@ export const siteConfig: SiteConfig = {
   // Visitors switch language at runtime via the LocaleSwitcher in SiteHeader.
   // Selected locale is persisted in localStorage; static HTML always shows defaultLocale.
   //
-  // To add translations: add name_{locale} / description_{locale} to item.json
-  // manually, or run the /translate-items AI skill to batch-fill them (see §20 Skill 3).
+  // Two translation layers:
+  //   1. UI strings  — all 67 button/label/badge strings, defined here in translations.{locale}
+  //   2. Item content — name_{locale} / description_{locale} in each item.json;
+  //                     run /translate-items to batch-fill these
+  //
+  // The build fails (check-config) if a locale is in availableLocales but its
+  // translations entry is missing or has fewer than all 67 required keys.
   i18n: {
     defaultLocale: "en",              // locale rendered in SSG static HTML; ISO 639-1
     availableLocales: ["en"],         // add "zh", "es", etc. to enable LocaleSwitcher
                                       // LocaleSwitcher is hidden when length === 1
     showLocaleSwitcher: true,         // show locale toggle in SiteHeader (when locales > 1)
-    strings: {
-      // Override any UI string. Leave "" to use the built-in English default.
-      heroTagline:     "",   // hero section tagline (falls back to siteConfig.tagline)
-      recentlyListed:  "",   // "Recently Listed" section heading
-      browseAll:       "",   // "Browse All" link label
-      makeOffer:       "",   // "Make an Offer" button label
-      contactSeller:   "",   // "Contact Seller" toggle label
-      soldBanner:      "",   // "SOLD" banner text on sold item pages
+    translations: {
+      en: {
+        // ── Navigation ────────────────────────────────────────────────────
+        home: "Home",
+        about: "About",
+        browseAll: "Browse All",
+        // ── Section headings ──────────────────────────────────────────────
+        recentlyListed: "Recently Listed",
+        recentlyViewed: "Recently Viewed",
+        // ── Contact ───────────────────────────────────────────────────────
+        contactSeller: "Contact Seller",
+        itemSold: "Item sold",
+        preferredPayment: "Preferred payment",
+        // ── Make-offer form ───────────────────────────────────────────────
+        makeOffer: "Make an Offer",
+        yourOffer: "Your offer",
+        send: "Send",
+        belowMinimumOffer: "That offer is below the minimum we can accept. Please try a higher amount.",
+        // ── Share button ──────────────────────────────────────────────────
+        share: "Share",
+        copied: "Copied!",
+        linkCopied: "Link copied!",
+        // ── Item metadata labels ───────────────────────────────────────────
+        brand: "Brand",
+        model: "Model",
+        age: "Age",
+        color: "Color",
+        dimensions: "Dimensions",
+        weight: "Weight",
+        originalSource: "Original Source",
+        originalPrice: "Original Price",
+        // ── Condition badge labels ─────────────────────────────────────────
+        conditionNew: "New",
+        conditionLikeNew: "Like New",
+        conditionGood: "Good",
+        conditionFair: "Fair",
+        conditionForParts: "For Parts",
+        // ── Status badge labels ────────────────────────────────────────────
+        statusAvailable: "Available",
+        statusPending: "Pending",
+        statusReserved: "Reserved",
+        statusSold: "Sold",
+        statusDraft: "Draft",
+        // ── Filter / sort bar ──────────────────────────────────────────────
+        filterShowSold: "Show sold",
+        filterPrice: "Price",
+        sortBy: "Sort by",
+        sortNewestFirst: "Newest first",
+        sortPriceLow: "Price: low → high",
+        sortPriceHigh: "Price: high → low",
+        sortConditionBest: "Condition: best first",
+        // ── Freshness label ────────────────────────────────────────────────
+        listed: "Listed",
+        // ── Page titles and banners ────────────────────────────────────────
+        soldBanner: "This item has been sold",
+        soldArchiveTitle: "Sold Archive",
+        // ── Condition guide panel ──────────────────────────────────────────
+        conditionGuideTitle: "Condition Guide",
+        conditionNewDesc: "Unopened, unused. Original packaging intact.",
+        conditionLikeNewDesc: "Used briefly. No visible wear. May be without original box.",
+        conditionGoodDesc: "Normal signs of use. Fully functional. Minor cosmetic marks.",
+        conditionFairDesc: "Visible wear or light damage. Works as expected.",
+        conditionForPartsDesc: "Not fully functional. Sold as-is for repair or parts.",
+        // ── Location / distance price bar ──────────────────────────────────
+        detectingLocation: "Detecting location…",
+        fromSeller: "from seller",
+        locationDetected: "Location detected",
+        enterManually: "Enter manually",
+        distanceManualLabel: "(manual)",
+        distanceUnit: "mi",
+        apply: "Apply",
+        pricesAtPickupRate: "Prices shown at pickup rate",
+        enterDistance: "Enter distance",
+        edit: "Edit",
+        clear: "Clear",
+        // ── Pricing table ──────────────────────────────────────────────────
+        contactForPrice: "Contact seller for pricing details.",
+        contactForPricingShort: "Contact seller for pricing",
+        pricingLabelHeader: "Label",
+        pricingDistanceHeader: "Distance",
+        pricingPriceHeader: "Price",
+        pickup: "Pickup",
+        obo: "OBO",
+        hidePricingTiers: "Hide pricing tiers",
+        viewAllPricingTiers: "View all pricing tiers",
+      },
+      // To enable Chinese, uncomment and translate all 67 keys, add "zh" to availableLocales:
+      // zh: { home: "首頁", about: "關於", browseAll: "瀏覽全部", ... },
     },
   },
 };

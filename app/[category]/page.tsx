@@ -7,6 +7,7 @@ import { loadCategories, loadItemsByCategory } from "@/lib/content/loader";
 import { isValidSlug } from "@/lib/utils/slug";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ItemGrid } from "@/components/item/ItemGrid";
+import { getTranslations } from "@/lib/i18n/getTranslations";
 
 // Memoised per request so generateMetadata and the page component share one parse pass.
 const getPageData = cache(async (slug: string) => {
@@ -77,7 +78,7 @@ export default async function CategoryPage({
   const displayName = category?.displayName ?? slug;
   const icon = category?.icon ?? "";
   const description = category?.description ?? "";
-  const browseAllLabel = siteConfig.i18n.strings.browseAll || "Browse All";
+  const browseAllLabel = getTranslations().browseAll;
 
   return (
     <>
