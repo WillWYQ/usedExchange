@@ -83,14 +83,6 @@ jobs:
           # Force-push because release is always regenerated from the tagged commit.
           git push origin release --force
 
-      - name: Trigger deployment
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # GITHUB_TOKEN pushes don't trigger push-based workflows (GitHub loop-prevention).
-          # Dispatch deploy.yml explicitly so the site rebuilds after every release.
-          gh workflow run deploy.yml --ref release
-
       - name: Summary
         run: |
           echo "### Release complete" >> "$GITHUB_STEP_SUMMARY"
