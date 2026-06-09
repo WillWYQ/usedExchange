@@ -45,7 +45,8 @@ export class VercelBlobAdapter implements ImageStorageAdapter {
   }
 
   getUpdatedChecksums(): Record<string, string> {
-    return this.updated;
+    // Return a copy so callers can't mutate the adapter's internal state.
+    return { ...this.updated };
   }
 
   async syncImage(

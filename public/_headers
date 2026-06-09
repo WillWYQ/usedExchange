@@ -1,0 +1,22 @@
+# Security response headers.
+#
+# ⚠️ IMPORTANT — where this file does and does not take effect:
+#   • Cloudflare Pages / Netlify  → applied automatically. Nothing else to do.
+#   • GitHub Pages (this project's default host) → IGNORED. GitHub Pages does
+#     not read _headers files. To get these headers on GitHub Pages, front the
+#     site with Cloudflare (proxied DNS) and add a "Response Header Transform"
+#     rule, or move hosting to Cloudflare Pages. Paste the same values below.
+#
+# CSP notes: 'unsafe-inline' is required for scripts because next-themes injects
+# an inline anti-FOUC theme script and the JSON-LD <script> tags are inline, and
+# a statically-exported site cannot mint a per-request nonce. It is required for
+# styles because Tailwind and motion emit inline styles. The remaining
+# directives still meaningfully shrink the attack surface (no plugins, no
+# framing, no <base> hijack, no cross-origin form posts).
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(self), camera=(), microphone=(), payment=()
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'

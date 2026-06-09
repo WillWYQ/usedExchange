@@ -3,10 +3,19 @@ import type { Dirent } from "fs";
 import path from "path";
 import { siteConfig } from "@/content/config";
 import { itemJsonSchema, categoryJsonSchema } from "@/lib/content/schema";
+import { mapWithConcurrency } from "@/lib/utils/concurrency";
 import type { Item, Category } from "@/lib/content/types";
 
 const CONTENT_ROOT = path.join(process.cwd(), "content", "items");
 const IMAGE_EXT = /\.(jpg|jpeg|png|webp|gif)$/i;
+
+// FIX Perf/Edge: cap the fan-out so a large catalogue can't exhaust the process
+// file-descriptor limit (EMFILE). Worst-case in-flight FDs ≈
+// CATEGORY_PARSE_CONCURRENCY × ITEM_PARSE_CONCURRENCY, kept well under the
+// default ulimit on both macOS (256) and Linux (1024). See
+// lib/utils/concurrency.ts for why a plain Promise.all is unsafe at scale.
+const CATEGORY_PARSE_CONCURRENCY = 6;
+const ITEM_PARSE_CONCURRENCY = 24;
 const MANIFEST_PATH = path.join(
   process.cwd(),
   "lib",
@@ -76,8 +85,15 @@ function isSoldItemVisible(item: Item): boolean {
   if (retention === 0) return true;   // keep forever
   if (retention < 0) return false;   // -1 = hide immediately; covers all negative values
 
-  const effectiveDateStr = item.soldDate ?? item.listedDate;
-  const soldMs = Date.parse(effectiveDateStr + "T00:00:00Z");
+  // FIX Edge L3: when sold_date is absent we have no basis to expire the item.
+  // Falling back to listedDate (the previous behaviour) would instantly hide a
+  // recently-sold *old* listing flipped to "sold" by hand without a sold_date —
+  // the seller sees the item vanish and assumes data loss. `pnpm mark-sold`
+  // always writes sold_date; this only affects manual edits, where keeping the
+  // item visible until a date is supplied is the safe, non-surprising default.
+  if (!item.soldDate) return true;
+
+  const soldMs = Date.parse(item.soldDate + "T00:00:00Z");
   // Unparseable date: conservatively hide rather than expose stale items.
   if (isNaN(soldMs)) return false;
 
@@ -254,8 +270,10 @@ async function parseCategory(
     (e) => e.isDirectory() && !e.name.startsWith("_"),
   );
 
-  const items = await Promise.all(
-    itemFolders.map((e) => parseItem(categorySlug, e.name, manifest, buildDate)),
+  const items = await mapWithConcurrency(
+    itemFolders,
+    ITEM_PARSE_CONCURRENCY,
+    (e) => parseItem(categorySlug, e.name, manifest, buildDate),
   );
 
   return items.filter((item): item is Item => item !== null);
@@ -395,8 +413,14 @@ export async function loadItemsByCategory(
 }
 
 /**
- * A single item, or null if the folder/item.json is missing or name is empty.
+ * A single VISIBLE item, or null if the folder/item.json is missing, the name is
+ * empty, OR the item must not be shown (draft, or sold past its retention window).
  * Never throws.
+ *
+ * FIX Sec/Arch L1: this previously returned the raw parsed item with no
+ * visibility filter, so any caller that rendered with it would leak drafts and
+ * expired-sold items. The visibility check is now applied here, matching
+ * loadItemsByCategory, so loadItem is safe to use directly in a render path.
  */
 export async function loadItem(
   categorySlug: string,
@@ -404,7 +428,8 @@ export async function loadItem(
 ): Promise<Item | null> {
   const manifest = await getManifest();
   const buildDate = new Date().toISOString().slice(0, 10);
-  return parseItem(categorySlug, itemSlug, manifest, buildDate);
+  const item = await parseItem(categorySlug, itemSlug, manifest, buildDate);
+  return item && isItemVisible(item) ? item : null;
 }
 
 /**
@@ -431,8 +456,10 @@ export async function loadAllItemsRaw(): Promise<Item[]> {
 
   const slugs = await listCategorySlugs();
 
-  const allItemArrays = await Promise.all(
-    slugs.map((slug) => parseCategory(slug, manifest, buildDate)),
+  const allItemArrays = await mapWithConcurrency(
+    slugs,
+    CATEGORY_PARSE_CONCURRENCY,
+    (slug) => parseCategory(slug, manifest, buildDate),
   );
 
   return allItemArrays.flat();

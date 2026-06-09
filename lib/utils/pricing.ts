@@ -35,8 +35,13 @@ export function resolveItemPrice(
     if (below.length > 0) return below[below.length - 1] ?? tiers[0] ?? null;
   }
 
-  // D is below all tier lower bounds — return the first tier
-  return tiers[0] ?? null;
+  // D is below every tier's lower bound. Return the tier with the smallest
+  // lower bound (the "nearest" tier) rather than tiers[0], so the result does
+  // not depend on the order the seller happened to author the tiers in.
+  const byMinAsc = [...tiers].sort(
+    (a, b) => (a.miles_min ?? 0) - (b.miles_min ?? 0),
+  );
+  return byMinAsc[0] ?? null;
 }
 
 // Open-ended tier (miles_max absent) first; on tie/missing, highest amount (first in array order).

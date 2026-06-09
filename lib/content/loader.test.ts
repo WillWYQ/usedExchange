@@ -23,7 +23,7 @@ const mockSiteConfig = {
 };
 vi.mock("@/content/config", () => ({ siteConfig: mockSiteConfig }));
 
-const { loadItemsByCategory, loadSoldItems } = await import("./loader");
+const { loadItemsByCategory, loadSoldItems, loadItem } = await import("./loader");
 
 const CONTENT_ROOT = path.join(process.cwd(), "content", "items");
 const MANIFEST_PATH = path.join(
@@ -52,7 +52,13 @@ function dirent(name: string, isDir: boolean): Dirent<string> {
 // sold-long-ago, and sold-with-a-future-dated soldDate (the FIX Bug 1 case —
 // a future sold_date must never be treated as "within retention").
 const ITEM_FIXTURES: Record<string, Record<string, unknown>> = {
-  laptop: { name: "Laptop", description: "d", status: "available" },
+  laptop: {
+    name: "Laptop",
+    description: "d",
+    status: "available",
+    // Private buyer field — must be stripped by the schema, never surfaced.
+    reserved_for: "buyer@example.com",
+  },
   "draft-thing": { name: "Draft Thing", description: "d", status: "draft" },
   "old-phone": {
     name: "Old Phone",
@@ -147,6 +153,74 @@ describe("loadItemsByCategory — isItemVisible boundaries", () => {
     mockSiteConfig.soldItemRetentionDays = 30;
     const items = await loadItemsByCategory("electronics");
     expect(items.some((i) => i.itemSlug === "future-item")).toBe(false);
+  });
+});
+
+describe("reserved_for — private field never surfaces on a loaded Item", () => {
+  it("strips reserved_for from the parsed Item", async () => {
+    const items = await loadItemsByCategory("electronics");
+    const laptop = items.find((i) => i.itemSlug === "laptop");
+    expect(laptop).toBeDefined();
+    const serialized = JSON.stringify(laptop);
+    expect(serialized).not.toContain("reserved_for");
+    expect(serialized).not.toContain("buyer@example.com");
+  });
+});
+
+describe("loadItem — applies the visibility filter (FIX L1)", () => {
+  it("returns an available item", async () => {
+    const item = await loadItem("electronics", "laptop");
+    expect(item?.itemSlug).toBe("laptop");
+  });
+
+  it("returns null for a draft item", async () => {
+    const item = await loadItem("electronics", "draft-thing");
+    expect(item).toBeNull();
+  });
+
+  it("returns null for a sold item past its retention window", async () => {
+    mockSiteConfig.soldItemRetentionDays = 3;
+    const item = await loadItem("electronics", "ancient-radio");
+    expect(item).toBeNull();
+  });
+});
+
+describe("isSoldItemVisible — sold item with no sold_date (FIX L3)", () => {
+  it("stays visible instead of expiring against listedDate", async () => {
+    // Re-mock a single-item category: status sold, listed long ago, NO sold_date.
+    // Old behaviour expired it against listedDate and hid it; it must now show.
+    mockReaddir.mockImplementation(async (dir: string) => {
+      if (dir === CONTENT_ROOT) return [dirent("electronics", true)];
+      if (dir === path.join(CONTENT_ROOT, "electronics")) {
+        return [dirent("sold-no-date", true)];
+      }
+      return [];
+    });
+    mockReadFile.mockImplementation(async (file: string) => {
+      if (file === MANIFEST_PATH) {
+        const err = new Error("ENOENT") as NodeJS.ErrnoException;
+        err.code = "ENOENT";
+        throw err;
+      }
+      if (
+        file ===
+        path.join(CONTENT_ROOT, "electronics", "sold-no-date", "item.json")
+      ) {
+        return JSON.stringify({
+          name: "Sold No Date",
+          description: "d",
+          status: "sold",
+          listed_date: isoDaysAgo(100),
+        });
+      }
+      const err = new Error("ENOENT") as NodeJS.ErrnoException;
+      err.code = "ENOENT";
+      throw err;
+    });
+
+    mockSiteConfig.soldItemRetentionDays = 3;
+    const items = await loadItemsByCategory("electronics");
+    expect(items.map((i) => i.itemSlug)).toEqual(["sold-no-date"]);
   });
 });
 

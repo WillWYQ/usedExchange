@@ -341,8 +341,8 @@ function GalleryPreview({ galleryKey }: { galleryKey: GalleryKey }) {
   return (
     <div className="flex gap-2 overflow-x-auto rounded-xl pb-1">
       {GALLERY_IMAGES.map((src, i) => (
-        // eslint-disable-next-line @next/next/no-img-element
         <div key={i} className="h-28 w-40 flex-shrink-0 overflow-hidden rounded-lg">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={src} alt={`Sample ${i + 1}`} className="h-full w-full object-cover" />
         </div>
       ))}

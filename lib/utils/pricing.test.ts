@@ -120,6 +120,18 @@ describe("resolveItemPrice", () => {
       ).toEqual(highTiers[0]);
     });
 
+    it("D below all lower bounds: returns nearest tier regardless of author order (FIX L4)", () => {
+      // Tiers authored out of order — the far tier is listed first.
+      const outOfOrder = [
+        tier("Far", 30, 20, 50),
+        tier("Near", 10, 5, 15),
+      ];
+      // D=2 is below both lower bounds; nearest (smallest miles_min) is "Near".
+      expect(
+        resolveItemPrice(price(outOfOrder), { source: "detected", miles: 2 }),
+      ).toEqual(outOfOrder[1]);
+    });
+
     it("single open-ended tier covers any finite distance", () => {
       const singleTier = [tier("Flat", 20)];
       expect(

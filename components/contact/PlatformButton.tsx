@@ -89,6 +89,10 @@ function buildUrl(
 
   switch (type) {
     case "email": {
+      // Take only the address itself: split on whitespace or a stray "?" so a
+      // typo'd config value can't inject extra mailto headers (cc/bcc) after the
+      // address. The subject/body we add are encodeURIComponent'd below.
+      const addr = (value.split(/[\s?]/)[0] ?? "").trim();
       const subject = encodeURIComponent(`Inquiry: ${item?.name ?? ""}`);
       const body = encodeURIComponent(
         item
@@ -96,8 +100,8 @@ function buildUrl(
           : "",
       );
       return item
-        ? `mailto:${value}?subject=${subject}&body=${body}`
-        : `mailto:${value}`;
+        ? `mailto:${addr}?subject=${subject}&body=${body}`
+        : `mailto:${addr}`;
     }
     case "discord":
       return `https://discord.com/users/${encodeURIComponent(value)}`;
