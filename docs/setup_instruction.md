@@ -74,6 +74,16 @@ In the token manager, click **Create API token**:
 - Click **Create API Token**
 - Copy the **Access Key ID** and **Secret Access Key** — you won't see the secret again
 
+> **What's safe to share vs. what's secret**
+>
+> | Value | Safe to share? |
+> |---|---|
+> | Account ID | ✅ Yes — not a secret; Cloudflare displays it publicly |
+> | Access Key ID | ✅ Yes — identifies the token but can't do anything alone |
+> | **Secret Access Key** | ❌ Never — treat it like a password; don't paste it in chat or email |
+>
+> When using the AI assistant to set up R2, you can share Account ID and Access Key ID freely. Always paste the Secret Access Key directly into `.env.local` yourself.
+
 ### Step 5 — Configure `.env.local`
 
 Copy `.env.example` to `.env.local` in the project root, then fill in:

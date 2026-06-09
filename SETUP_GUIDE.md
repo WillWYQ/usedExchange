@@ -17,9 +17,11 @@ Open Claude Code inside your project folder. The AI will automatically read your
 
 ## 1. Adding a New Item
 
+**Quick answer: yes, you create one folder per item. The AI generates everything inside it.**
+
 ### Step 1 — Create a folder for the item
 
-Inside `content/items/`, create a new folder. The folder name becomes part of the URL, so keep it short and lowercase with hyphens.
+Inside `content/items/`, create a new folder for each item you want to sell. The folder name becomes part of the URL, so keep it short and lowercase with hyphens.
 
 Example:
 ```

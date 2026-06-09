@@ -138,47 +138,59 @@ Map to: `currency`, `recentlyListedCount`, `soldItemRetentionDays`
 
 ### Group 7 — Appearance
 
+**Before presenting options, read `lib/ui/types.ts` to get the live list of valid values.** The options below are current as of the last update but the type file is authoritative — if they differ, use the type file.
+
 Ask:
 > Let's choose your visual style. I'll describe the options.
 >
 > **Background effect** (what's behind your content):
 > - `none` — clean white/dark background (default, loads fastest)
 > - `aurora` — slow animated colour gradient
-> - `particles` — floating particles
-> - `stars` — starfield
-> - `beams` — light beams
-> - (or any of: `grid`, `dots`, `globe`, `waves`, `sparkles`, `canvas`, `vortex`, `spotlight`, `noise`)
+> - `shooting-stars` — floating shooting-star particles
+> - `meteors` — streaking meteor effect
+> - `vortex` — spinning vortex tunnel
+> - `wavy` — gentle wave animation
+> - `spotlight` / `spotlight-new` — cursor-following spotlight
+> - `background-beams` / `background-beams-collision` — animated light beams
+> - `background-gradient-animation` — shifting gradient
+> - `background-boxes` — animated box grid
+> - `grid-and-dot` — static dot-grid pattern
+> - `background-lines` — subtle line pattern
 >
-> Which background would you like? (Type the name or "none")
+> Which background would you like? (Type the exact value, or "none")
 
 > **Item grid style** (how item cards are arranged):
 > - `simple` — clean CSS grid (recommended)
-> - `wavy-background` — items float on a subtle wave
-> - `focused-cards` — cards expand on hover
+> - `focus-cards` — cards expand and dim others on hover
+> - `bento-grid` — variable-size bento layout
+> - `layout-grid` — masonry-style layout
 >
-> Which grid style? (Type the name or "simple")
+> Which grid style? (Type the exact value, or "simple")
 
 > **Gallery style** (photo viewer on item detail pages):
 > - `simple` — main image + thumbnail strip (recommended)
-> - `card-stack` — swipeable card stack
-> - `lens` — zoom magnifier on hover
-> - `parallax` — depth effect on scroll
+> - `apple-cards-carousel` — swipeable card carousel
+> - `images-slider` — full-width sliding images
+> - `carousel` — standard auto-advancing carousel
+> - `parallax-scroll` — depth parallax on scroll
 >
 > Which gallery style?
 
 > **Item card style** (how individual item cards look):
 > - `simple` — clean card with shadow (recommended)
+> - `wobble-card` — wobbles on hover
 > - `3d-card` — lifts in 3D on hover
-> - `background-gradient` — gradient on hover
 > - `card-spotlight` — spotlight follows cursor
+> - `card-hover-effect` — subtle lift and glow
 > - `direction-aware-hover` — hover effect follows mouse direction
-> - `glare-card` — glare effect
-> - `animated-border` — animated border
+> - `glare-card` — glare/shine effect
 > - `evervault-card` — matrix-style pattern
 >
 > Which card style?
 
 Map to: `ui.background`, `ui.itemGrid`, `ui.gallery`, `ui.itemCard`
+
+After the seller picks, **validate each value against `lib/ui/types.ts`** before writing the config. If a value isn't in the type, tell the seller and ask them to pick from the real list.
 
 ---
 
@@ -213,11 +225,14 @@ For each category name the seller provides:
 Then generate a `_category.json` for each new category that doesn't already exist:
 ```json
 {
-  "displayName": "Electronics",
-  "icon": "device-laptop",
-  "sortOrder": 10
+  "display_name": "Electronics",
+  "description": "Laptops, phones, cables, and other tech.",
+  "icon": "💻",
+  "sort_order": 10
 }
 ```
+
+Use an appropriate emoji for `icon`. Use snake_case for all keys (`display_name`, `sort_order`).
 
 **Only create folders and `_category.json` files inside `content/items/`.** Never modify any other files.
 

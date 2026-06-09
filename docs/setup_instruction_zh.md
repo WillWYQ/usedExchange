@@ -74,6 +74,16 @@
 - 点击 **Create API Token**
 - 复制 **Access Key ID** 和 **Secret Access Key**——Secret 关闭页面后不再显示
 
+> **哪些值可以共享，哪些必须保密**
+>
+> | 值 | 可以共享？ |
+> |---|---|
+> | Account ID | ✅ 可以——不是机密；Cloudflare 会公开显示 |
+> | Access Key ID | ✅ 可以——用于标识 Token，单独无法操作任何内容 |
+> | **Secret Access Key** | ❌ 绝不——像密码一样保管；不要粘贴到聊天或邮件中 |
+>
+> 使用 AI 助手配置 R2 时，可以放心分享 Account ID 和 Access Key ID。Secret Access Key 请始终由你自己直接粘贴到 `.env.local` 文件中。
+
 ### 第 5 步 — 配置 `.env.local`
 
 将项目根目录的 `.env.example` 复制为 `.env.local`，填写以下内容：
