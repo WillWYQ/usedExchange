@@ -10,7 +10,7 @@
 **UsedExchange** is a Next.js 15 static site for listing second-hand items.
 Single seller, zero database, file-system-driven. Hosted on GitHub Pages + Cloudflare R2.
 
-**Status:** Phase 0 (Bootstrap) ✅ complete — Next.js 15 scaffold ready. Phases 1–15 pending.
+**Status:** All phases (0–15) implemented and live.
 
 ---
 
@@ -32,13 +32,15 @@ Every documentation file has an English version and a Chinese (`_zh`) version:
 | `docs/IMPLEMENTATION_PLAN.md` | `docs/IMPLEMENTATION_PLAN_zh.md` |
 | `docs/FEATURES_ROADMAP.md` | `docs/FEATURES_ROADMAP_zh.md` |
 | `docs/CURRENT_FUNCTIONALITY.md` | `docs/CURRENT_FUNCTIONALITY_zh.md` |
+| `docs/ARCHITECTURE.md` | `docs/ARCHITECTURE_zh.md` |
+| `docs/setup_instruction.md` | `docs/setup_instruction_zh.md` |
 
 **Any correction, addition, or update to an English doc MUST be mirrored to its `_zh` counterpart in the same response. Never close a doc-editing task until both language versions are confirmed fixed.**
 
 > Background: In the 2026-06-03 consistency audit, three bugs were found in all five English docs but the Chinese versions were initially missed, requiring a second pass. This rule prevents that from recurring.
 
-### 3. No app code yet
-The repo is docs-only. Do not create `app/`, `components/`, or `lib/` files until the seller explicitly starts Phase 0.
+### 3. App code is live
+All phases are implemented. `app/`, `components/`, `lib/`, and `scripts/` all contain production code. Do not create new files in these directories unless the seller explicitly requests a new feature or Phase.
 
 ### 4. Never render `reserved_for`
 This field is private buyer info — must never appear on any rendered page.
@@ -63,6 +65,8 @@ After finishing each phase's implementation, **update `docs/IMPLEMENTATION_PLAN.
 | docs/IMPLEMENTATION_PLAN.md / docs/IMPLEMENTATION_PLAN_zh.md | **v1.4** | 2026-06-03 |
 | docs/FEATURES_ROADMAP.md / docs/FEATURES_ROADMAP_zh.md | — | 2026-06-01 |
 | docs/CURRENT_FUNCTIONALITY.md / docs/CURRENT_FUNCTIONALITY_zh.md | — | 2026-06-03 |
+| docs/ARCHITECTURE.md / docs/ARCHITECTURE_zh.md | v1.0 | 2026-06-08 |
+| docs/setup_instruction.md / docs/setup_instruction_zh.md | — | 2026-06-08 |
 
 ---
 
@@ -89,10 +93,12 @@ After finishing each phase's implementation, **update `docs/IMPLEMENTATION_PLAN.
 | Sold item retention formula | docs/DESIGN.md §8 |
 | Status & visibility rules | docs/DESIGN.md §15 |
 | Distance-tiered pricing algorithm | docs/DESIGN.md §17 |
-| Component architecture + `"use client"` list | docs/DESIGN.md §12 |
+| Component architecture + `"use client"` list | docs/DESIGN.md §12, docs/ARCHITECTURE.md |
 | UI slot options (27 Aceternity components) | docs/DESIGN.md §18 |
 | i18n runtime (LocaleProvider / LocaleSwitcher) | docs/DESIGN.md §12, docs/TECH_REQUIREMENTS.md §22.8 |
-| 15-phase build plan | docs/IMPLEMENTATION_PLAN.md |
+| 16-phase build plan (Phases 0–15) | docs/IMPLEMENTATION_PLAN.md |
 | Deployment checklist (GitHub Pages + R2) | docs/TECH_REQUIREMENTS.md §19 |
 | AI skill file specs | docs/TECH_REQUIREMENTS.md §23 |
 | Testing strategy | docs/TECH_REQUIREMENTS.md §25 |
+| Code structure, data flow, module API | docs/ARCHITECTURE.md |
+| CDN setup walkthrough | docs/setup_instruction.md |

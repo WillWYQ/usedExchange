@@ -2,7 +2,7 @@
 
 **Based on:** DESIGN.md v0.9.1 · TECH_REQUIREMENTS.md v0.9.1 · IMPLEMENTATION_PLAN.md v1.4  
 **Date:** 2026-06-03  
-**Status:** Design phase — this document describes the *specified* v1 functionality. No code is implemented yet.
+**Status:** Implemented — this document describes the live v1 functionality.
 
 ---
 

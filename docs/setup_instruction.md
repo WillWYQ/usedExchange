@@ -1,5 +1,7 @@
 # UsedExchange — Setup Instructions
 
+> ← [Back to README.md](../README.md) · 🇨🇳 Chinese version: [setup_instruction_zh.md](setup_instruction_zh.md)
+
 **Phase 4: Image Pipeline**
 
 This guide covers how to configure the image storage provider and use the image sync pipeline after completing Phase 4.

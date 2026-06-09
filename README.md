@@ -1,5 +1,7 @@
 # UsedExchange
 
+> 🇨🇳 Chinese version: [README_zh.md](README_zh.md)
+
 A statically-generated personal storefront for listing second-hand items. No database, no CMS — content lives entirely in one folder.
 
 ## How it works
@@ -56,12 +58,14 @@ No API key required. Uses your existing AI tool subscription.
 
 | Document | Purpose |
 |---|---|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Code structure, data flow, module API, CI/CD pipeline — developer reference |
 | [DESIGN.md](docs/DESIGN.md) | Full architecture, data model, component specs, all design decisions |
 | [TECH_REQUIREMENTS.md](docs/TECH_REQUIREMENTS.md) | Dependencies, env vars, script specs, deployment checklist |
-| [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | 14-phase build plan (~20 dev days) |
+| [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | 16-phase build plan (Phases 0–15, ~24 dev days) |
 | [CURRENT_FUNCTIONALITY.md](docs/CURRENT_FUNCTIONALITY.md) | Plain-English summary of everything in v1 |
 | [FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) | Post-v1 backlog |
-| [SETUP_GUIDE.md](docs/SETUP_GUIDE.md) | Non-technical user guide (content/ operations only) |
+| [setup_instruction.md](docs/setup_instruction.md) | CDN setup walkthrough (Cloudflare R2, Vercel Blob, local) |
+| [SETUP_GUIDE.md](SETUP_GUIDE.md) | Non-technical user guide (content/ operations only) |
 
 ## Tech stack
 

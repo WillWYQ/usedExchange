@@ -1,5 +1,7 @@
 # UsedExchange
 
+> 🇺🇸 English version: [README.md](README.md)
+
 一个静态生成的个人二手物品销售平台。无需数据库，无需 CMS——所有内容都存放在一个文件夹中。
 
 ## 工作原理
@@ -56,12 +58,14 @@ git add content/ && git push
 
 | 文档 | 用途 |
 |---|---|
-| [DESIGN.md](docs/DESIGN.md) | 完整架构、数据模型、组件规范、所有设计决策 |
-| [TECH_REQUIREMENTS.md](docs/TECH_REQUIREMENTS.md) | 依赖项、环境变量、脚本规范、部署清单 |
-| [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | 14 阶段构建计划（约 20 个开发日） |
-| [CURRENT_FUNCTIONALITY.md](docs/CURRENT_FUNCTIONALITY.md) | v1 全部功能的简明汇总 |
-| [FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) | v1 之后的功能待办列表 |
-| [SETUP_GUIDE.md](docs/SETUP_GUIDE.md) | 非技术用户指南（仅涉及 content/ 操作） |
+| [ARCHITECTURE_zh.md](docs/ARCHITECTURE_zh.md) | 代码结构、数据流、模块 API、CI/CD 流水线——开发者参考 |
+| [DESIGN_zh.md](docs/DESIGN_zh.md) | 完整架构、数据模型、组件规范、所有设计决策 |
+| [TECH_REQUIREMENTS_zh.md](docs/TECH_REQUIREMENTS_zh.md) | 依赖项、环境变量、脚本规范、部署清单 |
+| [IMPLEMENTATION_PLAN_zh.md](docs/IMPLEMENTATION_PLAN_zh.md) | 16 阶段构建计划（第 0–15 阶段，约 24 个开发日） |
+| [CURRENT_FUNCTIONALITY_zh.md](docs/CURRENT_FUNCTIONALITY_zh.md) | v1 全部功能的简明汇总 |
+| [FEATURES_ROADMAP_zh.md](docs/FEATURES_ROADMAP_zh.md) | v1 之后的功能待办列表 |
+| [setup_instruction_zh.md](docs/setup_instruction_zh.md) | CDN 配置说明（Cloudflare R2、Vercel Blob、本地） |
+| [SETUP_GUIDE.md](SETUP_GUIDE.md) | 非技术用户指南（仅涉及 content/ 操作） |
 
 ## 技术栈
 

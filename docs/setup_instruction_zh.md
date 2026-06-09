@@ -1,5 +1,7 @@
 # UsedExchange — 安装配置说明
 
+> ← [返回 README_zh.md](../README_zh.md) · 🇺🇸 English version: [setup_instruction.md](setup_instruction.md)
+
 **第 4 阶段：图像管道**
 
 本文档说明如何在完成第 4 阶段后配置图像存储提供商并使用图像同步管道。
