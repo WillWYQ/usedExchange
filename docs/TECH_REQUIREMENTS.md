@@ -772,8 +772,8 @@ export default {
 ## 18. Git Conventions
 
 ### Branch strategy
-- `main` — production; auto-deploys to Vercel on push
-- `dev` — integration branch for multi-change work
+- `develop` — active development; code changes, skill updates
+- `release` — auto-generated from version tags; deploys to GitHub Pages on push
 - Feature branches: `feat/`, `fix/`, `chore/` prefixes
 
 ### Commit message format (Conventional Commits)
@@ -874,7 +874,7 @@ out/
 **One-time setup:**
 - [ ] Run `pnpm setup-ui` → commit `components/ui/`
 - [ ] Set `deploymentMode: "vercel"` and `imageStorage.provider: "vercel-blob"` in `content/config.ts`
-- [ ] Connect GitHub repo to Vercel project; Vercel auto-deploys on push to `main`
+- [ ] Connect GitHub repo to Vercel project; set deploy branch to `release` in Vercel project settings
 - [ ] Vercel Dashboard → Storage → Create Blob store → copy `BLOB_READ_WRITE_TOKEN`
 - [ ] Add `BLOB_READ_WRITE_TOKEN` to Vercel project Environment Variables (all environments)
 - [ ] Add `NEXT_PUBLIC_SITE_URL` to Vercel Environment Variables
@@ -1870,7 +1870,7 @@ description_es: string;
 
 ## 24. CI/CD Pipeline — GitHub Actions Workflow Specification
 
-The workflow file lives at `.github/workflows/deploy.yml` and ships with the project. It handles build + deploy to GitHub Pages on every push to `main`. No CDN credentials are needed in CI — the build reads the committed `lib/generated/image-manifest.json`.
+The workflow file lives at `.github/workflows/deploy.yml` and ships with the project. It handles build + deploy to GitHub Pages on every push to the `release` branch. No CDN credentials are needed in CI — the build reads the committed `lib/generated/image-manifest.json`.
 
 ### 24.1 Workflow File
 
@@ -1880,7 +1880,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [release]
   workflow_dispatch:        # allow manual trigger from GitHub UI
 
 permissions:
@@ -1964,7 +1964,7 @@ GitHub Actions emails the repository owner automatically on workflow failure. No
 
 ### 24.4 Vercel Deployment (alternative)
 
-Vercel auto-deploys on push to `main` when the repo is connected. No workflow file is needed. Vercel uses `pnpm build` directly (reads `package.json` scripts). The `prebuild` and `postbuild` npm lifecycle hooks run automatically.
+Vercel auto-deploys on push to `release` when the repo is connected (set deploy branch to `release` in Vercel project settings). No workflow file is needed. Vercel uses `pnpm build` directly (reads `package.json` scripts). The `prebuild` and `postbuild` npm lifecycle hooks run automatically.
 
 | Vercel setting | Value |
 |---|---|

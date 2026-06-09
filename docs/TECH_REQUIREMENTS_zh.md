@@ -576,8 +576,8 @@ export default {
 ## 18. Git 约定
 
 ### 分支策略
-- `main` — 生产；推送时自动部署到 Vercel
-- `dev` — 多变更工作的集成分支
+- `develop` — 活跃开发；代码变更、技能更新
+- `release` — 从版本 tag 自动生成；推送时部署到 GitHub Pages
 - 功能分支：`feat/`、`fix/`、`chore/` 前缀
 
 ### 提交消息格式（Conventional Commits）
@@ -665,7 +665,7 @@ out/
 **一次性设置：**
 - [ ] 运行 `pnpm setup-ui` → 提交 `components/ui/`
 - [ ] 在 `content/config.ts` 中设置 `deploymentMode: "vercel"` 和 `imageStorage.provider: "vercel-blob"`
-- [ ] 将 GitHub 仓库连接到 Vercel 项目；Vercel 自动在推送到 `main` 时部署
+- [ ] 将 GitHub 仓库连接到 Vercel 项目；在 Vercel 项目设置中将部署分支设为 `release`
 - [ ] Vercel Dashboard → Storage → 创建 Blob 存储 → 复制 `BLOB_READ_WRITE_TOKEN`
 - [ ] 将 `BLOB_READ_WRITE_TOKEN` 添加到 Vercel 项目环境变量
 - [ ] 复制 `.env.example` → `.env.local`；填写 `BLOB_READ_WRITE_TOKEN`
@@ -1113,7 +1113,7 @@ export function formatRelativeDate(isoDate: string | null, now?: Date): string
 
 ## 24. CI/CD 管道——GitHub Actions 工作流规范
 
-工作流文件位于 `.github/workflows/deploy.yml`，随项目发布。它在每次推送到 `main` 时处理构建 + 部署到 GitHub Pages。CI 中不需要 CDN 凭据——构建读取已提交的 `lib/generated/image-manifest.json`。
+工作流文件位于 `.github/workflows/deploy.yml`，随项目发布。它在每次推送到 `release` 分支时处理构建 + 部署到 GitHub Pages。CI 中不需要 CDN 凭据——构建读取已提交的 `lib/generated/image-manifest.json`。
 
 ### 24.1 工作流文件
 
@@ -1123,7 +1123,7 @@ name: 部署到 GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [release]
   workflow_dispatch:
 
 permissions:

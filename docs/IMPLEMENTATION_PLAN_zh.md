@@ -400,7 +400,7 @@
 - [ ] 将真实列表照片添加到 `content/items/` 文件夹
 - [ ] 运行 `pnpm upload-images` → 验证 R2 上传成功；清单已写入
 - [ ] 提交 `lib/generated/image-manifest.json` + `content/**/*.json`
-- [ ] 推送到 `main` → GitHub Actions 触发 → 验证工作流通过（绿色勾选）
+- [ ] 推送版本 tag（`git tag v1.0.0 && git push origin --tags`）→ `release-seller.yml` 创建 `release` 分支 → `deploy.yml` 触发 → 验证工作流通过（绿色勾选）
 - [ ] 导航到部署 URL → 验证所有页面、图片和定价正常工作
 
 ---
@@ -410,7 +410,7 @@
 
 **无 API 密钥，无新依赖，无自定义脚本。** 交付物是 Markdown 指令文件和一个 CI 工作流。
 
-**架构：** 技能按受众拆分。开发者上下文位于 `.claude/`（main 分支）。面向卖家的技能位于 `.claude/seller/`（源文件），推送版本 tag 时 CI 自动将其提升到 `release` 分支的 `.claude/skills/`。卖家 fork/clone `release` 分支。
+**架构：** 技能按受众拆分。开发者上下文位于 `.claude/`（develop 分支）。面向卖家的技能位于 `.claude/seller/`（源文件），推送版本 tag 时 CI 自动将其提升到 `release` 分支的 `.claude/skills/`。卖家 fork/clone `release` 分支。
 
 **可与 Phase 5–14 并行开发。**
 

@@ -500,7 +500,7 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 - [ ] Add real listing photos to `content/items/` folders
 - [ ] Run `pnpm upload-images` → verify R2 upload succeeds; manifest written
 - [ ] Commit `lib/generated/image-manifest.json` + `content/**/*.json`
-- [ ] Push to `main` → GitHub Actions triggers → verify workflow passes (green check)
+- [ ] Push a version tag (`git tag v1.0.0 && git push origin --tags`) → `release-seller.yml` creates `release` branch → `deploy.yml` triggers → verify workflow passes (green check)
 - [ ] Navigate to deployed URL → verify all pages, images, and pricing work
 - [ ] Verify HTTPS (Geolocation API requires HTTPS — enforced by GitHub Pages + custom domain)
 
@@ -523,7 +523,7 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 
 **No API keys, no new dependencies, no custom scripts.** The deliverable is Markdown instruction files and a CI workflow.
 
-**Architecture:** Skills are split by audience. Developer context lives in `.claude/` (main branch). Seller-facing skills live in `.claude/seller/` (source) and are automatically promoted to `.claude/skills/` on the `release` branch when a version tag is pushed. Sellers fork/clone the `release` branch.
+**Architecture:** Skills are split by audience. Developer context lives in `.claude/` (develop branch). Seller-facing skills live in `.claude/seller/` (source) and are automatically promoted to `.claude/skills/` on the `release` branch when a version tag is pushed. Sellers fork/clone the `release` branch.
 
 **Can be developed in parallel with Phases 5–14.**
 
