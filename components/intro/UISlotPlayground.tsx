@@ -332,7 +332,7 @@ function GalleryPreview({ galleryKey }: { galleryKey: GalleryKey }) {
       button: "View",
     }));
     return (
-      <div className="overflow-hidden rounded-xl">
+      <div className="@container aspect-square w-full max-w-full overflow-hidden rounded-xl">
         <CarouselSlider slides={slides} />
       </div>
     );

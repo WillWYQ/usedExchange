@@ -53,7 +53,7 @@ export function ItemGallery({ images, itemName }: ItemGalleryProps) {
         <img
           src={activeImage}
           alt={`${itemName} — image ${activeIndex + 1}`}
-          className="aspect-[4/3] w-full object-contain"
+          className="aspect-[4/3] w-full object-contain transition-transform duration-300 ease-out hover:scale-[1.03]"
         />
 
         {/* Prev / Next controls (shown only when > 1 image) */}
@@ -95,10 +95,10 @@ export function ItemGallery({ images, itemName }: ItemGalleryProps) {
               aria-label={`View image ${i + 1}`}
               aria-current={i === activeIndex}
               className={clsx(
-                "h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50",
+                "h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border-2 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50",
                 i === activeIndex
                   ? "border-foreground/60"
-                  : "border-foreground/10 opacity-60 hover:opacity-100",
+                  : "border-foreground/10 opacity-60 hover:scale-105 hover:opacity-100",
               )}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}

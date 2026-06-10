@@ -18,9 +18,9 @@ export const ParallaxScroll = ({
     offset: ["start start", "end start"], // remove this if your container is not fixed height
   });
 
-  const translateFirst = useTransform(scrollYProgress, [0, 1], [0, -200]);
-  const translateSecond = useTransform(scrollYProgress, [0, 1], [0, 200]);
-  const translateThird = useTransform(scrollYProgress, [0, 1], [0, -200]);
+  const translateFirst = useTransform(scrollYProgress, [0, 1], [0, -120]);
+  const translateSecond = useTransform(scrollYProgress, [0, 1], [0, 120]);
+  const translateThird = useTransform(scrollYProgress, [0, 1], [0, -120]);
 
   const third = Math.ceil(images.length / 3);
 
@@ -30,14 +30,14 @@ export const ParallaxScroll = ({
 
   return (
     <div
-      className={cn("h-[40rem] items-start overflow-y-auto w-full", className)}
+      className={cn(
+        "h-[28rem] w-full max-w-full items-start overflow-y-auto overflow-x-hidden @md:h-[32rem]",
+        className,
+      )}
       ref={gridRef}
     >
-      <div
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 items-start  max-w-5xl mx-auto gap-10 py-40 px-10"
-        ref={gridRef}
-      >
-        <div className="grid gap-10">
+      <div className="mx-auto grid max-w-5xl grid-cols-1 items-start gap-3 px-3 py-6 @sm:gap-4 @md:grid-cols-2 @md:gap-4 @md:px-4 @lg:grid-cols-3">
+        <div className="grid gap-3 @sm:gap-4">
           {firstPart.map((el, idx) => (
             <motion.div
               style={{ y: translateFirst }} // Apply the translateY motion value here
@@ -45,7 +45,7 @@ export const ParallaxScroll = ({
             >
               <img
                 src={el}
-                className="h-80 w-full object-cover object-left-top rounded-lg gap-10 !m-0 !p-0"
+                className="h-40 w-full rounded-lg object-cover object-left-top @md:h-56 !m-0 !p-0"
                 height="400"
                 width="400"
                 alt="thumbnail"
@@ -53,12 +53,12 @@ export const ParallaxScroll = ({
             </motion.div>
           ))}
         </div>
-        <div className="grid gap-10">
+        <div className="grid gap-3 @sm:gap-4">
           {secondPart.map((el, idx) => (
             <motion.div style={{ y: translateSecond }} key={"grid-2" + idx}>
               <img
                 src={el}
-                className="h-80 w-full object-cover object-left-top rounded-lg gap-10 !m-0 !p-0"
+                className="h-40 w-full rounded-lg object-cover object-left-top @md:h-56 !m-0 !p-0"
                 height="400"
                 width="400"
                 alt="thumbnail"
@@ -66,12 +66,12 @@ export const ParallaxScroll = ({
             </motion.div>
           ))}
         </div>
-        <div className="grid gap-10">
+        <div className="grid gap-3 @sm:gap-4">
           {thirdPart.map((el, idx) => (
             <motion.div style={{ y: translateThird }} key={"grid-3" + idx}>
               <img
                 src={el}
-                className="h-80 w-full object-cover object-left-top rounded-lg gap-10 !m-0 !p-0"
+                className="h-40 w-full rounded-lg object-cover object-left-top @md:h-56 !m-0 !p-0"
                 height="400"
                 width="400"
                 alt="thumbnail"

@@ -71,7 +71,7 @@ export function GalleryAdapter({ images, itemName }: Props) {
       button: "View",
     }));
     return (
-      <div className="w-full overflow-hidden rounded-2xl">
+      <div className="@container aspect-square w-full max-w-full overflow-hidden rounded-2xl">
         <CarouselSlider slides={slides} />
       </div>
     );
@@ -80,7 +80,7 @@ export function GalleryAdapter({ images, itemName }: Props) {
   // ── parallax-scroll ───────────────────────────────────────────────────────
   if (mode === "parallax-scroll") {
     return (
-      <div className="rounded-2xl overflow-hidden">
+      <div className="@container w-full max-w-full overflow-hidden rounded-2xl">
         <ParallaxScroll images={images} className="rounded-2xl" />
       </div>
     );
