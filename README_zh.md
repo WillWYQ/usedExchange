@@ -78,6 +78,7 @@ git add content/ && git push
 | [CURRENT_FUNCTIONALITY_zh.md](docs/CURRENT_FUNCTIONALITY_zh.md) | v1 全部功能的简明汇总 |
 | [FEATURES_ROADMAP_zh.md](docs/FEATURES_ROADMAP_zh.md) | v1 之后的功能待办列表 |
 | [setup_instruction_zh.md](docs/setup_instruction_zh.md) | CDN 配置说明（Cloudflare R2、Vercel Blob、本地） |
+| [UPDATE_GUIDE_zh.md](docs/UPDATE_GUIDE_zh.md) | 如何将站点更新到模板新版本 |
 | [SETUP_GUIDE.md](SETUP_GUIDE.md) | 非技术用户指南（仅涉及 content/ 操作） |
 
 ## 技术栈

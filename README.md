@@ -78,6 +78,7 @@ No API key required. Uses your existing AI tool subscription.
 | [CURRENT_FUNCTIONALITY.md](docs/CURRENT_FUNCTIONALITY.md) | Plain-English summary of everything in v1 |
 | [FEATURES_ROADMAP.md](docs/FEATURES_ROADMAP.md) | Post-v1 backlog |
 | [setup_instruction.md](docs/setup_instruction.md) | CDN setup walkthrough (Cloudflare R2, Vercel Blob, local) |
+| [UPDATE_GUIDE.md](docs/UPDATE_GUIDE.md) | How to update your site to a new template version |
 | [SETUP_GUIDE.md](SETUP_GUIDE.md) | Non-technical user guide (content/ operations only) |
 
 ## Tech stack
