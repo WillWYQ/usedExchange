@@ -79,4 +79,7 @@ export const EN_FALLBACK: UIStrings = {
   obo: "OBO",
   hidePricingTiers: "Hide pricing tiers",
   viewAllPricingTiers: "View all pricing tiers",
+
+  menuOpen: "Open menu",
+  menuClose: "Close menu",
 };

@@ -212,6 +212,10 @@ export const siteConfig: SiteConfig = {
         obo: "OBO",
         hidePricingTiers: "Hide pricing tiers",
         viewAllPricingTiers: "View all pricing tiers",
+
+        // ── Mobile nav drawer ────────────────────────────────────────────────
+        menuOpen: "Open menu",
+        menuClose: "Close menu",
       },
 
       // ── Add other locales below ────────────────────────────────────────────
@@ -285,6 +289,8 @@ export const siteConfig: SiteConfig = {
       //   obo: "可議價",
       //   hidePricingTiers: "隱藏費率",
       //   viewAllPricingTiers: "查看所有費率",
+      //   menuOpen: "開啟選單",
+      //   menuClose: "關閉選單",
       // },
     },
   },

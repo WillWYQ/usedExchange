@@ -38,6 +38,7 @@ const REQUIRED_KEYS: (keyof UIStrings)[] = [
   "contactForPrice", "contactForPricingShort",
   "pricingLabelHeader", "pricingDistanceHeader", "pricingPriceHeader",
   "pickup", "obo", "hidePricingTiers", "viewAllPricingTiers",
+  "menuOpen", "menuClose",
 ];
 
 function main(): void {

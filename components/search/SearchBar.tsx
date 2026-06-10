@@ -61,7 +61,7 @@ export function SearchBar() {
         aria-controls="search-results"
         aria-autocomplete="list"
         autoComplete="off"
-        className="w-40 rounded-full border border-foreground/20 bg-foreground/5 px-3 py-1 text-sm text-foreground placeholder-foreground/40 outline-none transition-all focus:w-56 focus:border-foreground/40 focus:bg-foreground/10 focus-visible:ring-1 focus-visible:ring-foreground/50 sm:w-48 sm:focus:w-64"
+        className="w-full rounded-full border border-foreground/20 bg-foreground/5 px-3 py-2.5 text-base text-foreground placeholder-foreground/40 outline-none transition-all focus:border-foreground/40 focus:bg-foreground/10 focus-visible:ring-1 focus-visible:ring-foreground/50 md:w-48 md:py-1 md:text-sm md:focus:w-64"
       />
 
       {showDropdown && (
@@ -69,7 +69,7 @@ export function SearchBar() {
           id="search-results"
           role="listbox"
           aria-label="Search results"
-          className="absolute right-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-xl border border-foreground/10 bg-background/95 shadow-2xl backdrop-blur-md"
+          className="absolute right-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl border border-foreground/10 bg-background/95 shadow-2xl backdrop-blur-md sm:w-72"
         >
           {results.length === 0 ? (
             <li className="px-4 py-3 text-sm text-foreground/40">No results found</li>

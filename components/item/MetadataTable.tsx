@@ -64,7 +64,7 @@ export function MetadataTable({ item }: MetadataTableProps) {
           className="flex items-baseline justify-between gap-4 py-2.5 text-sm"
         >
           <dt className="shrink-0 text-foreground/50">{row.label}</dt>
-          <dd className="text-right text-foreground/90">
+          <dd className="break-words text-right text-foreground/90">
             {row.href ? (
               <a
                 href={row.href}

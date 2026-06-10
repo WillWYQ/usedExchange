@@ -197,4 +197,8 @@ export type UIStrings = {
   obo: string;
   hidePricingTiers: string;
   viewAllPricingTiers: string;
+
+  // Mobile nav drawer
+  menuOpen: string;
+  menuClose: string;
 };
