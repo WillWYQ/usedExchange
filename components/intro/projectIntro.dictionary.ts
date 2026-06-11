@@ -120,9 +120,11 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       "From a fresh clone to a published listing — no code, just a few commands.",
     getStartedTitle: "Make it your own",
     getStartedSteps: [
-      "Fork or clone the repository and install dependencies.",
-      "Describe your store to the /setup skill, or edit content/config.ts by hand — name, location, currency, contact details, and the four UI slots above.",
-      "Add your first listings to content/items/, then build and deploy the static output to GitHub Pages (or any static host).",
+      "Clone the repository, then run pnpm install and pnpm setup-ui (installs the 27 UI components, once).",
+      "Run the /setup skill in Claude Code, or edit content/config.ts by hand — name, location, currency, contact details, and the four UI slots above.",
+      "Before going live: enable GitHub Pages (Settings → Pages → Source → GitHub Actions) and set up photo hosting — see the CDN setup guide in docs/setup_instruction.md.",
+      "Add your first listings to content/items/ — generate them with /update-items from photos, or write item.json by hand — then run pnpm upload-images and push to the release branch.",
+      "Later, pull template updates from the source repo using docs/UPDATE_GUIDE.md without losing anything in your content/ folder.",
     ],
   },
   zh: {
@@ -209,9 +211,11 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     workflowCaption: "从克隆仓库到发布商品——全程无需写代码，只需几条命令。",
     getStartedTitle: "把它变成你自己的商店",
     getStartedSteps: [
-      "复刻或克隆这个仓库，并安装依赖。",
-      "向 /setup 技能描述你的商店，或者手动编辑 content/config.ts——填写名称、所在地、货币、联系方式，以及上面提到的四个 UI 插槽。",
-      "把你的第一批商品添加到 content/items/，然后构建并将静态产物部署到 GitHub Pages（或任意静态托管平台）。",
+      "克隆仓库后运行 pnpm install 和 pnpm setup-ui（一次性安装 27 个 UI 组件）。",
+      "在 Claude Code 中运行 /setup 技能，或手动编辑 content/config.ts——填写名称、所在地、货币、联系方式，以及上面提到的四个 UI 插槽。",
+      "上线前：开启 GitHub Pages（Settings → Pages → Source → GitHub Actions），并配置照片托管——参见 docs/setup_instruction.md 中的 CDN 配置指南。",
+      "把第一批商品添加到 content/items/——可用 /update-items 从照片生成，也可手动编写 item.json——然后运行 pnpm upload-images 并推送到 release 分支。",
+      "之后可参照 docs/UPDATE_GUIDE.md 从源仓库拉取模板更新，content/ 文件夹中的内容不会受影响。",
     ],
   },
   fr: {
@@ -300,9 +304,11 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       "Du clonage du dépôt à la publication d'une annonce — sans code, juste quelques commandes.",
     getStartedTitle: "Faites-en votre propre boutique",
     getStartedSteps: [
-      "Clonez le dépôt et installez les dépendances.",
-      "Décrivez votre boutique à la compétence /setup, ou modifiez content/config.ts à la main : nom, localisation, devise, coordonnées de contact, et les quatre emplacements d'interface ci-dessus.",
-      "Ajoutez vos premières annonces dans content/items/, puis construisez et déployez le résultat statique sur GitHub Pages (ou tout autre hébergeur statique).",
+      "Clonez le dépôt, puis exécutez pnpm install et pnpm setup-ui (installe les 27 composants d'interface, une seule fois).",
+      "Exécutez la compétence /setup dans Claude Code, ou modifiez content/config.ts à la main : nom, localisation, devise, coordonnées de contact, et les quatre emplacements d'interface ci-dessus.",
+      "Avant la mise en ligne : activez GitHub Pages (Settings → Pages → Source → GitHub Actions) et configurez l'hébergement des photos — voir le guide CDN dans docs/setup_instruction.md.",
+      "Ajoutez vos premières annonces dans content/items/ — générez-les avec /update-items à partir de photos, ou écrivez item.json à la main — puis exécutez pnpm upload-images et poussez vers la branche release.",
+      "Plus tard, récupérez les mises à jour du modèle depuis le dépôt source en suivant docs/UPDATE_GUIDE.md, sans rien perdre de votre dossier content/.",
     ],
   },
   es: {
@@ -391,9 +397,11 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       "Desde clonar el repositorio hasta publicar un anuncio — sin código, solo unos pocos comandos.",
     getStartedTitle: "Haz que sea tuya",
     getStartedSteps: [
-      "Bifurca o clona el repositorio e instala las dependencias.",
-      "Describe tu tienda a la habilidad /setup, o edita content/config.ts a mano: nombre, ubicación, moneda, datos de contacto y los cuatro espacios de interfaz mencionados arriba.",
-      "Añade tus primeros artículos en content/items/, luego compila y despliega el resultado estático en GitHub Pages (o cualquier alojamiento estático).",
+      "Clona el repositorio y luego ejecuta pnpm install y pnpm setup-ui (instala los 27 componentes de interfaz, una sola vez).",
+      "Ejecuta la habilidad /setup en Claude Code, o edita content/config.ts a mano: nombre, ubicación, moneda, datos de contacto y los cuatro espacios de interfaz mencionados arriba.",
+      "Antes de publicar: activa GitHub Pages (Settings → Pages → Source → GitHub Actions) y configura el alojamiento de fotos — consulta la guía de CDN en docs/setup_instruction.md.",
+      "Añade tus primeros artículos en content/items/ — genéralos con /update-items a partir de fotos, o escribe item.json a mano — luego ejecuta pnpm upload-images y haz push a la rama release.",
+      "Más adelante, obtén las actualizaciones de la plantilla desde el repositorio original siguiendo docs/UPDATE_GUIDE.md, sin perder nada de tu carpeta content/.",
     ],
   },
   ja: {
@@ -482,9 +490,11 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       "リポジトリをクローンしてから出品を公開するまで——コードを書く必要はなく、いくつかのコマンドだけです。",
     getStartedTitle: "自分だけのストアにする",
     getStartedSteps: [
-      "リポジトリをフォークまたはクローンし、依存関係をインストールします。",
-      "/setup スキルにストアの内容を伝えるか、content/config.ts を直接編集します——名前、所在地、通貨、連絡先、そして上記の4つの UI スロットなど。",
-      "最初の出品を content/items/ に追加し、ビルドした静的ファイルを GitHub Pages（または任意の静的ホスティング）にデプロイします。",
+      "リポジトリをクローンし、pnpm install と pnpm setup-ui（27個のUIコンポーネントを一度だけインストール）を実行します。",
+      "Claude Code で /setup スキルを実行するか、content/config.ts を直接編集します——名前、所在地、通貨、連絡先、そして上記の4つの UI スロット。",
+      "公開前に：GitHub Pages を有効化し（Settings → Pages → Source → GitHub Actions）、写真のホスティングを設定します——docs/setup_instruction.md の CDN 設定ガイドを参照してください。",
+      "最初の出品を content/items/ に追加します——/update-items で写真から生成するか、item.json を手動で作成し——その後 pnpm upload-images を実行して release ブランチに push します。",
+      "その後は docs/UPDATE_GUIDE.md に従って元リポジトリからテンプレートの更新を取り込めます。content/ フォルダの内容は失われません。",
     ],
   },
   ko: {
@@ -573,9 +583,11 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       "저장소를 클론하는 것부터 상품을 게시하는 것까지 — 코드 작성 없이 몇 가지 명령어만으로.",
     getStartedTitle: "나만의 스토어로 만들기",
     getStartedSteps: [
-      "저장소를 포크하거나 클론한 뒤 의존성을 설치하세요.",
-      "/setup 스킬에 스토어를 설명하거나 content/config.ts를 직접 편집하세요 — 이름, 위치, 통화, 연락처 정보, 그리고 위에서 설명한 네 가지 UI 슬롯 등을 포함합니다.",
-      "첫 상품들을 content/items/에 추가한 뒤, 정적 결과물을 빌드하여 GitHub Pages(또는 다른 정적 호스팅)에 배포하세요.",
+      "저장소를 클론한 뒤 pnpm install과 pnpm setup-ui(27개 UI 컴포넌트를 한 번만 설치)를 실행하세요.",
+      "Claude Code에서 /setup 스킬을 실행하거나 content/config.ts를 직접 편집하세요 — 이름, 위치, 통화, 연락처 정보, 그리고 위에서 설명한 네 가지 UI 슬롯.",
+      "공개하기 전: GitHub Pages를 활성화하고(Settings → Pages → Source → GitHub Actions), 사진 호스팅을 설정하세요 — docs/setup_instruction.md의 CDN 설정 가이드를 참고하세요.",
+      "첫 상품들을 content/items/에 추가하세요 — /update-items로 사진에서 생성하거나 item.json을 직접 작성한 뒤 — pnpm upload-images를 실행하고 release 브랜치로 push하세요.",
+      "이후에는 docs/UPDATE_GUIDE.md를 참고하여 원본 저장소에서 템플릿 업데이트를 받아올 수 있습니다. content/ 폴더의 내용은 그대로 유지됩니다.",
     ],
   },
 };

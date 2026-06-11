@@ -271,7 +271,7 @@ Batch-translates item listings into additional locales. After adding a locale, i
 
 ```
 1. Add the locale code to siteConfig.i18n.availableLocales  (e.g. ["en", "zh"])
-2. Add a translations.{locale} block to content/config.ts with all 67 UI string keys translated
+2. Add a translations.{locale} block to content/config.ts with all 71 UI string keys translated
 3. Open Claude Code (or similar AI tool) in the project directory
 4. Type: /translate-items   (or "translate my items into zh")
 5. Review the proposed translations shown per item
@@ -280,7 +280,7 @@ Batch-translates item listings into additional locales. After adding a locale, i
 
 Translates `name` → `name_{locale}` and `description` → `description_{locale}` only; preserves brand, model, tags, prices, dates, and all Markdown syntax verbatim. Skips items that already have a non-empty translation. Writes only to `content/items/*/item.json`.
 
-> **Note:** `/translate-items` handles item-level translations only. The `translations.{locale}` UI strings block (buttons, badges, headers — 67 keys) must be filled in manually in `content/config.ts` before running this skill.
+> **Note:** `/translate-items` handles item-level translations only. The `translations.{locale}` UI strings block (buttons, badges, headers — 71 keys) must be filled in manually in `content/config.ts` before running this skill.
 
 ### No API Key Required
 
@@ -294,7 +294,7 @@ Visitors can read listings in more than one language and switch on the fly.
 
 - **For visitors:** a language toggle (`LocaleSwitcher`) appears in the site header whenever more than one locale is configured. Switching language instantly updates item names, descriptions, and all UI labels (buttons, badges, headers) — no page reload. The choice is remembered in the browser (`localStorage`) across pages and visits.
 - **For sellers:** two steps to add a language:
-  1. Add the locale code to `siteConfig.i18n.availableLocales` (e.g. `["en", "zh"]`) **and** add a `translations.{locale}` block in `content/config.ts` with all 67 UI string keys translated. The build fails if this block is missing or incomplete.
+  1. Add the locale code to `siteConfig.i18n.availableLocales` (e.g. `["en", "zh"]`) **and** add a `translations.{locale}` block in `content/config.ts` with all 71 UI string keys translated. The build fails if this block is missing or incomplete.
   2. Fill in `name_zh` / `description_zh` on each item — by hand or with the `/translate-items` AI skill.
 - **Graceful fallback:** any item without a translation shows the default language — never a blank or an error. Any missing UI string key falls back to the built-in English default.
 - **Single deployment:** all languages ship in one build; there are no separate per-language sites.
@@ -365,11 +365,11 @@ Set any option in `content/config.ts`. All 27 Aceternity components are pre-inst
 | Hero | `hero.cta_label`, `hero.cta_href` |
 | SEO | `meta.description`, `meta.twitterHandle` |
 | UI slots | `ui.background`, `ui.itemGrid`, `ui.gallery`, `ui.itemCard` |
-| Dark mode | `darkMode: "media"` (auto, follows OS) |
+| Dark mode | Header toggle (light/dark/system, persisted via `next-themes`); the `darkMode` config field is legacy and unused |
 | Analytics | `analytics.vercel`, `analytics.speedInsights` |
 | Search | `search.enabled`, `search.placeholder` |
 | Sitemap | `sitemap.enabled` |
-| i18n | `i18n.defaultLocale`, `i18n.availableLocales`, `i18n.showLocaleSwitcher`, `i18n.translations.{locale}.*` (67 UI string keys) |
+| i18n | `i18n.defaultLocale`, `i18n.availableLocales`, `i18n.showLocaleSwitcher`, `i18n.translations.{locale}.*` (71 UI string keys) |
 
 ---
 
@@ -406,7 +406,7 @@ Photos copied locally → dev server with hot reload.
 
 ## Dark Mode
 
-Automatic — follows the visitor's OS/browser dark/light preference via Tailwind v4's default `prefers-color-scheme` behaviour (no `darkMode` directive needed). No toggle needed; no user action required. All Aceternity components are dark-mode aware.
+A sun/moon toggle in the site header (`ThemeToggle`) lets visitors switch between light and dark themes. It defaults to the visitor's OS/browser preference (`system`) and persists an explicit choice via `next-themes` (class-based switching, stored in `localStorage`). All Aceternity components are dark-mode aware. The `darkMode` field in `content/config.ts` is legacy and no longer read by the app.
 
 ---
 

@@ -15,6 +15,8 @@ Two one-time steps before your site goes live:
 1. **Enable GitHub Pages** — go to your repository on GitHub → **Settings → Pages → Source → set to "GitHub Actions"**. Without this, pushes will build but never publish.
 2. **Set up image hosting** — follow the [CDN setup guide](docs/setup_instruction.md) to configure where photos are stored (Cloudflare R2 recommended for GitHub Pages).
 
+> **Note:** the deploy workflow ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)) only runs on pushes to the **`release`** branch (the branch you get when following [UPDATE_GUIDE.md](docs/UPDATE_GUIDE.md)). Do your seller work on `release` — pushes to other branches build in CI but won't publish.
+
 ---
 
 ## How it works

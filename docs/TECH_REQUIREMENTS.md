@@ -1556,7 +1556,7 @@ The sitemap only generates when `siteConfig.sitemap.enabled === true`. The `post
 
 | Layer | What it covers | Where it lives | Who fills it |
 |---|---|---|---|
-| **UI strings** | All 67 button/label/badge/header strings | `content/config.ts` → `i18n.translations.{locale}` | Seller (via `/setup` or manual edit) |
+| **UI strings** | All 71 button/label/badge/header strings | `content/config.ts` → `i18n.translations.{locale}` | Seller (via `/setup` or manual edit) |
 | **Item content** | `name` and `description` per item | `content/items/**/item.json` → `name_{locale}`, `description_{locale}` | `/translate-items` AI skill or manual edit |
 
 ### SiteConfig i18n type (`lib/config/types.ts`)
@@ -1570,7 +1570,7 @@ export type I18nConfig = {
 };
 ```
 
-### `UIStrings` type (67 keys, `lib/config/types.ts`)
+### `UIStrings` type (71 keys, `lib/config/types.ts`)
 
 Covers every visible UI label: navigation links, section headings, contact labels, offer form, share button, metadata table headers, condition/status badges, filter/sort options, freshness label, page banners, condition guide descriptions, location bar strings, pricing table headers.
 
@@ -1601,7 +1601,7 @@ useT() hook     — returns the active locale's UIStrings dict (merged: EN_FALLB
 
 ```ts
 // lib/i18n/translations.ts
-// EN_FALLBACK: UIStrings — built-in English default for all 67 keys.
+// EN_FALLBACK: UIStrings — built-in English default for all 71 keys.
 // Used by both useT() (client) and getTranslations() (server) as the safety net.
 
 // lib/i18n/getTranslations.ts
@@ -1636,12 +1636,12 @@ Server-only surfaces (`generateMetadata`, `<title>`, OG tags, JSON-LD) call `get
 
 ### Build-time completeness enforcement
 
-`scripts/check-config.ts` validates on every build that every locale in `availableLocales` has a `translations` entry with all 67 required keys. Build fails with a descriptive error if any locale is missing or incomplete — prevents silent English fallback.
+`scripts/check-config.ts` validates on every build that every locale in `availableLocales` has a `translations` entry with all 71 required keys. Build fails with a descriptive error if any locale is missing or incomplete — prevents silent English fallback.
 
 ### Adding a new locale
 
 1. Add the locale code to `siteConfig.i18n.availableLocales` in `content/config.ts`.
-2. Add a `translations.{locale}` block with all 67 `UIStrings` keys translated.
+2. Add a `translations.{locale}` block with all 71 `UIStrings` keys translated.
 3. Add `name_{locale}` and `description_{locale}` to the Zod schema (`lib/content/schema.ts`) and `Item` type (`lib/content/types.ts`) — mirrors the existing `name_zh` / `description_zh` pattern.
 4. Run `/translate-items` AI skill to batch-fill `name_{locale}` / `description_{locale}` on each `item.json`, or add them manually.
 5. `LocaleSwitcher` appears automatically once `availableLocales.length > 1`.

@@ -15,6 +15,8 @@
 1. **开启 GitHub Pages** — 在 GitHub 仓库页面进入 **Settings → Pages → Source → 选择 "GitHub Actions"**。不做这一步，代码推送后会构建但不会发布。
 2. **配置图片存储** — 参照 [CDN 配置指南](docs/setup_instruction_zh.md) 设置照片托管服务（GitHub Pages 推荐使用 Cloudflare R2）。
 
+> **提示：** 部署工作流（[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)）只在推送到 **`release`** 分支时运行（按照 [UPDATE_GUIDE_zh.md](docs/UPDATE_GUIDE_zh.md) 操作后会得到这个分支）。请在 `release` 分支上进行卖家相关操作——推送到其他分支虽然会触发 CI 构建，但不会发布上线。
+
 ---
 
 ## 工作原理

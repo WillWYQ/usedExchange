@@ -976,7 +976,7 @@ if (siteConfig.sitemap.enabled) {
 
 | 层 | 覆盖内容 | 存储位置 | 填写者 |
 |---|---|---|---|
-| **UI 字符串** | 全部 67 个按钮/标签/徽章/标题文本 | `content/config.ts` → `i18n.translations.{locale}` | 卖家（通过 `/setup` 或手动编辑） |
+| **UI 字符串** | 全部 71 个按钮/标签/徽章/标题文本 | `content/config.ts` → `i18n.translations.{locale}` | 卖家（通过 `/setup` 或手动编辑） |
 | **物品内容** | 每件物品的 `name` 和 `description` | `content/items/**/item.json` → `name_{locale}`、`description_{locale}` | `/translate-items` AI 技能或手动编辑 |
 
 **SiteConfig i18n 类型（`lib/config/types.ts`）：**
@@ -990,7 +990,7 @@ export type I18nConfig = {
 };
 ```
 
-**`UIStrings` 类型（67 个键，`lib/config/types.ts`）：**
+**`UIStrings` 类型（71 个键，`lib/config/types.ts`）：**
 
 涵盖所有可见 UI 标签：导航链接、板块标题、联系标签、出价表单、分享按钮、元数据表头、成色/状态徽章、筛选/排序选项、新鲜度标签、页面横幅、成色说明、位置栏文本、定价表头。
 
@@ -1020,7 +1020,7 @@ useT() hook     — 返回当前语区的 UIStrings 字典（合并顺序：EN_F
 
 ```ts
 // lib/i18n/translations.ts
-// EN_FALLBACK: UIStrings — 所有 67 个键的内置英文默认值
+// EN_FALLBACK: UIStrings — 所有 71 个键的内置英文默认值
 // 被 useT()（客户端）和 getTranslations()（服务端）用作安全兜底
 
 // lib/i18n/getTranslations.ts
@@ -1053,12 +1053,12 @@ export function getLocalizedField(
 
 **构建时完整性校验：**
 
-`scripts/check-config.ts` 在每次构建时验证 `availableLocales` 中的每个语区都有包含全部 67 个必需键的 `translations` 条目。如有语区缺失或不完整，构建将以描述性错误信息失败。
+`scripts/check-config.ts` 在每次构建时验证 `availableLocales` 中的每个语区都有包含全部 71 个必需键的 `translations` 条目。如有语区缺失或不完整，构建将以描述性错误信息失败。
 
 **添加新语区步骤：**
 
 1. 将语区代码加入 `content/config.ts` 的 `siteConfig.i18n.availableLocales`。
-2. 添加包含全部 67 个 `UIStrings` 键（已翻译）的 `translations.{locale}` 块。
+2. 添加包含全部 71 个 `UIStrings` 键（已翻译）的 `translations.{locale}` 块。
 3. 在 Zod schema（`lib/content/schema.ts`）和 `Item` 类型（`lib/content/types.ts`）中添加 `name_{locale}` 和 `description_{locale}`——与现有的 `name_zh` / `description_zh` 模式相同。
 4. 运行 `/translate-items` AI 技能批量填充各 `item.json` 中的 `name_{locale}` / `description_{locale}`，或手动添加。
 5. `availableLocales.length > 1` 时，`LocaleSwitcher` 自动出现。
