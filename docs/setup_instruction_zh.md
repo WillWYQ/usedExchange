@@ -168,6 +168,9 @@ pnpm upload-images
 pnpm push
 ```
 
+> 🔒 `pnpm upload-images` 会在每张新增或变更的照片上传前，自动剥离其
+> EXIF/GPS 元数据（包括拍摄地点），详见下方"照片隐私"。
+
 ### 本地开发
 
 ```bash
@@ -218,11 +221,25 @@ pnpm build
 | 图片超过 8 MB | 文件过大 | 上传前将图片缩小至最大宽度 2000px |
 | 未找到 `cover.*` | 物品文件夹没有封面图片 | 将主缩略图命名为 `cover.jpg` |
 | 未找到任何图片 | 物品文件夹没有照片 | 上架前至少添加一张照片 |
-| 图片宽度不足 800px（需要 `sharp`） | 照片分辨率过低 | 使用更高质量的照片 |
+| 图片宽度不足 800px | 照片分辨率过低 | 使用更高质量的照片 |
 
-如需启用宽度检查，安装 `sharp`：
-```bash
-pnpm add -D sharp
+---
+
+## 照片隐私：自动剥离 EXIF/GPS 元数据
+
+手机相机会在照片中嵌入 EXIF 元数据——包括拍摄地点的 GPS 坐标。每次运行
+`pnpm upload-images` 时，任何新增或变更的 JPEG/PNG/WebP 照片在离开你的电脑
+之前，都会自动通过 `sharp`（`lib/images/stripMetadata.ts`）重新编码：
+
+- 照片的显示方向保持不变（依旧正向显示）。
+- 所有 EXIF/IPTC/XMP 元数据——包括 GPS 位置——都会被移除。
+- GIF 会原样上传（GIF 没有 EXIF 数据，重新编码会破坏动图）。
+
+此处理只影响上传到 CDN 的副本，`content/items/` 中的原始文件不会被修改。
+每次上传后的汇总行会报告处理了多少张照片，例如：
+
+```
+🔒 stripped EXIF/GPS metadata from 3/3 uploaded image(s)
 ```
 
 ---

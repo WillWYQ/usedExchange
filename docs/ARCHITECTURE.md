@@ -261,7 +261,9 @@ canEstimateShipping(shipping, weight, dimensions, resolvedTier): boolean
 | `VercelBlobAdapter` | `"vercel-blob"` | `lib/images/vercel-blob.ts` |
 | `LocalAdapter` | `"local"` | `lib/images/local.ts` |
 
-`scripts/sync-images.ts` instantiates the correct adapter at runtime based on `siteConfig.imageStorage.provider`. All three implement `syncImage(sourcePath, manifestKey, checksum)` and an incremental skip mechanism via `loadChecksums` / `getUpdatedChecksums`.
+`scripts/sync-images.ts` instantiates the correct adapter at runtime based on `siteConfig.imageStorage.provider`. All three implement `syncImage(sourcePath, manifestKey, checksum, body?)` and an incremental skip mechanism via `loadChecksums` / `getUpdatedChecksums`.
+
+**`lib/images/stripMetadata.ts`** — `stripImageMetadata(input: Buffer, ext: string): Promise<Buffer>`. Used by `runUpload()` in `scripts/sync-images.ts` to re-encode every new/changed JPEG, PNG, and WebP via `sharp` before upload, dropping all EXIF/IPTC/XMP metadata (including GPS coordinates) while applying the EXIF orientation tag so the image still displays right-side-up. The resulting buffer is passed as the optional `body` argument to `syncImage`, which adapters use instead of reading `sourcePath` directly. GIFs pass through unchanged (no EXIF segment; re-encoding would collapse animation).
 
 ### `lib/utils/concurrency.ts`
 

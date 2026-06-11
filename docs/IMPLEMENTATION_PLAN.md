@@ -139,6 +139,7 @@
 - [x] Write `scripts/mark-sold.ts` — reads `content/items/<cat>/<name>/item.json`, sets `status: "sold"` and `sold_date: today (ISO 8601)`, writes file in place; exits 1 with a clear error if the item path does not exist (TECH_REQUIREMENTS.md §22.3)
 - [x] Write `scripts/create-item.ts` — creates `content/items/<category>/<name>/` folder and `item.json` from template; opens in `$EDITOR` if set; validates category exists (TECH_REQUIREMENTS.md §22.3)
 - [x] Write `scripts/create-template.ts` — creates `content/items/<category>/_template.json` or global `content/items/_template.json` without an argument (TECH_REQUIREMENTS.md §22.3)
+- [x] Extract `scripts/lib/itemTemplate.ts` (`buildItemTemplate()`) as the single source of truth for the scaffold, used by both `create-item.ts` and `create-template.ts` — covers all 38 fields from DESIGN.md §5 (except `reserved_for`), with `dimensions`/`weight` written as empty placeholder structures (`{ length: null, width: null, height: null, unit: "cm" }` / `{ value: null, unit: "kg" }`) that coerce to `null` via the existing Zod `.catch(null)` logic if left unfilled
 - [x] Verify loader returns correct data for sample items
 
 ### Acceptance Criteria
@@ -172,6 +173,7 @@ DESIGN.md §4, §5, §6, §8, §11 · TECH_REQUIREMENTS.md §6, §7, §8
 - [x] Implement `--mode dev-sync`: copy to `public/items/`, copy contact/, graceful if `content/items/` missing
 - [x] Implement `--mode build-check`: local provider → copy locally; cloud provider → verify manifest exists, warn if missing; always copy contact/
 - [x] Update `next.config.ts` to add Vercel Blob / R2 remote patterns (TECH_REQUIREMENTS.md §4) — completed in Phase 0
+- [x] Write `lib/images/stripMetadata.ts` (`sharp`, required devDependency) — strip EXIF/IPTC/XMP (incl. GPS) from new/changed JPEG/PNG/WebP before `--mode upload`; auto-rotate via `.rotate()` first so orientation is preserved; GIFs pass through unchanged. `--mode dev-sync`/`build-check` are unaffected (local copies keep original bytes).
 
 #### 4d — Integration Test
 - [x] `pnpm dev` → sample images appear at `/items/houseware/item/cover.jpg`

@@ -137,6 +137,26 @@ export function SiteFooter() {
       <p className="text-center text-xs">
         {siteConfig.name} &middot; Last updated {buildDate}
       </p>
+      <p className="text-center text-xs text-foreground/35">
+        Built with{" "}
+        <a
+          href={REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-foreground/55 underline-offset-2 hover:underline"
+        >
+          UsedExchange
+        </a>
+        {" "}— a free template on GitHub. Statically-generated personal storefront for listing second-hand items. No database, no CMS — content lives entirely in one folder.{" "}
+        <a
+          href={REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-foreground/55 underline-offset-2 hover:underline"
+        >
+          Use it today
+        </a>
+      </p>
     </footer>
   );
 }

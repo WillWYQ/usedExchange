@@ -81,6 +81,7 @@ export class CloudflareR2Adapter implements ImageStorageAdapter {
     sourcePath: string,
     manifestKey: string,
     checksum: string,
+    body?: Buffer,
   ): Promise<string> {
     const cdnUrl = `${this.publicUrl}/${manifestKey}`;
 
@@ -89,13 +90,13 @@ export class CloudflareR2Adapter implements ImageStorageAdapter {
       return cdnUrl;
     }
 
-    const body = await readFile(sourcePath);
+    const fileBody = body ?? (await readFile(sourcePath));
 
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: manifestKey,
-        Body: body,
+        Body: fileBody,
         ContentType: resolveContentType(sourcePath),
         // Cache-Control: aggressive caching since content-addressed by SHA-256
         CacheControl: "public, max-age=31536000, immutable",

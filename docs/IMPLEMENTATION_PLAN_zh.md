@@ -138,6 +138,7 @@
 - [x] 编写 `scripts/mark-sold.ts`
 - [x] 编写 `scripts/create-item.ts`
 - [x] 编写 `scripts/create-template.ts`
+- [x] 提取 `scripts/lib/itemTemplate.ts`（`buildItemTemplate()`）作为脚手架的唯一数据源，供 `create-item.ts` 和 `create-template.ts` 共用——覆盖 DESIGN.md §5 中全部 38 个字段（`reserved_for` 除外），其中 `dimensions`/`weight` 写入空结构占位符（`{ length: null, width: null, height: null, unit: "cm" }` / `{ value: null, unit: "kg" }`），未填写时通过现有的 Zod `.catch(null)` 逻辑自动归一为 `null`
 - [x] 验证加载器为示例物品返回正确数据
 
 ### 验收标准
@@ -168,6 +169,7 @@
 - [x] 实现 `--mode dev-sync`：复制到 `public/items/`，复制 contact/，content/items/ 缺失时优雅处理
 - [x] 实现 `--mode build-check`：本地提供商 → 本地复制；云提供商 → 验证清单存在；始终复制 contact/
 - [x] 更新 `next.config.ts` 添加 Vercel Blob / R2 远程模式（Phase 0 已完成）
+- [x] 编写 `lib/images/stripMetadata.ts`（`sharp`，已提升为必需 devDependency）——在 `--mode upload` 中对新增/变更的 JPEG/PNG/WebP 剥离 EXIF/IPTC/XMP 元数据（含 GPS 位置）；先通过 `.rotate()` 自动旋正方向以保留显示效果；GIF 原样透传。`--mode dev-sync`/`build-check` 不受影响（本地复制保留原始字节）
 
 #### 4d — 集成测试
 - [x] `pnpm dev` → 示例图片出现在 `/items/houseware/item/cover.jpg`

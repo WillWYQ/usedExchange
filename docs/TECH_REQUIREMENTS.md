@@ -65,6 +65,7 @@ Aceternity components are installed individually via their CLI. The following pa
 | `prettier-plugin-tailwindcss` | `^0.6.0` | Sorts Tailwind classes automatically |
 | `tsx` | `^4.15.0` | Runs `scripts/sync-images.ts` and other scripts without a separate compile step |
 | `next-sitemap` | `^4.2.0` | Generates `sitemap.xml` + `robots.txt` in `postbuild` |
+| `sharp` | `^0.33.0` | Strips EXIF/GPS metadata from images before upload (`lib/images/stripMetadata.ts`) and provides image-width quality checks in `scripts/sync-images.ts` |
 
 ### 2.4 Image Storage Provider Dependencies
 
@@ -89,14 +90,6 @@ pnpm add -D @vercel/blob
 ### 2.5 Image Storage — Vercel devDependency Note
 
 > ⚠️ `@vercel/blob`, `@aws-sdk/client-s3`, and `tsx` are listed as **devDependencies**. Vercel installs devDependencies by default during the build step. If you have customised the install command (e.g., `pnpm install --prod`), the `prebuild` script will fail. Ensure Vercel's install command does **not** skip devDependencies.
-
-### 2.6 Optional / Future Dependencies
-
-These are not installed in v1 but are the designated choices when the extension points in DESIGN.md §19 are implemented:
-
-| Package | Feature | Extension point |
-|---|---|---|
-| `sharp` | Pre-upload image resizing/optimisation | Optional `preprocess` step in `scripts/sync-images.ts --mode upload` |
 
 ---
 

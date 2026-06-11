@@ -1,4 +1,4 @@
-import { mkdir, stat, copyFile } from "fs/promises";
+import { mkdir, stat, copyFile, writeFile } from "fs/promises";
 import path from "path";
 import type { ImageStorageAdapter } from "./adapter";
 
@@ -49,9 +49,15 @@ export class LocalAdapter implements ImageStorageAdapter {
     sourcePath: string,
     manifestKey: string,
     _checksum: string,
+    body?: Buffer,
   ): Promise<string> {
     const destPath = path.join(PUBLIC_ITEMS, manifestKey);
-    await copyIfChanged(sourcePath, destPath);
+    if (body) {
+      await mkdir(path.dirname(destPath), { recursive: true });
+      await writeFile(destPath, body);
+    } else {
+      await copyIfChanged(sourcePath, destPath);
+    }
     return `/items/${manifestKey}`;
   }
 }

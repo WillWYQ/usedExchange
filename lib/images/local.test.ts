@@ -4,11 +4,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockStat = vi.fn();
 const mockMkdir = vi.fn().mockResolvedValue(undefined);
 const mockCopyFile = vi.fn().mockResolvedValue(undefined);
+const mockWriteFile = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("fs/promises", () => ({
   stat: mockStat,
   mkdir: mockMkdir,
   copyFile: mockCopyFile,
+  writeFile: mockWriteFile,
 }));
 
 // Import after mock setup.
@@ -68,6 +70,15 @@ describe("LocalAdapter.syncImage", () => {
       .mockResolvedValueOnce({ size: 999, mtimeMs: 1_700_000_000 }); // dst newer
     await adapter.syncImage(SRC, KEY, "sha256abc");
     expect(mockCopyFile).toHaveBeenCalledOnce();
+  });
+
+  it("writes the provided body buffer directly when given, without copying the source", async () => {
+    const body = Buffer.from("stripped-bytes");
+    const url = await adapter.syncImage(SRC, KEY, "sha256abc", body);
+    expect(mockWriteFile).toHaveBeenCalledWith(expect.any(String), body);
+    expect(mockCopyFile).not.toHaveBeenCalled();
+    expect(mockStat).not.toHaveBeenCalled();
+    expect(url).toBe(`/items/${KEY}`);
   });
 
   it("loadChecksums and getUpdatedChecksums are no-ops (local adapter uses mtime)", () => {

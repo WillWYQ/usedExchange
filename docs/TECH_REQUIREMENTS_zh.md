@@ -63,6 +63,7 @@ Aceternity 组件通过其 CLI 单独安装。以下包大多数组件需要：
 | `prettier-plugin-tailwindcss` | `^0.6.0` | 自动排序 Tailwind class |
 | `tsx` | `^4.15.0` | 无需单独编译步骤运行 TypeScript 脚本 |
 | `next-sitemap` | `^4.2.0` | 在 `postbuild` 中生成 `sitemap.xml` + `robots.txt` |
+| `sharp` | `^0.33.0` | 上传前剥离图片 EXIF/GPS 元数据（`lib/images/stripMetadata.ts`），并为 `scripts/sync-images.ts` 提供图片宽度质量检查 |
 
 ### 2.4 图片存储提供商依赖
 

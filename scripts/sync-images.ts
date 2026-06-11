@@ -11,9 +11,11 @@ import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
 import crypto from "crypto";
+import sharp from "sharp";
 import { siteConfig } from "@/content/config";
 import type { ImageStorageAdapter } from "@/lib/images/adapter";
 import { copyIfChanged } from "@/lib/images/local";
+import { stripImageMetadata } from "@/lib/images/stripMetadata";
 import { mapWithConcurrency } from "@/lib/utils/concurrency";
 
 // ── Paths ─────────────────────────────────────────────────────────────────────
@@ -156,13 +158,7 @@ async function createAdapter(): Promise<ImageStorageAdapter> {
 
 async function tryGetImageWidth(sourcePath: string): Promise<number | null> {
   try {
-    // sharp is an optional dependency; if not installed, width check is skipped silently.
-    // Install with: pnpm add -D sharp
-    const sharpPkg = "sharp" as string;
-    const sharp = (await import(sharpPkg)) as unknown as {
-      default: (p: string) => { metadata(): Promise<{ width?: number }> };
-    };
-    const meta = await sharp.default(sourcePath).metadata();
+    const meta = await sharp(sourcePath).metadata();
     return meta.width ?? null;
   } catch {
     return null;
@@ -292,6 +288,7 @@ async function runUpload(): Promise<void> {
     manifestKey: string;
     manifestUrl: string;
     uploaded: boolean;
+    stripped: boolean;
     error?: string;
   };
 
@@ -303,23 +300,37 @@ async function runUpload(): Promise<void> {
     // URL so a previously-uploaded file keeps working, and report at the end.
     try {
       const checksum = await sha256(sourcePath);
-      const url = await adapter.syncImage(sourcePath, manifestKey, checksum);
+      const isNewOrChanged = savedChecksums[manifestKey] !== checksum;
+
+      // Only re-encode files that are actually being (re)uploaded — unchanged
+      // files are skipped by the adapter, so stripping them would be wasted work.
+      let body: Buffer | undefined;
+      let stripped = false;
+      if (isNewOrChanged) {
+        const original = await fsPromises.readFile(sourcePath);
+        const ext = path.extname(sourcePath).slice(1);
+        body = await stripImageMetadata(original, ext);
+        stripped = ext.toLowerCase() !== "gif";
+      }
+
+      const url = await adapter.syncImage(sourcePath, manifestKey, checksum, body);
 
       if (url === "") {
         // Vercel Blob skip signal: file unchanged — preserve existing manifest URL
-        return { manifestKey, manifestUrl: existingManifest[manifestKey] ?? "", uploaded: false } satisfies SyncOutcome;
+        return { manifestKey, manifestUrl: existingManifest[manifestKey] ?? "", uploaded: false, stripped: false } satisfies SyncOutcome;
       }
-      if (savedChecksums[manifestKey] === checksum) {
+      if (!isNewOrChanged) {
         // Checksum match (R2 / local): file unchanged — URL reconstructed by adapter
-        return { manifestKey, manifestUrl: url, uploaded: false } satisfies SyncOutcome;
+        return { manifestKey, manifestUrl: url, uploaded: false, stripped: false } satisfies SyncOutcome;
       }
       // New or changed file
-      return { manifestKey, manifestUrl: url, uploaded: true } satisfies SyncOutcome;
+      return { manifestKey, manifestUrl: url, uploaded: true, stripped } satisfies SyncOutcome;
     } catch (err: unknown) {
       return {
         manifestKey,
         manifestUrl: existingManifest[manifestKey] ?? "",
         uploaded: false,
+        stripped: false,
         error: err instanceof Error ? err.message : String(err),
       } satisfies SyncOutcome;
     }
@@ -328,6 +339,7 @@ async function runUpload(): Promise<void> {
   const newManifest: Record<string, string> = {};
   let uploaded = 0;
   let skipped = 0;
+  let stripped = 0;
   const failures: Array<{ manifestKey: string; error: string }> = [];
   for (const outcome of outcomes) {
     if (outcome.error !== undefined) {
@@ -340,6 +352,7 @@ async function runUpload(): Promise<void> {
     newManifest[outcome.manifestKey] = outcome.manifestUrl;
     if (outcome.uploaded) uploaded++;
     else skipped++;
+    if (outcome.stripped) stripped++;
   }
 
   // 6. Purge stale manifest entries (deleted item folders)
@@ -364,6 +377,9 @@ async function runUpload(): Promise<void> {
   console.log(
     `[upload-images] provider=${provider}  uploaded=${uploaded}  skipped=${skipped}  failed=${failures.length}  purged=${purged}  total=${total}  warnings=${warnings.length}`,
   );
+  if (uploaded > 0) {
+    console.log(`  🔒 stripped EXIF/GPS metadata from ${stripped}/${uploaded} uploaded image(s)`);
+  }
   if (warnings.length > 0) {
     for (const w of warnings) console.warn(`  ⚠️  ${w}`);
   }

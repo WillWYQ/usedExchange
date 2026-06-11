@@ -6,6 +6,7 @@ import fs from "fs/promises";
 import path from "path";
 import { spawnSync } from "child_process";
 import { isValidSlug } from "@/lib/utils/slug";
+import { buildItemTemplate } from "./lib/itemTemplate";
 
 // FIX Sec 3: only allow lowercase kebab-case slugs (letters, digits, hyphens).
 // This prevents path-traversal payloads such as "../../etc/cron.d" from being
@@ -74,21 +75,17 @@ async function main() {
     .replace(/-/g, " ")
     .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
-  const template = {
-    name: displayName,
-    status: "draft",
-    condition: "good",
-    listed_date: today,
-    description: "",
-    tags: [],
-  };
+  const template = buildItemTemplate(displayName, today);
 
   const jsonPath = path.join(itemDir, "item.json");
   await fs.writeFile(jsonPath, JSON.stringify(template, null, 2) + "\n");
 
   console.log(`✓ Created ${jsonPath}`);
   console.log(
-    `  Next steps:\n  1. Edit ${jsonPath} (add price, description, photos)\n  2. Drop photos into ${itemDir}/\n  3. Set status to "available" when ready`,
+    `  The file includes every fillable field (see docs/DESIGN.md §5 for details).\n` +
+      `  Fields left as "", null, or [] use safe defaults if you don't fill them in —\n` +
+      `  e.g. an unfilled "dimensions"/"weight" placeholder is treated as not set.\n\n` +
+      `  Next steps:\n  1. Edit ${jsonPath} (add price, description, photos)\n  2. Drop photos into ${itemDir}/\n  3. Set status to "available" when ready`,
   );
 
   // FIX Sec 2: use spawnSync with an args array instead of execSync with a

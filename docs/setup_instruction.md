@@ -168,6 +168,10 @@ pnpm upload-images
 pnpm push
 ```
 
+> 🔒 `pnpm upload-images` automatically strips EXIF/GPS metadata (including
+> the location where the photo was taken) from every new or changed photo
+> before it's uploaded — see "Photo Privacy" below.
+
 ### Local Development
 
 ```bash
@@ -218,11 +222,28 @@ The upload script prints advisory warnings (never blocks the upload):
 | Image > 8 MB | File is very large | Resize to max 2000px wide before uploading |
 | No `cover.*` found | Item folder has no `cover.jpg/png` | Name your main thumbnail `cover.jpg` |
 | No images found | Item folder has no photos | Add at least one photo before listing |
-| Image < 800px wide (requires `sharp`) | Photo resolution is low | Use a higher-quality photo |
+| Image < 800px wide | Photo resolution is low | Use a higher-quality photo |
 
-To enable the width check, install `sharp`:
-```bash
-pnpm add -D sharp
+---
+
+## Photo Privacy: EXIF/GPS Stripping
+
+Phone cameras embed EXIF metadata in photos — including the GPS coordinates
+of where the photo was taken. Every time you run `pnpm upload-images`, any
+new or changed JPEG/PNG/WebP photo is automatically re-encoded via `sharp`
+(`lib/images/stripMetadata.ts`) before it leaves your machine:
+
+- The photo's orientation is preserved (it still displays right-side-up).
+- All EXIF/IPTC/XMP metadata — including GPS location — is removed.
+- GIFs are uploaded unchanged (GIF has no EXIF data, and re-encoding would
+  break animated GIFs).
+
+This only affects the copy that gets uploaded to the CDN. Your original
+files in `content/items/` are never modified. The summary line after each
+upload reports how many photos were processed, e.g.:
+
+```
+🔒 stripped EXIF/GPS metadata from 3/3 uploaded image(s)
 ```
 
 ---

@@ -146,6 +146,9 @@ During `pnpm upload-images`, advisory warnings are printed (never block) for:
 - Item folders with no `cover.*` named image
 - Item folders with no images at all
 
+### Photo Privacy — EXIF/GPS Stripping
+Every new or changed JPEG/PNG/WebP photo is automatically re-encoded via `sharp` (`lib/images/stripMetadata.ts`) before `pnpm upload-images` sends it to the CDN — this removes all EXIF/IPTC/XMP metadata, including GPS location, while auto-rotating the image so it still displays right-side-up. GIFs pass through unchanged. Original files in `content/items/` are untouched; `pnpm dev` and `pnpm build` (dev-sync/build-check) are unaffected.
+
 ---
 
 ## Pages
@@ -327,7 +330,7 @@ Scripts run on the seller's machine. All write only to `content/`.
 | `pnpm upload-images` | Upload photos to CDN, update manifest, print backup reminder |
 | `pnpm push` | Stage `content/` + manifest, commit with default message, and push |
 | `pnpm mark-sold <cat>/<name>` | Set `status: "sold"` and `sold_date: today` without editing JSON |
-| `pnpm create-item <cat>/<name>` | Create new item folder + `item.json` from template |
+| `pnpm create-item <cat>/<name>` | Create new item folder + `item.json` pre-filled with all 38 schema fields (DESIGN.md §5) |
 | `pnpm new <cat>/<name>` | Shorthand for `create-item` |
 | `pnpm create-template [cat]` | Create a `_template.json` for a category (or global) |
 

@@ -72,13 +72,13 @@ export function ItemCard({ item, resolvedPrice, showCategoryChip = false }: Item
       <div className="flex flex-1 flex-col gap-2 p-3">
         {/* Category chip (Browse All page) */}
         {showCategoryChip && (
-          <span className="w-fit rounded-full bg-foreground/10 px-2 py-0.5 text-xs text-foreground/60">
+          <span className="w-fit rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium text-white drop-shadow">
             {item.categoryOverride || item.categorySlug}
           </span>
         )}
 
         {/* Item name — locale-aware, re-renders on LocaleSwitcher change */}
-        <h3 className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
+        <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-white drop-shadow-lg">
           {displayName}
         </h3>
 
@@ -92,15 +92,15 @@ export function ItemCard({ item, resolvedPrice, showCategoryChip = false }: Item
         <div className="mt-auto pt-1 text-sm">
           {resolvedPrice !== null ? (
             <div className="flex flex-wrap items-baseline gap-1.5">
-              <span className="font-semibold text-foreground">
+              <span className="font-semibold text-white drop-shadow">
                 ${resolvedPrice.amount}
               </span>
               {item.price.negotiable && (
-                <span className="text-xs text-foreground/50">OBO</span>
+                <span className="text-xs text-gray-200 drop-shadow">OBO</span>
               )}
             </div>
           ) : (
-            <span className="text-foreground/40">Contact for price</span>
+            <span className="text-gray-300 drop-shadow">Contact for price</span>
           )}
         </div>
       </div>

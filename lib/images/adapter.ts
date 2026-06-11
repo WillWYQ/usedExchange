@@ -11,11 +11,16 @@ export interface ImageStorageAdapter {
    * @param sourcePath  Absolute path to the source image file on disk
    * @param manifestKey Relative key: "{categorySlug}/{itemSlug}/{filename}"
    * @param checksum    SHA-256 hex of the file (for incremental skip logic)
+   * @param body        Optional pre-processed file bytes (e.g. with EXIF/GPS
+   *                     metadata stripped via lib/images/stripMetadata.ts).
+   *                     When provided, adapters use this instead of reading
+   *                     sourcePath directly.
    */
   syncImage(
     sourcePath: string,
     manifestKey: string,
     checksum: string,
+    body?: Buffer,
   ): Promise<string>;
 
   /**

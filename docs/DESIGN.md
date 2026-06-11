@@ -208,6 +208,16 @@ On the CI runner (GitHub Actions or Vercel), `manifest[key]` is always populated
 
 `.image-cache/checksums.json` stores `{ relativePath: sha256 }` for every previously uploaded image. On the next `pnpm upload-images`, only changed or new files are re-uploaded. The cache lives on the seller's machine only (gitignored). It can be deleted at any time — all images are simply re-uploaded on the next run.
 
+#### Privacy: Stripping EXIF/GPS Metadata
+
+Phone cameras embed EXIF metadata in JPEG/PNG/WebP files — including GPS coordinates of where the photo was taken. Before any new or changed image is uploaded, `pnpm upload-images` re-encodes it via `sharp` (`lib/images/stripMetadata.ts`):
+
+- Applies the EXIF orientation tag (so the image still displays right-side-up), then drops it.
+- Strips all other EXIF/IPTC/XMP metadata, including GPS latitude/longitude.
+- GIFs pass through unchanged — GIF has no EXIF segment, and re-encoding an animated GIF would collapse it to a single frame.
+
+This happens only during `pnpm upload-images` (the images that actually leave the seller's machine). Local copies in `content/items/` and `public/items/` (used by `pnpm dev`) are untouched. The summary line after each run reports how many images were stripped, e.g. `🔒 stripped EXIF/GPS metadata from 3/3 uploaded image(s)`.
+
 #### Backup Policy
 
 > ⚠️ **The seller is responsible for backing up their `content/` folder (specifically the photos).**

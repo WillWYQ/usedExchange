@@ -156,7 +156,7 @@ After writing, tell the seller:
 1. Which files were written.
 2. Run `pnpm type-check` to confirm no schema errors.
 3. Change `"status": "draft"` to `"status": "available"` in each file when ready to publish.
-4. Run `pnpm upload-images` to push photos to the CDN.
+4. Run `pnpm upload-images` to push photos to the CDN — this also automatically strips EXIF/GPS metadata (including the photo's location) from every new or changed image before upload.
 
 ---
 

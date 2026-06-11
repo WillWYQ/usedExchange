@@ -53,6 +53,7 @@ export class VercelBlobAdapter implements ImageStorageAdapter {
     sourcePath: string,
     manifestKey: string,
     checksum: string,
+    body?: Buffer,
   ): Promise<string> {
     // Return "" to signal "unchanged — caller preserves existing manifest URL"
     if (this.checksums[manifestKey] === checksum) {
@@ -69,8 +70,8 @@ export class VercelBlobAdapter implements ImageStorageAdapter {
       );
     })) as unknown as { put: BlobPutFn };
 
-    const body = await readFile(sourcePath);
-    const result = await mod.put(manifestKey, body, {
+    const fileBody = body ?? (await readFile(sourcePath));
+    const result = await mod.put(manifestKey, fileBody, {
       access: "public",
       addRandomSuffix: false,
     });

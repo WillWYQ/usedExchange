@@ -260,7 +260,9 @@ canEstimateShipping(shipping, weight, dimensions, resolvedTier): boolean
 | `VercelBlobAdapter` | `"vercel-blob"` | `lib/images/vercel-blob.ts` |
 | `LocalAdapter` | `"local"` | `lib/images/local.ts` |
 
-`scripts/sync-images.ts` 在运行时根据 `siteConfig.imageStorage.provider` 实例化正确的适配器。三个适配器均实现 `syncImage(sourcePath, manifestKey, checksum)` 和通过 `loadChecksums`/`getUpdatedChecksums` 实现的增量跳过机制。
+`scripts/sync-images.ts` 在运行时根据 `siteConfig.imageStorage.provider` 实例化正确的适配器。三个适配器均实现 `syncImage(sourcePath, manifestKey, checksum, body?)` 和通过 `loadChecksums`/`getUpdatedChecksums` 实现的增量跳过机制。
+
+**`lib/images/stripMetadata.ts`** —— `stripImageMetadata(input: Buffer, ext: string): Promise<Buffer>`。由 `scripts/sync-images.ts` 的 `runUpload()` 调用，在上传前用 `sharp` 对每个新增/变更的 JPEG、PNG、WebP 重新编码，去除全部 EXIF/IPTC/XMP 元数据（包括 GPS 坐标），同时应用 EXIF 方向标签以保证图片显示方向不变。处理后的字节作为可选的 `body` 参数传给 `syncImage`，各适配器会优先使用它而不是直接读取 `sourcePath`。GIF 原样透传（本身没有 EXIF 段，且重新编码会导致动画坍缩为单帧）。
 
 ### `lib/utils/concurrency.ts`
 
