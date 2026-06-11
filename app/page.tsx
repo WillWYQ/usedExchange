@@ -48,6 +48,7 @@ export default async function HomePage() {
   const { categories, recentItems } = await getHomePageData();
 
   const tagline = siteConfig.tagline;
+  const t = getTranslations();
 
   return (
     <>
@@ -75,7 +76,7 @@ export default async function HomePage() {
           id="categories-heading"
           className="mb-4 text-xl font-semibold text-foreground"
         >
-          Browse by Category
+          {t.categoriesHeading}
         </h2>
         <CategoryGrid categories={categories} />
       </section>

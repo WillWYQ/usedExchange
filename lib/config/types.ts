@@ -106,6 +106,7 @@ export type UIStrings = {
   // Section headings
   recentlyListed: string;
   recentlyViewed: string;
+  categoriesHeading: string;
 
   // Contact
   contactSeller: string;
@@ -178,6 +179,7 @@ export type UIStrings = {
   enterManually: string;
   distanceManualLabel: string;
   distanceUnit: string;
+  distanceInputLabel: string;
   apply: string;
   pricesAtPickupRate: string;
   enterDistance: string;

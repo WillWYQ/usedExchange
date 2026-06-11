@@ -118,6 +118,7 @@ export const siteConfig: SiteConfig = {
         // ── Section headings ────────────────────────────────────────────────
         recentlyListed: "Recently Listed",
         recentlyViewed: "Recently Viewed",
+        categoriesHeading: "Browse by Category",
 
         // ── Contact ─────────────────────────────────────────────────────────
         contactSeller: "Contact Seller",
@@ -191,6 +192,7 @@ export const siteConfig: SiteConfig = {
         enterManually: "Enter manually",
         distanceManualLabel: "(manual)",
         distanceUnit: "mi",
+        distanceInputLabel: "Distance in miles",
         apply: "Apply",
         pricesAtPickupRate: "Prices shown at pickup rate",
         enterDistance: "Enter distance",
@@ -220,6 +222,7 @@ export const siteConfig: SiteConfig = {
       //   browseAll: "瀏覽全部",
       //   recentlyListed: "最新上架",
       //   recentlyViewed: "最近瀏覽",
+      //   categoriesHeading: "依分類瀏覽",
       //   contactSeller: "聯繫賣家",
       //   itemSold: "已售出",
       //   preferredPayment: "偏好付款方式",
@@ -270,6 +273,7 @@ export const siteConfig: SiteConfig = {
       //   enterManually: "手動輸入",
       //   distanceManualLabel: "（手動）",
       //   distanceUnit: "英里",
+      //   distanceInputLabel: "距離（英里）",
       //   apply: "套用",
       //   pricesAtPickupRate: "顯示自取價格",
       //   enterDistance: "輸入距離",

@@ -16,7 +16,7 @@ import type { UIStrings } from "@/lib/config/types";
 // All keys that must be present for every enabled locale.
 const REQUIRED_KEYS: (keyof UIStrings)[] = [
   "home", "about", "browseAll",
-  "recentlyListed", "recentlyViewed",
+  "recentlyListed", "recentlyViewed", "categoriesHeading",
   "contactSeller", "itemSold", "preferredPayment",
   "makeOffer", "yourOffer", "send", "belowMinimumOffer",
   "share", "copied", "linkCopied",
@@ -33,7 +33,7 @@ const REQUIRED_KEYS: (keyof UIStrings)[] = [
   "conditionNewDesc", "conditionLikeNewDesc", "conditionGoodDesc",
   "conditionFairDesc", "conditionForPartsDesc",
   "detectingLocation", "fromSeller", "locationDetected",
-  "enterManually", "distanceManualLabel", "distanceUnit",
+  "enterManually", "distanceManualLabel", "distanceUnit", "distanceInputLabel",
   "apply", "pricesAtPickupRate", "enterDistance", "edit", "clear",
   "contactForPrice", "contactForPricingShort",
   "pricingLabelHeader", "pricingDistanceHeader", "pricingPriceHeader",

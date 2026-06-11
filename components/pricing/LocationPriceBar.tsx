@@ -76,7 +76,7 @@ export function LocationPriceBar({
   const distanceInput = showInput && (
     <form onSubmit={handleSubmit} className="flex items-center gap-2">
       <label htmlFor={inputId} className="sr-only">
-        {t.pricingDistanceHeader}
+        {t.distanceInputLabel}
       </label>
       <input
         id={inputId}

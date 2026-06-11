@@ -7,7 +7,7 @@ import { MakeOfferButton } from "./MakeOfferButton";
 // MakeOfferButton.tsx (which imports @/content/config at module level) loads.
 vi.mock("@/content/config", () => ({
   siteConfig: {
-    i18n: { strings: { makeOffer: "" } },
+    i18n: { defaultLocale: "en", translations: { en: {} } },
     contact: {
       platforms: [{ type: "email", value: "seller@example.com" }],
     },
