@@ -31,6 +31,9 @@ export type Price = {
   // detail page. Default false — sellers may not want buyers comparing tiers
   // (e.g. seeing that pickup is much cheaper than shipping).
   show_tiers: boolean;
+  // Overrides siteConfig.shipping.defaultPayer for this item. See
+  // lib/utils/shipping.ts and DESIGN.md §21.
+  shipping_payer?: "seller" | "buyer";
 };
 
 // Full Item type — all camelCase fields from item.json with defaults applied by loader.

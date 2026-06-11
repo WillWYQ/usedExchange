@@ -519,6 +519,7 @@ export async function generateStaticParams() {
 | 路径遍历 | 图片路径仅从已知 slug 构建；运行时无用户提供的路径段 |
 | `meta_description` | 截断到 160 字符；不作为 HTML 渲染（仅纯文本） |
 | `poweredByHeader: false` | 抑制 `X-Powered-By: Next.js` 响应头 |
+| 运费计算 API 密钥（可选，§29） | 永不出现在静态构建产物中；仅以 `wrangler secret` 形式存于 `workers/shipping-rate-proxy`，浏览器通过 `siteConfig.shipping.proxyUrl` 调用 |
 
 ---
 
@@ -1284,6 +1285,21 @@ scripts/sync-images.test.ts       ← 清单构建 / 清除 / 校验和逻辑
 | Infinity 有开放式档位 | `D=Infinity`，最后档位无 `miles_max` | 开放式档位 |
 | 空档位 | `price.tiers: []` | `null`（→"联系询价"） |
 
+#### `lib/utils/shipping.test.ts`
+
+| 用例 | 输入 | 预期 |
+|---|---|---|
+| `isShippingTier` — null 档位 | `null` | `false` |
+| `isShippingTier` — 有边界的档位 | `miles_max: 5` 的档位 | `false` |
+| `isShippingTier` — 开放式档位 | `miles_max` 缺失的档位 | `true` |
+| `resolveShippingPayer` — 物品无覆盖 | `price.shipping_payer` 缺失，`siteConfig.shipping.defaultPayer: "seller"` | `"seller"` |
+| `resolveShippingPayer` — 物品有覆盖 | `price.shipping_payer: "seller"`，默认 `"buyer"` | `"seller"` |
+| `canEstimateShipping` — 配置缺失 | `shipping: undefined` | `false` |
+| `canEstimateShipping` — 已禁用 | `shipping.enabled: false` | `false` |
+| `canEstimateShipping` — 缺少重量/尺寸 | 任一为 `null` | `false` |
+| `canEstimateShipping` — 非运费档位 | 解析后档位有 `miles_max` | `false` |
+| `canEstimateShipping` — 满足所有前置条件 | 已启用 + 重量 + 尺寸 + 开放式档位 | `true` |
+
 #### `lib/utils/haversine.test.ts`
 
 | 用例 | 输入 | 预期（±0.5 英里） |
@@ -1462,6 +1478,130 @@ export function validateSiteConfig(): void {
 import { validateSiteConfig } from "@/lib/config/validate";
 validateSiteConfig();   // 配置无效时以清晰消息退出 1
 ```
+
+---
+
+## 29. 运费计算器集成——技术规范
+
+> 完整功能设计与原理见 [DESIGN_zh.md §21](DESIGN_zh.md)。本节涵盖实现约定。
+
+### 29.1 概述
+
+运费估算功能**完全可选**，仅当 `siteConfig.shipping` 已定义且 `enabled: true` 时才启用。该功能纯粹是附加性的：缺失时不引入任何新的网络请求、UI 元素或构建期要求。
+
+### 29.2 `SiteConfig.shipping` 类型（`lib/config/types.ts`）
+
+```ts
+shipping?: {
+  enabled: boolean;
+  proxyUrl: string;                          // Cloudflare Worker 端点（workers/shipping-rate-proxy）
+  defaultPayer: "seller" | "buyer";
+  origin: { zip: string; country: string };  // 卖家发货地
+};
+```
+
+### 29.3 `Price.shipping_payer`（`lib/content/types.ts` + `schema.ts`）
+
+```ts
+// lib/content/types.ts
+shipping_payer?: "seller" | "buyer";
+
+// lib/content/schema.ts
+shipping_payer: z.enum(["seller", "buyer"]).optional().catch(undefined),
+```
+
+单品级覆盖 `siteConfig.shipping.defaultPayer`，由 `resolveShippingPayer()`（`lib/utils/shipping.ts`，见 ARCHITECTURE_zh.md）解析。
+
+### 29.4 `useShippingRate` hook（`components/pricing/useShippingRate.ts`）
+
+`"use client"` hook，状态机：
+
+```ts
+type ShippingRateState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; rate: ShippingRate }
+  | { status: "error" };
+
+function useShippingRate(): {
+  state: ShippingRateState;
+  fetchRate: (input: {
+    destinationZip: string;
+    destinationCountry: string;
+    weight: Weight;
+    dimensions: Dimensions;
+    currency: string;
+  }) => void;
+};
+```
+
+- 使用 `AbortController` ref，每次调用 `fetchRate()` 会取消上一次未完成的请求——防止旧响应覆盖新输入的邮编结果。
+- 向 `siteConfig.shipping.proxyUrl` POST JSON；非 2xx 响应或网络错误均转入 `{ status: "error" }`。
+
+### 29.5 `ShippingEstimator` 组件（`components/item/ShippingEstimator.tsx`）
+
+`"use client"` 组件，props：
+
+```ts
+{
+  price: Price;
+  resolvedTier: PriceTier | null;
+  weight: Weight | null;
+  dimensions: Dimensions | null;
+}
+```
+
+- 当 `!canEstimateShipping(...)`（见 `lib/utils/shipping.ts`）时返回 `null`——一次判断即覆盖"未启用"、"数据缺失"、"非运费档位"三种情况。
+- `resolveShippingPayer() === "seller"` → 渲染 `t.shippingIncludedBySeller`，不发起网络请求。
+- `resolveShippingPayer() === "buyer"` → 渲染邮编输入框；`onBlur`/回车触发 `fetchRate()`；加载中显示 `t.shippingCalculating`，成功显示解析后的 `ShippingRate`，出错显示 `t.shippingUnavailable`。
+
+### 29.6 Cloudflare Worker 约定（`workers/shipping-rate-proxy`）
+
+独立部署；从根目录 `tsconfig.json`（`exclude`）和 `eslint.config.mjs`（`ignores`）中排除——拥有自己的 `package.json`、`tsconfig.json` 和 `wrangler.toml`。
+
+**请求** —— `POST /`（CORS 限制为 `ALLOWED_ORIGIN`）：
+
+```ts
+{
+  destinationZip: string;
+  destinationCountry: string;
+  weight: { value: number; unit: "kg" | "lb" };
+  dimensions: { length: number; width: number; height: number; unit: "cm" | "in" };
+  currency: string;
+}
+```
+
+**响应**（`RateResponseBody`）：
+
+```ts
+{
+  amount: number;
+  currency: string;
+  carrier: string;
+  service: string;
+  estimatedDays: number | null;
+}
+```
+
+- `Env` 变量：`SHIPPING_PROVIDER`（`"shippo" | "easypost"`）、`ALLOWED_ORIGIN`、`ORIGIN_ZIP`、`ORIGIN_COUNTRY`。
+- `Env` 密钥（通过 `wrangler secret put` 设置，绝不提交到 git）：`SHIPPO_API_KEY` 和/或 `EASYPOST_API_KEY`。
+- Worker 调用配置的服务商，将单位转换为该服务商 API 所需格式（`toInches()` 等），并在返回的多个选项中取最低运费。
+- `OPTIONS` 请求返回 CORS 预检响应头；非 `POST` 方法返回 `405`。
+
+### 29.7 新增 i18n 键（`UIStrings`，`lib/config/types.ts` + `lib/i18n/translations.ts`）
+
+| 键 | 英文默认值 |
+|---|---|
+| `shippingEstimateLabel` | `"Estimated shipping"` |
+| `shippingZipPlaceholder` | `"ZIP code"` |
+| `shippingCalculating` | `"Calculating shipping…"` |
+| `shippingUnavailable` | `"Shipping estimate unavailable"` |
+| `shippingIncludedBySeller` | `"Free shipping (included by seller)"` |
+| `shippingEstimateSuffix` | `"shipping"` |
+
+### 29.8 部署
+
+面向卖家的操作指南：`workers/shipping-rate-proxy/README.md` 和 `.claude/commands/setup-shipping.md`。不影响 `pnpm build`、CI 或 GitHub Pages 部署——Worker 通过 `workers/shipping-rate-proxy/` 目录下的 `wrangler deploy` 单独部署。
 
 ---
 

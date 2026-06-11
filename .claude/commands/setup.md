@@ -113,6 +113,9 @@ For each platform the seller mentions, ask for the relevant value:
 - Discord → numeric User ID (explain: Settings → Advanced → Developer Mode → right-click your name → Copy User ID)
 - Twitter/X → handle (without @)
 - TikTok → handle (with @, e.g. @username)
+- Facebook → username, or paste your full profile URL (also handles `profile.php?id=...` links for accounts without a vanity username)
+- LinkedIn → `in/your-name` for a personal profile, or `company/your-page` for a company page — a bare `your-name` also works (treated as `in/your-name`), and a full profile URL works too
+- YouTube → handle (with @, e.g. @your_channel)
 
 Ask:
 > Should contact info be hidden behind a "Show Contact" button, or always visible?

@@ -1,0 +1,10 @@
+# Copy to .dev.vars for local development with `wrangler dev` (gitignored —
+# never committed). Production secrets are set separately with:
+#   wrangler secret put SHIPPO_API_KEY
+#   wrangler secret put EASYPOST_API_KEY
+
+# Required if SHIPPING_PROVIDER = "shippo" (wrangler.toml)
+SHIPPO_API_KEY=shippo_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Required if SHIPPING_PROVIDER = "easypost" (wrangler.toml)
+# EASYPOST_API_KEY=EZAKxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

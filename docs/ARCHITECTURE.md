@@ -31,7 +31,7 @@ usedExchange/
 │   ├── intro/                        ← ProjectIntro + UISlotPlayground + projectIntro.dictionary (6-locale copy)
 │   ├── item/                         ← All item-rendering components (see §Item Components)
 │   ├── layout/                       ← Breadcrumb, SiteHeader, SiteFooter
-│   ├── pricing/                      ← DistancePricingContext, LocationPriceBar, useDistancePricing, useGeolocation
+│   ├── pricing/                      ← DistancePricingContext, LocationPriceBar, useDistancePricing, useGeolocation, useShippingRate
 │   ├── search/                       ← SearchBar, SearchBarClient, useSearch
 │   ├── theme/                        ← ThemeProvider, ThemeToggle
 │   ├── ui/                           ← Aceternity UI library (27 components; installed once by `pnpm setup-ui`)
@@ -75,6 +75,7 @@ usedExchange/
 │       ├── index.ts                  ← Re-exports cn() (clsx + tailwind-merge)
 │       ├── jsonld.ts                 ← buildProductJsonLd(), buildBreadcrumbJsonLd()
 │       ├── pricing.ts                ← resolveItemPrice(price, resolved) — NO "use client"
+│       ├── shipping.ts               ← isShippingTier(), resolveShippingPayer(), canEstimateShipping() — NO "use client"
 │       ├── slug.ts                   ← isValidSlug() — kebab-case validation
 │       └── templateStatus.ts         ← isTemplateConfigured() — detects unconfigured template
 │
@@ -96,6 +97,12 @@ usedExchange/
 │   ├── ci.yml                        ← Type-check + lint + test on push
 │   ├── deploy.yml                    ← Build + deploy to GitHub Pages from release branch
 │   └── release-seller.yml            ← Automated release branch management
+│
+├── workers/                           ← Independently deployed Cloudflare Workers (own tsconfig/eslint scope)
+│   └── shipping-rate-proxy/          ← Optional: shipping rate proxy (see DESIGN.md §21)
+│       ├── src/index.ts              ← fetch handler — calls Shippo/EasyPost, returns cheapest rate
+│       ├── wrangler.toml             ← Worker config (vars + secrets — see workers/shipping-rate-proxy/README.md)
+│       └── README.md                 ← Deploy walkthrough + API contract
 │
 ├── content/config.ts                 ← (see above — seller configuration)
 ├── next.config.ts                    ← Static export flag, image domains
@@ -148,6 +155,28 @@ Browser hydration
     │       ▼
     └─► resolveItemPrice()        Selects the matching PriceTier from price.tiers
             (lib/utils/pricing.ts — importable from both server and client)
+```
+
+### Shipping Estimate (Optional, Client Runtime)
+
+```
+ShippingEstimator (components/item/ShippingEstimator.tsx)
+    │  rendered only if canEstimateShipping() — see lib/utils/shipping.ts
+    │
+    ├─► resolveShippingPayer() === "seller"
+    │       └─► renders t.shippingIncludedBySeller (no network call)
+    │
+    └─► resolveShippingPayer() === "buyer"
+            │  buyer enters destination ZIP
+            ▼  useShippingRate() (components/pricing/useShippingRate.ts)
+            POST siteConfig.shipping.proxyUrl
+                { destinationZip, destinationCountry, weight, dimensions, currency }
+            │
+            ▼  workers/shipping-rate-proxy (Cloudflare Worker — holds API keys)
+            Calls Shippo or EasyPost, returns the cheapest rate
+            │
+            ▼  ShippingRate { amount, currency, carrier, service, estimatedDays }
+            Displayed inline; errors shown as t.shippingUnavailable
 ```
 
 ### Image Upload (Seller Machine Only)
@@ -207,6 +236,20 @@ resolveItemPrice(price: Price, resolved: ResolvedDistance): PriceTier | null
 - `resolved.source === "detected" | "manual"`: returns the first tier where `D >= miles_min && D <= miles_max`. On a gap between tiers, returns the tier whose `miles_max` is closest to D from below. When D is below every tier's lower bound, returns the tier with the smallest `miles_min`.
 
 **⚠ Must never have `"use client"`** — this function is called both in Server Components (for the SSG initial render, so the static HTML never shows a blank price) and in `useDistancePricing` (a client hook). Adding `"use client"` would break the server import path.
+
+### `lib/utils/shipping.ts` — Shipping Eligibility & Payer Resolution
+
+```ts
+isShippingTier(tier: PriceTier | null): boolean
+resolveShippingPayer(price: Price, shipping: NonNullable<SiteConfig["shipping"]>): "seller" | "buyer"
+canEstimateShipping(shipping, weight, dimensions, resolvedTier): boolean
+```
+
+- `isShippingTier()` — `true` only for the open-ended pricing tier (`miles_max` absent), the convention used to mean "Shipping" (see DESIGN.md §17).
+- `resolveShippingPayer()` — `price.shipping_payer` (per-item override) falls back to `siteConfig.shipping.defaultPayer`.
+- `canEstimateShipping()` — gates the `ShippingEstimator` UI: requires `shipping.enabled`, both `weight` and `dimensions` present on the item, and the resolved tier to be the shipping tier.
+
+**Same invariant as `pricing.ts`: no `"use client"`** — kept pure so it can be unit-tested and reused from both the server-rendered item page and the `ShippingEstimator` client component. See DESIGN.md §21 for the full feature design.
 
 ### `lib/images/` — Storage Adapter Pattern
 
@@ -291,6 +334,7 @@ Server Components render static HTML during `next build`. The client boundary is
 
 **Always Client Components** (`"use client"` at the top):
 - All pricing: `DistancePricingContext`, `LocationPriceBar`, `useDistancePricing`, `useGeolocation`
+- Shipping estimate (optional, see §21 of DESIGN.md): `useShippingRate`, `ShippingEstimator`
 - All i18n runtime: `LocaleProvider`, `LocaleSwitcher`, `useLocale`, `useT`
 - All filtering: `FilterBar`, `SortSelect`, `useFilters`
 - Search: `SearchBarClient`, `useSearch`
@@ -329,6 +373,7 @@ Four adapters read `siteConfig.ui.*` at render time and forward to the appropria
 | `LocalizedItemContent` | Client | Renders `nameZh`/`descriptionZh` when locale is `zh` |
 | `PricingSection` | Client | Resolved tier display + "View all tiers" toggle |
 | `PricingTable` / `PricingTableToggle` | Client | Full tier list expandable |
+| `ShippingEstimator` | Client | Optional shipping cost estimate (see DESIGN.md §21) |
 | `MakeOfferButton` | Client | Appears when `negotiable: true` and `minAcceptableOffer` is set |
 | `ConditionBadge` | Client | Condition label chip |
 | `ConditionGuide` | Client | `?` popover explaining condition scale |
@@ -430,6 +475,9 @@ These are enforced by code and must never be violated:
 | Draft items have no static route | Loader visibility filter excludes `status: "draft"` from `generateStaticParams` |
 | `soldItemRetentionDays: -1` hides immediately | Explicit `< 0` guard in `isSoldItemVisible()` |
 | Sold items without `sold_date` stay visible | Conservative default: no date → no expiry basis |
+| `lib/utils/shipping.ts` has no `"use client"` | Same reasoning as `pricing.ts` — shared by server page render and `ShippingEstimator` |
+| Shipping API keys never reach the browser | Held only as `wrangler secret` values in `workers/shipping-rate-proxy`; static site only knows `siteConfig.shipping.proxyUrl` |
+| `workers/` excluded from root build/lint/test | `tsconfig.json` `exclude`, `eslint.config.mjs` `ignores` — independent subproject with its own `package.json` |
 
 ---
 
@@ -462,6 +510,7 @@ See [`.env.example`](../.env.example) for setup instructions and [setup_instruct
 | UI slot options (27 Aceternity components) | [DESIGN.md §18](DESIGN.md) |
 | i18n runtime | [DESIGN.md §12](DESIGN.md), [TECH_REQUIREMENTS.md §22.8](TECH_REQUIREMENTS.md) |
 | Sold item retention formula | [DESIGN.md §8](DESIGN.md) |
+| Shipping calculator integration (optional) | [DESIGN.md §21](DESIGN.md), [workers/shipping-rate-proxy/README.md](../workers/shipping-rate-proxy/README.md) |
 | Deployment checklist | [TECH_REQUIREMENTS.md §19](TECH_REQUIREMENTS.md) |
 | Testing strategy | [TECH_REQUIREMENTS.md §25](TECH_REQUIREMENTS.md) |
 | CDN setup walkthrough | [setup_instruction.md](setup_instruction.md) |

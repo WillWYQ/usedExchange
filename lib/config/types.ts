@@ -81,6 +81,20 @@ export type SiteConfig = {
     enabled: boolean;
   };
 
+  // Shipping calculator (optional — see DESIGN.md §21)
+  // Absent or enabled: false → ShippingEstimator renders nothing; zero impact.
+  shipping?: {
+    enabled: boolean;
+    // Cloudflare Worker proxy URL (holds the carrier API key server-side).
+    proxyUrl: string;
+    // Who pays for shipping by default; per-item override via price.shipping_payer.
+    defaultPayer: "seller" | "buyer";
+    origin: {
+      zip: string;
+      country: string; // ISO 3166-1 alpha-2, e.g. "US"
+    };
+  };
+
   // Internationalisation
   i18n: {
     defaultLocale: string;
@@ -196,6 +210,14 @@ export type UIStrings = {
   obo: string;
   hidePricingTiers: string;
   viewAllPricingTiers: string;
+
+  // Shipping estimator (optional — see DESIGN.md §21)
+  shippingEstimateLabel: string;
+  shippingZipPlaceholder: string;
+  shippingCalculating: string;
+  shippingUnavailable: string;
+  shippingIncludedBySeller: string;
+  shippingEstimateSuffix: string;
 
   // Mobile nav drawer
   menuOpen: string;

@@ -306,10 +306,14 @@ Only `name` is required. Every other field is optional; the build applies safe d
       { "label": "Shipping",         "miles_min": 30,  "amount": 35 }
     ],
     "negotiable": true,                        // boolean, default false; renders "OBO" on price
-    "show_tiers": false                        // boolean, default false; whether buyers may expand
+    "show_tiers": false,                       // boolean, default false; whether buyers may expand
                                                 //   "View all pricing tiers" on the item detail page.
                                                 //   Off by default — sellers may not want buyers to
                                                 //   see e.g. how much cheaper pickup is than shipping.
+    "shipping_payer": "buyer"                  // "seller" | "buyer", optional; overrides
+                                                //   siteConfig.shipping.defaultPayer for this item.
+                                                //   Only relevant when siteConfig.shipping.enabled
+                                                //   is true. See §21.
   },
 
   // ── Item details ──────────────────────────────────────────────────────────
@@ -425,6 +429,7 @@ Only `name` is required. Every other field is optional; the build applies safe d
 | `price.tiers` | `[]` → shows "Contact for price" |
 | `price.negotiable` | `false` |
 | `price.show_tiers` | `false` → "View all pricing tiers" toggle hidden from buyers |
+| `price.shipping_payer` | `siteConfig.shipping.defaultPayer` if absent (see §21) |
 | `condition` | `"good"` |
 | `quantity` | `1` |
 | `status` | `"available"` |
@@ -488,12 +493,17 @@ contact: {
     //   → right-click your username → Copy User ID.
     //   Opens a direct message link. Alternatively, use a server invite code for a trade server.
     { type: "facebook",  value: "your.username" },
+    // ^ Or paste your full profile URL (e.g. "https://www.facebook.com/profile.php?id=...")
+    //   if your account has no vanity username — both forms resolve to the same link.
     { type: "instagram", value: "your_handle" },
     { type: "snapchat",  value: "your_username" },
     { type: "whatsapp",  value: "+11234567890" },   // E.164 format
     { type: "twitter",   value: "your_handle" },
     { type: "tiktok",    value: "@your_handle" },
     { type: "linkedin",  value: "in/your-name" },
+    // ^ "in/<id>" for a personal profile, "company/<id>" for a company page.
+    //   A bare "your-name" is also accepted and treated as "in/your-name".
+    //   Your full profile URL (e.g. "https://www.linkedin.com/in/your-name") works too.
     { type: "youtube",   value: "@your_channel" },
 
     // ── Payment platforms ────────────────────────────────────────────────────
@@ -525,13 +535,13 @@ contact: {
 |---|---|
 | `email` | `mailto:{value}` |
 | `discord` | `https://discord.com/users/{value}` — opens DM intent in browser or Discord app |
-| `facebook` | `https://facebook.com/{value}` |
+| `facebook` | `https://facebook.com/{value}` — a pasted full profile URL is normalized to its path (e.g. `profile.php?id=...`) instead of being double-encoded |
 | `instagram` | `https://instagram.com/{value}` |
 | `snapchat` | `https://snapchat.com/add/{value}` |
 | `whatsapp` | `https://wa.me/{value}` (strips leading `+`) |
 | `twitter` | `https://x.com/{value}` |
 | `tiktok` | `https://tiktok.com/{value}` |
-| `linkedin` | `https://linkedin.com/{value}` |
+| `linkedin` | `https://linkedin.com/{value}` — `/` separators are preserved (not %-encoded); a bare handle is treated as `in/{value}` |
 | `youtube` | `https://youtube.com/{value}` |
 | `venmo` (link) | `https://venmo.com/u/{value}` |
 | `venmo` (QR) | Opens modal with `<img src={qr_image}>` |
@@ -883,6 +893,15 @@ export const siteConfig: SiteConfig = {
   currency: "USD",
   recentlyListedCount: 6,
   soldItemRetentionDays: 3,                   // 0 = keep forever; -1 = hide immediately
+
+  // ── Shipping calculator (optional) ────────────────────────────────────────
+  // Absent or enabled: false → zero impact. See §21.
+  // shipping: {
+  //   enabled: true,
+  //   proxyUrl: "https://shipping-rate-proxy.<your-subdomain>.workers.dev",
+  //   defaultPayer: "buyer",                  // "seller" | "buyer"
+  //   origin: { zip: "94103", country: "US" },
+  // },
 
   // ── Contact ───────────────────────────────────────────────────────────────
   contact: {
@@ -1917,4 +1936,125 @@ The skill files are human-readable. A seller who opens them in a text editor wil
 ### `content/` Rule — Maintained
 
 All three skills instruct the AI to write ONLY to `content/config.ts`, `content/items/*/item.json`, and `content/items/*/_category.json` (the translator touches only `item.json` locale fields). No app code is touched. The AI is explicitly instructed not to modify any files outside `content/`.
+
+---
+
+## 21. Shipping Calculator Integration (Optional)
+
+> Implements the v3 roadmap item described in `docs/FEATURES_ROADMAP.md` §4.3.
+
+### Overview
+
+By default, the open-ended "Shipping" price tier (the tier whose `miles_max`
+is absent — see §17) shows a fixed amount the seller typed into `item.json`.
+This section adds an **optional** live shipping rate estimate, sourced from a
+carrier-rate aggregator (Shippo or EasyPost), based on the buyer's ZIP code
+and the item's `weight`/`dimensions`.
+
+The feature is **off by default** and has **zero impact** on a site that
+doesn't configure it: `siteConfig.shipping` is `undefined`, `ShippingEstimator`
+renders `null`, and no network requests are made.
+
+### Why a Cloudflare Worker is required
+
+UsedExchange is a fully static export with no server and no credentials in
+CI (§3 "Deployment Modes"). Carrier rate APIs (Shippo, EasyPost) require a
+secret API key. That key **must never** ship in the browser bundle. The
+solution is a small, independently-deployed **Cloudflare Worker** —
+`workers/shipping-rate-proxy/` — that holds the key as a `wrangler secret`
+and exposes a single CORS-restricted POST endpoint. The seller already has a
+Cloudflare account for R2 image storage (§3 "Image Storage Architecture"), so
+this reuses existing infrastructure rather than introducing a new provider.
+
+### Architecture
+
+```
+Buyer enters ZIP code in ShippingEstimator (item detail page)
+   │
+   ▼
+useShippingRate()  (components/pricing/useShippingRate.ts, client)
+   │  POST { destinationZip, destinationCountry, weight, dimensions, currency }
+   ▼
+Cloudflare Worker — workers/shipping-rate-proxy/
+   │  Holds SHIPPO_API_KEY / EASYPOST_API_KEY as a wrangler secret
+   │  Calls Shippo or EasyPost Rates API; returns the cheapest rate
+   ▼
+{ amount, currency, carrier, service, estimatedDays }
+   │
+   ▼
+ShippingEstimator displays the estimate (payer = "buyer")
+   or "Free shipping (included by seller)" (payer = "seller")
+```
+
+`resolveItemPrice()` (§17, `lib/utils/pricing.ts`) is **unchanged** — the
+shipping estimate is an additive display element, not a modification to the
+resolved tier price.
+
+### Configuration — `siteConfig.shipping`
+
+```ts
+shipping?: {
+  enabled: boolean;
+  proxyUrl: string;               // Cloudflare Worker URL
+  defaultPayer: "seller" | "buyer";
+  origin: { zip: string; country: string }; // ISO 3166-1 alpha-2
+};
+```
+
+Absent or `enabled: false` → feature fully inert. See §13 for the full
+template (commented out by default).
+
+### Per-item override — `price.shipping_payer`
+
+```jsonc
+"price": {
+  "tiers": [ /* ... */ ],
+  "shipping_payer": "buyer" // "seller" | "buyer", optional
+}
+```
+
+Overrides `siteConfig.shipping.defaultPayer` for a single item — e.g. a
+seller who normally absorbs shipping cost but wants one heavy/oversized item
+to be buyer-pays.
+
+### Eligibility — when the estimator appears
+
+`canEstimateShipping()` (`lib/utils/shipping.ts`) requires **all** of:
+
+1. `siteConfig.shipping.enabled === true`
+2. The item has both `weight` and `dimensions` set
+3. The buyer's **resolved price tier** is the open-ended "Shipping" tier
+   (`miles_max` absent — same convention as §17)
+
+Local-pickup tiers are never affected.
+
+### Display by payer
+
+| `resolveShippingPayer()` result | What the buyer sees |
+|---|---|
+| `"buyer"` | ZIP input + live estimate: `"+ $12.50 shipping (USPS Priority Mail, ~2d)"` |
+| `"seller"` | Static text: `"Free shipping (included by seller)"` — no ZIP input, no rate exposed |
+
+### Privacy & graceful degradation
+
+- The buyer's ZIP code lives only in `ShippingEstimator`'s component state —
+  never written to `localStorage`, cookies, or persisted in any way. Same
+  guarantee as visitor geolocation (§17 "Privacy Guarantee").
+- If the Worker is unreachable, misconfigured, or returns no rates,
+  `useShippingRate` resolves to `{ status: "error" }` and
+  `ShippingEstimator` shows `t.shippingUnavailable` ("Shipping estimate
+  unavailable") — the rest of the page is unaffected.
+
+### Deployment
+
+See [`workers/shipping-rate-proxy/README.md`](../workers/shipping-rate-proxy/README.md)
+for the full setup walkthrough (get an API key, configure `wrangler.toml`,
+`wrangler secret put`, `wrangler deploy`), or run `/setup-shipping` for a
+guided, conversational version of the same steps.
+
+### New i18n strings
+
+Six new `UIStrings` keys (added to `currency`/pricing-table group):
+`shippingEstimateLabel`, `shippingZipPlaceholder`, `shippingCalculating`,
+`shippingUnavailable`, `shippingIncludedBySeller`, `shippingEstimateSuffix`.
 

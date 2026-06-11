@@ -118,6 +118,14 @@ content/
 - **静态 HTML：** 始终显示最高档位（JS 加载前不会留空）
 - **待定状态：** 显示回退（最高）价格——卡片级别无加载占位符
 
+### 运费估算（可选）
+默认关闭——卖家通过 `siteConfig.shipping.enabled` 开启。开启后，对于落在开放式"邮寄"档位（即没有 `miles_max` 的档位）且设置了 `weight` 和 `dimensions` 的物品，会显示实时运费估算：
+
+- **卖家承担运费**（`siteConfig.shipping.defaultPayer: "seller"`，或单品级 `price.shipping_payer: "seller"`）→ 显示"包邮（卖家承担运费）"，无需输入。
+- **买家承担运费**（默认）→ 买家输入邮编；站点调用 Cloudflare Worker 代理，由其查询 Shippo 或 EasyPost 并返回最低实时运费。
+
+运费服务商的 API 密钥仅存于 Cloudflare Worker（`workers/shipping-rate-proxy/`），绝不出现在静态站点构建产物中。详见 [DESIGN_zh.md §21](DESIGN_zh.md) 和 `.claude/commands/setup-shipping.md`。
+
 ---
 
 ## 照片图库与图片存储
@@ -200,12 +208,12 @@ content/
 | Email | `mailto:{address}?subject=...&body=...`（预填） |
 | WhatsApp | `https://wa.me/{number}?text=...`（预填） |
 | Venmo | `https://venmo.com/u/{username}?txn=pay&note={item}`（预填） |
-| Facebook | `https://facebook.com/{username}` |
+| Facebook | `https://facebook.com/{username}` — 若粘贴完整主页链接（如 `profile.php?id=...`），会自动归一化为路径，不会被重复编码 |
 | Instagram | `https://instagram.com/{handle}` |
 | Snapchat | `https://snapchat.com/add/{username}` |
 | Twitter/X | `https://x.com/{handle}` |
 | TikTok | `https://tiktok.com/{handle}` |
-| LinkedIn | `https://linkedin.com/{path}` |
+| LinkedIn | `https://linkedin.com/{path}` — 会保留 `/`（不做 `%` 编码）；只填用户名时自动视为 `in/{handle}` |
 | YouTube | `https://youtube.com/{channel}` |
 
 **二维码弹窗式**（无公开个人主页链接）：

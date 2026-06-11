@@ -1,0 +1,17 @@
+name = "shipping-rate-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+[vars]
+# "shippo" | "easypost" — pick the aggregator you signed up with.
+SHIPPING_PROVIDER = "shippo"
+# Must match siteConfig.baseUrl exactly (no trailing slash) — the Worker
+# rejects requests from any other Origin.
+ALLOWED_ORIGIN = "https://your-domain.com"
+# Where parcels ship from — siteConfig.shipping.origin.
+ORIGIN_ZIP = "94103"
+ORIGIN_COUNTRY = "US"
+
+# Secrets — set with `wrangler secret put <NAME>`. Never put these here.
+#   SHIPPO_API_KEY     (required if SHIPPING_PROVIDER = "shippo")
+#   EASYPOST_API_KEY   (required if SHIPPING_PROVIDER = "easypost")

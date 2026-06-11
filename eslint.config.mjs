@@ -20,6 +20,8 @@ const config = [
       "components/**-demo.tsx",
       // Next.js generated type declaration
       "next-env.d.ts",
+      // Independently deployed Cloudflare Worker — own tsconfig/lint scope
+      "workers/**",
     ],
   },
   ...compat.extends("next/core-web-vitals", "next/typescript"),

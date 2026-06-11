@@ -498,12 +498,12 @@ For a personal garage sale site this is low priority; re-triggering a Vercel bui
 
 ---
 
-### 4.3 Shipping Calculator Integration
+### 4.3 Shipping Calculator Integration ✅ Implemented (Optional)
 **Effort:** L · **Value:** ⭐⭐
 
-For items with a "Shipping" price tier: integrate USPS/UPS/FedEx APIs to calculate actual shipping cost based on buyer ZIP code, item dimensions, and weight. Replace the fixed "Shipping: $35" with a dynamically calculated figure.
+For items with a "Shipping" price tier: integrates Shippo/EasyPost APIs to calculate actual shipping cost based on buyer ZIP code, item dimensions, and weight, replacing the fixed "Shipping: $tier" amount with a live estimate.
 
-Requires a serverless function to proxy the shipping API calls (API keys must not be in the browser bundle).
+Implemented as a fully optional, opt-in feature (`siteConfig.shipping.enabled`), with a configurable shipping payer (seller or buyer, site-wide default + per-item override via `price.shipping_payer`). API keys are proxied through an independently-deployed Cloudflare Worker (`workers/shipping-rate-proxy/`) so they never reach the browser bundle. See [DESIGN.md §21](DESIGN.md) for the full design and `.claude/commands/setup-shipping.md` for the seller setup walkthrough.
 
 ---
 
@@ -560,5 +560,4 @@ Features shipped in v1 have been moved to the "Shipped in v1" section at the top
 | **Seller dashboard (local-only GUI)** | 👤 | v2 — key non-CS growth unlock |
 | Multi-seller support | 👤 | v3 / architecture redesign required |
 | Real-time inventory without rebuild | 👤 | v3 |
-| Shipping calculator (USPS/UPS API) | 🎓👤 | v3 |
 | Buyer reservation system | 👤 | v3 |

@@ -713,6 +713,7 @@ No IE support. CSS Grid and `aspect-ratio` are used freely.
 | Path traversal | Image paths constructed from known slugs only; no user-supplied path segments at runtime |
 | `meta_description` | Truncated to 160 chars; not rendered as HTML (plain text only) |
 | `poweredByHeader: false` | Suppresses `X-Powered-By: Next.js` response header |
+| Shipping rate API keys (optional, §29) | Never present in the static bundle; held only as `wrangler secret` values on `workers/shipping-rate-proxy`, which the browser calls via `siteConfig.shipping.proxyUrl` |
 
 ---
 
@@ -2042,6 +2043,21 @@ scripts/sync-images.test.ts       ← manifest build / purge / checksum logic
 | Empty tiers | `price.tiers: []` | `null` (→ "Contact for price") |
 | `negotiable: true` | any resolved tier | tier returned, `negotiable` flag on Price object |
 
+#### `lib/utils/shipping.test.ts`
+
+| Case | Input | Expected |
+|---|---|---|
+| `isShippingTier` — null tier | `null` | `false` |
+| `isShippingTier` — bounded tier | tier with `miles_max: 5` | `false` |
+| `isShippingTier` — open-ended tier | tier with `miles_max` absent | `true` |
+| `resolveShippingPayer` — no item override | `price.shipping_payer` absent, `siteConfig.shipping.defaultPayer: "seller"` | `"seller"` |
+| `resolveShippingPayer` — item override | `price.shipping_payer: "seller"`, default `"buyer"` | `"seller"` |
+| `canEstimateShipping` — config absent | `shipping: undefined` | `false` |
+| `canEstimateShipping` — disabled | `shipping.enabled: false` | `false` |
+| `canEstimateShipping` — missing weight/dimensions | either `null` | `false` |
+| `canEstimateShipping` — non-shipping tier | resolved tier has `miles_max` | `false` |
+| `canEstimateShipping` — all preconditions met | enabled + weight + dimensions + open-ended tier | `true` |
+
 #### `lib/utils/haversine.test.ts`
 
 | Case | Input | Expected (±0.5 mi) |
@@ -2120,6 +2136,7 @@ Add a `test` job to `.github/workflows/deploy.yml` that runs before `build`:
 | Geolocation hook | Requires browser environment; covered by manual verification in `pnpm dev` |
 | Image upload adapters | Requires live CDN credentials; covered by the deployment checklist (TECH_REQUIREMENTS.md §19) |
 | Aceternity UI components | Third-party; not modified; visual regression is out of scope for v1 |
+| `workers/shipping-rate-proxy` | Independent subproject excluded from `pnpm test` scope (own `package.json`); covered by manual `wrangler dev` verification — see §29 and `workers/shipping-rate-proxy/README.md` |
 
 ---
 
@@ -2313,6 +2330,130 @@ TypeScript already enforces these at compile time (`pnpm type-check`):
 - Invalid `ui.*` slot values (caught by `BackgroundOption` / `ItemGridOption` union types)
 
 Zod runtime validation fills in what TypeScript cannot: value-range checks and semantic constraints.
+
+---
+
+## 29. Shipping Calculator Integration — Technical Specification
+
+> Full feature design and rationale: [DESIGN.md §21](DESIGN.md). This section covers the implementation contracts.
+
+### 29.1 Overview
+
+Shipping cost estimation is **fully optional**, disabled unless `siteConfig.shipping` is defined and `enabled: true`. It is purely additive: when absent, no new network calls, UI elements, or build-time requirements are introduced.
+
+### 29.2 `SiteConfig.shipping` type (`lib/config/types.ts`)
+
+```ts
+shipping?: {
+  enabled: boolean;
+  proxyUrl: string;                          // Cloudflare Worker endpoint (workers/shipping-rate-proxy)
+  defaultPayer: "seller" | "buyer";
+  origin: { zip: string; country: string };  // seller's shipping origin
+};
+```
+
+### 29.3 `Price.shipping_payer` (`lib/content/types.ts` + `schema.ts`)
+
+```ts
+// lib/content/types.ts
+shipping_payer?: "seller" | "buyer";
+
+// lib/content/schema.ts
+shipping_payer: z.enum(["seller", "buyer"]).optional().catch(undefined),
+```
+
+Per-item override of `siteConfig.shipping.defaultPayer`, resolved by `resolveShippingPayer()` (`lib/utils/shipping.ts`, see ARCHITECTURE.md).
+
+### 29.4 `useShippingRate` hook (`components/pricing/useShippingRate.ts`)
+
+`"use client"` hook. State machine:
+
+```ts
+type ShippingRateState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; rate: ShippingRate }
+  | { status: "error" };
+
+function useShippingRate(): {
+  state: ShippingRateState;
+  fetchRate: (input: {
+    destinationZip: string;
+    destinationCountry: string;
+    weight: Weight;
+    dimensions: Dimensions;
+    currency: string;
+  }) => void;
+};
+```
+
+- Uses an `AbortController` ref so a new `fetchRate()` call cancels any in-flight request — prevents stale responses from overwriting a newer ZIP entry.
+- POSTs JSON to `siteConfig.shipping.proxyUrl`; non-2xx or network errors transition to `{ status: "error" }`.
+
+### 29.5 `ShippingEstimator` component (`components/item/ShippingEstimator.tsx`)
+
+`"use client"` component, props:
+
+```ts
+{
+  price: Price;
+  resolvedTier: PriceTier | null;
+  weight: Weight | null;
+  dimensions: Dimensions | null;
+}
+```
+
+- Returns `null` when `!canEstimateShipping(...)` (see `lib/utils/shipping.ts`) — covers the disabled, missing-data, and non-shipping-tier cases with a single check.
+- `resolveShippingPayer() === "seller"` → renders `t.shippingIncludedBySeller`, no network call.
+- `resolveShippingPayer() === "buyer"` → renders a ZIP input; `onBlur`/Enter triggers `fetchRate()`; renders `t.shippingCalculating` while loading, the resolved `ShippingRate` when ready, or `t.shippingUnavailable` on error.
+
+### 29.6 Cloudflare Worker contract (`workers/shipping-rate-proxy`)
+
+Independently deployed; excluded from the root `tsconfig.json` (`exclude`) and `eslint.config.mjs` (`ignores`) — has its own `package.json`, `tsconfig.json`, and `wrangler.toml`.
+
+**Request** — `POST /` (CORS-restricted to `ALLOWED_ORIGIN`):
+
+```ts
+{
+  destinationZip: string;
+  destinationCountry: string;
+  weight: { value: number; unit: "kg" | "lb" };
+  dimensions: { length: number; width: number; height: number; unit: "cm" | "in" };
+  currency: string;
+}
+```
+
+**Response** (`RateResponseBody`):
+
+```ts
+{
+  amount: number;
+  currency: string;
+  carrier: string;
+  service: string;
+  estimatedDays: number | null;
+}
+```
+
+- `Env` vars: `SHIPPING_PROVIDER` (`"shippo" | "easypost"`), `ALLOWED_ORIGIN`, `ORIGIN_ZIP`, `ORIGIN_COUNTRY`.
+- `Env` secrets (set via `wrangler secret put`, never committed): `SHIPPO_API_KEY` and/or `EASYPOST_API_KEY`.
+- Worker calls the configured provider, converts units to what the provider API expects (`toInches()` etc.), and returns the cheapest rate across returned options.
+- `OPTIONS` requests are answered with CORS preflight headers; non-`POST` methods return `405`.
+
+### 29.7 New i18n keys (`UIStrings`, `lib/config/types.ts` + `lib/i18n/translations.ts`)
+
+| Key | English default |
+|---|---|
+| `shippingEstimateLabel` | `"Estimated shipping"` |
+| `shippingZipPlaceholder` | `"ZIP code"` |
+| `shippingCalculating` | `"Calculating shipping…"` |
+| `shippingUnavailable` | `"Shipping estimate unavailable"` |
+| `shippingIncludedBySeller` | `"Free shipping (included by seller)"` |
+| `shippingEstimateSuffix` | `"shipping"` |
+
+### 29.8 Deployment
+
+Seller-facing walkthrough: `workers/shipping-rate-proxy/README.md` and `.claude/commands/setup-shipping.md`. No changes to `pnpm build`, CI, or GitHub Pages deployment — the Worker is deployed separately via `wrangler deploy` from `workers/shipping-rate-proxy/`.
 
 ---
 

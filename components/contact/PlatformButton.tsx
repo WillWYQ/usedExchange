@@ -76,6 +76,47 @@ function formatPrice(tier: PriceTier, currency: string): string {
   }
 }
 
+// Matches a pasted Facebook profile/page URL, capturing the "path?query" tail
+// (e.g. "profile.php?id=100012345678" or "your.username").
+const FACEBOOK_URL = /^(?:https?:\/\/)?(?:www\.|m\.)?(?:facebook\.com|fb\.me)\/(.+)$/i;
+
+// Matches a pasted LinkedIn profile/company URL, capturing the "path" tail
+// (e.g. "in/jane-doe" or "company/acme").
+const LINKEDIN_URL = /^(?:https?:\/\/)?(?:www\.)?linkedin\.com\/(.+)$/i;
+
+/**
+ * Normalizes a Facebook/LinkedIn config `value` into a URL path + query.
+ *
+ * Sellers may enter either a bare handle/path (e.g. "in/jane-doe") or a full
+ * profile URL copied from their browser (e.g.
+ * "https://www.facebook.com/profile.php?id=100012345678"). A plain
+ * `encodeURIComponent(value)` breaks both: it turns "in/jane-doe" into
+ * "in%2Fjane-doe" (a 404 on LinkedIn), and it double-encodes a pasted URL
+ * into a nonsensical "facebook.com/https%3A%2F%2F..." link.
+ *
+ * `urlPattern` strips a recognized "<scheme>://<www.><platform domain>/"
+ * prefix down to its path+query; the remainder is then re-segmented on "/"
+ * and each segment is encoded individually, so "/" separators and the query
+ * string survive intact.
+ */
+function normalizeProfilePath(value: string, urlPattern: RegExp): string {
+  const trimmed = value.trim().replace(/^\/+/, "");
+  const hostMatch = trimmed.match(urlPattern);
+  const pathAndQuery = hostMatch?.[1] ?? trimmed;
+
+  const queryIndex = pathAndQuery.indexOf("?");
+  const path = queryIndex === -1 ? pathAndQuery : pathAndQuery.slice(0, queryIndex);
+  const query = queryIndex === -1 ? "" : pathAndQuery.slice(queryIndex);
+
+  const encodedPath = path
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+  return encodedPath + query;
+}
+
 function buildUrl(
   type: string,
   value: string,
@@ -106,7 +147,7 @@ function buildUrl(
     case "discord":
       return `https://discord.com/users/${encodeURIComponent(value)}`;
     case "facebook":
-      return `https://facebook.com/${encodeURIComponent(value)}`;
+      return `https://facebook.com/${normalizeProfilePath(value, FACEBOOK_URL)}`;
     case "instagram":
       return `https://instagram.com/${encodeURIComponent(value)}`;
     case "snapchat":
@@ -123,8 +164,13 @@ function buildUrl(
       return `https://x.com/${encodeURIComponent(value)}`;
     case "tiktok":
       return `https://tiktok.com/${encodeURIComponent(value)}`;
-    case "linkedin":
-      return `https://linkedin.com/${encodeURIComponent(value)}`;
+    case "linkedin": {
+      const path = normalizeProfilePath(value, LINKEDIN_URL);
+      // Bare handles (no "in/", "company/", "school/" or "pub/" prefix)
+      // default to a personal profile, matching LinkedIn's own URL scheme.
+      const hasProfileType = /^(in|company|school|pub)\//i.test(path);
+      return `https://linkedin.com/${hasProfileType ? path : `in/${path}`}`;
+    }
     case "youtube":
       return `https://youtube.com/${encodeURIComponent(value)}`;
     case "venmo": {

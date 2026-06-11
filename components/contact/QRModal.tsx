@@ -37,7 +37,7 @@ export function QRModal({ imageSrc, label, onClose }: QRModalProps) {
       ref={dialogRef}
       onClose={handleDialogClose}
       onClick={handleBackdropClick}
-      className="m-auto max-w-xs rounded-2xl border-0 bg-background/90 p-0 text-foreground backdrop:bg-background/60 backdrop:backdrop-blur-sm"
+      className="m-auto max-w-sm rounded-2xl border-0 bg-background/90 p-0 text-foreground backdrop:bg-background/60 backdrop:backdrop-blur-sm"
     >
       <div className="relative flex flex-col items-center gap-4 p-6">
         <button
@@ -54,7 +54,7 @@ export function QRModal({ imageSrc, label, onClose }: QRModalProps) {
         <img
           src={imageSrc}
           alt={`${label} QR code`}
-          className="h-48 w-48 rounded-lg object-contain"
+          className="h-72 w-72 rounded-lg object-contain"
         />
 
         <p className="text-xs text-foreground/40">Scan to connect</p>

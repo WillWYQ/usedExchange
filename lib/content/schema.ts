@@ -102,6 +102,9 @@ const priceSchema = z
     // Buyer-facing "View all pricing tiers" toggle is opt-in: sellers may not
     // want buyers to see e.g. how much cheaper local pickup is than shipping.
     show_tiers: z.boolean().catch(false).optional().default(false),
+    // Overrides siteConfig.shipping.defaultPayer for this item. Absent =
+    // use the site-wide default. See DESIGN.md §21.
+    shipping_payer: z.enum(["seller", "buyer"]).optional().catch(undefined),
   })
   .optional()
   .default({ currency: "", tiers: [], negotiable: false, show_tiers: false });

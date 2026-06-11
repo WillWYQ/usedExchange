@@ -1,10 +1,11 @@
 "use client";
 
-import type { Price, PriceTier } from "@/lib/content/types";
+import type { Price, PriceTier, Weight, Dimensions } from "@/lib/content/types";
 import { resolveItemPrice } from "@/lib/utils/pricing";
 import { useDistancePricingContext } from "@/components/pricing/DistancePricingContext";
 import { LocationPriceBar } from "@/components/pricing/LocationPriceBar";
 import { PricingTableToggle } from "./PricingTableToggle";
+import { ShippingEstimator } from "./ShippingEstimator";
 
 type PricingSectionProps = {
   price: Price;
@@ -13,6 +14,9 @@ type PricingSectionProps = {
   initialResolvedTier: PriceTier | null;
   // Show struck-through previous price when price_reduced is true.
   previousLowestPrice?: number | null;
+  // Passed through to ShippingEstimator — see DESIGN.md §21.
+  weight?: Weight | null;
+  dimensions?: Dimensions | null;
 };
 
 // Renders LocationPriceBar (geo/distance status) above PricingTableToggle (pricing).
@@ -28,6 +32,8 @@ export function PricingSection({
   price,
   initialResolvedTier,
   previousLowestPrice,
+  weight = null,
+  dimensions = null,
 }: PricingSectionProps) {
   const { geoState, resolved, setManualMiles } = useDistancePricingContext();
 
@@ -53,6 +59,13 @@ export function PricingSection({
       )}
 
       <PricingTableToggle price={price} resolvedTier={resolvedTier} />
+
+      <ShippingEstimator
+        price={price}
+        resolvedTier={resolvedTier}
+        weight={weight}
+        dimensions={dimensions}
+      />
     </div>
   );
 }

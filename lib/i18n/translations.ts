@@ -82,6 +82,13 @@ export const EN_FALLBACK: UIStrings = {
   hidePricingTiers: "Hide pricing tiers",
   viewAllPricingTiers: "View all pricing tiers",
 
+  shippingEstimateLabel: "Estimated shipping",
+  shippingZipPlaceholder: "ZIP code",
+  shippingCalculating: "Calculating shipping…",
+  shippingUnavailable: "Shipping estimate unavailable",
+  shippingIncludedBySeller: "Free shipping (included by seller)",
+  shippingEstimateSuffix: "shipping",
+
   menuOpen: "Open menu",
   menuClose: "Close menu",
 };

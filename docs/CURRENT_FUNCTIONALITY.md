@@ -118,6 +118,14 @@ Visitor coordinates never leave the browser. Seller coordinates are in the stati
 - **Static HTML:** always shows highest tier (never blank before JS loads)
 - **Pending state:** shows fallback (highest) price — no card-level spinners
 
+### Shipping Cost Estimation (Optional)
+Disabled by default — sellers opt in via `siteConfig.shipping.enabled`. When enabled, items in the open-ended "Shipping" tier (the one without `miles_max`) and with `weight` + `dimensions` set show a live shipping estimate:
+
+- **Seller pays shipping** (`siteConfig.shipping.defaultPayer: "seller"`, or `price.shipping_payer: "seller"` per item) → shows "Free shipping (included by seller)", no input needed.
+- **Buyer pays shipping** (default) → buyer enters their ZIP code; the site calls a Cloudflare Worker proxy, which queries Shippo or EasyPost and returns the cheapest live rate.
+
+API keys for the shipping provider live only in the Cloudflare Worker (`workers/shipping-rate-proxy/`), never in the static site bundle. See [DESIGN.md §21](DESIGN.md) and `.claude/commands/setup-shipping.md`.
+
 ---
 
 ## Photo Gallery & Image Storage
@@ -200,12 +208,12 @@ Site header + "Page not found" + link home.
 | Email | `mailto:{address}?subject=...&body=...` (pre-filled) |
 | WhatsApp | `https://wa.me/{number}?text=...` (pre-filled) |
 | Venmo | `https://venmo.com/u/{username}?txn=pay&note={item}` (pre-filled) |
-| Facebook | `https://facebook.com/{username}` |
+| Facebook | `https://facebook.com/{username}` — a pasted full profile URL (e.g. `profile.php?id=...`) is normalized rather than double-encoded |
 | Instagram | `https://instagram.com/{handle}` |
 | Snapchat | `https://snapchat.com/add/{username}` |
 | Twitter/X | `https://x.com/{handle}` |
 | TikTok | `https://tiktok.com/{handle}` |
-| LinkedIn | `https://linkedin.com/{path}` |
+| LinkedIn | `https://linkedin.com/{path}` — `/` is preserved (not %-encoded); a bare handle defaults to `in/{handle}` |
 | YouTube | `https://youtube.com/{channel}` |
 
 **QR-code modal** (no public profile URL):

@@ -1,8 +1,8 @@
 # UsedExchange — Implementation Plan
 
-**Version:** 1.4  
-**Date:** 2026-06-03  
-**Based on:** DESIGN.md v0.9.1 · TECH_REQUIREMENTS.md v0.9.1  
+**Version:** 1.5  
+**Date:** 2026-06-11  
+**Based on:** DESIGN.md v0.9.2 · TECH_REQUIREMENTS.md v0.9.2  
 **Assumption:** Single developer; primary target = GitHub Pages + Cloudflare R2
 
 ---
@@ -27,7 +27,8 @@
 | 13 | SEO, Search, A11y & Security Hardening | 1 | 11 |
 | 14 | Deployment | 1 | 4, 13 |
 | 15 | AI Skill Files (Setup Wizard + Item Generator + Item Translator) | 2 | 3 |
-| **Total** | | **~24 days** | |
+| 16 | Shipping Calculator Integration (Optional) | 2 | 7, 12 |
+| **Total** | | **~26 days** | |
 
 **Critical path:** 0 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 11 → 13 → 14  
 **Parallelisable:** Phase 1 ∥ Phase 2; Phase 4 ∥ Phase 3; Phase 10 ∥ Phase 7; Phase 12 (i18n) ∥ Phases 10, 11, 13; Phase 15 ∥ Phases 5–14
@@ -578,6 +579,60 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 - No new npm dependencies added
 - No API keys required
 - No files written outside `content/`
+
+---
+
+## Phase 16 — Shipping Calculator Integration (Optional) ✅
+**Goal:** Sellers can optionally enable a live shipping cost estimate (Shippo/EasyPost) for items in the open-ended "Shipping" price tier, with the shipping cost payer (seller or buyer) configurable site-wide and per item. Disabled by default — zero impact on sites that don't opt in. API keys never enter the static bundle; they are held by an independently-deployed Cloudflare Worker.
+
+**Architecture:** A pure helper module (`lib/utils/shipping.ts`, mirrors `lib/utils/pricing.ts` — no `"use client"`) decides eligibility and payer. A client hook + component (`useShippingRate`, `ShippingEstimator`) call a Cloudflare Worker proxy (`workers/shipping-rate-proxy/`, independently deployed, excluded from root tsconfig/eslint/test scope) which holds the provider API key as a `wrangler secret`.
+
+### Dependencies
+- Phase 7 (Geolocation & Pricing System) — reuses `PriceTier`/`Price` types and the open-ended-tier convention
+- Phase 12 (i18n Runtime) — adds new `UIStrings` keys
+
+### Tasks
+
+#### 16a — Types & Schema
+- [x] `lib/utils/shipping.ts` — `isShippingTier()`, `resolveShippingPayer()`, `canEstimateShipping()`; pure, no `"use client"`
+- [x] `lib/utils/shipping.test.ts` — 10 unit tests covering all three functions
+- [x] `Price.shipping_payer?: "seller" | "buyer"` added to `lib/content/types.ts` and `lib/content/schema.ts` (`z.enum(...).optional().catch(undefined)`)
+- [x] `SiteConfig.shipping?` (`enabled`, `proxyUrl`, `defaultPayer`, `origin`) added to `lib/config/types.ts`
+- [x] 6 new `UIStrings` keys added to `lib/config/types.ts`, `lib/i18n/translations.ts` (`EN_FALLBACK`), and `content/config.ts` (English + commented zh template)
+
+#### 16b — Client Hook & Component
+- [x] `components/pricing/useShippingRate.ts` (client) — `{ status: idle|loading|ready|error }` state machine; `AbortController` cancels in-flight requests on re-fetch
+- [x] `components/item/ShippingEstimator.tsx` (client) — returns `null` unless `canEstimateShipping()`; renders "included by seller" or a ZIP input + live rate depending on `resolveShippingPayer()`
+- [x] Wired into `components/item/PricingSection.tsx` and `app/[category]/[item]/page.tsx` (passes `weight`/`dimensions`)
+
+#### 16c — Cloudflare Worker Proxy
+- [x] `workers/shipping-rate-proxy/` — independent subproject (own `package.json`, `tsconfig.json`, `wrangler.toml`)
+- [x] `src/index.ts` — CORS-restricted `POST` handler; `getShippoRate()` / `getEasyPostRate()`; returns cheapest rate as `RateResponseBody`
+- [x] `.dev.vars.example` documents required secrets (`SHIPPO_API_KEY` / `EASYPOST_API_KEY`)
+- [x] `README.md` — deploy walkthrough (get API key, `wrangler secret put`, `wrangler deploy`, enable in `content/config.ts`) + API contract
+- [x] Root `tsconfig.json` `exclude` and `eslint.config.mjs` `ignores` updated to exclude `workers/`
+- [x] `.gitignore` updated: `.dev.vars`, `.wrangler/` ignored; `.dev.vars.example` kept
+
+#### 16d — Verification & Documentation
+- [x] `pnpm type-check`, `pnpm lint`, `pnpm test` all pass (220 tests across 20 files)
+- [x] `pnpm exec tsx scripts/check-config.ts` passes (feature commented out by default — template still valid)
+- [x] DESIGN.md / DESIGN_zh.md §21 — full feature design (config, per-item override, eligibility, display-by-payer, privacy, deployment)
+- [x] ARCHITECTURE.md / ARCHITECTURE_zh.md — module reference, data flow diagram, component tables, key invariants, directory structure
+- [x] TECH_REQUIREMENTS.md / TECH_REQUIREMENTS_zh.md §29 — implementation contracts (types, hook/component API, Worker request/response shapes, test cases, security)
+- [x] FEATURES_ROADMAP.md / FEATURES_ROADMAP_zh.md §4.3 marked implemented
+- [x] CURRENT_FUNCTIONALITY.md / CURRENT_FUNCTIONALITY_zh.md — seller-facing functional description
+- [x] `.claude/commands/setup-shipping.md` — seller skill for enabling/configuring the feature
+
+### Acceptance Criteria
+- `siteConfig.shipping` absent or `enabled: false` → `ShippingEstimator` renders nothing; no behavior change vs. pre-Phase-16
+- Seller-pays item → "Free shipping (included by seller)" shown, no network call
+- Buyer-pays item with weight + dimensions on the Shipping tier → ZIP input shown; valid ZIP returns a live rate from the Worker
+- Shipping API keys never appear in `out/` (static export) or any client bundle
+- `lib/utils/shipping.ts` has no `"use client"` and is importable from both server and client code
+- `workers/` does not affect `pnpm type-check` / `pnpm lint` / `pnpm test` for the main app
+
+### References
+DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md (lib/ Module Reference, Shipping Estimate data flow) · `workers/shipping-rate-proxy/README.md`
 
 ---
 

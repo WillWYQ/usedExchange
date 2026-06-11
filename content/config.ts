@@ -47,6 +47,22 @@ export const siteConfig: SiteConfig = {
   // is capped. Set to 0 to render every item with no cap.
   soldArchiveDisplayLimit: 200,
 
+  // ── Shipping calculator (optional) ─────────────────────────────────────────
+  // Disabled by default — zero impact on the site until configured.
+  // To enable: deploy workers/shipping-rate-proxy (see its README), then set
+  // enabled: true and proxyUrl to your Worker's URL. Only affects items whose
+  // resolved price tier is "open-ended" (no miles_max — the "Shipping" tier).
+  // See DESIGN.md §21 for the full architecture.
+  // shipping: {
+  //   enabled: true,
+  //   proxyUrl: "https://shipping-rate-proxy.<your-subdomain>.workers.dev",
+  //   defaultPayer: "buyer", // "seller" | "buyer" — who pays for shipping by default
+  //   origin: {
+  //     zip: "94103",
+  //     country: "US", // ISO 3166-1 alpha-2
+  //   },
+  // },
+
   // ── Contact ───────────────────────────────────────────────────────────────
   contact: {
     reveal_behavior: "click", // "click" | "always"
@@ -210,6 +226,14 @@ export const siteConfig: SiteConfig = {
         hidePricingTiers: "Hide pricing tiers",
         viewAllPricingTiers: "View all pricing tiers",
 
+        // ── Shipping estimator ───────────────────────────────────────────────
+        shippingEstimateLabel: "Estimated shipping",
+        shippingZipPlaceholder: "ZIP code",
+        shippingCalculating: "Calculating shipping…",
+        shippingUnavailable: "Shipping estimate unavailable",
+        shippingIncludedBySeller: "Free shipping (included by seller)",
+        shippingEstimateSuffix: "shipping",
+
         // ── Mobile nav drawer ────────────────────────────────────────────────
         menuOpen: "Open menu",
         menuClose: "Close menu",
@@ -288,6 +312,12 @@ export const siteConfig: SiteConfig = {
       //   obo: "可議價",
       //   hidePricingTiers: "隱藏費率",
       //   viewAllPricingTiers: "查看所有費率",
+      //   shippingEstimateLabel: "預估運費",
+      //   shippingZipPlaceholder: "郵遞區號",
+      //   shippingCalculating: "運費計算中…",
+      //   shippingUnavailable: "無法取得運費估算",
+      //   shippingIncludedBySeller: "免運費（賣家負擔）",
+      //   shippingEstimateSuffix: "運費",
       //   menuOpen: "開啟選單",
       //   menuClose: "關閉選單",
       // },

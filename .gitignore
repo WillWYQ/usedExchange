@@ -9,6 +9,11 @@ config/secrets.*
 anthropic_key*
 openai_key*
 
+# ── Cloudflare Workers ───────────────────────────────────────────────────────
+.dev.vars
+!.dev.vars.example
+.wrangler/
+
 # ── macOS ─────────────────────────────────────────────────────────────────────
 .DS_Store
 .AppleDouble

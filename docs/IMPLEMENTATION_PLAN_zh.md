@@ -1,8 +1,8 @@
 # UsedExchange — 实施计划
 
-**版本：** 1.4  
-**日期：** 2026-06-03  
-**基于：** DESIGN.md v0.9.1 · TECH_REQUIREMENTS.md v0.9.1  
+**版本：** 1.5  
+**日期：** 2026-06-11  
+**基于：** DESIGN.md v0.9.2 · TECH_REQUIREMENTS.md v0.9.2  
 **假设：** 单人开发者；主要目标 = GitHub Pages + Cloudflare R2
 
 ---
@@ -27,7 +27,8 @@
 | 13 | SEO、搜索、无障碍与安全加固 | 1 | 11 |
 | 14 | 部署 | 1 | 4, 13 |
 | 15 | AI 技能文件（设置向导 + 物品生成器 + 物品翻译器） | 2 | 3 |
-| **总计** | | **约 24 天** | |
+| 16 | 运费计算器集成（可选） | 2 | 7, 12 |
+| **总计** | | **约 26 天** | |
 
 **关键路径：** 0 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 11 → 13 → 14  
 **可并行：** Phase 1 ∥ Phase 2；Phase 4 ∥ Phase 3；Phase 10 ∥ Phase 7；Phase 12（国际化）∥ Phase 10、11、13；Phase 15 ∥ Phase 5–14
@@ -452,6 +453,60 @@
 - [x] 创建 `.github/workflows/release-seller.yml`——由 `v*` tag 触发的 CI 工作流；将 `release` 分支重置到打标签的提交；用 `.claude/seller/CLAUDE.md` 替换 `.claude/CLAUDE.md`；将 `.claude/seller/*.md` 复制到 `.claude/skills/`；强制推送 `release`。支持 `workflow_dispatch` 手动运行。
 - [ ] 在至少一个非 Claude AI 工具（Cursor 或 GitHub Copilot）中测试所有三个技能，验证兼容性
 - [ ] 确认 `content/` 规则：AI 绝不修改 `content/` 之外的任何文件
+
+---
+
+## Phase 16 — 运费计算器集成（可选）✅
+**目标：** 卖家可选择性地为处于开放式"邮寄"价格档位的物品启用实时运费估算（Shippo/EasyPost），运费承担方（卖家或买家）可在站点级和单品级配置。默认关闭——未开启的站点不受任何影响。API 密钥绝不进入静态构建产物，由独立部署的 Cloudflare Worker 持有。
+
+**架构：** 纯函数辅助模块（`lib/utils/shipping.ts`，与 `lib/utils/pricing.ts` 同理——禁止 `"use client"`）负责判断可用性和承担方。客户端 hook + 组件（`useShippingRate`、`ShippingEstimator`）调用 Cloudflare Worker 代理（`workers/shipping-rate-proxy/`，独立部署，不参与根目录 tsconfig/eslint/测试范围），由其以 `wrangler secret` 形式持有服务商 API 密钥。
+
+### 依赖
+- Phase 7（地理定位与定价系统）——复用 `PriceTier`/`Price` 类型及开放式档位惯例
+- Phase 12（国际化运行时）——新增 `UIStrings` 键
+
+### 任务
+
+#### 16a — 类型与 Schema
+- [x] `lib/utils/shipping.ts`——`isShippingTier()`、`resolveShippingPayer()`、`canEstimateShipping()`；纯函数，禁止 `"use client"`
+- [x] `lib/utils/shipping.test.ts`——覆盖三个函数的 10 个单元测试
+- [x] `lib/content/types.ts` 和 `lib/content/schema.ts` 新增 `Price.shipping_payer?: "seller" | "buyer"`（`z.enum(...).optional().catch(undefined)`）
+- [x] `lib/config/types.ts` 新增 `SiteConfig.shipping?`（`enabled`、`proxyUrl`、`defaultPayer`、`origin`）
+- [x] `lib/config/types.ts`、`lib/i18n/translations.ts`（`EN_FALLBACK`）和 `content/config.ts`（英文 + 注释掉的中文模板）新增 6 个 `UIStrings` 键
+
+#### 16b — 客户端 Hook 与组件
+- [x] `components/pricing/useShippingRate.ts`（客户端）——`{ status: idle|loading|ready|error }` 状态机；`AbortController` 在重新请求时取消进行中的请求
+- [x] `components/item/ShippingEstimator.tsx`（客户端）——`!canEstimateShipping()` 时返回 `null`；根据 `resolveShippingPayer()` 渲染"包邮"提示或邮编输入框 + 实时运费
+- [x] 接入 `components/item/PricingSection.tsx` 和 `app/[category]/[item]/page.tsx`（传递 `weight`/`dimensions`）
+
+#### 16c — Cloudflare Worker 代理
+- [x] `workers/shipping-rate-proxy/`——独立子项目（自有 `package.json`、`tsconfig.json`、`wrangler.toml`）
+- [x] `src/index.ts`——CORS 限制的 `POST` 处理函数；`getShippoRate()` / `getEasyPostRate()`；以 `RateResponseBody` 返回最低运费
+- [x] `.dev.vars.example` 记录所需密钥（`SHIPPO_API_KEY` / `EASYPOST_API_KEY`）
+- [x] `README.md`——部署指南（获取 API 密钥、`wrangler secret put`、`wrangler deploy`、在 `content/config.ts` 中启用）+ API 约定
+- [x] 根目录 `tsconfig.json` 的 `exclude` 和 `eslint.config.mjs` 的 `ignores` 已更新以排除 `workers/`
+- [x] `.gitignore` 已更新：忽略 `.dev.vars`、`.wrangler/`；保留 `.dev.vars.example`
+
+#### 16d — 验证与文档
+- [x] `pnpm type-check`、`pnpm lint`、`pnpm test` 全部通过（20 个文件共 220 个测试）
+- [x] `pnpm exec tsx scripts/check-config.ts` 通过（功能默认注释关闭——模板仍然有效）
+- [x] DESIGN.md / DESIGN_zh.md §21——完整功能设计（配置、单品覆盖、可用性判断、按承担方展示、隐私、部署）
+- [x] ARCHITECTURE.md / ARCHITECTURE_zh.md——模块参考、数据流图、组件表、关键不变性、目录结构
+- [x] TECH_REQUIREMENTS.md / TECH_REQUIREMENTS_zh.md §29——实现约定（类型、hook/组件 API、Worker 请求/响应格式、测试用例、安全性）
+- [x] FEATURES_ROADMAP.md / FEATURES_ROADMAP_zh.md §4.3 标记为已实现
+- [x] CURRENT_FUNCTIONALITY.md / CURRENT_FUNCTIONALITY_zh.md——面向卖家的功能说明
+- [x] `.claude/commands/setup-shipping.md`——用于启用/配置该功能的卖家技能
+
+### 验收标准
+- `siteConfig.shipping` 缺失或 `enabled: false` → `ShippingEstimator` 不渲染任何内容；与 Phase 16 之前行为一致
+- 卖家承担运费的物品 → 显示"包邮（卖家承担运费）"，不发起网络请求
+- 买家承担运费且设置了重量+尺寸的"邮寄"档位物品 → 显示邮编输入框；输入有效邮编后从 Worker 返回实时运费
+- 运费 API 密钥不会出现在 `out/`（静态导出）或任何客户端构建产物中
+- `lib/utils/shipping.ts` 禁止 `"use client"`，可同时被服务端和客户端代码导入
+- `workers/` 不影响主应用的 `pnpm type-check` / `pnpm lint` / `pnpm test`
+
+### 参考
+DESIGN_zh.md §21 · TECH_REQUIREMENTS_zh.md §29 · ARCHITECTURE_zh.md（lib/ 模块参考、运费估算数据流）· `workers/shipping-rate-proxy/README.md`
 
 ---
 

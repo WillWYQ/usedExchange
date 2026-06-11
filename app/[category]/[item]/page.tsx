@@ -220,6 +220,8 @@ export default async function ItemDetailPage({
             previousLowestPrice={
               itemData.priceReduced ? itemData.previousLowestPrice : null
             }
+            weight={itemData.weight}
+            dimensions={itemData.dimensions}
           />
 
           {/* Make an Offer button — shown when negotiable AND min offer is set */}
