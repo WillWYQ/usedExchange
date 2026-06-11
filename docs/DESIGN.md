@@ -915,12 +915,6 @@ export const siteConfig: SiteConfig = {
     itemCard:   "simple",
   },
 
-  // ── Dark mode ─────────────────────────────────────────────────────────────
-  // "media"  → automatic — follows OS/browser dark/light preference (default)
-  //            No toggle needed; zero user action.
-  // "class"  → manual toggle via button in SiteHeader (future extension)
-  darkMode: "media" as const,
-
   // ── Analytics ─────────────────────────────────────────────────────────────
   analytics: {
     vercel:        false,  // Vercel Analytics — only active on Vercel deployments; no-op elsewhere
@@ -1626,7 +1620,6 @@ The following were previously listed as future features. Those now in v1 have be
 | Future feature | Designated extension point |
 |---|---|
 | Contact form / enquiry | Serverless function; `ContactSection` has a reserved slot |
-| Manual dark mode toggle | Change `darkMode: "media"` → `"class"` in config; add toggle button to `SiteHeader` |
 | Tag filter page | `/tags/{tag}` route + tag index in loader; tags are already stored and indexed by search |
 | Draft preview | Next.js middleware on `/preview/[category]/[item]`; reads `status: "draft"` items |
 | Distance unit toggle (mi ↔ km) | Add `distanceUnit: "mi" \| "km"` to `siteConfig.i18n`; `useDistancePricing` converts |

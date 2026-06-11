@@ -22,7 +22,7 @@
 | Vercel Analytics + Speed Insights 🎓 | Hobby 计划免费；通过配置启用 |
 | Schema 字段扩展 🎓 | stripe_payment_link、pickup_windows、no_lowball、price_reduced、youtube_link、isbn、course、edition、semester_listed、name_zh、description_zh、venmo_payment_request、min_acceptable_offer |
 | 客户端全文搜索 🎓👤 | fuse.js；构建时索引；头部搜索栏 |
-| 自动深色模式（系统设置）🎓 | Tailwind v4 默认（`prefers-color-scheme`）——无需切换按钮 |
+| 深色模式（自动 + 手动切换）🎓 | 默认跟随系统偏好（`prefers-color-scheme`）；页头 `ThemeToggle` 允许访客手动切换，由 `next-themes` 持久化 |
 | 卖家 CLI 工具 🎓👤 | `pnpm create-item`、`pnpm create-template`、`pnpm new`、`pnpm mark-sold` |
 | "浏览全部"跨分类页 🎓👤 | `/all` 路由，含完整筛选 + 排序 |
 | "出价"流程 🎓👤 | 内联表单 + 预填联系消息；`min_acceptable_offer` 门槛 |
@@ -177,10 +177,10 @@ pnpm semester-end
 
 ---
 
-### 2.3 深色模式 🎓
+### 2.3 深色模式 🎓 ✅ v1 已包含
 **工作量：** M · **价值：** ⭐⭐
 
-`tailwind darkMode: 'class'` + `SiteHeader` 中的切换按钮 + 首次加载时的系统偏好检测。所有 Aceternity 组件均支持深色模式。
+`SiteHeader` 中的 `ThemeToggle` 按钮 + `next-themes`（class 方式）：默认跟随访客的操作系统/浏览器偏好，并将明确选择持久化到 `localStorage`。所有 Aceternity 组件均支持深色模式。
 
 ---
 

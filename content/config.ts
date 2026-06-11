@@ -79,11 +79,6 @@ export const siteConfig: SiteConfig = {
     itemCard: "simple",
   },
 
-  // ── Dark mode ─────────────────────────────────────────────────────────────
-  // "media" → follows OS/browser preference (default)
-  // "class" → manual toggle via SiteHeader button (future extension)
-  darkMode: "media",
-
   // ── Analytics ─────────────────────────────────────────────────────────────
   analytics: {
     vercel: false, // enable only on Vercel deployments

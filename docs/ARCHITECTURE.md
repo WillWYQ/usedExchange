@@ -270,7 +270,7 @@ Returns `true` once the seller has replaced `baseUrl` with a real domain (i.e. i
 ```
 <html>
   <body>
-    <ThemeProvider>          ← next-themes, follows siteConfig.darkMode
+    <ThemeProvider>          ← next-themes, class-based, defaultTheme="system"; ThemeToggle persists choice
       <LocaleProvider>       ← locale state in localStorage; exposes useLocale()
         <BackgroundEffect>   ← reads siteConfig.ui.background, renders Aceternity background
           <SiteHeader />     ← logo, search bar (when enabled), locale switcher

@@ -22,7 +22,7 @@ The following features were initially on the roadmap and have been moved into th
 | Vercel Analytics + Speed Insights 🎓 | Free on Hobby; enabled via config |
 | Schema additions 🎓 | stripe_payment_link, pickup_windows, no_lowball, price_reduced, youtube_link, isbn, course, edition, semester_listed, name_zh, description_zh, venmo_payment_request, min_acceptable_offer |
 | Client-side full-text search 🎓👤 | fuse.js; build-time index; search bar in header |
-| Auto dark mode (system setting) 🎓 | Tailwind v4 default (`prefers-color-scheme`) — no toggle needed |
+| Dark mode (auto + manual toggle) 🎓 | Defaults to OS preference (`prefers-color-scheme`); `ThemeToggle` in the header lets visitors override, persisted via `next-themes` |
 | Seller CLI tools 🎓👤 | `pnpm create-item`, `pnpm create-template`, `pnpm new`, `pnpm mark-sold` |
 | "Browse All" cross-category page 🎓👤 | `/all` route with full filter + sort |
 | "Make an Offer" flow 🎓👤 | Inline form + pre-filled contact message; `min_acceptable_offer` gate |
@@ -240,14 +240,12 @@ Already in the Extensibility Register.
 
 ---
 
-### 2.3 Dark Mode 🎓
+### 2.3 Dark Mode 🎓 ✅ Shipped in v1
 **Effort:** M · **Value:** ⭐⭐
 
-`tailwind darkMode: 'class'` + a toggle button in `SiteHeader` + system preference detection on first load.
+`ThemeToggle` button in `SiteHeader` + `next-themes` (class-based), defaulting to the visitor's OS/browser preference and persisting an explicit choice in `localStorage`.
 
 All Aceternity components are dark-mode aware. The seller's chosen background effect automatically adapts. Particularly relevant for the CS student audience who typically prefer dark UI.
-
-Already in the Extensibility Register.
 
 ---
 

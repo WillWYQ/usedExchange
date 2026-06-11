@@ -365,7 +365,7 @@ Set any option in `content/config.ts`. All 27 Aceternity components are pre-inst
 | Hero | `hero.cta_label`, `hero.cta_href` |
 | SEO | `meta.description`, `meta.twitterHandle` |
 | UI slots | `ui.background`, `ui.itemGrid`, `ui.gallery`, `ui.itemCard` |
-| Dark mode | Header toggle (light/dark/system, persisted via `next-themes`); the `darkMode` config field is legacy and unused |
+| Dark mode | Header toggle (light/dark/system, persisted via `next-themes`) |
 | Analytics | `analytics.vercel`, `analytics.speedInsights` |
 | Search | `search.enabled`, `search.placeholder` |
 | Sitemap | `sitemap.enabled` |
@@ -406,7 +406,7 @@ Photos copied locally → dev server with hot reload.
 
 ## Dark Mode
 
-A sun/moon toggle in the site header (`ThemeToggle`) lets visitors switch between light and dark themes. It defaults to the visitor's OS/browser preference (`system`) and persists an explicit choice via `next-themes` (class-based switching, stored in `localStorage`). All Aceternity components are dark-mode aware. The `darkMode` field in `content/config.ts` is legacy and no longer read by the app.
+A sun/moon toggle in the site header (`ThemeToggle`) lets visitors switch between light and dark themes. It defaults to the visitor's OS/browser preference (`system`) and persists an explicit choice via `next-themes` (class-based switching, stored in `localStorage`). All Aceternity components are dark-mode aware.
 
 ---
 

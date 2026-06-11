@@ -1396,7 +1396,6 @@ export default { plugins: { "@tailwindcss/postcss": {} } };
 - No toggle needed; no user action required; no JavaScript involved
 - All Tailwind `dark:` variant classes respond to OS/browser `prefers-color-scheme`
 - Aceternity components installed via `npx shadcn@latest` are Tailwind v4 compatible
-- `siteConfig.darkMode` is typed `"media" | "class"`. The `"class"` variant is a future extension (requires toggle button in SiteHeader + persisted preference; see DESIGN.md §19)
 
 ---
 

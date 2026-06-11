@@ -594,8 +594,6 @@ export const siteConfig: SiteConfig = {
     itemCard:   "simple",
   },
 
-  darkMode: "media" as const,
-
   analytics: {
     vercel:        false,
     speedInsights: false,
@@ -993,7 +991,6 @@ export function BackgroundEffect({ children }: { children: React.ReactNode }) {
 | 未来功能 | 指定扩展点 |
 |---|---|
 | 联系表单/询问 | 无服务器函数；`ContactSection` 有保留槽位 |
-| 手动深色模式切换 | 将 `darkMode: "media"` 改为 `"class"`；在 `SiteHeader` 中添加切换按钮 |
 | 标签筛选页 | `/tags/{tag}` 路由 + 加载器中的标签索引 |
 | 草稿预览 | Next.js middleware 在 `/preview/[category]/[item]` |
 | 距离单位切换（英里 ↔ 公里） | 在 `siteConfig.i18n` 中添加 `distanceUnit: "mi" \| "km"` |

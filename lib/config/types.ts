@@ -64,9 +64,6 @@ export type SiteConfig = {
   // UI Component Slots
   ui: UIConfig;
 
-  // Dark mode
-  darkMode: "media" | "class";
-
   // Analytics
   analytics: {
     vercel: boolean;

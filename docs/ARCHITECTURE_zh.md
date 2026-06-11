@@ -269,7 +269,7 @@ isTemplateConfigured(): boolean
 ```
 <html>
   <body>
-    <ThemeProvider>          ← next-themes，遵循 siteConfig.darkMode
+    <ThemeProvider>          ← next-themes，class 方式，defaultTheme="system"；ThemeToggle 持久化用户选择
       <LocaleProvider>       ← 语言状态存储于 localStorage；暴露 useLocale()
         <BackgroundEffect>   ← 读取 siteConfig.ui.background，渲染 Aceternity 背景
           <SiteHeader />     ← Logo、搜索栏（启用时）、语言切换器

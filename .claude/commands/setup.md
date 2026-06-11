@@ -302,9 +302,6 @@ export const siteConfig: SiteConfig = {
     itemCard:   "{{ui.itemCard}}",
   },
 
-  // ── Dark Mode ─────────────────────────────────────────────────────────────
-  darkMode: "media",
-
   // ── Analytics ─────────────────────────────────────────────────────────────
   analytics: {
     vercel:        false,
