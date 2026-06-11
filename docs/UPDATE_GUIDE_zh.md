@@ -25,6 +25,29 @@
 
 ---
 
+## 快速开始：`pnpm update-site`
+
+下面的步骤已经由 `scripts/update-site.ts` 自动化。在项目根目录运行：
+
+```bash
+pnpm update-site --list   # 查看可用版本（首次运行会自动添加 upstream 远程仓库）
+pnpm update-site          # 更新到最新的标签版本
+pnpm update-site v1.2.0   # 更新到指定的标签版本
+```
+
+该脚本会从上游模板仓库拉取标签，复制与下方"第 2 步"相同的文件列表（绝不包含
+`content/`），恢复你的 `lib/generated/image-manifest.json`，然后运行
+`pnpm install`、`pnpm type-check` 和 `pnpm build` 来验证结果。
+传入 `--skip-verify` 可跳过最后这一验证步骤。
+
+如果你的工作区有未提交的改动，脚本会中止；它也不会替你提交或推送——
+请先检查 `git status` / `git diff`，再自行提交和推送（见下方"第 4 步"）。
+
+本指南其余部分说明该脚本具体做了什么，方便你在需要手动执行某些步骤
+或手动修复问题时参考。
+
+---
+
 ## 一次性设置：添加上游远程仓库
 
 无论你的站点是通过 **fork** 还是 **"Use this template"** 创建的（后者默认不会与原始仓库建立关联），

@@ -28,6 +28,30 @@ template code, so it's always safe to overwrite with the latest version.
 
 ---
 
+## Quick start: `pnpm update-site`
+
+The steps below are automated by `scripts/update-site.ts`. From your project root:
+
+```bash
+pnpm update-site --list   # see available versions (adds the upstream remote on first run)
+pnpm update-site          # update to the latest tagged release
+pnpm update-site v1.2.0   # update to a specific tagged release
+```
+
+This fetches tags from the upstream template repo, copies over the same file list
+as "Step 2" below (never `content/`), restores your `lib/generated/image-manifest.json`,
+then runs `pnpm install`, `pnpm type-check`, and `pnpm build` to verify the result.
+Pass `--skip-verify` to skip that last step.
+
+The script aborts if your working tree has uncommitted changes, and never commits
+or pushes for you — review `git status` / `git diff`, then commit and push yourself
+(see "Step 4" below).
+
+The rest of this guide explains what the script does, in case you want to run the
+steps by hand or something needs manual fixing.
+
+---
+
 ## One-time setup: add the upstream remote
 
 This works whether your site started as a **fork** or via **"Use this template"**

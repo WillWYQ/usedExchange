@@ -80,6 +80,7 @@ After finishing each phase's implementation, **update `docs/IMPLEMENTATION_PLAN.
 | Mark an item sold | `pnpm mark-sold <category>/<name>` |
 | Create a new item | `pnpm create-item <category>/<name>` |
 | Upload photos to CDN | `pnpm upload-images` |
+| Update site to a new template version | `pnpm update-site` (`docs/UPDATE_GUIDE.md`) |
 
 ---
 

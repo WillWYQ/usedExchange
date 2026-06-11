@@ -9,6 +9,7 @@
     "create-template": "tsx scripts/create-template.ts",
     "new": "tsx scripts/create-item.ts",
     "mark-sold": "tsx scripts/mark-sold.ts",
+    "update-site": "tsx scripts/update-site.ts",
     "push": "git add content lib/generated/image-manifest.json && git commit -m 'chore: update listings' && git push",
     "prebuild": "tsx scripts/check-config.ts && tsx scripts/sync-images.ts --mode build-check && tsx scripts/build-search-index.ts",
     "build": "next build",
