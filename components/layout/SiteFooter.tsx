@@ -5,6 +5,7 @@ import { isTemplateConfigured } from "@/lib/utils/templateStatus";
 const REPO_URL = "https://github.com/WillWYQ/usedExchange";
 const ISSUES_URL = "https://github.com/WillWYQ/usedExchange/issues/new";
 const CREATOR_URL = "https://github.com/WillWYQ";
+const CREATOR_WEBSITE = "https://willsleep.dev";
 
 // Build timestamp is computed at static-export time (correct "last updated" value).
 export function SiteFooter() {
@@ -147,14 +148,34 @@ export function SiteFooter() {
         >
           UsedExchange
         </a>
-        {" "}— a free template on GitHub. Statically-generated personal storefront for listing second-hand items. No database, no CMS — content lives entirely in one folder.{" "}
+        {" "}— a free template on GitHub.  <br />  Statically-generated personal storefront for listing second-hand items. <br /> No database, no CMS — content lives entirely in one folder.{" "}
         <a
           href={REPO_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="text-foreground/55 underline-offset-2 hover:underline"
         >
-          Use it today
+          Use it today for your own yard sale!
+        </a>
+      </p>
+      <p className="text-center text-xs">
+        Built by willsleep with passion, open sourced under the MIT License.{" "}
+        <a
+          href={CREATOR_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-foreground/55 underline-offset-2 hover:underline"
+        >
+          View creator's GitHub
+        </a>
+        {" "}or visit their personal website at{" "}
+        <a
+          href={CREATOR_WEBSITE}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-foreground/55 underline-offset-2 hover:underline"
+        >
+          willsleep.dev
         </a>
       </p>
     </footer>
