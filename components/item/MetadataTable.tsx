@@ -2,6 +2,9 @@
 
 import type { Item } from "@/lib/content/types";
 import { useT } from "@/components/i18n/useT";
+import { useLocale } from "@/components/i18n/useLocale";
+import { siteConfig } from "@/content/config";
+import { formatDimensions, formatWeight, resolveMeasurementUnit } from "@/lib/utils/units";
 
 type MetadataTableProps = {
   item: Item;
@@ -13,19 +16,10 @@ type Row = {
   href?: string; // renders as an external link when set
 };
 
-function formatDimensions(item: Item): string | null {
-  if (!item.dimensions) return null;
-  const { length, width, height, unit } = item.dimensions;
-  return `${length} × ${width} × ${height} ${unit}`;
-}
-
-function formatWeight(item: Item): string | null {
-  if (!item.weight) return null;
-  return `${item.weight.value} ${item.weight.unit}`;
-}
-
 export function MetadataTable({ item }: MetadataTableProps) {
   const t = useT();
+  const { locale } = useLocale();
+  const unitSystem = resolveMeasurementUnit(locale, siteConfig);
   const rows: Row[] = [
     { label: t.brand, value: item.brand || null },
     { label: t.model, value: item.model || null },
@@ -37,8 +31,14 @@ export function MetadataTable({ item }: MetadataTableProps) {
           : null,
     },
     { label: t.color, value: item.color || null },
-    { label: t.dimensions, value: formatDimensions(item) },
-    { label: t.weight, value: formatWeight(item) },
+    {
+      label: t.dimensions,
+      value: item.dimensions ? formatDimensions(item.dimensions, unitSystem) : null,
+    },
+    {
+      label: t.weight,
+      value: item.weight ? formatWeight(item.weight, unitSystem) : null,
+    },
     {
       label: t.originalSource,
       value: item.originalSource || null,

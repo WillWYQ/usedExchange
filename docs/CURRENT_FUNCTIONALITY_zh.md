@@ -51,8 +51,8 @@ content/
 | `brand` | 字符串 | 品牌/制造商 |
 | `model` | 字符串 | 型号 |
 | `age_years` | 数字 | 大致使用年限 |
-| `dimensions` | 对象 | 长 × 宽 × 高，单位 cm 或 in |
-| `weight` | 对象 | 数值 + 单位（kg 或 lb） |
+| `dimensions` | 对象 | 长 × 宽 × 高，单位 cm 或 in——展示时会换算为访客解析出的单位制（`siteConfig.measurementUnit`，可按语区覆盖） |
+| `weight` | 对象 | 数值 + 单位（kg 或 lb）——展示时同样换算 |
 | `color` | 字符串 | 主要颜色 |
 | `quantity` | 整数 | 可用数量（> 1 时显示徽章） |
 | `original_source` | 字符串 | 原始购买渠道 |
@@ -318,10 +318,10 @@ AI 会询问 8 个方面：店铺名称、位置（从描述解析经纬度）�
 |---|---|
 | `pnpm upload-images` | 上传照片到 CDN，更新清单，打印备份提醒 |
 | `pnpm push` | 暂存 `content/` 和清单文件、提交（默认消息）并推送 |
-| `pnpm mark-sold <cat>/<name>` | 将 `status` 设为 `"sold"` 并记录 `sold_date`，无需手动编辑 JSON |
-| `pnpm create-item <cat>/<name>` | 创建新物品文件夹 + 预填全部 38 个 schema 字段的 `item.json`（参见 DESIGN.md §5） |
+| `pnpm mark-sold <cat>/<name>` | 将 `status` 设为 `"sold"` 并记录 `sold_date`，无需手动编辑 JSON——原地修改 JSONC，保留所有 `// options: ...` 注释 |
+| `pnpm create-item <cat>/<name>` | 创建新物品文件夹 + 预填全部 38 个 schema 字段的 `item.json`（参见 DESIGN.md §5），以 JSONC 格式写入，并为 `condition`、`status`、`dimensions.unit`、`weight.unit` 附上列出所有可选值的 `// options: ...` 提示 |
 | `pnpm new <cat>/<name>` | `create-item` 的简写 |
-| `pnpm create-template [cat]` | 为某分类（或全局）创建 `_template.json` |
+| `pnpm create-template [cat]` | 为某分类（或全局）创建 `_template.json`——与 `create-item` 相同的 JSONC + `// options: ...` 提示 |
 
 ---
 

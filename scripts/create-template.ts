@@ -5,7 +5,8 @@
 
 import fs from "fs/promises";
 import path from "path";
-import { buildItemTemplate } from "./lib/itemTemplate";
+import { siteConfig } from "@/content/config";
+import { buildItemTemplate, renderItemTemplateJsonc } from "./lib/itemTemplate";
 
 async function main() {
   const category = process.argv[2];
@@ -30,11 +31,11 @@ async function main() {
   const today = new Date().toISOString().slice(0, 10);
 
   const template = {
-    ...buildItemTemplate("Item Name Here", today),
+    ...buildItemTemplate("Item Name Here", today, siteConfig.measurementUnit),
     description: "Item description (GitHub-flavoured Markdown supported).",
   };
 
-  await fs.writeFile(targetPath, JSON.stringify(template, null, 2) + "\n");
+  await fs.writeFile(targetPath, renderItemTemplateJsonc(template));
 
   console.log(`✓ Template created at ${targetPath}`);
   console.log(

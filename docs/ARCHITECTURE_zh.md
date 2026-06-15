@@ -214,6 +214,8 @@ content/items/<分类>/<物品>/*.jpg
 
 **性能不变性：** 图片清单（`lib/generated/image-manifest.json`）通过模块级 Promise 缓存在每个进程中只读取一次。同时需要分类和物品数据的函数（`loadHomePageData`、`loadBrowseAllPageData`）仅解析一次所有物品——不要在同一渲染流程中组合 `loadCategories()` + `loadItemsByCategory()`，否则会重复解析所有物品。
 
+**`item.json`/`_category.json` 以 JSONC 解析**（通过 `jsonc-parser` 的 `readJsonc()` 辅助函数）——允许 `//` 注释和尾随逗号。纯 JSON 同样能零错误解析，因此这一改动是纯增量的；解析出错时返回 `undefined`，处理方式与旧版 `JSON.parse` 抛出异常一致（物品 → `null` / 分类 → 默认值）。
+
 ### `lib/content/schema.ts` — Zod 验证
 
 验证并规范化原始 `item.json` 数据。关键行为：
@@ -235,6 +237,21 @@ resolveItemPrice(price: Price, resolved: ResolvedDistance): PriceTier | null
 - `resolved.source === "detected" | "manual"`：返回第一个满足 `D >= miles_min && D <= miles_max` 的档位。档位之间有间隙时，返回 `miles_max` 最接近 D（从下方）的档位。D 低于所有档位下限时，返回 `miles_min` 最小的档位。
 
 **⚠ 此文件绝对不能添加 `"use client"`**——该函数既在服务端组件中调用（SSG 初始渲染，确保静态 HTML 不会显示空白价格），也在 `useDistancePricing`（客户端 hook）中调用。添加 `"use client"` 会破坏服务端导入路径。
+
+### `lib/utils/units.ts` — 尺寸/重量单位换算
+
+```ts
+convertLength(value: number, from: "cm" | "in", to: "cm" | "in"): number
+convertWeight(value: number, from: "kg" | "lb", to: "kg" | "lb"): number
+resolveMeasurementUnit(locale: string, config: SiteConfig): "metric" | "imperial"
+formatDimensions(dimensions: Dimensions, targetSystem: "metric" | "imperial"): string
+formatWeight(weight: Weight, targetSystem: "metric" | "imperial"): string
+```
+
+- `resolveMeasurementUnit()`——`siteConfig.i18n.localeMeasurementUnits?.[locale] ?? siteConfig.measurementUnit`。
+- `formatDimensions`/`formatWeight`——将物品存储的 `dimensions`/`weight`（卖家填写时的单位）换算为解析出的单位制，四舍五入到 2 位小数。由 `MetadataTable`（`components/item/MetadataTable.tsx`）使用，`unitSystem = resolveMeasurementUnit(useLocale().locale, siteConfig)`。
+
+**无 `"use client"`**——与 `pricing.ts`/`shipping.ts` 同样的不变性，可在服务端和客户端组件中导入。
 
 ### `lib/utils/shipping.ts` — 运费可用性与承担方解析
 

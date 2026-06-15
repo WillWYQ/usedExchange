@@ -5,8 +5,9 @@
 import fs from "fs/promises";
 import path from "path";
 import { spawnSync } from "child_process";
+import { siteConfig } from "@/content/config";
 import { isValidSlug } from "@/lib/utils/slug";
-import { buildItemTemplate } from "./lib/itemTemplate";
+import { buildItemTemplate, renderItemTemplateJsonc } from "./lib/itemTemplate";
 
 // FIX Sec 3: only allow lowercase kebab-case slugs (letters, digits, hyphens).
 // This prevents path-traversal payloads such as "../../etc/cron.d" from being
@@ -75,10 +76,10 @@ async function main() {
     .replace(/-/g, " ")
     .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
-  const template = buildItemTemplate(displayName, today);
+  const template = buildItemTemplate(displayName, today, siteConfig.measurementUnit);
 
   const jsonPath = path.join(itemDir, "item.json");
-  await fs.writeFile(jsonPath, JSON.stringify(template, null, 2) + "\n");
+  await fs.writeFile(jsonPath, renderItemTemplateJsonc(template));
 
   console.log(`✓ Created ${jsonPath}`);
   console.log(

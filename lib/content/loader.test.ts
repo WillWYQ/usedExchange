@@ -224,6 +224,44 @@ describe("isSoldItemVisible — sold item with no sold_date (FIX L3)", () => {
   });
 });
 
+describe("loader — item.json is JSONC-tolerant", () => {
+  it("parses an item.json with // comments and a trailing comma", async () => {
+    mockReaddir.mockImplementation(async (dir: string) => {
+      if (dir === CONTENT_ROOT) return [dirent("electronics", true)];
+      if (dir === path.join(CONTENT_ROOT, "electronics")) {
+        return [dirent("commented-item", true)];
+      }
+      return [];
+    });
+    mockReadFile.mockImplementation(async (file: string) => {
+      if (file === MANIFEST_PATH) {
+        const err = new Error("ENOENT") as NodeJS.ErrnoException;
+        err.code = "ENOENT";
+        throw err;
+      }
+      if (
+        file ===
+        path.join(CONTENT_ROOT, "electronics", "commented-item", "item.json")
+      ) {
+        return `{
+          // condition options: "new" | "like-new" | "good" | "fair" | "for-parts"
+          "name": "Commented Item",
+          "description": "d",
+          "status": "available",
+          "condition": "good", // trailing comma below is also allowed
+        }`;
+      }
+      const err = new Error("ENOENT") as NodeJS.ErrnoException;
+      err.code = "ENOENT";
+      throw err;
+    });
+
+    const item = await loadItem("electronics", "commented-item");
+    expect(item?.itemSlug).toBe("commented-item");
+    expect(item?.name).toBe("Commented Item");
+  });
+});
+
 describe("loadSoldItems — no retention filter, sorted by soldDate desc", () => {
   it("returns every sold item regardless of soldItemRetentionDays", async () => {
     mockSiteConfig.soldItemRetentionDays = 3;

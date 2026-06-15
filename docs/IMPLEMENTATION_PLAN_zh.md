@@ -1,7 +1,7 @@
 # UsedExchange — 实施计划
 
-**版本：** 1.5  
-**日期：** 2026-06-11  
+**版本：** 1.6  
+**日期：** 2026-06-14  
 **基于：** DESIGN.md v0.9.2 · TECH_REQUIREMENTS.md v0.9.2  
 **假设：** 单人开发者；主要目标 = GitHub Pages + Cloudflare R2
 
@@ -119,6 +119,7 @@
 - [x] 编写 `lib/utils/i18n.ts` — `getLocalizedField(item, field, locale)` 和 `t(key)`
 - [x] 用已知坐标测试 `haversineInMiles`
 - [x] 测试 `resolveItemPrice` 的所有分支：Infinity、精确匹配、间隙、空档位、开放式档位
+- [x] **（2026-06-14 新增）** 编写 `lib/utils/units.ts` — `convertLength`/`convertWeight`、`resolveMeasurementUnit(locale, config)`（解析 `siteConfig.i18n.localeMeasurementUnits?.[locale] ?? siteConfig.measurementUnit`）、`formatDimensions`/`formatWeight`（将物品存储的尺寸/重量换算为解析出的单位制以供展示，四舍五入到 2 位小数）。无 `"use client"`——供 `MetadataTable.tsx` 使用
 
 #### 3c — 加载器（`lib/content/loader.ts`）
 - [x] 实现 `loadCategories()` — 读取 `content/items/`，解析 `_category.json`，应用排序逻辑，排除 `_` 前缀文件夹
@@ -130,6 +131,7 @@
 - [x] 图片 URL 解析：`manifest[key] ?? "/items/{key}"` 回退
 - [x] 图片排序：`filenames.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))` ——显式排序，绝不依赖 `readdir` 顺序
 - [x] 验证返回的 `Item` 类型中从不包含 `reserved_for` 字段
+- [x] **（2026-06-14 新增）** `item.json`/`_category.json` 通过 `jsonc-parser` 以 JSONC 解析（`readJsonc()` 辅助函数，`allowTrailingComma: true`）——允许 `//` 注释和尾随逗号；纯 JSON 仍可零错误解析，因此现有文件不受影响
 
 #### 3d — 种子数据与内容 CLI 脚本
 - [x] 创建 2 个示例分类（`content/items/houseware/`、`content/items/electronics/`）
@@ -140,6 +142,9 @@
 - [x] 编写 `scripts/create-template.ts`
 - [x] 提取 `scripts/lib/itemTemplate.ts`（`buildItemTemplate()`）作为脚手架的唯一数据源，供 `create-item.ts` 和 `create-template.ts` 共用——覆盖 DESIGN.md §5 中全部 38 个字段（`reserved_for` 除外），其中 `dimensions`/`weight` 写入空结构占位符（`{ length: null, width: null, height: null, unit: "cm" }` / `{ value: null, unit: "kg" }`），未填写时通过现有的 Zod `.catch(null)` 逻辑自动归一为 `null`
 - [x] 验证加载器为示例物品返回正确数据
+- [x] **（2026-06-14 新增）** `buildItemTemplate(name, listedDate, measurementUnit)` ——`dimensions.unit`/`weight.unit` 占位符现在默认取自 `siteConfig.measurementUnit`（"metric" → cm/kg，"imperial" → in/lb），而非硬编码
+- [x] **（2026-06-14 新增）** `scripts/lib/itemTemplate.ts` —— `renderItemTemplateJsonc()` 将模板写为 JSONC，并为 `condition`、`status`、`dimensions.unit`、`weight.unit` 附上列出所有可选值的 `// options: ...` 注释；`create-item.ts`/`create-template.ts` 写入此输出
+- [x] **（2026-06-14 新增）** `scripts/lib/markSold.ts`（`applyMarkSold()`）——`mark-sold` 现在通过 `jsonc-parser` 的 `modify`/`applyEdits`（定向编辑指定 token）来更新 `status`/`sold_date`，而非完整 parse/stringify 往返，从而保留 `// options: ...` 注释和卖家的格式
 
 ### 验收标准
 - 所有 4 个加载器函数从示例 `content/items/` 返回类型化数据

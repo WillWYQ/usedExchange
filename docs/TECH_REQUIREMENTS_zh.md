@@ -32,6 +32,7 @@
 | `clsx` | `^2.1.0` | 条件 class 合并 |
 | `tailwind-merge` | `^2.3.0` | Tailwind class 去重（用于 `cn()` 工具） |
 | `fuse.js` | `^7.0.0` | 客户端全文搜索；构建时构建索引 |
+| `jsonc-parser` | `^3.3.1` | 将 `item.json`/`_category.json` 作为 JSONC 解析（允许 `//` 注释和尾随逗号）；用于 `lib/content/loader.ts` 和 `scripts/mark-sold.ts`（通过 `modify`/`applyEdits` 保留注释的编辑） |
 | `@vercel/analytics` | `^1.3.0` | Vercel Analytics——Vercel 之外为空操作 |
 | `@vercel/speed-insights` | `^1.0.0` | Vercel Speed Insights——同上 |
 

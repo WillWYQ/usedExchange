@@ -1,7 +1,7 @@
 # UsedExchange — Implementation Plan
 
-**Version:** 1.5  
-**Date:** 2026-06-11  
+**Version:** 1.6  
+**Date:** 2026-06-14  
 **Based on:** DESIGN.md v0.9.2 · TECH_REQUIREMENTS.md v0.9.2  
 **Assumption:** Single developer; primary target = GitHub Pages + Cloudflare R2
 
@@ -120,6 +120,7 @@
 - [x] Write `lib/utils/i18n.ts` — `getLocalizedField(item, field, locale)` and `t(key)` (TECH_REQUIREMENTS.md §22.8)
 - [x] Test `haversineInMiles` against known coordinates
 - [x] Test `resolveItemPrice` for all branches: Infinity, exact match, gap, empty tiers, open-ended tier
+- [x] **(Added 2026-06-14)** Write `lib/utils/units.ts` — `convertLength`/`convertWeight`, `resolveMeasurementUnit(locale, config)` (resolves `siteConfig.i18n.localeMeasurementUnits?.[locale] ?? siteConfig.measurementUnit`), `formatDimensions`/`formatWeight` (convert an item's stored dimensions/weight to the resolved unit system for display, rounded to 2 decimals). No `"use client"` — used by `MetadataTable.tsx`
 
 #### 3c — Loader (`lib/content/loader.ts`)
 - [x] Implement `loadCategories()` — reads `content/items/`, parses `_category.json`, applies sort logic (DESIGN.md §6), excludes `_`-prefixed folders
@@ -131,6 +132,7 @@
 - [x] Image URL resolution: `manifest[key] ?? "/items/{key}"` fallback (DESIGN.md §11)
 - [x] Image sorting: `filenames.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))` — explicit sort, never rely on `readdir` order (DESIGN.md §4)
 - [x] Verify `reserved_for` field is never included in returned `Item` type
+- [x] **(Added 2026-06-14)** `item.json`/`_category.json` parsed as JSONC via `jsonc-parser` (`readJsonc()` helper, `allowTrailingComma: true`) — `//` comments and trailing commas allowed; strict JSON still parses with zero errors, so existing files are unaffected
 
 #### 3d — Seed Data & Content CLI Scripts
 - [x] Create 2 sample categories (`content/items/houseware/`, `content/items/electronics/`)
@@ -141,6 +143,9 @@
 - [x] Write `scripts/create-template.ts` — creates `content/items/<category>/_template.json` or global `content/items/_template.json` without an argument (TECH_REQUIREMENTS.md §22.3)
 - [x] Extract `scripts/lib/itemTemplate.ts` (`buildItemTemplate()`) as the single source of truth for the scaffold, used by both `create-item.ts` and `create-template.ts` — covers all 38 fields from DESIGN.md §5 (except `reserved_for`), with `dimensions`/`weight` written as empty placeholder structures (`{ length: null, width: null, height: null, unit: "cm" }` / `{ value: null, unit: "kg" }`) that coerce to `null` via the existing Zod `.catch(null)` logic if left unfilled
 - [x] Verify loader returns correct data for sample items
+- [x] **(Added 2026-06-14)** `buildItemTemplate(name, listedDate, measurementUnit)` — `dimensions.unit`/`weight.unit` placeholders now default from `siteConfig.measurementUnit` ("metric" → cm/kg, "imperial" → in/lb) instead of being hardcoded
+- [x] **(Added 2026-06-14)** `scripts/lib/itemTemplate.ts` — `renderItemTemplateJsonc()` writes the template as JSONC with `// options: ...` comments listing every valid value for `condition`, `status`, `dimensions.unit`, and `weight.unit`; `create-item.ts`/`create-template.ts` write this output
+- [x] **(Added 2026-06-14)** `scripts/lib/markSold.ts` (`applyMarkSold()`) — `mark-sold` now edits `status`/`sold_date` via `jsonc-parser`'s `modify`/`applyEdits` (targeted token edits) instead of a full parse/stringify round trip, so `// options: ...` comments and seller formatting survive
 
 ### Acceptance Criteria
 - All 4 loader functions return typed data from sample `content/items/`

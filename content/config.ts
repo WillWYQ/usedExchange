@@ -47,6 +47,12 @@ export const siteConfig: SiteConfig = {
   // is capped. Set to 0 to render every item with no cap.
   soldArchiveDisplayLimit: 200,
 
+  // "metric" (cm/kg) | "imperial" (in/lb). Sets the dimensions.unit/weight.unit
+  // defaults for `pnpm create-item`, and the fallback display unit for
+  // dimensions/weight on item pages (lib/utils/units.ts). Override per locale
+  // via i18n.localeMeasurementUnits below.
+  measurementUnit: "metric",
+
   // ── Shipping calculator (optional) ─────────────────────────────────────────
   // Disabled by default — zero impact on the site until configured.
   // To enable: deploy workers/shipping-rate-proxy (see its README), then set
@@ -124,6 +130,8 @@ export const siteConfig: SiteConfig = {
     defaultLocale: "en",
     availableLocales: ["en"],
     showLocaleSwitcher: true,
+    // Optional: override `measurementUnit` per locale, e.g.
+    // localeMeasurementUnits: { en: "imperial", zh: "metric" },
     translations: {
       en: {
         // ── Navigation ──────────────────────────────────────────────────────

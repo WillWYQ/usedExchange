@@ -293,6 +293,15 @@ content/                            ← ★ THE ONLY FOLDER SELLERS NEED TO TOUC
 
 Only `name` is required. Every other field is optional; the build applies safe defaults when absent.
 
+`item.json` is **JSONC** (JSON with `//` comments and trailing commas allowed,
+parsed via `jsonc-parser`) — strictly a superset of JSON, so existing
+strict-JSON `item.json` files keep working unchanged. `pnpm create-item` /
+`pnpm create-template` write `// options: ...` comments next to every field
+that has a fixed set of valid values (`condition`, `status`,
+`dimensions.unit`, `weight.unit`) so you can see all the choices without
+opening this doc. `pnpm mark-sold` edits only the `status`/`sold_date` tokens
+in place, so these comments survive.
+
 ```jsonc
 {
   // ── Identity ───────────────────────────────────────────────────────────────
@@ -338,9 +347,13 @@ Only `name` is required. Every other field is optional; the build applies safe d
   "age_years": 2,                             // number, approximate; default null
   "dimensions": {
     "length": 45, "width": 15, "height": 15,
-    "unit": "cm"                              // "cm" | "in"; default "cm"
+    "unit": "cm"                              // "cm" | "in"; default from siteConfig.measurementUnit
   },
-  "weight": { "value": 0.8, "unit": "kg" },  // unit: "kg" | "lb"
+  "weight": { "value": 0.8, "unit": "kg" },  // unit: "kg" | "lb"; default from siteConfig.measurementUnit
+  // ^ dimensions/weight are stored in whatever unit the seller entered. On the
+  //   item detail page, lib/utils/units.ts converts for display to the unit
+  //   system resolved for the visitor's locale (see §13 measurementUnit /
+  //   localeMeasurementUnits) — no need to keep all items in the same unit.
   "color": "white",                           // string; default ""
   "quantity": 1,                              // integer ≥ 1; default 1
 
@@ -903,6 +916,11 @@ export const siteConfig: SiteConfig = {
   currency: "USD",
   recentlyListedCount: 6,
   soldItemRetentionDays: 3,                   // 0 = keep forever; -1 = hide immediately
+  measurementUnit: "metric",                  // "metric" (cm/kg) | "imperial" (in/lb)
+  // ^ Default unit for new item.json dimensions/weight (pnpm create-item) and
+  //   the fallback display unit on item pages (lib/utils/units.ts converts
+  //   each item's stored dimensions/weight to this unit system). Override per
+  //   locale via i18n.localeMeasurementUnits below.
 
   // ── Shipping calculator (optional) ────────────────────────────────────────
   // Absent or enabled: false → zero impact. See §21.
@@ -982,6 +1000,8 @@ export const siteConfig: SiteConfig = {
     availableLocales: ["en"],         // add "zh", "es", etc. to enable LocaleSwitcher
                                       // LocaleSwitcher is hidden when length === 1
     showLocaleSwitcher: true,         // show locale toggle in SiteHeader (when locales > 1)
+    // Optional: override `measurementUnit` per locale, e.g.
+    // localeMeasurementUnits: { en: "imperial", zh: "metric" },
     translations: {
       en: {
         // ── Navigation ────────────────────────────────────────────────────

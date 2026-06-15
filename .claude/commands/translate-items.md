@@ -189,6 +189,8 @@ For each confirmed item, merge **only** the new locale fields into the existing 
 
 Concretely: read the existing JSON, add or update `name_{locale}` and `description_{locale}`, preserve all other fields exactly (same key order if possible), write back.
 
+**`item.json` is JSONC** — it may contain `// options: ...` comments next to `condition`, `status`, `dimensions.unit`, and `weight.unit` (written by `pnpm create-item`). Use a targeted edit for the `name_{locale}`/`description_{locale}` fields (e.g. insert/update just those keys) rather than a full parse-and-`JSON.stringify` rewrite, so these comments are not stripped.
+
 **Only write files inside `content/`.** Never modify any other file.
 
 ---

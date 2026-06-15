@@ -4,6 +4,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { isValidSlug } from "@/lib/utils/slug";
+import { applyMarkSold } from "./lib/markSold";
 
 // FIX Sec 3: only allow lowercase kebab-case slugs (letters, digits, hyphens).
 // Prevents path-traversal payloads such as "../../etc/passwd" from reaching
@@ -58,21 +59,16 @@ async function main() {
     process.exit(1);
   }
 
-  const raw = JSON.parse(await fs.readFile(jsonPath, "utf-8")) as Record<
-    string,
-    unknown
-  >;
+  const text = await fs.readFile(jsonPath, "utf-8");
+  const today = new Date().toISOString().slice(0, 10);
 
-  if (raw["status"] === "sold") {
+  const next = applyMarkSold(text, today);
+  if (next === null) {
     console.log(`[mark-sold] ${arg} is already marked as sold.`);
     process.exit(0);
   }
 
-  const today = new Date().toISOString().slice(0, 10);
-  raw["status"] = "sold";
-  raw["sold_date"] = today;
-
-  await fs.writeFile(jsonPath, JSON.stringify(raw, null, 2) + "\n");
+  await fs.writeFile(jsonPath, next);
 
   console.log(`✓ Marked ${arg} as sold  (sold_date: ${today})`);
 }

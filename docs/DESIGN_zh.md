@@ -192,6 +192,13 @@ content/                            ← ★ 卖家唯一需要接触的文件夹
 
 只有 `name` 是必填的。其他所有字段都是可选的；缺失时构建应用安全默认值。
 
+`item.json` 是 **JSONC**（允许 `//` 注释和尾随逗号，通过 `jsonc-parser` 解析）——
+严格来说是 JSON 的超集，所以现有的纯 JSON `item.json` 文件无需修改即可继续使用。
+`pnpm create-item` / `pnpm create-template` 会在每个有固定取值范围的字段
+（`condition`、`status`、`dimensions.unit`、`weight.unit`）旁写入
+`// options: ...` 注释，方便你无需查阅本文档即可看到所有可选值。
+`pnpm mark-sold` 只会原地修改 `status`/`sold_date` 这两个值，因此这些注释会保留下来。
+
 ```jsonc
 {
   // ── 身份 ──────────────────────────────────────────────────────────────────
@@ -221,8 +228,12 @@ content/                            ← ★ 卖家唯一需要接触的文件夹
   "brand": "IKEA",
   "model": "TRÅDFRI E14",
   "age_years": 2,
-  "dimensions": { "length": 45, "width": 15, "height": 15, "unit": "cm" },
-  "weight": { "value": 0.8, "unit": "kg" },
+  "dimensions": { "length": 45, "width": 15, "height": 15, "unit": "cm" },  // "cm" | "in"；默认取自 siteConfig.measurementUnit
+  "weight": { "value": 0.8, "unit": "kg" },  // "kg" | "lb"；默认取自 siteConfig.measurementUnit
+  // ^ dimensions/weight 按卖家填写时的单位存储。在物品详情页，
+  //   lib/utils/units.ts 会将其换算为当前访客语区解析出的单位制
+  //   （见 §13 measurementUnit / localeMeasurementUnits）——无需让所有
+  //   物品使用统一单位。
   "color": "白色",
   "quantity": 1,
 
@@ -590,6 +601,11 @@ export const siteConfig: SiteConfig = {
   currency: "USD",
   recentlyListedCount: 6,
   soldItemRetentionDays: 3,
+  measurementUnit: "metric",  // "metric"（cm/kg）| "imperial"（in/lb）
+  // ^ 新建 item.json（pnpm create-item）中 dimensions/weight 的默认单位，
+  //   也是物品详情页的回退显示单位（lib/utils/units.ts 会将每个物品存储的
+  //   dimensions/weight 换算为该单位制）。可通过下方
+  //   i18n.localeMeasurementUnits 按语区覆盖。
 
   // ── 运费计算器（可选）────────────────────────────────────────────────────
   // 不设置或 enabled: false → 完全不影响站点。见 §21。
@@ -652,6 +668,8 @@ export const siteConfig: SiteConfig = {
     defaultLocale: "en",
     availableLocales: ["en"],
     showLocaleSwitcher: true,
+    // 可选：按语区覆盖 measurementUnit，例如
+    // localeMeasurementUnits: { en: "imperial", zh: "metric" },
     translations: {
       en: {
         // ── 导航 ──────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import type { Dirent } from "fs";
 import path from "path";
+import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { siteConfig } from "@/content/config";
 import { itemJsonSchema, categoryJsonSchema } from "@/lib/content/schema";
 import { mapWithConcurrency } from "@/lib/utils/concurrency";
@@ -8,6 +9,16 @@ import type { Item, Category } from "@/lib/content/types";
 
 const CONTENT_ROOT = path.join(process.cwd(), "content", "items");
 const IMAGE_EXT = /\.(jpg|jpeg|png|webp|gif)$/i;
+
+// item.json / _category.json are JSONC: `//` comments (e.g. the `// options: ...`
+// hints written by scripts/lib/itemTemplate.ts) and trailing commas are allowed.
+// Strict JSON parses with zero errors here too, so existing files are unaffected.
+// Any other syntax error → undefined, treated the same as the old JSON.parse throw.
+function readJsonc(text: string): unknown {
+  const errors: ParseError[] = [];
+  const value = parseJsonc(text, errors, { allowTrailingComma: true });
+  return errors.length === 0 ? value : undefined;
+}
 
 // FIX Perf/Edge: cap the fan-out so a large catalogue can't exhaust the process
 // file-descriptor limit (EMFILE). Worst-case in-flight FDs ≈
@@ -125,10 +136,11 @@ async function parseItem(
 
   let raw: unknown;
   try {
-    raw = JSON.parse(await fs.readFile(jsonPath, "utf-8"));
+    raw = readJsonc(await fs.readFile(jsonPath, "utf-8"));
   } catch {
     return null;
   }
+  if (raw === undefined) return null;
 
   const result = itemJsonSchema.safeParse(raw);
   if (!result.success) {
@@ -324,9 +336,11 @@ async function buildCategoriesFromItems(
         sort_order: null as number | null,
       };
       try {
-        const raw = JSON.parse(await fs.readFile(catJsonPath, "utf-8"));
-        const r = categoryJsonSchema.safeParse(raw);
-        if (r.success) catParsed = r.data;
+        const raw = readJsonc(await fs.readFile(catJsonPath, "utf-8"));
+        if (raw !== undefined) {
+          const r = categoryJsonSchema.safeParse(raw);
+          if (r.success) catParsed = r.data;
+        }
       } catch {
         // No _category.json → use defaults
       }

@@ -6,7 +6,16 @@
 // intentionally excluded — see .claude/CLAUDE.md Iron Rule 4 (private
 // buyer info, never rendered, never written by tooling).
 
-export function buildItemTemplate(name: string, listedDate: string) {
+export type MeasurementUnit = "metric" | "imperial";
+
+export function buildItemTemplate(
+  name: string,
+  listedDate: string,
+  measurementUnit: MeasurementUnit = "metric",
+) {
+  const dimensionsUnit = measurementUnit === "imperial" ? "in" : "cm";
+  const weightUnit = measurementUnit === "imperial" ? "lb" : "kg";
+
   return {
     name,
     price: {
@@ -26,8 +35,8 @@ export function buildItemTemplate(name: string, listedDate: string) {
     age_years: null,
     // Placeholder shape — if left with `null` leaves, lib/content/schema.ts
     // coerces the whole `dimensions`/`weight` object to null on build.
-    dimensions: { length: null, width: null, height: null, unit: "cm" },
-    weight: { value: null, unit: "kg" },
+    dimensions: { length: null, width: null, height: null, unit: dimensionsUnit },
+    weight: { value: null, unit: weightUnit },
     color: "",
     quantity: 1,
     original_source: "",
@@ -56,4 +65,38 @@ export function buildItemTemplate(name: string, listedDate: string) {
     name_zh: "",
     description_zh: "",
   };
+}
+
+// ── JSONC rendering ──────────────────────────────────────────────────────────
+
+// Appends a trailing `// ...` comment to the (unique) first occurrence of
+// `marker` in `json`. Each marker below is guaranteed unique in the output of
+// JSON.stringify(buildItemTemplate(...)), so a plain indexOf/slice insert is
+// sufficient — no JSON AST manipulation needed.
+function withTrailingComment(json: string, marker: string, comment: string): string {
+  const idx = json.indexOf(marker);
+  if (idx === -1) return json;
+  const insertAt = idx + marker.length;
+  return `${json.slice(0, insertAt)} // ${comment}${json.slice(insertAt)}`;
+}
+
+const CONDITION_OPTIONS = `options: "new" | "like-new" | "good" | "fair" | "for-parts"`;
+const STATUS_OPTIONS = `options: "available" | "pending" | "reserved" | "sold" | "draft" — keep "draft" until ready to publish`;
+const DIMENSIONS_UNIT_OPTIONS = `options: "cm" | "in"`;
+const WEIGHT_UNIT_OPTIONS = `options: "kg" | "lb"`;
+
+// Renders an item.json template as JSONC: valid JSON plus `// options: ...`
+// hints next to every field with a fixed set of valid values, so a seller
+// editing the file can see all the choices without consulting DESIGN.md §5.
+// item.json is JSONC-tolerant (see lib/content/loader.ts), so this is fully
+// backward compatible with strict-JSON item.json files.
+export function renderItemTemplateJsonc(
+  template: ReturnType<typeof buildItemTemplate>,
+): string {
+  let json = JSON.stringify(template, null, 2);
+  json = withTrailingComment(json, `"condition": "${template.condition}",`, CONDITION_OPTIONS);
+  json = withTrailingComment(json, `"status": "${template.status}",`, STATUS_OPTIONS);
+  json = withTrailingComment(json, `"unit": "${template.dimensions.unit}"`, DIMENSIONS_UNIT_OPTIONS);
+  json = withTrailingComment(json, `"unit": "${template.weight.unit}"`, WEIGHT_UNIT_OPTIONS);
+  return json + "\n";
 }

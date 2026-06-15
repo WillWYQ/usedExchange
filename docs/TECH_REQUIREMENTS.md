@@ -32,6 +32,7 @@
 | `clsx` | `^2.1.0` | Conditional class merging |
 | `tailwind-merge` | `^2.3.0` | Tailwind class deduplication (used in `cn()` util) |
 | `fuse.js` | `^7.0.0` | Client-side full-text search; index built at build time |
+| `jsonc-parser` | `^3.3.1` | Parses `item.json`/`_category.json` as JSONC (`//` comments, trailing commas allowed); used by `lib/content/loader.ts` and `scripts/mark-sold.ts` (comment-preserving edits via `modify`/`applyEdits`) |
 | `@vercel/analytics` | `^1.3.0` | Vercel Analytics — no-op outside Vercel; enabled when `siteConfig.analytics.vercel: true` |
 | `@vercel/speed-insights` | `^1.0.0` | Vercel Speed Insights — no-op outside Vercel; enabled when `siteConfig.analytics.speedInsights: true` |
 

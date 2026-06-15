@@ -42,6 +42,13 @@ export type SiteConfig = {
   soldItemRetentionDays: number;
   // Caps how many sold items render on /sold (0 = no cap). See content/config.ts.
   soldArchiveDisplayLimit: number;
+  // Default unit system: "metric" (cm/kg) | "imperial" (in/lb).
+  // Sets the dimensions.unit/weight.unit defaults `pnpm create-item` writes
+  // into new item.json files, and the fallback display unit for
+  // dimensions/weight on item pages (see lib/utils/units.ts). Per-item
+  // dimensions/weight are always stored in whatever unit the seller entered
+  // and converted for display — this only controls the target unit.
+  measurementUnit: "metric" | "imperial";
 
   // Contact
   contact: {
@@ -105,6 +112,11 @@ export type SiteConfig = {
     // fall back to it for any missing key. Add one entry per locale listed
     // in availableLocales — check-config validates completeness at build time.
     translations: Record<string, Partial<UIStrings>>;
+    // Per-locale override of `measurementUnit` (see lib/utils/units.ts).
+    // E.g. { en: "imperial" } shows in/lb for English visitors while other
+    // locales fall back to the top-level `measurementUnit`. Optional —
+    // omit entirely for a single global unit system.
+    localeMeasurementUnits?: Partial<Record<string, "metric" | "imperial">>;
   };
 };
 

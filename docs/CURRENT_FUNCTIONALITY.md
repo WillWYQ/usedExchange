@@ -51,8 +51,8 @@ content/
 | `brand` | string | Brand / manufacturer |
 | `model` | string | Model number |
 | `age_years` | number | Approximate age |
-| `dimensions` | object | L × W × H in cm or in |
-| `weight` | object | Value + unit (kg or lb) |
+| `dimensions` | object | L × W × H in cm or in — converted for display to the visitor's resolved unit system (`siteConfig.measurementUnit`, optionally per-locale) |
+| `weight` | object | Value + unit (kg or lb) — converted for display the same way |
 | `color` | string | Primary colour |
 | `quantity` | integer | Units available (shows badge when > 1) |
 | `original_source` | string | Where originally purchased |
@@ -329,10 +329,10 @@ Scripts run on the seller's machine. All write only to `content/`.
 |---|---|
 | `pnpm upload-images` | Upload photos to CDN, update manifest, print backup reminder |
 | `pnpm push` | Stage `content/` + manifest, commit with default message, and push |
-| `pnpm mark-sold <cat>/<name>` | Set `status: "sold"` and `sold_date: today` without editing JSON |
-| `pnpm create-item <cat>/<name>` | Create new item folder + `item.json` pre-filled with all 38 schema fields (DESIGN.md §5) |
+| `pnpm mark-sold <cat>/<name>` | Set `status: "sold"` and `sold_date: today` without editing JSON — edits the JSONC in place, preserving any `// options: ...` comments |
+| `pnpm create-item <cat>/<name>` | Create new item folder + `item.json` pre-filled with all 38 schema fields (DESIGN.md §5), written as JSONC with `// options: ...` hints listing every valid value for `condition`, `status`, `dimensions.unit`, and `weight.unit` |
 | `pnpm new <cat>/<name>` | Shorthand for `create-item` |
-| `pnpm create-template [cat]` | Create a `_template.json` for a category (or global) |
+| `pnpm create-template [cat]` | Create a `_template.json` for a category (or global) — same JSONC + `// options: ...` hints as `create-item` |
 
 ---
 

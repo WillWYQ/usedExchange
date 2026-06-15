@@ -152,6 +152,8 @@ Write the confirmed JSON to `content/items/<category>/<item-name>/item.json`.
 
 **Only write files inside `content/`.** Never modify any other file.
 
+**Note on existing files:** `item.json` is JSONC — a draft created by `pnpm create-item` may contain `// options: ...` comments next to `condition`, `status`, `dimensions.unit`, and `weight.unit` listing their valid values. When overwriting a `status: "draft"` file that already has these comments, preserve them (re-insert the same `// options: ...` comments next to the corresponding fields in the new output) rather than dropping them in a plain JSON rewrite.
+
 After writing, tell the seller:
 1. Which files were written.
 2. Run `pnpm type-check` to confirm no schema errors.

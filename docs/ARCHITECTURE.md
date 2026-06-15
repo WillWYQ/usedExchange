@@ -215,6 +215,8 @@ All page components must call these functions. Never read `content/items/` direc
 
 **Performance invariant:** The image manifest (`lib/generated/image-manifest.json`) is read once per process via a module-level Promise cache. Functions that need both categories and items (`loadHomePageData`, `loadBrowseAllPageData`) parse every item exactly once — do not compose `loadCategories()` + `loadItemsByCategory()` in the same render pass, as that would parse every item twice.
 
+**`item.json`/`_category.json` are parsed as JSONC** via `jsonc-parser` (`readJsonc()` helper) — `//` comments and trailing commas are allowed. Strict JSON parses with zero errors too, so this is purely additive; a parse error → `undefined`, handled the same as the old `JSON.parse` throw (item → `null` / category → defaults).
+
 ### `lib/content/schema.ts` — Zod Validation
 
 Validates and normalises raw `item.json` data. Key behaviours:
@@ -236,6 +238,21 @@ resolveItemPrice(price: Price, resolved: ResolvedDistance): PriceTier | null
 - `resolved.source === "detected" | "manual"`: returns the first tier where `D >= miles_min && D <= miles_max`. On a gap between tiers, returns the tier whose `miles_max` is closest to D from below. When D is below every tier's lower bound, returns the tier with the smallest `miles_min`.
 
 **⚠ Must never have `"use client"`** — this function is called both in Server Components (for the SSG initial render, so the static HTML never shows a blank price) and in `useDistancePricing` (a client hook). Adding `"use client"` would break the server import path.
+
+### `lib/utils/units.ts` — Dimension/Weight Unit Conversion
+
+```ts
+convertLength(value: number, from: "cm" | "in", to: "cm" | "in"): number
+convertWeight(value: number, from: "kg" | "lb", to: "kg" | "lb"): number
+resolveMeasurementUnit(locale: string, config: SiteConfig): "metric" | "imperial"
+formatDimensions(dimensions: Dimensions, targetSystem: "metric" | "imperial"): string
+formatWeight(weight: Weight, targetSystem: "metric" | "imperial"): string
+```
+
+- `resolveMeasurementUnit()` — `siteConfig.i18n.localeMeasurementUnits?.[locale] ?? siteConfig.measurementUnit`.
+- `formatDimensions`/`formatWeight` — convert an item's stored `dimensions`/`weight` (whatever unit the seller entered) to the resolved unit system, rounding to 2 decimals. Used by `MetadataTable` (`components/item/MetadataTable.tsx`) with `unitSystem = resolveMeasurementUnit(useLocale().locale, siteConfig)`.
+
+**No `"use client"`** — same invariant as `pricing.ts`/`shipping.ts`, importable from both server and client components.
 
 ### `lib/utils/shipping.ts` — Shipping Eligibility & Payer Resolution
 
