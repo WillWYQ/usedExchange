@@ -333,6 +333,7 @@ Scripts run on the seller's machine. All write only to `content/`.
 | `pnpm create-item <cat>/<name>` | Create new item folder + `item.json` pre-filled with all 38 schema fields (DESIGN.md §5), written as JSONC with `// options: ...` hints listing every valid value for `condition`, `status`, `dimensions.unit`, and `weight.unit` |
 | `pnpm new <cat>/<name>` | Shorthand for `create-item` |
 | `pnpm create-template [cat]` | Create a `_template.json` for a category (or global) — same JSONC + `// options: ...` hints as `create-item` |
+| `pnpm fb-export` | Interactively export available items to a Facebook Marketplace bulk-upload CSV. Three-step guided prompt: select all / by category / individual items (supports comma lists and ranges like `1-4`); choose price tier (lowest/highest/by label); auto-batches into 50-item files (FB's limit). Outputs to `exports/`. Smart category mapping infers FB's category hierarchy from item tags, brand, and name — no manual setup needed. |
 
 ---
 

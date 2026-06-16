@@ -318,10 +318,31 @@ CS 学生出售大量教材。教材的一流支持使站点对该用户群体�
 
 ---
 
-### 3.4 跨平台发布导出模板
+### 3.4 跨平台发布导出模板——Facebook Marketplace ✅ 已实现
 **工作量：** M · **价值：** ⭐⭐
 
-`pnpm export-marketplace houseware/ikea-lamp` 生成格式化文字块，可直接粘贴到 Facebook Marketplace、Craigslist、OfferUp / Letgo、eBay（描述模板）。
+`pnpm fb-export` 交互式将在售物品导出为 Facebook Marketplace 批量上传 CSV。三步引导式界面：
+
+1. **物品选择** — 全部物品、单个分类，或手动挑选子集（逗号列表或 `1-4` 区间写法）
+2. **价格档位** — 最低价（自取）、最高价（运送），或任意命名档位标签
+3. **输出** — 写入 `exports/facebook-marketplace.csv`；超过 50 条时自动分批输出编号文件（FB 每次上传上限）
+
+**智能分类映射**（`scripts/lib/fbCategoryMap.ts`）：50+ 条关键词规则将物品标签、名称、品牌、型号匹配到 FB 的 `"顶级//子级//叶级"` 分类格式。覆盖 GPU/CPU/RAM、教材、家具、音频、手机、游戏、服装等品类。无匹配时回退到分类 slug（FB 将提示卖家手动选择）。
+
+**字段映射：**
+
+| item.json 字段 | FB CSV 列 | 说明 |
+|---|---|---|
+| `name`（+ 品牌/型号前缀） | TITLE | 截断至 150 字符；品牌/型号仅在名称中未包含时才前置 |
+| 最低/最高 `price.tiers[].amount` | PRICE | 四舍五入为整数；档位由交互式选择决定 |
+| `condition` | CONDITION | `good→"Used - Good"`, `like-new→"Used - Like New"`, `new→"New"`, `fair/for-parts→"Used - Fair"` |
+| `description` + 元数据块 | DESCRIPTION | 附加品牌、型号、颜色、年限、原价、标签为 `[key: value]` 页脚；截断至 5000 字符 |
+| 关键词规则 | CATEGORY | 自动从语料库检测 |
+| `weight`（转换为磅） | SHIPPING WEIGHT | 仅当存在运送档位（无 `miles_max`）时填写 |
+| `price.shipping_payer === "seller"` | OFFER FREE SHIPPING | Yes/No |
+| 存在开放式档位 | OFFER SHIPPING | Yes/No |
+
+**其余平台**（Craigslist、OfferUp、eBay）仍为路线图待办项，留待未来迭代。
 
 ---
 
@@ -422,7 +443,8 @@ CS 学生出售大量教材。教材的一流支持使站点对该用户群体�
 | 取货预约链接（Calendly/Cal.com 字段） | 🎓👤 | v1.1 |
 | 标签筛选页（`/tags/{tag}`） | 🎓👤 | v1.1 |
 | 距离单位切换（英里 ↔ 公里） | 🎓 | v1.1 |
-| 跨平台发布导出模板 | 🎓 | v2 |
+| Facebook Marketplace 导出（`pnpm fb-export`） | 🎓 | ✅ 已实现 |
+| 跨平台导出（Craigslist / OfferUp / eBay） | 🎓 | v2 |
 | 捆绑优惠多物品联系 | 🎓👤 | v2 |
 | 联系表单（无服务器，隐藏联系信息） | 👤 | v2 |
 | 物品浏览计数器（GoatCounter） | 🎓 | v2 |

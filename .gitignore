@@ -73,6 +73,10 @@ public/contact/
 # ── Incremental upload cache (seller's machine only) ─────────────────────────
 .image-cache/
 
+# ── Facebook Marketplace export files ────────────────────────────────────────
+exports/*.csv
+exports/.export-history.json
+
 # ── Generated build artifacts (rebuilt on every next build) ──────────────────
 # image-manifest.json is intentionally NOT listed here — it IS committed.
 # search-index.json is written to public/ (not lib/generated/) so SearchBar can fetch it via HTTP.

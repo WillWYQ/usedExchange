@@ -1,6 +1,6 @@
 {
   "name": "usedexchange",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "private": true,
   "scripts": {
     "setup-ui": "bash scripts/setup-ui.sh",
@@ -9,6 +9,7 @@
     "create-template": "tsx scripts/create-template.ts",
     "new": "tsx scripts/create-item.ts",
     "mark-sold": "tsx scripts/mark-sold.ts",
+    "fb-export": "tsx scripts/export-facebook.ts",
     "update-site": "tsx scripts/update-site.ts",
     "push": "git add content lib/generated/image-manifest.json && git commit -m 'chore: update listings' && git push",
     "prebuild": "tsx scripts/check-config.ts && tsx scripts/sync-images.ts --mode build-check && tsx scripts/build-search-index.ts",

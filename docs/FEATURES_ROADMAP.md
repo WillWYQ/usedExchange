@@ -424,16 +424,31 @@ Builds on the PWA manifest (Tier 1.10).
 
 ---
 
-### 3.4 Cross-Listing Export Templates
+### 3.4 Cross-Listing Export Templates — Facebook Marketplace ✅ Implemented
 **Effort:** M · **Value:** ⭐⭐
 
-`pnpm export-marketplace houseware/ikea-lamp` generates a formatted text block ready to paste into:
-- Facebook Marketplace
-- Craigslist
-- OfferUp / Letgo
-- eBay (description template)
+`pnpm fb-export` interactively exports available items as a Facebook Marketplace bulk-upload CSV. Three-step guided UI:
 
-Reads `item.json` and formats fields per each platform's conventions (title length limits, description format, etc.).
+1. **Item selection** — all items, a single category, or a manually picked subset (comma list or `1-4` range notation)
+2. **Price tier** — lowest price (pickup), highest price (shipping), or any named tier label
+3. **Output** — writes `exports/facebook-marketplace.csv`; auto-batches into numbered files if > 50 items (FB's per-upload limit)
+
+**Smart category mapping** (`scripts/lib/fbCategoryMap.ts`): 50+ keyword rules match item tags, name, brand, and model to FB's `"Top Level//Sub Level//Leaf Level"` category format. Covers GPU/CPU/RAM, textbooks, furniture, audio, phones, gaming, clothing, and more. Falls back to the category slug when no rule matches (FB will prompt the seller to choose manually).
+
+**Field mapping:**
+
+| item.json field | FB CSV column | Notes |
+|---|---|---|
+| `name` (+ brand/model prefix) | TITLE | Truncated to 150 chars; brand/model prepended only if not already in name |
+| lowest/highest `price.tiers[].amount` | PRICE | Rounded to nearest dollar; tier chosen interactively |
+| `condition` | CONDITION | `good→"Used - Good"`, `like-new→"Used - Like New"`, `new→"New"`, `fair/for-parts→"Used - Fair"` |
+| `description` + meta block | DESCRIPTION | Appends brand, model, color, age, original price, tags as `[key: value]` footer; truncated to 5000 chars |
+| keyword rules | CATEGORY | Auto-detected from corpus |
+| `weight` (converted to lb) | SHIPPING WEIGHT | Only when a shipping tier (no `miles_max`) is present |
+| `price.shipping_payer === "seller"` | OFFER FREE SHIPPING | Yes/No |
+| has open-ended tier | OFFER SHIPPING | Yes/No |
+
+**Remaining platforms** (Craigslist, OfferUp, eBay) remain roadmap items for a future iteration.
 
 ---
 
@@ -550,7 +565,8 @@ Features shipped in v1 have been moved to the "Shipped in v1" section at the top
 | Pickup scheduling link (Calendly/Cal.com field) | 🎓👤 | v1.1 |
 | Tag filter page (`/tags/{tag}`) | 🎓👤 | v1.1 |
 | Distance unit toggle (mi ↔ km) | 🎓 | v1.1 |
-| Cross-listing export templates | 🎓 | v2 |
+| Facebook Marketplace export (`pnpm fb-export`) | 🎓 | ✅ Implemented |
+| Cross-listing export (Craigslist / OfferUp / eBay) | 🎓 | v2 |
 | Bundle deal multi-item contact | 🎓👤 | v2 |
 | Contact form (serverless, hides contact info) | 👤 | v2 |
 | Item view counter (GoatCounter) | 🎓 | v2 |
