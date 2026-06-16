@@ -186,7 +186,8 @@ function parseSelection(input: string, max: number): number[] {
   for (const part of input.split(",")) {
     const range = part.trim().match(/^(\d+)-(\d+)$/);
     if (range) {
-      for (let i = parseInt(range[1], 10); i <= parseInt(range[2], 10); i++) {
+      const [, lo, hi] = range;
+      for (let i = parseInt(lo ?? "0", 10); i <= parseInt(hi ?? "0", 10); i++) {
         result.add(i);
       }
     } else {
