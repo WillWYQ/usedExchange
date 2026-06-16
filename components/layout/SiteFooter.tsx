@@ -166,7 +166,7 @@ export function SiteFooter() {
           rel="noopener noreferrer"
           className="text-foreground/55 underline-offset-2 hover:underline"
         >
-          View creator's GitHub
+          View creator&apos;s GitHub
         </a>
         {" "}or visit their personal website at{" "}
         <a
