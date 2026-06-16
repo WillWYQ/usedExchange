@@ -240,7 +240,9 @@ async function stepHistory(items: Item[]): Promise<Set<string>> {
 
     // Group by run for readability
     for (let r = history.runs.length - 1; r >= 0; r--) {
+      // history.runs[r] is ExportRun | undefined under noUncheckedIndexedAccess
       const run = history.runs[r];
+      if (!run) continue;
       // Only show items that still exist in the current exportable pool
       const visible = run.items.filter((ri) =>
         items.some((i) => itemSlug(i) === ri.slug),
@@ -281,7 +283,7 @@ async function stepSelectItems(items: Item[]): Promise<Item[]> {
   section("Step 1 · Select items");
   console.log(`  [a]  All items  (${items.length} total)`);
   cats.forEach((slug, i) => {
-    const count = byCategory.get(slug)!.length;
+    const count = byCategory.get(slug)?.length ?? 0;
     console.log(
       `  [${i + 1}]  ${slug.padEnd(20)} (${count} item${count !== 1 ? "s" : ""})`,
     );
@@ -294,7 +296,9 @@ async function stepSelectItems(items: Item[]): Promise<Item[]> {
 
   const catIdx = parseInt(choice, 10);
   if (!isNaN(catIdx) && catIdx >= 1 && catIdx <= cats.length) {
-    return byCategory.get(cats[catIdx - 1])!;
+    // cats[catIdx - 1] is string | undefined under noUncheckedIndexedAccess
+    const catSlug = cats[catIdx - 1];
+    if (catSlug !== undefined) return byCategory.get(catSlug) ?? items;
   }
 
   if (choice.toLowerCase() === "m") {
@@ -321,7 +325,10 @@ async function stepSelectItems(items: Item[]): Promise<Item[]> {
       console.log("  No valid selection — exporting all items.");
       return items;
     }
-    return indices.map((i) => flat[i - 1]);
+    // flat[i - 1] is Item | undefined under noUncheckedIndexedAccess; filter guards the cast
+    return indices
+      .map((i) => flat[i - 1])
+      .filter((item): item is Item => item !== undefined);
   }
 
   console.log("  Unrecognised choice — exporting all items.");
@@ -348,7 +355,9 @@ async function stepPriceStrategy(items: Item[]): Promise<PriceStrategy> {
     const raw = await ask("  Pick number: ");
     const idx = parseInt(raw, 10);
     if (!isNaN(idx) && idx >= 1 && idx <= labels.length) {
-      return { label: labels[idx - 1] };
+      // labels[idx - 1] is string | undefined under noUncheckedIndexedAccess
+      const labelValue = labels[idx - 1];
+      if (labelValue !== undefined) return { label: labelValue };
     }
     console.log("  Invalid — falling back to lowest.");
   }
@@ -414,7 +423,9 @@ async function main(): Promise<void> {
   const rows: string[][] = [];
   for (const item of selected) {
     const row = buildRow(item, priceStrategy);
-    const cat = row[4] ? row[4].split("//")[0] : "(FB auto-detect)";
+    // row[N] is string | undefined under noUncheckedIndexedAccess; split()[0] likewise
+    const catCol = row[4] ?? "";
+    const cat = catCol ? (catCol.split("//")[0] ?? catCol) : "(FB auto-detect)";
     const priceLabel = row[1] ? `$${row[1]}` : "—";
     console.log(
       `  ✓ ${item.name.slice(0, 40).padEnd(41)} ${cat.slice(0, 22).padEnd(23)} ${priceLabel}`,

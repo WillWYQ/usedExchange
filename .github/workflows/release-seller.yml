@@ -17,6 +17,12 @@ on:
         description: "Tag or ref to release (defaults to HEAD)"
         required: false
 
+# Only one release run at a time. If multiple version tags are pushed
+# simultaneously, cancel the older run and keep only the latest.
+concurrency:
+  group: release-seller
+  cancel-in-progress: true
+
 permissions:
   contents: write
 

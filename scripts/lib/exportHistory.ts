@@ -73,7 +73,9 @@ export function allExportedSlugs(history: ExportHistory): Set<string> {
 
 /** Returns the most recent run, or null when there are no past runs. */
 export function lastRun(history: ExportHistory): ExportRun | null {
-  return history.runs.length > 0 ? history.runs[history.runs.length - 1] : null;
+  if (history.runs.length === 0) return null;
+  // `?? null` because noUncheckedIndexedAccess widens the type to ExportRun | undefined
+  return history.runs[history.runs.length - 1] ?? null;
 }
 
 // ── Write ─────────────────────────────────────────────────────────────────────
