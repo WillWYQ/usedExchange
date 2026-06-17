@@ -322,7 +322,7 @@ AI 会询问 8 个方面：店铺名称、位置（从描述解析经纬度）�
 | `pnpm create-item <cat>/<name>` | 创建新物品文件夹 + 预填全部 38 个 schema 字段的 `item.json`（参见 DESIGN.md §5），以 JSONC 格式写入，并为 `condition`、`status`、`dimensions.unit`、`weight.unit` 附上列出所有可选值的 `// options: ...` 提示 |
 | `pnpm new <cat>/<name>` | `create-item` 的简写 |
 | `pnpm create-template [cat]` | 为某分类（或全局）创建 `_template.json`——与 `create-item` 相同的 JSONC + `// options: ...` 提示 |
-| `pnpm fb-export` | 交互式将在售物品导出为 Facebook Marketplace 批量上传 CSV。三步引导式提示：选择全部 / 按分类 / 单独物品（支持逗号列表和 `1-4` 区间）；选择价格档位（最低价/最高价/按标签）；超过 50 条自动分批（FB 上限）。输出至 `exports/`。智能分类映射根据物品标签、品牌和名称推断 FB 分类层级，无需手动配置。 |
+| `pnpm fb-export` | 交互式将在售物品导出为 Facebook Marketplace 批量上传 CSV。三步引导式提示：选择全部 / 按分类 / 单独物品（支持逗号列表和 `1-4` 区间）；选择价格档位（最低价/最高价/按标签）；超过 50 条自动分批（FB 上限）。输出至 `exports/`。智能分类映射根据物品标签、品牌和名称推断 FB 分类层级，无需手动配置。**导出历史：** 第二次运行时会出现步骤 0，提供跳过已导出物品的选项；历史记录保存于 `exports/.export-history.json`（已加入 gitignore）。 |
 
 ---
 

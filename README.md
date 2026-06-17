@@ -60,6 +60,13 @@ pnpm mark-sold electronics/iphone-14
 git add content/ && git push
 ```
 
+```bash
+# Export to Facebook Marketplace (interactive)
+pnpm fb-export
+# → guides you through item selection, price tier, and writes exports/facebook-marketplace.csv
+# → on re-run, offers to skip already-exported items (export history auto-saved locally)
+```
+
 ## AI-assisted listing (optional)
 
 Open Claude Code (or any capable AI tool) in this directory:

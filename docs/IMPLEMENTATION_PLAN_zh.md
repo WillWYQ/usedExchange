@@ -517,6 +517,47 @@ DESIGN_zh.md §21 · TECH_REQUIREMENTS_zh.md §29 · ARCHITECTURE_zh.md（lib/ �
 
 ---
 
+## Phase 17 — Facebook Marketplace 智能导出 ✅
+
+**目标：** `pnpm fb-export` 通过交互式三步 CLI 将在售物品导出为 Facebook Marketplace 批量上传 CSV。智能导出历史可防止重复运行时生成重复发布。
+
+**版本：** v1.3.0
+
+### 任务
+
+#### 17a — 分类映射器
+- [x] `scripts/lib/fbCategoryMap.ts` — 50+ 条正则规则，将物品语料（名称 + 标签 + 品牌 + 型号 + 分类 slug）映射为 FB `"Top//Sub//Leaf"` 分类字符串；为未匹配分类提供 slug 回退映射
+
+#### 17b — 导出脚本
+- [x] `scripts/export-facebook.ts` — 交互式三步 CLI（步骤 0：第二次及以后运行时显示历史过滤；步骤 1：全部/按分类/多选，支持逗号列表和区间 `1-4`；步骤 2：价格档位：最低价/最高价/按标签）
+- [x] FB CSV 字段映射：`name`→TITLE（150 字符）、`price`→PRICE、`condition`→CONDITION、`description`→DESCRIPTION（5000 字符）、分类→CATEGORY、重量→SHIPPING WEIGHT、运费标志→OFFER FREE SHIPPING / OFFER SHIPPING
+- [x] 物品超过 50 条时自动拆分为编号文件（FB 单次上传上限）
+- [x] 每次成功写入后将 `ExportRun` 追加至导出历史
+
+#### 17c — 导出历史
+- [x] `scripts/lib/exportHistory.ts` — `loadHistory()`、`allExportedSlugs()`、`lastRun()`、`appendRun()`、`formatRunDate()`
+- [x] 历史记录保存于 `exports/.export-history.json`（已加入 gitignore）；`exports/.gitkeep` 追踪目录
+- [x] 身份键：`{categorySlug}/{itemSlug}` — 重命名后仍保持稳定
+
+#### 17d — 接入与文档
+- [x] `package.json` 新增 `"fb-export"` 脚本；版本升至 `1.3.0`
+- [x] `.gitignore` 更新：排除 `exports/*.csv` 和 `exports/.export-history.json`
+- [x] `.claude/CLAUDE.md` — 常用卖家任务表格新增 `pnpm fb-export` 行
+- [x] `docs/CURRENT_FUNCTIONALITY.md` / `_zh` — 卖家 CLI 工具表格记录 fb-export 及导出历史
+- [x] `docs/FEATURES_ROADMAP.md` / `_zh` — §3.4 补充导出历史说明
+- [x] `README.md` / `README_zh.md` — 卖家工作流新增 fb-export
+- [x] `SETUP_GUIDE.md` — 新增 §8「导出至 Facebook Marketplace」（面向卖家的白话说明）
+- [x] `pnpm type-check`、`pnpm lint` 通过（CI 绿灯）
+
+### 验收标准
+- `pnpm fb-export` 在 TTY 下交互运行，引导完成所有步骤无报错
+- 输出 CSV 列顺序符合 Facebook Marketplace 批量上传模板
+- 物品超过 50 条时自动拆分为 `facebook-marketplace-1.csv`、`facebook-marketplace-2.csv`……
+- 第二次运行显示步骤 0，含已导出物品数量；选择「跳过」后自动过滤
+- 历史文件写入后若损坏，回退至 `{ runs: [] }` 而不崩溃
+
+---
+
 ## 风险登记册
 
 | 风险 | 可能性 | 影响 | 缓解措施 |

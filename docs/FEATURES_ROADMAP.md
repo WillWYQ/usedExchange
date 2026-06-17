@@ -448,6 +448,8 @@ Builds on the PWA manifest (Tier 1.10).
 | `price.shipping_payer === "seller"` | OFFER FREE SHIPPING | Yes/No |
 | has open-ended tier | OFFER SHIPPING | Yes/No |
 
+**Smart Export History** (`scripts/lib/exportHistory.ts`): On the second run, Step 0 asks whether to skip items already exported in a previous session. History is keyed by `{categorySlug}/{itemSlug}` (stable filesystem identity), stored in `exports/.export-history.json` (gitignored). Each run appends an `ExportRun` entry recording the timestamp, price strategy, item count, CSV file paths, and per-item slug + name + price. This lets the seller confidently re-export only newly available items without duplicating existing FB listings.
+
 **Remaining platforms** (Craigslist, OfferUp, eBay) remain roadmap items for a future iteration.
 
 ---

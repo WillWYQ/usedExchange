@@ -643,6 +643,47 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md (lib/ Module Refe
 
 ---
 
+## Phase 17 — Facebook Marketplace Smart Export ✅
+
+**Goal:** `pnpm fb-export` lets sellers export available items as a Facebook Marketplace bulk-upload CSV through an interactive three-step CLI. A smart export history prevents duplicate listings on re-run.
+
+**Version:** v1.3.0
+
+### Tasks
+
+#### 17a — Category Mapper
+- [x] `scripts/lib/fbCategoryMap.ts` — 50+ regex rules mapping item corpus (name + tags + brand + model + categorySlug) to FB `"Top//Sub//Leaf"` category string; slug fallback map for unmatched categories
+
+#### 17b — Export Script
+- [x] `scripts/export-facebook.ts` — interactive 3-step CLI (Step 0: history filter shown on 2nd+ run; Step 1: all/category/multi-select with comma and range notation `1-4`; Step 2: price tier: lowest/highest/by label)
+- [x] FB CSV field mapping: `name`→TITLE (150 chars), `price`→PRICE, `condition`→CONDITION, `description`→DESCRIPTION (5000 chars), category→CATEGORY, weight→SHIPPING WEIGHT, shipping flags→OFFER FREE SHIPPING / OFFER SHIPPING
+- [x] Auto-batches into numbered files when > 50 items (FB per-upload limit)
+- [x] Appends `ExportRun` to export history after each successful write
+
+#### 17c — Export History
+- [x] `scripts/lib/exportHistory.ts` — `loadHistory()`, `allExportedSlugs()`, `lastRun()`, `appendRun()`, `formatRunDate()`
+- [x] History stored in `exports/.export-history.json` (gitignored); `exports/.gitkeep` tracks the directory
+- [x] Identity key: `{categorySlug}/{itemSlug}` — stable across renames
+
+#### 17d — Wiring & Documentation
+- [x] `package.json` `"fb-export"` script; version bumped to `1.3.0`
+- [x] `.gitignore` updated: `exports/*.csv` and `exports/.export-history.json` excluded
+- [x] `.claude/CLAUDE.md` — added `pnpm fb-export` row to Common Seller Tasks table
+- [x] `docs/CURRENT_FUNCTIONALITY.md` / `_zh` — fb-export + export history documented in Seller CLI Tools table
+- [x] `docs/FEATURES_ROADMAP.md` / `_zh` — §3.4 updated with export history description
+- [x] `README.md` / `README_zh.md` — fb-export added to seller workflow
+- [x] `SETUP_GUIDE.md` — §8 "Exporting to Facebook Marketplace" added (seller-facing plain-language walkthrough)
+- [x] `pnpm type-check`, `pnpm lint` pass (CI green)
+
+### Acceptance Criteria
+- `pnpm fb-export` runs interactively with TTY; guides through all steps without errors
+- Output CSV conforms to Facebook Marketplace bulk upload template column order
+- Items with > 50 selected auto-batch into `facebook-marketplace-1.csv`, `facebook-marketplace-2.csv`, …
+- Second run shows Step 0 with count of previously exported items; selecting "skip" filters them out
+- History file written atomically; corrupted file falls back to `{ runs: [] }` without crashing
+
+---
+
 ## Risk Register
 
 | Risk | Likelihood | Impact | Mitigation |

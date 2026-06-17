@@ -342,6 +342,8 @@ CS 学生出售大量教材。教材的一流支持使站点对该用户群体�
 | `price.shipping_payer === "seller"` | OFFER FREE SHIPPING | Yes/No |
 | 存在开放式档位 | OFFER SHIPPING | Yes/No |
 
+**智能导出历史** (`scripts/lib/exportHistory.ts`)：第二次运行时，步骤 0 会询问是否跳过上次已导出的物品。历史记录以 `{categorySlug}/{itemSlug}`（稳定的文件系统路径）为键，保存于 `exports/.export-history.json`（已加入 gitignore）。每次运行会追加一条 `ExportRun` 记录，包含时间戳、价格策略、物品数量、CSV 文件路径，以及每件物品的 slug、名称和价格。卖家可放心地仅导出新上架物品，不必担心与 FB 已有发布重复。
+
 **其余平台**（Craigslist、OfferUp、eBay）仍为路线图待办项，留待未来迭代。
 
 ---

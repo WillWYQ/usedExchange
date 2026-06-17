@@ -174,7 +174,29 @@ The AI will read your current settings and ask what you'd like to change. You do
 
 ---
 
-## 8. What to Back Up
+## 8. Exporting to Facebook Marketplace
+
+To list your items on Facebook Marketplace in bulk, run:
+
+```
+pnpm fb-export
+```
+
+The command walks you through three steps:
+
+1. **Choose items** — export everything, a single category, or pick specific items by number (you can type `1,3,5` or a range like `2-6`)
+2. **Choose price** — lowest price (good for local pickup), highest price (shipping), or any named tier you set
+3. **Done** — the file `exports/facebook-marketplace.csv` is ready to upload to Facebook Marketplace's bulk listing tool
+
+If you have more than 50 items, the file is automatically split into numbered batches (Facebook's per-upload limit).
+
+**Re-running later:** the second time you run `pnpm fb-export`, it asks if you want to skip items you already exported. This way you only add newly listed items without re-creating duplicates.
+
+The CSV is not committed to git — it stays on your computer only.
+
+---
+
+## 9. What to Back Up
 
 The only folder you need to back up is **`content/`**. Everything else (the site code, design, build scripts) can be restored from the GitHub repository.
 
@@ -186,7 +208,7 @@ Inside `content/`, the most important files are:
 
 ---
 
-## 9. Who to Contact If Something Breaks
+## 10. Who to Contact If Something Breaks
 
 If the AI generates incorrect output, the site fails to build, or something looks wrong:
 

@@ -60,6 +60,13 @@ pnpm mark-sold electronics/iphone-14
 git add content/ && git push
 ```
 
+```bash
+# 导出至 Facebook Marketplace（交互式）
+pnpm fb-export
+# → 引导选择物品、价格档位，生成 exports/facebook-marketplace.csv
+# → 再次运行时可选择跳过已导出物品（导出历史自动保存在本地）
+```
+
 ## AI 辅助上架（可选）
 
 在项目目录中打开 Claude Code（或任何兼容的 AI 工具）：
