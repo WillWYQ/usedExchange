@@ -48,7 +48,7 @@ export type SiteConfig = {
   // dimensions/weight on item pages (see lib/utils/units.ts). Per-item
   // dimensions/weight are always stored in whatever unit the seller entered
   // and converted for display — this only controls the target unit.
-  measurementUnit: "metric" | "imperial";
+  measurementUnit?: "metric" | "imperial";
 
   // Contact
   contact: {

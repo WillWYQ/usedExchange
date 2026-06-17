@@ -21,7 +21,7 @@ export function convertWeight(value: number, from: "kg" | "lb", to: "kg" | "lb")
 // Resolves the display unit system for a locale: per-locale override
 // (i18n.localeMeasurementUnits) falls back to the site-wide measurementUnit.
 export function resolveMeasurementUnit(locale: string, config: SiteConfig): MeasurementUnit {
-  return config.i18n.localeMeasurementUnits?.[locale] ?? config.measurementUnit;
+  return config.i18n.localeMeasurementUnits?.[locale] ?? config.measurementUnit ?? "metric";
 }
 
 // Rounds to 2 decimals, trimming trailing zeros (e.g. 12.50 -> 12.5, 12.00 -> 12).
