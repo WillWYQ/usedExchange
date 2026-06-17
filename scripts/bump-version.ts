@@ -108,11 +108,12 @@ async function waitForCI(sha: string): Promise<boolean> {
         `gh run list --commit ${sha} --workflow ci.yml --json status,conclusion,number --limit 1`,
       );
       const runs = JSON.parse(raw) as GhRun[];
-      if (runs.length === 0) {
+      const ciRun = runs[0];
+      if (!ciRun) {
         console.log("  (no run yet, retrying…)");
         continue;
       }
-      const { status, conclusion, number } = runs[0];
+      const { status, conclusion, number } = ciRun;
       console.log(`  CI run #${number}: ${status}${conclusion ? ` → ${conclusion}` : ""}`);
       if (status === "completed") return conclusion === "success";
     } catch {
