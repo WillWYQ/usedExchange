@@ -90,3 +90,4 @@ public/search-index.json
 *.njsproj
 *.sln
 .next.nosync
+Marketplace_Bulk_Upload_Template.xlsx
