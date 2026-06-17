@@ -2,9 +2,8 @@
 
 import type { Item } from "@/lib/content/types";
 import { useT } from "@/components/i18n/useT";
-import { useLocale } from "@/components/i18n/useLocale";
-import { siteConfig } from "@/content/config";
-import { formatDimensions, formatWeight, resolveMeasurementUnit } from "@/lib/utils/units";
+import { useMeasurementUnit } from "@/components/units/useMeasurementUnit";
+import { formatDimensions, formatWeight } from "@/lib/utils/units";
 
 type MetadataTableProps = {
   item: Item;
@@ -18,8 +17,7 @@ type Row = {
 
 export function MetadataTable({ item }: MetadataTableProps) {
   const t = useT();
-  const { locale } = useLocale();
-  const unitSystem = resolveMeasurementUnit(locale, siteConfig);
+  const { unit: unitSystem } = useMeasurementUnit();
   const rows: Row[] = [
     { label: t.brand, value: item.brand || null },
     { label: t.model, value: item.model || null },

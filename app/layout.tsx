@@ -6,6 +6,7 @@ import { SiteFooter } from "@/components/layout/SiteFooter";
 import { BackgroundEffect } from "@/components/ui-adapters/BackgroundEffect";
 import { LocaleProvider } from "@/components/i18n/LocaleProvider";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { MeasurementUnitProvider } from "@/components/units/MeasurementUnitProvider";
 
 export const metadata: Metadata = {
   title: {
@@ -33,11 +34,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-background text-foreground antialiased">
         <ThemeProvider>
           <LocaleProvider>
-            <BackgroundEffect>
-              <SiteHeader />
-              <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
-              <SiteFooter />
-            </BackgroundEffect>
+            <MeasurementUnitProvider>
+              <BackgroundEffect>
+                <SiteHeader />
+                <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+                <SiteFooter />
+              </BackgroundEffect>
+            </MeasurementUnitProvider>
           </LocaleProvider>
         </ThemeProvider>
       </body>

@@ -8,6 +8,7 @@ import { isTemplateConfigured } from "@/lib/utils/templateStatus";
 import { LocaleSwitcher } from "@/components/i18n/LocaleSwitcher";
 import { SearchBarClient } from "@/components/search/SearchBarClient";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { MeasurementUnitToggle } from "@/components/units/MeasurementUnitToggle";
 import { useT } from "@/components/i18n/useT";
 
 export function SiteHeader() {
@@ -70,6 +71,7 @@ export function SiteHeader() {
         >
           {siteConfig.search.enabled && <SearchBarClient />}
           {navLinks}
+          <MeasurementUnitToggle />
           <LocaleSwitcher />
           <ThemeToggle />
         </nav>
@@ -109,7 +111,8 @@ export function SiteHeader() {
           <div className="flex flex-col gap-1 [&>a]:rounded-lg [&>a]:px-3 [&>a]:py-3">
             {navLinks}
           </div>
-          <div className="px-3 py-2">
+          <div className="flex items-center gap-2 px-3 py-2">
+            <MeasurementUnitToggle />
             <LocaleSwitcher />
           </div>
         </nav>
