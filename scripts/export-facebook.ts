@@ -175,12 +175,6 @@ function localPhotoFiles(item: Item): string[] {
   }
 }
 
-/** Return relative photo paths for the CSV PHOTO columns, pointing into the exports photo folder. */
-function localPhotoPaths(item: Item): string[] {
-  const files = localPhotoFiles(item);
-  return files.map((f) => `facebook-marketplace-photos/${item.categorySlug}/${item.itemSlug}/${f}`);
-}
-
 /** Copy local photos for all selected items into exports/.
  *  Folders are named NNN_category-item (row number = CSV row order) so the
  *  order is obvious when manually uploading photos after a CSV import.
@@ -189,7 +183,7 @@ async function copyLocalPhotos(selected: Item[]): Promise<{ photoCount: number; 
   const PHOTO_FOLDER = "facebook-marketplace-photos";
   const photoDir = path.join(EXPORTS_DIR, PHOTO_FOLDER);
 
-  let maxPhotos = Math.min(FB_PHOTO_LIMIT, Math.max(1, ...selected.map((i) => localPhotoFiles(i).length)));
+  const maxPhotos = Math.min(FB_PHOTO_LIMIT, Math.max(1, ...selected.map((i) => localPhotoFiles(i).length)));
   if (maxPhotos === 0) return { photoCount: 0, hasPhotos: false };
 
   mkdirSync(photoDir, { recursive: true });

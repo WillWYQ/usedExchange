@@ -3,6 +3,7 @@
 //
 // Interactive CLI that bumps package.json version, commits, tags, pushes,
 // and creates a GitHub release — matching the existing v{ver} — {title} format.
+// Waits for CI to pass on the bump commit before tagging and releasing.
 
 import fs from "fs/promises";
 import path from "path";
@@ -83,6 +84,43 @@ async function askNotes(): Promise<string> {
     lines.push(line);
   }
   return lines.join("\n");
+}
+
+// ── CI wait ───────────────────────────────────────────────────────────────────
+
+interface GhRun {
+  status: string;
+  conclusion: string;
+  number: number;
+}
+
+async function waitForCI(sha: string): Promise<boolean> {
+  const MAX_WAIT_MS = 10 * 60 * 1000;
+  const POLL_MS = 15_000;
+  const deadline = Date.now() + MAX_WAIT_MS;
+
+  console.log(`\n  Waiting for CI on ${sha.slice(0, 7)} (up to 10 min)…`);
+
+  while (Date.now() < deadline) {
+    await new Promise<void>((r) => setTimeout(r, POLL_MS));
+    try {
+      const raw = run(
+        `gh run list --commit ${sha} --workflow ci.yml --json status,conclusion,number --limit 1`,
+      );
+      const runs = JSON.parse(raw) as GhRun[];
+      if (runs.length === 0) {
+        console.log("  (no run yet, retrying…)");
+        continue;
+      }
+      const { status, conclusion, number } = runs[0];
+      console.log(`  CI run #${number}: ${status}${conclusion ? ` → ${conclusion}` : ""}`);
+      if (status === "completed") return conclusion === "success";
+    } catch {
+      // gh or network not ready yet — keep polling
+    }
+  }
+  console.error("  ✗ Timed out waiting for CI.");
+  return false;
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -173,22 +211,37 @@ async function main(): Promise<void> {
   }
 
   // 2. Stage & commit
-  const stagedFiles = ["package.json"];
-  run(`git add ${stagedFiles.join(" ")}`);
+  run("git add package.json");
   run(`git commit -m "chore: bump to v${newVersion}"`);
-  console.log(`  ✓ Committed  chore: bump to v${newVersion}`);
+  const headSha = run("git rev-parse HEAD");
+  console.log(`  ✓ Committed  chore: bump to v${newVersion}  (${headSha.slice(0, 7)})`);
 
-  // 3. Tag
+  // 3. Push commit — this triggers CI
+  console.log("  Pushing commit…");
+  runLive("git push");
+  console.log("  ✓ Pushed");
+
+  // 4. Wait for CI to pass before tagging and releasing
+  const ciPassed = await waitForCI(headSha);
+  if (!ciPassed) {
+    console.error(
+      `\n  ✗ CI did not pass. Tag v${newVersion} was NOT created.\n` +
+        `  Fix the issue, then re-run pnpm bump (choose "keep" to skip the version bump).\n`,
+    );
+    process.exit(1);
+  }
+  console.log("  ✓ CI passed");
+
+  // 5. Tag (only after CI is green)
   run(`git tag v${newVersion}`);
   console.log(`  ✓ Tagged     v${newVersion}`);
 
-  // 4. Push commits + tag
-  console.log("  Pushing…");
-  runLive("git push");
+  // 6. Push tag
+  console.log("  Pushing tag…");
   runLive(`git push origin v${newVersion}`);
-  console.log("  ✓ Pushed");
+  console.log("  ✓ Pushed tag");
 
-  // 5. Create GitHub release
+  // 7. Create GitHub release
   console.log("  Creating GitHub release…");
   const escapedNotes = notes.replace(/'/g, "'\\''");
   runLive(
