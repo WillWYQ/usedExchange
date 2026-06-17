@@ -253,6 +253,8 @@ function printBackupReminder(): void {
 ║    • iCloud Drive / Google Drive / Dropbox                   ║
 ║                                                              ║
 ║  Next steps:                                                 ║
+║    pnpm push                                                 ║
+║    — or manually:                                            ║
 ║    git add lib/generated/image-manifest.json                 ║
 ║    git add content/**/*.json content/config.ts               ║
 ║    git commit -m "chore: update listings"                    ║

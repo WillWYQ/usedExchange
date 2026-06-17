@@ -9,7 +9,7 @@
 // previous session. History is persisted in exports/.export-history.json.
 
 import fs from "fs/promises";
-import { existsSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync, readdirSync } from "fs";
 import path from "path";
 import * as readline from "readline";
 import { loadAllItemsRaw } from "@/lib/content/loader";
@@ -156,6 +156,69 @@ function buildRow(item: Item, strategy: PriceStrategy, photoCount: number): stri
 
 function itemSlug(item: Item): string {
   return `${item.categorySlug}/${item.itemSlug}`;
+}
+
+// ── Local photo helpers ────────────────────────────────────────────────────────
+
+const IMAGE_EXTENSIONS = /\.(jpe?g|png|webp|gif|svg|bmp|tiff?)$/i;
+
+/** Return image filenames from an item's content folder, sorted alphabetically. */
+function localPhotoFiles(item: Item): string[] {
+  try {
+    const dir = path.join(process.cwd(), "content", "items", item.categorySlug, item.itemSlug);
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir)
+      .filter((f) => IMAGE_EXTENSIONS.test(f))
+      .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  } catch {
+    return [];
+  }
+}
+
+/** Return relative photo paths for the CSV PHOTO columns, pointing into the exports photo folder. */
+function localPhotoPaths(item: Item): string[] {
+  const files = localPhotoFiles(item);
+  return files.map((f) => `facebook-marketplace-photos/${item.categorySlug}/${item.itemSlug}/${f}`);
+}
+
+/** Copy local photos for all selected items into exports/.
+ *  Folders are named NNN_category-item (row number = CSV row order) so the
+ *  order is obvious when manually uploading photos after a CSV import.
+ *  Only copies files that are missing in the target directory. */
+async function copyLocalPhotos(selected: Item[]): Promise<{ photoCount: number; hasPhotos: boolean }> {
+  const PHOTO_FOLDER = "facebook-marketplace-photos";
+  const photoDir = path.join(EXPORTS_DIR, PHOTO_FOLDER);
+
+  let maxPhotos = Math.min(FB_PHOTO_LIMIT, Math.max(1, ...selected.map((i) => localPhotoFiles(i).length)));
+  if (maxPhotos === 0) return { photoCount: 0, hasPhotos: false };
+
+  mkdirSync(photoDir, { recursive: true });
+
+  // Pad width so folders sort lexicographically in the same order as CSV rows.
+  const pad = String(selected.length).length;
+
+  for (let idx = 0; idx < selected.length; idx++) {
+    const item = selected[idx];
+    if (!item) continue;
+    const files = localPhotoFiles(item);
+    if (!files.length) continue;
+
+    const rowNum = String(idx + 1).padStart(pad, "0");
+    const subDir = path.join(photoDir, `${rowNum}_${item.categorySlug}-${item.itemSlug}`);
+    mkdirSync(subDir, { recursive: true });
+
+    for (const file of files.slice(0, FB_PHOTO_LIMIT)) {
+      const dest = path.join(subDir, file);
+      if (!existsSync(dest)) {
+        await fs.copyFile(
+          path.join(process.cwd(), "content", "items", item.categorySlug, item.itemSlug, file),
+          dest,
+        );
+      }
+    }
+  }
+
+  return { photoCount: maxPhotos, hasPhotos: true };
 }
 
 // ── CSV serialisation ──────────────────────────────────────────────────────────
@@ -434,7 +497,11 @@ async function main(): Promise<void> {
   const priceStrategy = await stepPriceStrategy(selected);
   rl.close();
 
-  // Determine how many PHOTO columns are needed (max across selected items, capped at FB limit)
+  // Copy local photos into exports/ as a manual-upload fallback (in case CDN URLs change).
+  await copyLocalPhotos(selected);
+
+  // PHOTO columns use CDN (https://) URLs — FB fetches them automatically on CSV upload.
+  // photoCount = max CDN images any item has, capped at FB's 10-photo limit.
   const photoCount = Math.min(
     FB_PHOTO_LIMIT,
     Math.max(1, ...selected.map((i) => publicImages(i).length)),
@@ -450,12 +517,21 @@ async function main(): Promise<void> {
     const catCol = row[4] ?? "";
     const cat = catCol ? (catCol.split("//")[0] ?? catCol) : "(FB auto-detect)";
     const priceLabel = row[1] ? `$${row[1]}` : "—";
-    const photoUrls = publicImages(item);
-    const photoLabel = photoUrls.length ? `📷 ${photoUrls.length}` : "⚠️  no photos";
+    const cdnCount = publicImages(item).length;
+    const photoLabel = cdnCount ? `📷 ${cdnCount}` : "⚠️  no CDN photos";
     console.log(
       `  ✓ ${item.name.slice(0, 36).padEnd(37)} ${cat.slice(0, 20).padEnd(21)} ${priceLabel.padEnd(7)} ${photoLabel}`,
     );
     rows.push(row);
+  }
+
+  // Warn if any items have no CDN photos (FB won't receive photos for those rows).
+  const noCdnItems = selected.filter((i) => publicImages(i).length === 0);
+  if (noCdnItems.length) {
+    console.log(
+      `\n  ⚠️  ${noCdnItems.length} item${noCdnItems.length !== 1 ? "s have" : " has"} no CDN photos — PHOTO columns will be empty for those rows.`,
+    );
+    console.log("     Run \`pnpm upload-images\` first to upload photos to Cloudflare R2.\n");
   }
 
   // Write CSV — split into 50-item batches if needed
@@ -496,7 +572,11 @@ async function main(): Promise<void> {
   await appendRun(run);
 
   console.log("  Export history updated  (exports/.export-history.json)");
-  console.log("  Upload the CSV at: facebook.com/marketplace/create/bulk\n");
+  if (photoCount > 0) {
+    const PHOTO_FOLDER = "facebook-marketplace-photos";
+    console.log(`  Photo folder   exports/${PHOTO_FOLDER}/`);
+  }
+  console.log(`\n  To upload: drag the CSV file + photo folder to facebook.com/marketplace/create/bulk\n`);
 }
 
 main().catch((err: unknown) => {
