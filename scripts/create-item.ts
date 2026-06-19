@@ -76,7 +76,7 @@ async function main() {
     .replace(/-/g, " ")
     .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
-  const template = buildItemTemplate(displayName, today, siteConfig.measurementUnit);
+  const template = buildItemTemplate(displayName, today, siteConfig.measurementUnit, siteConfig.defaultPriceTiers);
 
   const jsonPath = path.join(itemDir, "item.json");
   await fs.writeFile(jsonPath, renderItemTemplateJsonc(template));

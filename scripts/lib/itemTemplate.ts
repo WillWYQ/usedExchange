@@ -8,23 +8,34 @@
 
 export type MeasurementUnit = "metric" | "imperial";
 
+export type PriceTierTemplate = {
+  label: string;
+  miles_min?: number;
+  miles_max?: number;
+  amount: number;
+};
+
+const DEFAULT_PRICE_TIERS: PriceTierTemplate[] = [
+  { label: "Pickup / ≤ 5 mi", miles_max: 5, amount: 0 },
+  { label: "6 – 15 mi", miles_min: 5, miles_max: 15, amount: 0 },
+  { label: "Shipping", miles_min: 15, amount: 0 },
+];
+
 export function buildItemTemplate(
   name: string,
   listedDate: string,
   measurementUnit: MeasurementUnit = "metric",
+  priceTiers?: PriceTierTemplate[],
 ) {
   const dimensionsUnit = measurementUnit === "imperial" ? "in" : "cm";
   const weightUnit = measurementUnit === "imperial" ? "lb" : "kg";
+  const tiers = priceTiers && priceTiers.length > 0 ? priceTiers : DEFAULT_PRICE_TIERS;
 
   return {
     name,
     price: {
       currency: "USD",
-      tiers: [
-        { label: "Pickup / ≤ 5 mi", miles_max: 5, amount: 0 },
-        { label: "6 – 15 mi", miles_min: 5, miles_max: 15, amount: 0 },
-        { label: "Shipping", miles_min: 15, amount: 0 },
-      ],
+      tiers,
       negotiable: false,
       show_tiers: false,
     },

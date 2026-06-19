@@ -40,6 +40,17 @@ export type SiteConfig = {
   currency: string;
   recentlyListedCount: number;
   soldItemRetentionDays: number;
+
+  // Default price tiers written into every new item.json created by `pnpm create-item`.
+  // Each tier must have a `label` and `amount` (set to 0 as a placeholder).
+  // Tiers with `miles_max` are local pickup tiers; tiers without are shipping tiers.
+  // When absent, a built-in 3-tier default (pickup ≤5mi / 6–15mi / Shipping) is used.
+  defaultPriceTiers?: Array<{
+    label: string;
+    miles_min?: number;
+    miles_max?: number;
+    amount: number;
+  }>;
   // Caps how many sold items render on /sold (0 = no cap). See content/config.ts.
   soldArchiveDisplayLimit: number;
   // Default unit system: "metric" (cm/kg) | "imperial" (in/lb).

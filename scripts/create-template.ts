@@ -31,7 +31,7 @@ async function main() {
   const today = new Date().toISOString().slice(0, 10);
 
   const template = {
-    ...buildItemTemplate("Item Name Here", today, siteConfig.measurementUnit),
+    ...buildItemTemplate("Item Name Here", today, siteConfig.measurementUnit, siteConfig.defaultPriceTiers),
     description: "Item description (GitHub-flavoured Markdown supported).",
   };
 

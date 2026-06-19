@@ -53,6 +53,18 @@ export const siteConfig: SiteConfig = {
   // via i18n.localeMeasurementUnits below.
   measurementUnit: "metric",
 
+  // ── Default price tiers ────────────────────────────────────────────────────
+  // Written into every new item.json created by `pnpm create-item`.
+  // Tiers with miles_max are local pickup; tiers without miles_max are shipping.
+  // Set amount to 0 — fill in the real price after running create-item.
+  // When this key is absent, a built-in 3-tier default is used:
+  //   Pickup / ≤ 5 mi  |  6 – 15 mi  |  Shipping
+  // Uncomment and edit to match your preferred ranges:
+  // defaultPriceTiers: [
+  //   { label: "Local pickup (≤ 15 mi)", miles_max: 15, amount: 0 },
+  //   { label: "Shipping (buyer pays)", amount: 0 },
+  // ],
+
   // ── Shipping calculator (optional) ─────────────────────────────────────────
   // Disabled by default — zero impact on the site until configured.
   // To enable: deploy workers/shipping-rate-proxy (see its README), then set
