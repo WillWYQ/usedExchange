@@ -61,22 +61,34 @@ const CONDITION_MAP: Record<string, string> = {
 
 // ── Price strategy ─────────────────────────────────────────────────────────────
 
-type PriceStrategy = "lowest" | "highest" | { label: string };
+/**
+ * Strategies:
+ *   "lowest"   — cheapest tier across all tiers (good default, reflects pickup price)
+ *   "highest"  — most expensive tier (reflects shipping price)
+ *   "pickup"   — lowest-amount tier that has a miles_max (local-only tier); falls back to lowest
+ *   "shipping" — lowest-amount tier that has NO miles_max (open-ended tier); falls back to highest
+ */
+type PriceStrategy = "lowest" | "highest" | "pickup" | "shipping";
 
 function resolvePrice(tiers: PriceTier[], strategy: PriceStrategy): number | null {
   if (!tiers.length) return null;
   if (strategy === "lowest") return Math.min(...tiers.map((t) => t.amount));
   if (strategy === "highest") return Math.max(...tiers.map((t) => t.amount));
-  const match = tiers.find(
-    (t) => t.label.toLowerCase() === strategy.label.toLowerCase(),
-  );
-  return match ? match.amount : Math.min(...tiers.map((t) => t.amount));
+  if (strategy === "pickup") {
+    const pickupTiers = tiers.filter((t) => t.miles_max !== undefined);
+    return pickupTiers.length
+      ? Math.min(...pickupTiers.map((t) => t.amount))
+      : Math.min(...tiers.map((t) => t.amount));
+  }
+  // "shipping"
+  const shippingTiers = tiers.filter((t) => t.miles_max === undefined);
+  return shippingTiers.length
+    ? Math.min(...shippingTiers.map((t) => t.amount))
+    : Math.max(...tiers.map((t) => t.amount));
 }
 
 function priceStrategyLabel(strategy: PriceStrategy): string {
-  if (strategy === "lowest") return "lowest";
-  if (strategy === "highest") return "highest";
-  return `label:${strategy.label}`;
+  return strategy;
 }
 
 // ── Shipping helpers ───────────────────────────────────────────────────────────
@@ -410,31 +422,30 @@ async function stepSelectItems(items: Item[]): Promise<Item[]> {
 
 // ── Step 2 — Price tier ───────────────────────────────────────────────────────
 
+function hasPickupTier(items: Item[]): boolean {
+  return items.some((i) => i.price.tiers.some((t) => t.miles_max !== undefined));
+}
+function hasShippingTiers(items: Item[]): boolean {
+  return items.some((i) => i.price.tiers.some((t) => t.miles_max === undefined));
+}
+
 async function stepPriceStrategy(items: Item[]): Promise<PriceStrategy> {
-  const labels = [...new Set(items.flatMap((i) => i.price.tiers.map((t) => t.label)))];
+  const pickup = hasPickupTier(items);
+  const shipping = hasShippingTiers(items);
 
   section("Step 2 · Price tier");
-  console.log("  [1]  Lowest price  (pickup / cheapest tier)   ← recommended");
-  console.log("  [2]  Highest price  (shipping / most expensive tier)");
-  if (labels.length) console.log("  [3]  Choose by tier label");
+  console.log("  [1]  Lowest price across all tiers   ← recommended for most cases");
+  console.log("  [2]  Highest price across all tiers");
+  if (pickup)   console.log("  [3]  Local pickup price  (miles-limited tiers only)");
+  if (shipping) console.log("  [4]  Shipping price  (open-ended tiers only)");
+  console.log();
+  console.log("  Items with no matching tier fall back to lowest / highest respectively.");
 
-  const choice = await ask("\nYour choice [1]: ");
+  const choice = (await ask("\nYour choice [1]: ")).trim() || "1";
 
   if (choice === "2") return "highest";
-
-  if (choice === "3" && labels.length) {
-    console.log("\n  Available labels:");
-    labels.forEach((l, i) => console.log(`    [${i + 1}]  ${l}`));
-    const raw = await ask("  Pick number: ");
-    const idx = parseInt(raw, 10);
-    if (!isNaN(idx) && idx >= 1 && idx <= labels.length) {
-      // labels[idx - 1] is string | undefined under noUncheckedIndexedAccess
-      const labelValue = labels[idx - 1];
-      if (labelValue !== undefined) return { label: labelValue };
-    }
-    console.log("  Invalid — falling back to lowest.");
-  }
-
+  if (choice === "3" && pickup)   return "pickup";
+  if (choice === "4" && shipping) return "shipping";
   return "lowest";
 }
 
