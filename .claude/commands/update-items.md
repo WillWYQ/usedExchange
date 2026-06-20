@@ -101,7 +101,7 @@ Look at every image in the folder. Extract as many fields as possible using the 
 - `name_{locale}`, `description_{locale}` — use `/translate-items` instead
 
 **Fields left as defaults unless the description file provides them:**
-- `price` — seller must set pricing (AI generates a blank tier scaffold to fill in)
+- `price` — seller must set pricing. Read `siteConfig.defaultPriceTiers` from `content/config.ts` and use those tiers (with `amount: 0`) as the scaffold. If `defaultPriceTiers` is absent or empty, fall back to the built-in 3-tier default from `scripts/lib/itemTemplate.ts`.
 - `pickup_windows` — seller knows their schedule
 - `preferred_payment`, `contact_note` — from description file only
 - `no_lowball`, `price_reduced`, `previous_lowest_price`, `min_acceptable_offer` — from description file only
@@ -172,17 +172,16 @@ Use this as the output template. Omit any field whose value is `null`, `""`, or 
   "name": "",                           // REQUIRED — specific and descriptive
 
   // ── Pricing ───────────────────────────────────────────────────────────────
+  // IMPORTANT: Read `siteConfig.defaultPriceTiers` from content/config.ts.
+  // If it is defined and non-empty, use those tiers here (keeping amount: 0).
+  // If it is absent/commented-out, fall back to this 3-tier default:
   "price": {
     "currency": "USD",                  // ISO 4217; omit to inherit from siteConfig
     "tiers": [
-      // Distance-based tiers. miles_max absent = open-ended (shipping/far pickup).
-      // Boundaries should be inclusive/overlapping to avoid gaps.
-      // Example:
-      { "label": "Local pickup (≤ 5 mi)", "miles_max": 5, "amount": 0 },
-      { "label": "6 – 20 mi", "miles_min": 5, "miles_max": 20, "amount": 0 },
-      { "label": "Shipping", "miles_min": 20, "amount": 0 }
-      // For a flat price, use a single tier with no miles fields:
-      // { "label": "Flat price", "amount": 0 }
+      // ↓ Fallback only — prefer siteConfig.defaultPriceTiers when available
+      { "label": "Pickup / ≤ 5 mi", "miles_max": 5, "amount": 0 },
+      { "label": "6 – 15 mi", "miles_min": 5, "miles_max": 15, "amount": 0 },
+      { "label": "Shipping", "miles_min": 15, "amount": 0 }
     ],
     "negotiable": false
   },
