@@ -6,8 +6,16 @@ import { ItemGrid } from "@/components/item/ItemGrid";
 import { useT } from "@/components/i18n/useT";
 
 const STORAGE_KEY = "ue_newly_listed_last_visit";
+const SESSION_KEY = "ue_newly_listed_session_active";
 
 type Tab = "since-last-visit" | "today" | "this-week";
+
+function toLocalDateStr(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 export function NewlyListedClient({ items }: { items: Item[] }) {
   const t = useT();
@@ -23,7 +31,12 @@ export function NewlyListedClient({ items }: { items: Item[] }) {
         setIsFirstVisit(true);
       }
       setLastVisit(stored);
-      localStorage.setItem(STORAGE_KEY, new Date().toISOString().slice(0, 10));
+      // Only update the last-visit timestamp once per browser session so that
+      // navigating to an item detail and back doesn't clear the list.
+      if (!sessionStorage.getItem(SESSION_KEY)) {
+        localStorage.setItem(STORAGE_KEY, toLocalDateStr(new Date()));
+        sessionStorage.setItem(SESSION_KEY, "1");
+      }
     } catch {
       // Private browsing or quota — fall back to showing all items
     }
@@ -32,17 +45,16 @@ export function NewlyListedClient({ items }: { items: Item[] }) {
 
   const { sinceLastVisitItems, todayItems, thisWeekItems } = useMemo(() => {
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    const todayStr = toLocalDateStr(now);
 
     const dayOfWeek = now.getDay();
     const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - mondayOffset);
-    const weekStartStr = weekStart.toISOString().slice(0, 10);
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset);
+    const weekStartStr = toLocalDateStr(weekStart);
 
     return {
       sinceLastVisitItems: lastVisit
-        ? items.filter((i) => i.listedDate > lastVisit)
+        ? items.filter((i) => i.listedDate >= lastVisit)
         : items,
       todayItems: items.filter((i) => i.listedDate === todayStr),
       thisWeekItems: items.filter((i) => i.listedDate >= weekStartStr),

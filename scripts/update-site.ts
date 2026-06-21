@@ -180,6 +180,12 @@ function main(): void {
   }
 
   if (!skipVerify) {
+    const dotNext = path.join(process.cwd(), ".next");
+    if (fs.existsSync(dotNext)) {
+      console.log("\n[update-site] Removing stale .next cache...");
+      fs.rmSync(dotNext, { recursive: true, force: true });
+    }
+
     console.log("\n[update-site] Reinstalling dependencies...");
     run("pnpm", ["install"]);
 
@@ -195,7 +201,7 @@ function main(): void {
     console.log("\n[update-site] Committing changes...");
     git(["add", "-A"]);
     git(["commit", "-m", `chore: update site code to ${targetTag}`]);
-    console.log(`\n[update-site] Committed. Push when ready:`);
+    console.log(`[update-site] Committed. Push when ready:`);
   } else {
     console.log(`\n[update-site] No changes to commit — already at ${targetTag}.`);
     console.log(`[update-site] Push when ready:`);
