@@ -54,6 +54,17 @@ It must be importable by both server and client components.
 ### 7. Mark phases complete in docs
 After finishing each phase's implementation, **update `docs/IMPLEMENTATION_PLAN.md` and `docs/IMPLEMENTATION_PLAN_zh.md`** to mark all tasks `[x]` (checked) and add ✅ after the phase title. This maintains a visible record of progress and helps future sessions understand project state. Use the bilingual sync rule (Rule 2) — update both English and Chinese versions in the same commit.
 
+### 8. New config fields must be backward-compatible
+`content/config.ts` is seller-owned — `pnpm update-site` never overwrites it. Any new field added to `SiteConfig`, `UIConfig`, or any config-related type **must be TypeScript-optional (`?`)** with a runtime default at the consumption site. This ensures downstream sites that haven't updated their config still pass type-check after pulling new template code.
+
+Checklist for every new config field:
+1. Type definition: mark with `?` (e.g. `priceFilterStrategy?: PriceFilterStrategy`)
+2. Consumer code: use `?? "default"` when reading (e.g. `siteConfig.ui.priceFilterStrategy ?? "none"`)
+3. Upstream `content/config.ts`: set the value explicitly (as documentation)
+4. Add the field to `scripts/lib/configDefaults.ts` so `update-site --migrate-config` can auto-inject it into downstream configs
+
+> Background: In the v1.4.1 release, `priceFilterStrategy` was added as a required field in `UIConfig`. Downstream sites running `pnpm update-site` failed type-check because their `content/config.ts` lacked the field. This rule prevents that class of breakage.
+
 ---
 
 ## Current Doc Versions

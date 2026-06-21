@@ -13,6 +13,7 @@
 import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
+import { migrateConfig } from "./migrate-config";
 
 const UPSTREAM_REMOTE = "upstream";
 const UPSTREAM_URL = "https://github.com/WillWYQ/usedExchange.git";
@@ -177,6 +178,16 @@ function main(): void {
     } catch {
       console.warn(`[update-site] Could not restore ${IMAGE_MANIFEST} — check it manually.`);
     }
+  }
+
+  // Auto-inject missing config fields before type-checking so downstream
+  // configs stay compatible with newly added optional fields.
+  console.log("\n[update-site] Migrating config...");
+  const { applied } = migrateConfig();
+  if (applied.length > 0) {
+    console.log(`[update-site] Added ${applied.length} new config field(s): ${applied.join(", ")}`);
+  } else {
+    console.log("[update-site] Config is up to date — no migration needed.");
   }
 
   if (!skipVerify) {
