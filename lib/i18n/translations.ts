@@ -91,4 +91,11 @@ export const EN_FALLBACK: UIStrings = {
 
   menuOpen: "Open menu",
   menuClose: "Close menu",
+
+  newlyListed: "Newly Listed",
+  newlyListedSinceLastVisit: "Since Last Visit",
+  newlyListedToday: "Today",
+  newlyListedThisWeek: "This Week",
+  newlyListedFirstVisit: "Welcome! Everything here is new to you.",
+  newlyListedNoneInPeriod: "No new items in this period.",
 };

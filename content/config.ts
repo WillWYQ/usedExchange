@@ -257,6 +257,14 @@ export const siteConfig: SiteConfig = {
         // ── Mobile nav drawer ────────────────────────────────────────────────
         menuOpen: "Open menu",
         menuClose: "Close menu",
+
+        // ── Newly Listed page ────────────────────────────────────────────────
+        newlyListed: "Newly Listed",
+        newlyListedSinceLastVisit: "Since Last Visit",
+        newlyListedToday: "Today",
+        newlyListedThisWeek: "This Week",
+        newlyListedFirstVisit: "Welcome! Everything here is new to you.",
+        newlyListedNoneInPeriod: "No new items in this period.",
       },
 
       // ── Add other locales below ────────────────────────────────────────────

@@ -31,6 +31,13 @@ export function SiteHeader() {
       >
         {t.browseAll}
       </Link>
+      <Link
+        href="/newly-listed"
+        onClick={() => setOpen(false)}
+        className="transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+      >
+        {t.newlyListed}
+      </Link>
 
       {/* Once configured, "/" is the catalog and the project intro lives
           at /about — link to it. While unconfigured, "/" already *is*

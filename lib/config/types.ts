@@ -245,4 +245,12 @@ export type UIStrings = {
   // Mobile nav drawer
   menuOpen: string;
   menuClose: string;
+
+  // Newly Listed page
+  newlyListed: string;
+  newlyListedSinceLastVisit: string;
+  newlyListedToday: string;
+  newlyListedThisWeek: string;
+  newlyListedFirstVisit: string;
+  newlyListedNoneInPeriod: string;
 };
