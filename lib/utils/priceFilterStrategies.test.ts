@@ -5,7 +5,6 @@ import {
   linearToLog,
   logToLinear,
 } from "./priceFilterStrategies";
-import type { PriceFilterConfig } from "./priceFilterStrategies";
 
 const REAL_DATA = [15, 18, 20, 28, 28, 45, 55, 60, 65, 75, 340, 370, 580, 610];
 
