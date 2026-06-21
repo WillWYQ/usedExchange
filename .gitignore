@@ -74,8 +74,7 @@ public/contact/
 .image-cache/
 
 # ── Facebook Marketplace export files ────────────────────────────────────────
-exports/*.csv
-exports/.export-history.json
+exports/
 
 # ── Generated build artifacts (rebuilt on every next build) ──────────────────
 # image-manifest.json is intentionally NOT listed here — it IS committed.

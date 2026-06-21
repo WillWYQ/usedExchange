@@ -190,12 +190,17 @@ function main(): void {
     run("pnpm", ["build"]);
   }
 
-  console.log(`\n[update-site] Done. Review the changes (git status / git diff), then:`);
-  console.log(`  git add -A`);
-  console.log(`  git commit -m "chore: update site code to ${targetTag}"`);
+  const dirty = git(["status", "--porcelain"], { silent: true });
+  if (dirty) {
+    console.log("\n[update-site] Committing changes...");
+    git(["add", "-A"]);
+    git(["commit", "-m", `chore: update site code to ${targetTag}`]);
+    console.log(`\n[update-site] Committed. Push when ready:`);
+  } else {
+    console.log(`\n[update-site] No changes to commit — already at ${targetTag}.`);
+    console.log(`[update-site] Push when ready:`);
+  }
   console.log(`  git push`);
-  console.log(`\nTo undo a single file before committing:`);
-  console.log(`  git checkout HEAD -- <path/to/file>`);
 }
 
 main();
