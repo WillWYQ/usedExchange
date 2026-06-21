@@ -45,6 +45,6 @@ export type UIConfig = {
   itemGrid: ItemGridOption;
   gallery: GalleryOption;
   itemCard: ItemCardOption;
-  priceFilterStrategy: PriceFilterStrategy;
+  priceFilterStrategy?: PriceFilterStrategy;
   priceFilterBuckets?: number[];
 };

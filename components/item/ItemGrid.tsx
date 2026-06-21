@@ -35,7 +35,7 @@ export function ItemGrid({ items, browseAll = false }: ItemGridProps) {
 
   const priceFilterConfig = useMemo<PriceFilterConfig>(
     () => ({
-      strategy: siteConfig.ui.priceFilterStrategy,
+      strategy: siteConfig.ui.priceFilterStrategy ?? "none",
       customBuckets: siteConfig.ui.priceFilterBuckets,
     }),
     [],
