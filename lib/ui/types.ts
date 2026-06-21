@@ -33,9 +33,18 @@ export type ItemCardOption =
   | "direction-aware-hover"
   | "glare-card";
 
+export type PriceFilterStrategy =
+  | "none"
+  | "percentile"
+  | "logarithmic"
+  | "preset-buckets"
+  | "iqr";
+
 export type UIConfig = {
   background: BackgroundOption;
   itemGrid: ItemGridOption;
   gallery: GalleryOption;
   itemCard: ItemCardOption;
+  priceFilterStrategy: PriceFilterStrategy;
+  priceFilterBuckets?: number[];
 };

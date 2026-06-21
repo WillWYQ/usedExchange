@@ -111,6 +111,16 @@ export const siteConfig: SiteConfig = {
     itemGrid: "simple",
     gallery: "simple",
     itemCard: "simple",
+    // Price filter outlier strategy:
+    //   "none"           — raw min/max (default)
+    //   "percentile"     — slider clamped to P5/P95
+    //   "logarithmic"    — non-linear slider scale
+    //   "preset-buckets" — quick-tap price range buttons
+    //   "iqr"            — slider clamped via interquartile range
+    priceFilterStrategy: "none",
+    // Custom bucket boundaries for "preset-buckets" (optional).
+    // Example: [50, 100, 300] → "< $50", "$50–$100", "$100–$300", "$300+"
+    // priceFilterBuckets: [50, 100, 300],
   },
 
   // ── Analytics ─────────────────────────────────────────────────────────────
@@ -200,6 +210,8 @@ export const siteConfig: SiteConfig = {
         // ── Filter / sort bar ────────────────────────────────────────────────
         filterShowSold: "Show sold",
         filterPrice: "Price",
+        filterPriceBucketAll: "All prices",
+        filterPriceIncludesOutliers: "+ items outside range",
         sortBy: "Sort by",
         sortNewestFirst: "Newest first",
         sortPriceLow: "Price: low → high",
@@ -305,6 +317,8 @@ export const siteConfig: SiteConfig = {
       //   statusDraft: "草稿",
       //   filterShowSold: "顯示已售",
       //   filterPrice: "價格",
+      //   filterPriceBucketAll: "全部價格",
+      //   filterPriceIncludesOutliers: "+ 範圍外商品",
       //   sortBy: "排序方式",
       //   sortNewestFirst: "最新上架",
       //   sortPriceLow: "價格：由低到高",

@@ -254,4 +254,179 @@ describe("useFilters", () => {
       expect(result.current.resolvedPrices.get("electronics/laptop")?.amount).toBe(100);
     });
   });
+
+  // ── priceFilterConfig strategies ────────────────────────────────────────────
+
+  // Richer fixture set for strategy tests — wide price spread with outliers.
+  const CHEAP = makeItem({
+    categorySlug: "c",
+    itemSlug: "cheap",
+    name: "Cheap",
+    price: {
+      currency: "USD",
+      tiers: [{ label: "P", amount: 5 }],
+      negotiable: false,
+      show_tiers: false,
+    },
+    listedDate: "2026-06-01",
+  });
+  const MID_A = makeItem({
+    categorySlug: "c",
+    itemSlug: "mid-a",
+    name: "MidA",
+    price: {
+      currency: "USD",
+      tiers: [{ label: "P", amount: 40 }],
+      negotiable: false,
+      show_tiers: false,
+    },
+    listedDate: "2026-05-01",
+  });
+  const MID_B = makeItem({
+    categorySlug: "c",
+    itemSlug: "mid-b",
+    name: "MidB",
+    price: {
+      currency: "USD",
+      tiers: [{ label: "P", amount: 50 }],
+      negotiable: false,
+      show_tiers: false,
+    },
+    listedDate: "2026-04-01",
+  });
+  const MID_C = makeItem({
+    categorySlug: "c",
+    itemSlug: "mid-c",
+    name: "MidC",
+    price: {
+      currency: "USD",
+      tiers: [{ label: "P", amount: 60 }],
+      negotiable: false,
+      show_tiers: false,
+    },
+    listedDate: "2026-03-01",
+  });
+  const MID_D = makeItem({
+    categorySlug: "c",
+    itemSlug: "mid-d",
+    name: "MidD",
+    price: {
+      currency: "USD",
+      tiers: [{ label: "P", amount: 70 }],
+      negotiable: false,
+      show_tiers: false,
+    },
+    listedDate: "2026-02-01",
+  });
+  const EXPENSIVE = makeItem({
+    categorySlug: "c",
+    itemSlug: "expensive",
+    name: "Expensive",
+    price: {
+      currency: "USD",
+      tiers: [{ label: "P", amount: 2000 }],
+      negotiable: false,
+      show_tiers: false,
+    },
+    listedDate: "2026-01-01",
+  });
+
+  const WIDE_ITEMS = [CHEAP, MID_A, MID_B, MID_C, MID_D, EXPENSIVE];
+
+  describe("priceFilterConfig strategies", () => {
+    describe("none (default)", () => {
+      it("uses raw min/max bounds", () => {
+        const { result } = renderHook(() => useFilters(WIDE_ITEMS, Infinity));
+        expect(result.current.priceBounds).toEqual([5, 2000]);
+        expect(result.current.rawPriceBounds).toEqual([5, 2000]);
+      });
+
+      it("priceBuckets is null", () => {
+        const { result } = renderHook(() => useFilters(WIDE_ITEMS, Infinity));
+        expect(result.current.priceBuckets).toBeNull();
+      });
+    });
+
+    describe("percentile", () => {
+      it("clamps slider bounds narrower than raw", () => {
+        const { result } = renderHook(() =>
+          useFilters(WIDE_ITEMS, Infinity, { strategy: "percentile" }),
+        );
+        const slider = result.current.priceBounds!;
+        const raw = result.current.rawPriceBounds!;
+        expect(raw).toEqual([5, 2000]);
+        expect(slider[1]).toBeLessThan(raw[1]);
+      });
+    });
+
+    describe("iqr", () => {
+      it("clamps slider bounds using IQR fences", () => {
+        const { result } = renderHook(() =>
+          useFilters(WIDE_ITEMS, Infinity, { strategy: "iqr" }),
+        );
+        const slider = result.current.priceBounds!;
+        const raw = result.current.rawPriceBounds!;
+        expect(raw).toEqual([5, 2000]);
+        expect(slider[1]).toBeLessThan(raw[1]);
+      });
+
+      it("edge-inclusion: slider at max edge includes expensive outlier", () => {
+        const { result } = renderHook(() =>
+          useFilters(WIDE_ITEMS, Infinity, { strategy: "iqr" }),
+        );
+        // priceRange is initialized to priceBounds (slider at edges)
+        const slugs = result.current.filteredItems.map((i) => i.itemSlug);
+        expect(slugs).toContain("expensive");
+      });
+
+      it("edge-inclusion: narrowing away from edge excludes outlier", () => {
+        const { result } = renderHook(() =>
+          useFilters(WIDE_ITEMS, Infinity, { strategy: "iqr" }),
+        );
+        const bounds = result.current.priceBounds!;
+        // Move the max edge inward so it's no longer at the bound edge
+        act(() => result.current.setPriceRange([bounds[0], bounds[1] - 1]));
+        const slugs = result.current.filteredItems.map((i) => i.itemSlug);
+        expect(slugs).not.toContain("expensive");
+      });
+    });
+
+    describe("logarithmic", () => {
+      it("bounds are same as raw (transformation is UI-only)", () => {
+        const { result } = renderHook(() =>
+          useFilters(WIDE_ITEMS, Infinity, { strategy: "logarithmic" }),
+        );
+        expect(result.current.priceBounds).toEqual([5, 2000]);
+        expect(result.current.rawPriceBounds).toEqual([5, 2000]);
+      });
+    });
+
+    describe("preset-buckets", () => {
+      it("exposes priceBuckets", () => {
+        const { result } = renderHook(() =>
+          useFilters(WIDE_ITEMS, Infinity, {
+            strategy: "preset-buckets",
+            customBuckets: [50, 100],
+          }),
+        );
+        expect(result.current.priceBuckets).not.toBeNull();
+        expect(result.current.priceBuckets!.length).toBe(3);
+      });
+
+      it("auto-generates buckets when customBuckets not provided", () => {
+        const { result } = renderHook(() =>
+          useFilters(WIDE_ITEMS, Infinity, { strategy: "preset-buckets" }),
+        );
+        expect(result.current.priceBuckets).not.toBeNull();
+        expect(result.current.priceBuckets!.length).toBeGreaterThanOrEqual(2);
+      });
+
+      it("priceBuckets is null for non-bucket strategies", () => {
+        const { result } = renderHook(() =>
+          useFilters(WIDE_ITEMS, Infinity, { strategy: "iqr" }),
+        );
+        expect(result.current.priceBuckets).toBeNull();
+      });
+    });
+  });
 });

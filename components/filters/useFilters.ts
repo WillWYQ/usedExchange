@@ -3,6 +3,14 @@
 import { useState, useRef, useMemo } from "react";
 import type { Item, Condition, PriceTier } from "@/lib/content/types";
 import { resolveItemPrice } from "@/lib/utils/pricing";
+import {
+  computePriceBounds,
+  computePriceBuckets,
+} from "@/lib/utils/priceFilterStrategies";
+import type {
+  PriceFilterConfig,
+  PriceBucket,
+} from "@/lib/utils/priceFilterStrategies";
 import type { SortKey } from "./SortSelect";
 
 const CONDITION_ORDER: Record<Condition, number> = {
@@ -13,6 +21,8 @@ const CONDITION_ORDER: Record<Condition, number> = {
   "for-parts": 4,
 };
 
+const DEFAULT_CONFIG: PriceFilterConfig = { strategy: "none" };
+
 export type UseFiltersResult = {
   // Condition chips
   availableConditions: Condition[];
@@ -21,8 +31,12 @@ export type UseFiltersResult = {
 
   // Price slider — null when no item in the set has price tiers
   priceBounds: [number, number] | null;
+  rawPriceBounds: [number, number] | null;
   priceRange: [number, number] | null;
   setPriceRange: (range: [number, number]) => void;
+
+  // Preset buckets — non-null only when strategy is "preset-buckets"
+  priceBuckets: PriceBucket[] | null;
 
   // Status toggle
   showSold: boolean;
@@ -36,8 +50,6 @@ export type UseFiltersResult = {
   filteredItems: Item[];
 
   // Per-item resolved price at the current distance, keyed by "categorySlug/itemSlug".
-  // Exposed so callers (e.g. ItemCard) can reuse the already-computed tier instead
-  // of calling resolveItemPrice again — avoids redundant computation per render.
   resolvedPrices: Map<string, PriceTier | null>;
 };
 
@@ -47,6 +59,7 @@ export type UseFiltersResult = {
 export function useFilters(
   items: Item[],
   resolvedDistanceMi: number,
+  priceFilterConfig: PriceFilterConfig = DEFAULT_CONFIG,
 ): UseFiltersResult {
   const [activeConditions, setActiveConditions] = useState<Set<Condition>>(new Set());
   const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
@@ -68,35 +81,37 @@ export function useFilters(
     );
   }, [items, resolvedDistanceMi]);
 
-  // Bounds across all items that have at least one tier.
-  // Uses a single pass instead of Math.min(...amounts)/Math.max(...amounts) —
-  // the spread form risks "Maximum call stack size exceeded" on large item sets.
-  const priceBounds = useMemo<[number, number] | null>(() => {
-    const amounts = [...resolvedPrices.values()]
-      .filter((t) => t !== null)
-      .map((t) => t!.amount);
-    if (amounts.length === 0) return null;
-    let lo = amounts[0]!;
-    let hi = amounts[0]!;
-    for (const amount of amounts) {
-      if (amount < lo) lo = amount;
-      if (amount > hi) hi = amount;
-    }
-    return [lo, hi];
-  }, [resolvedPrices]);
+  // Collect all non-null price amounts for bounds/bucket computation.
+  const priceAmounts = useMemo(
+    () =>
+      [...resolvedPrices.values()]
+        .filter((t): t is PriceTier => t !== null)
+        .map((t) => t.amount),
+    [resolvedPrices],
+  );
+
+  // Compute bounds using the configured strategy.
+  const boundsResult = useMemo(
+    () => computePriceBounds(priceAmounts, priceFilterConfig),
+    [priceAmounts, priceFilterConfig],
+  );
+
+  const priceBounds = boundsResult?.sliderBounds ?? null;
+  const rawPriceBounds = boundsResult?.rawBounds ?? null;
+
+  // Preset buckets (only for "preset-buckets" strategy).
+  const priceBuckets = useMemo(() => {
+    if (priceFilterConfig.strategy !== "preset-buckets") return null;
+    if (priceAmounts.length === 0) return null;
+    return computePriceBuckets(
+      priceAmounts,
+      "USD",
+      priceFilterConfig.customBuckets,
+    );
+  }, [priceAmounts, priceFilterConfig]);
 
   // Reset slider to full range whenever the distance (and therefore prices) change.
-  // Adjusted during render (React's documented pattern for derived state) rather
-  // than via useEffect — an effect here would commit the old priceRange first,
-  // then schedule a second render to apply the reset, producing a visible flash
-  // of the stale (pre-reset) range on every distance change.
-  // null sentinel guarantees the reset also fires on the very first render
-  // (resolvedDistanceMi is always a number — Infinity included — so it can
-  // never equal null, unlike using resolvedDistanceMi itself as the initial ref value).
   const prevDistanceRef = useRef<number | null>(null);
-  // Guard against NaN: NaN !== NaN is always true, so without this check a
-  // NaN resolvedDistanceMi (e.g. a corrupted manual-entry value) would make
-  // the condition below true on every single render — an infinite render loop.
   if (
     !Number.isNaN(resolvedDistanceMi) &&
     prevDistanceRef.current !== resolvedDistanceMi
@@ -113,7 +128,6 @@ export function useFilters(
   }, [items]);
 
   const filteredItems = useMemo<Item[]>(() => {
-    // Helper: resolved amount for an item, with a numeric fallback for sorting.
     const getAmount = (item: Item, fallback: number): number => {
       const tier = resolvedPrices.get(`${item.categorySlug}/${item.itemSlug}`) ?? null;
       return tier?.amount ?? fallback;
@@ -124,11 +138,15 @@ export function useFilters(
 
       if (activeConditions.size > 0 && !activeConditions.has(item.condition)) return false;
 
-      if (priceRange !== null) {
+      if (priceRange !== null && priceBounds !== null) {
         const tier = resolvedPrices.get(`${item.categorySlug}/${item.itemSlug}`) ?? null;
-        // tier === null → "Contact for price" → always include regardless of slider
         if (tier !== null) {
-          if (tier.amount < priceRange[0] || tier.amount > priceRange[1]) return false;
+          // Edge-inclusion: when slider is pegged to its min/max edge,
+          // include all items beyond that edge (outliers stay reachable).
+          const atMinEdge = priceRange[0] === priceBounds[0];
+          const atMaxEdge = priceRange[1] === priceBounds[1];
+          if (tier.amount < priceRange[0] && !atMinEdge) return false;
+          if (tier.amount > priceRange[1] && !atMaxEdge) return false;
         }
       }
 
@@ -148,7 +166,7 @@ export function useFilters(
           return b.listedDate.localeCompare(a.listedDate);
       }
     });
-  }, [items, showSold, activeConditions, priceRange, sortKey, resolvedPrices]);
+  }, [items, showSold, activeConditions, priceRange, priceBounds, sortKey, resolvedPrices]);
 
   return {
     availableConditions,
@@ -161,8 +179,10 @@ export function useFilters(
         return next;
       }),
     priceBounds,
+    rawPriceBounds,
     priceRange,
     setPriceRange,
+    priceBuckets,
     showSold,
     toggleShowSold: () => setShowSold((v) => !v),
     sortKey,

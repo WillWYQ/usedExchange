@@ -42,6 +42,8 @@ export const EN_FALLBACK: UIStrings = {
   statusDraft: "Draft",
   filterShowSold: "Show sold",
   filterPrice: "Price",
+  filterPriceBucketAll: "All prices",
+  filterPriceIncludesOutliers: "+ items outside range",
   sortBy: "Sort by",
   sortNewestFirst: "Newest first",
   sortPriceLow: "Price: low → high",

@@ -640,6 +640,15 @@ export const siteConfig: SiteConfig = {
     itemGrid:   "simple",
     gallery:    "simple",
     itemCard:   "simple",
+    // 價格篩選離群值策略：
+    //   "none"           — 原始最小/最大值（預設）
+    //   "percentile"     — 滑條裁剪至 P5/P95
+    //   "logarithmic"    — 非線性滑條刻度
+    //   "preset-buckets" — 快速點選價格區間按鈕
+    //   "iqr"            — 透過四分位距裁剪滑條
+    priceFilterStrategy: "none",
+    // "preset-buckets" 的自訂分界點（選填）。
+    // priceFilterBuckets: [50, 100, 300],
   },
 
   analytics: {

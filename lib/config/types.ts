@@ -188,6 +188,8 @@ export type UIStrings = {
   // Filter bar
   filterShowSold: string;
   filterPrice: string;
+  filterPriceBucketAll: string;
+  filterPriceIncludesOutliers: string;
   sortBy: string;
   sortNewestFirst: string;
   sortPriceLow: string;

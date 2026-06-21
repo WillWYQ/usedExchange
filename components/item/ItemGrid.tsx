@@ -1,10 +1,12 @@
 "use client";
 
+import { useMemo } from "react";
 import type { Item } from "@/lib/content/types";
 import { siteConfig } from "@/content/config";
 import { useGeolocation } from "@/components/pricing/useGeolocation";
 import { useDistancePricing } from "@/components/pricing/useDistancePricing";
 import { useFilters } from "@/components/filters/useFilters";
+import type { PriceFilterConfig } from "@/lib/utils/priceFilterStrategies";
 import { useIncrementalReveal } from "@/components/common/useIncrementalReveal";
 import { FilterBar } from "@/components/filters/FilterBar";
 import { LocationPriceBar } from "@/components/pricing/LocationPriceBar";
@@ -31,20 +33,30 @@ export function ItemGrid({ items, browseAll = false }: ItemGridProps) {
   const resolvedDistanceMi =
     resolved.source === "fallback" ? Infinity : resolved.miles;
 
+  const priceFilterConfig = useMemo<PriceFilterConfig>(
+    () => ({
+      strategy: siteConfig.ui.priceFilterStrategy,
+      customBuckets: siteConfig.ui.priceFilterBuckets,
+    }),
+    [],
+  );
+
   const {
     availableConditions,
     activeConditions,
     toggleCondition,
     priceBounds,
+    rawPriceBounds,
     priceRange,
     setPriceRange,
+    priceBuckets,
     showSold,
     toggleShowSold,
     sortKey,
     setSortKey,
     filteredItems,
     resolvedPrices,
-  } = useFilters(items, resolvedDistanceMi);
+  } = useFilters(items, resolvedDistanceMi, priceFilterConfig);
 
   // Caps how many cards mount at once — large catalogues would otherwise mean
   // hundreds of images/cards in the DOM on first paint. Filtering/sorting still
@@ -66,8 +78,11 @@ export function ItemGrid({ items, browseAll = false }: ItemGridProps) {
         activeConditions={activeConditions}
         onToggleCondition={toggleCondition}
         priceBounds={priceBounds}
+        rawPriceBounds={rawPriceBounds}
         priceRange={priceRange}
         onPriceRangeChange={setPriceRange}
+        priceFilterStrategy={siteConfig.ui.priceFilterStrategy}
+        priceBuckets={priceBuckets}
         showSold={showSold}
         onToggleShowSold={toggleShowSold}
         sortKey={sortKey}

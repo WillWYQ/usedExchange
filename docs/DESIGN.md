@@ -960,6 +960,15 @@ export const siteConfig: SiteConfig = {
     itemGrid:   "simple",
     gallery:    "simple",
     itemCard:   "simple",
+    // Price filter outlier strategy:
+    //   "none"           — raw min/max (default)
+    //   "percentile"     — slider clamped to P5/P95
+    //   "logarithmic"    — non-linear slider scale
+    //   "preset-buckets" — quick-tap price range buttons
+    //   "iqr"            — slider clamped via interquartile range
+    priceFilterStrategy: "none",
+    // Custom bucket boundaries for "preset-buckets" (optional).
+    // priceFilterBuckets: [50, 100, 300],
   },
 
   // ── Analytics ─────────────────────────────────────────────────────────────

@@ -165,7 +165,7 @@ Every new or changed JPEG/PNG/WebP photo is automatically re-encoded via `sharp`
 
 ### Category Page (`/[category]`)
 - Location price bar — detected distance + "Change distance" override
-- **Filter bar** — condition chips + price range slider + status toggle
+- **Filter bar** — condition chips + price range slider (configurable outlier strategy via `ui.priceFilterStrategy`: none / percentile / logarithmic / preset-buckets / iqr) + status toggle
 - **Sort select** — Price low/high · Date listed · Condition
 - **"Browse All" link** — navigates to `/all`
 - Item grid with location-resolved prices
@@ -361,6 +361,7 @@ Set any option in `content/config.ts`. All 27 Aceternity components are pre-inst
 | Item Grid | `ui.itemGrid` | `"simple"` + bento-grid, layout-grid, focus-cards |
 | Gallery | `ui.gallery` | `"simple"` + apple-cards-carousel, images-slider, carousel, parallax-scroll |
 | Item Card | `ui.itemCard` | `"simple"` + 8 Aceternity card effects |
+| Price Filter | `ui.priceFilterStrategy` | `"none"` (default), percentile, logarithmic, preset-buckets, iqr |
 
 ---
 
@@ -376,7 +377,7 @@ Set any option in `content/config.ts`. All 27 Aceternity components are pre-inst
 | Contact | `contact.reveal_behavior`, `contact.platforms[]` |
 | Hero | `hero.cta_label`, `hero.cta_href` |
 | SEO | `meta.description`, `meta.twitterHandle` |
-| UI slots | `ui.background`, `ui.itemGrid`, `ui.gallery`, `ui.itemCard` |
+| UI slots | `ui.background`, `ui.itemGrid`, `ui.gallery`, `ui.itemCard`, `ui.priceFilterStrategy`, `ui.priceFilterBuckets` |
 | Dark mode | Header toggle (light/dark/system, persisted via `next-themes`) |
 | Analytics | `analytics.vercel`, `analytics.speedInsights` |
 | Search | `search.enabled`, `search.placeholder` |

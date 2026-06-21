@@ -165,7 +165,7 @@ content/
 
 ### 分类页（`/[category]`）
 - 定位价格栏——检测到的距离 + "修改距离"覆盖
-- **筛选栏** — 成色标签 + 价格范围滑块 + 状态切换
+- **筛选栏** — 成色标签 + 价格范围滑块（可配置离群值策略 `ui.priceFilterStrategy`：none / percentile / logarithmic / preset-buckets / iqr） + 状态切换
 - **排序选择** — 价格低/高 · 上架日期 · 成色
 - **"浏览全部"链接** — 导航到 `/all`
 - 物品网格，显示定位解析价格
@@ -350,6 +350,7 @@ AI 会询问 8 个方面：店铺名称、位置（从描述解析经纬度）�
 | 物品网格 | `ui.itemGrid` | `"simple"` + bento-grid、layout-grid、focus-cards |
 | 图库 | `ui.gallery` | `"simple"` + apple-cards-carousel、images-slider、carousel、parallax-scroll |
 | 物品卡片 | `ui.itemCard` | `"simple"` + 8 个 Aceternity 卡片效果 |
+| 价格筛选 | `ui.priceFilterStrategy` | `"none"`（预设）、percentile、logarithmic、preset-buckets、iqr |
 
 ---
 
@@ -365,7 +366,7 @@ AI 会询问 8 个方面：店铺名称、位置（从描述解析经纬度）�
 | 联系方式 | `contact.reveal_behavior`、`contact.platforms[]` |
 | Hero | `hero.cta_label`、`hero.cta_href` |
 | SEO | `meta.description`、`meta.twitterHandle` |
-| UI 槽位 | `ui.background`、`ui.itemGrid`、`ui.gallery`、`ui.itemCard` |
+| UI 槽位 | `ui.background`、`ui.itemGrid`、`ui.gallery`、`ui.itemCard`、`ui.priceFilterStrategy`、`ui.priceFilterBuckets` |
 | 深色模式 | 页头切换按钮（浅色/深色/跟随系统，由 `next-themes` 持久化） |
 | 分析 | `analytics.vercel`、`analytics.speedInsights` |
 | 搜索 | `search.enabled`、`search.placeholder` |
