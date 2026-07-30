@@ -221,3 +221,84 @@ can damage seller data.
 | 6 — `pricing.ts` has no `"use client"` | Not touched |
 | 7 — mark phases complete | Phase 18 added and checked off on completion |
 | 8 — config fields optional | No new config fields introduced (§3) |
+
+## 14. Visual Direction
+
+Studio is a tool a single seller opens several times a week — a dense table plus a
+drawer form. There is no hero. Density and legibility come first, with boldness spent
+in exactly one place.
+
+### 14.1 Subject vocabulary
+
+The material world of resale is consignment paperwork: NCR carbon-copy forms,
+handwritten price tags, thermal shipping labels, rubber stamps. The project already has
+a shipping calculator and a `sold_date` field, so this vocabulary is literal, not a
+borrowed metaphor.
+
+### 14.2 Palette — carbon-copy form, not cream paper
+
+| Token | Value | Use |
+|---|---|---|
+| `carbon-pale` | `#E4EBEF` | Page background — the cool grey-blue of a form's second copy |
+| `carbon-rule` | `#C2CFD6` | Table rules, field underlines |
+| `ink` | `#1B2A35` | Body text and data — cool pen black |
+| `ink-soft` | `#5C6E7A` | Secondary labels, help text |
+| `stamp` | `#B3241E` | **`sold` only** — stamp red |
+| `pending` | `#8A6A12` | `pending` status — archival ochre |
+
+Cream + serif + terracotta was rejected deliberately: it is one of the current
+AI-default looks and appears regardless of subject. Carbon-copy grey-blue carries the
+same paper quality but belongs to paperwork rather than a boutique, and a cool ground
+lets stamp red carry real signal — a warm ground flattens it.
+
+### 14.3 Typography
+
+All faces install locally via `@fontsource` npm packages, never a CDN — a local tool
+must work offline.
+
+- **Data / utility:** `Courier Prime`. Prices, dates, dimensions, filenames. Monospace
+  aligns amounts and dates for free, and it is where the carbon-copy reference earns
+  its place.
+- **Interface:** `IBM Plex Sans`. Neutral, legible at small sizes.
+- **Headings / status labels:** `Archivo Narrow`. Condensed, drawn from labels and form
+  column headers — not a display serif.
+
+### 14.4 Layout
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ SELLER STUDIO            content/ · 34 items · 3 uncommitted   │
+├──────────┬─────────────────────────────────────────────────────┤
+│ electronics 12│ ☐  NAME              STATUS   PRICE   IMG      │
+│ books       9 │ ☐  Desk lamp         avail    $24.00   4       │
+│ furniture   6 │ ☑  IKEA shelf     ╱SOLD╱      $60.00   7       │
+│ misc        7 │ ☑  Monitor stand  ╱SOLD╱      $15.00   2       │
+│ ─────────────│ ☐  Textbook CS61A    pending   $45.00   3       │
+│ sold       18 │                                                │
+│ drafts      2 │                                                │
+├──────────┴─────────────────────────────────────────────────────┤
+│ 2 selected   [Mark sold]  [Pending]  [Draft]        [Publish 3]│
+└────────────────────────────────────────────────────────────────┘
+```
+
+Structural devices encode real information only. Left-rail numbers are actual counts;
+there is no 01 / 02 / 03 numbering, because an item list is not a sequence. The header
+surfaces the uncommitted-change count most prominently, since editing without pushing
+is this tool's one true failure mode.
+
+### 14.5 Signature: the SOLD rubber stamp
+
+Bulk-marking sold presses a stamp impression onto the selected rows — slight rotation
+(about -4°), uneven ink edges, a single press animation, then the row settles into its
+sold state. This is the only bold element; everything around it stays quiet: no
+decorative radii, no gradients, no stacked shadows.
+
+It earns the signature slot because it *is* the reason the tool exists: "sold three
+things this weekend, mark them all at once."
+
+Under `prefers-reduced-motion` the end state renders directly, with no press animation.
+
+### 14.6 Quality floor
+
+Responsive down to narrow screens (table collapses to cards), visible keyboard focus,
+reduced motion respected. Stated once here rather than announced in the UI.
