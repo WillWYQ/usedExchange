@@ -108,12 +108,26 @@ type SyncOutcome = {
 export async function syncImagesToCdn(options: ImageSyncOptions): Promise<ImageSyncResult> {
   const { adapter, contentItemsDir, manifestPath, checksumsPath, onProgress } = options;
 
+  // A consumer's progress sink must not be able to fail the sync — e.g. an SSE
+  // endpoint whose `enqueue`/`write` throws after the seller closes the tab
+  // mid-upload must not turn a successful upload into a fabricated failure
+  // (a throw inside the `file`/`file-failed` emit would otherwise land in the
+  // worker's own catch, or escape mapWithConcurrency entirely and discard the
+  // whole batch before the manifest is written).
+  function emit(progress: ImageSyncProgress): void {
+    try {
+      onProgress?.(progress);
+    } catch {
+      // Swallow: a broken progress sink must never corrupt the sync pipeline.
+    }
+  }
+
   const savedChecksums = await loadJson<Record<string, string>>(checksumsPath, {});
   adapter.loadChecksums(savedChecksums);
 
   const existingManifest = await loadJson<Record<string, string>>(manifestPath, {});
   const images = await scanImages(contentItemsDir);
-  onProgress?.({ type: "scanned", total: images.length });
+  emit({ type: "scanned", total: images.length });
 
   let completed = 0;
 
@@ -143,7 +157,7 @@ export async function syncImagesToCdn(options: ImageSyncOptions): Promise<ImageS
         // "" is the Vercel Blob skip signal: unchanged, keep the existing URL.
         const resolvedUrl = url === "" ? (existingManifest[manifestKey] ?? "") : url;
         const uploaded = url !== "" && isNewOrChanged;
-        onProgress?.({
+        emit({
           type: "file",
           manifestKey,
           index: completed,
@@ -159,7 +173,7 @@ export async function syncImagesToCdn(options: ImageSyncOptions): Promise<ImageS
       } catch (err: unknown) {
         completed++;
         const error = err instanceof Error ? err.message : String(err);
-        onProgress?.({
+        emit({
           type: "file-failed",
           manifestKey,
           index: completed,
