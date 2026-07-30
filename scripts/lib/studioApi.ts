@@ -20,6 +20,7 @@ import { z } from "zod";
 import { loadAllItemsRaw } from "../../lib/content/loader";
 import { isValidSlug } from "../../lib/utils/slug";
 import { applyFieldEdits, readItemField } from "./itemEdit";
+import { contentTypeFor, isValidImageFilename, listImageFiles } from "./studioImages";
 
 const IMAGE_EXT = /\.(jpg|jpeg|png|webp|gif)$/i;
 
@@ -228,6 +229,46 @@ async function handleBulkStatus(req: StudioRequest): Promise<StudioResponse> {
   return { status: 200, body: result };
 }
 
+// /api/items/<category>/<item>/images[/<filename>]
+const IMAGE_ROUTE_RE = /^\/api\/items\/([^/]+)\/([^/]+)\/images(?:\/([^/]+))?$/;
+
+async function handleImageList(
+  req: StudioRequest,
+  category: string,
+  item: string,
+): Promise<StudioResponse> {
+  const dir = resolveItemDir(req.projectRoot, category, item);
+  return { status: 200, body: { files: await listImageFiles(dir) } };
+}
+
+async function handleImageGet(
+  req: StudioRequest,
+  category: string,
+  item: string,
+  filename: string,
+): Promise<StudioResponse> {
+  if (!isValidImageFilename(filename)) {
+    throw new StudioError(400, `not an image filename: "${filename}"`);
+  }
+  const dir = resolveItemDir(req.projectRoot, category, item);
+  const filePath = path.join(dir, filename);
+
+  // Containment again, not because the name could contain a separator — the
+  // allowlist forbids that — but because this is the layer that would still
+  // hold if the allowlist is ever relaxed.
+  if (path.relative(dir, filePath) !== filename) {
+    throw new StudioError(400, "resolved path escapes the item folder");
+  }
+
+  try {
+    await fsPromises.access(filePath);
+  } catch {
+    throw new StudioError(404, `no such image: ${filename}`);
+  }
+
+  return { status: 200, file: filePath, contentType: contentTypeFor(filename) };
+}
+
 export async function handleStudioRequest(req: StudioRequest): Promise<StudioResponse> {
   const pathname = req.url.split("?")[0] ?? "";
 
@@ -247,6 +288,44 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
       // rejects after the block has exited, so StudioError would escape the
       // catch below instead of becoming its 400/404 response.
       return await handleBulkStatus(req);
+    }
+
+    // Matched against the raw, still-percent-encoded pathname on purpose: an
+    // encoded "%2F" inside what should be a single filename segment must NOT
+    // be mistaken for a literal "/" here, or a traversal payload could smuggle
+    // itself in as an extra route segment that never reaches
+    // isValidImageFilename below. Route matching decides segment boundaries;
+    // decoding happens only after, on the segments this match already
+    // isolated.
+    const imageMatch = IMAGE_ROUTE_RE.exec(pathname);
+    if (imageMatch !== null) {
+      const [, categoryRaw, itemRaw, filenameRaw] = imageMatch;
+      if (categoryRaw === undefined || itemRaw === undefined) {
+        return { status: 400, body: { error: "malformed image route" } };
+      }
+
+      // Decode each segment individually, after the route match and before
+      // any validation runs — never the other way around, or the allowlist
+      // would inspect a different string than the one the filesystem
+      // ultimately receives. A malformed escape sequence (e.g. a lone "%") is
+      // itself a bad request, not a 500.
+      let category: string;
+      let item: string;
+      let filename: string | undefined;
+      try {
+        category = decodeURIComponent(categoryRaw);
+        item = decodeURIComponent(itemRaw);
+        filename = filenameRaw === undefined ? undefined : decodeURIComponent(filenameRaw);
+      } catch {
+        return { status: 400, body: { error: "malformed URL encoding" } };
+      }
+
+      if (req.method === "GET") {
+        return filename === undefined
+          ? await handleImageList(req, category, item)
+          : await handleImageGet(req, category, item, filename);
+      }
+      return { status: 405, body: { error: `method not allowed: ${req.method}` } };
     }
 
     return { status: 404, body: { error: `no route for ${pathname}` } };

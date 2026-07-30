@@ -260,6 +260,86 @@ describe("POST /api/items/bulk-status", () => {
   });
 });
 
+const PNG_BYTES = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
+
+async function seedImage(id: string, filename: string): Promise<void> {
+  const dir = path.join(sandbox, "content", "items", ...id.split("/"));
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, filename), PNG_BYTES);
+}
+
+function get(url: string) {
+  return handleStudioRequest({
+    method: "GET",
+    url,
+    body: Buffer.alloc(0),
+    projectRoot: sandbox,
+  });
+}
+
+describe("GET image routes", () => {
+  beforeEach(async () => {
+    sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "studio-api-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(sandbox, { recursive: true, force: true });
+  });
+
+  it("lists an item's images in loader order", async () => {
+    await seedItem("electronics/desk-lamp");
+    await seedImage("electronics/desk-lamp", "02-Side.JPG");
+    await seedImage("electronics/desk-lamp", "01-front.jpg");
+
+    const res = await get("/api/items/electronics/desk-lamp/images");
+
+    expect(res.status).toBe(200);
+    expect(asJson(res).body).toEqual({ files: ["01-front.jpg", "02-Side.JPG"] });
+  });
+
+  it("serves one image as a file response", async () => {
+    await seedItem("electronics/desk-lamp");
+    await seedImage("electronics/desk-lamp", "01-front.jpg");
+
+    const res = await get("/api/items/electronics/desk-lamp/images/01-front.jpg");
+
+    expect(res.status).toBe(200);
+    expect(isFileResponse(res)).toBe(true);
+    if (isFileResponse(res)) {
+      expect(res.contentType).toBe("image/jpeg");
+      expect(res.file.endsWith("01-front.jpg")).toBe(true);
+    }
+  });
+
+  it("404s an image that is not there", async () => {
+    await seedItem("electronics/desk-lamp");
+    const res = await get("/api/items/electronics/desk-lamp/images/missing.jpg");
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects a traversal filename", async () => {
+    await seedItem("electronics/desk-lamp");
+    const res = await get("/api/items/electronics/desk-lamp/images/..%2Fitem.json");
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a bad category slug", async () => {
+    const res = await get("/api/items/Electronics/desk-lamp/images");
+    expect(res.status).toBe(400);
+  });
+
+  it("405s a POST-less method on the image collection", async () => {
+    await seedItem("electronics/desk-lamp");
+    const res = await handleStudioRequest({
+      method: "PUT",
+      url: "/api/items/electronics/desk-lamp/images",
+      body: Buffer.alloc(0),
+      projectRoot: sandbox,
+    });
+    expect(res.status).toBe(405);
+  });
+});
+
 describe("response variants", () => {
   it("recognises a JSON response", () => {
     const res = { status: 200, body: { ok: true } };
