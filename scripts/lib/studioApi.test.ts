@@ -177,6 +177,39 @@ describe("POST /api/items/bulk-status", () => {
     expect(text).toContain('"sold_date": null');
   });
 
+  it("does not restamp sold_date when an already-sold item is bulk-marked sold again", async () => {
+    const dir = path.join(sandbox, "content", "items", "electronics", "desk-lamp");
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(
+      path.join(dir, "item.json"),
+      `{
+  "name": "Desk lamp",
+  "status": "sold",
+  "sold_date": "2026-01-15",
+  "reserved_for": "alice@example.com"
+}
+`,
+    );
+
+    const res = await bulkStatus(["electronics/desk-lamp"], "sold");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: 1, failed: [] });
+    const text = await readItemJson("electronics/desk-lamp");
+    expect(text).toContain('"sold_date": "2026-01-15"');
+    expect(text).toContain('"status": "sold"');
+  });
+
+  it("still stamps today when a fresh (non-sold) item transitions to sold", async () => {
+    await seedItem("electronics/desk-lamp");
+    const res = await bulkStatus(["electronics/desk-lamp"], "sold");
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: 1, failed: [] });
+    const text = await readItemJson("electronics/desk-lamp");
+    expect(text).toMatch(/"sold_date": "\d{4}-\d{2}-\d{2}"/);
+    expect(text).not.toContain('"sold_date": null');
+  });
+
   it("reports per-item failures without discarding successes", async () => {
     await seedItem("electronics/desk-lamp");
 

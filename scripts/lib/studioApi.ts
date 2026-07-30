@@ -19,7 +19,7 @@ import { z } from "zod";
 // hook resolving it at runtime, an undeclared and untested resolution chain.
 import { loadAllItemsRaw } from "../../lib/content/loader";
 import { isValidSlug } from "../../lib/utils/slug";
-import { applyFieldEdits } from "./itemEdit";
+import { applyFieldEdits, readItemField } from "./itemEdit";
 
 const IMAGE_EXT = /\.(jpg|jpeg|png|webp|gif)$/i;
 
@@ -161,7 +161,20 @@ async function applyStatus(
   const text = await fsPromises.readFile(jsonPath, "utf-8");
 
   // sold_date is bound to status: entering sold stamps today, leaving sold
-  // clears it, so the two fields can never disagree.
+  // clears it, so the two fields can never disagree — EXCEPT when the item is
+  // already sold and the target status is also sold (bulk "Mark sold" applied
+  // to a mix of items, some already sold). Stamping today there would
+  // overwrite the original sale date with no status change to show for it,
+  // silently republishing expired listings once soldItemRetentionDays has
+  // elapsed (lib/content/loader.ts's isSoldItemVisible). Mirrors the CLI's
+  // idempotence guard in markSold.ts. Nothing would change on disk in that
+  // case, so skip the write entirely rather than rewriting status to its
+  // current value.
+  const currentStatus = readItemField(text, "status");
+  if (status === "sold" && currentStatus === "sold") {
+    return;
+  }
+
   const next = applyFieldEdits(text, [
     { path: ["status"], value: status },
     { path: ["sold_date"], value: status === "sold" ? today : null },
