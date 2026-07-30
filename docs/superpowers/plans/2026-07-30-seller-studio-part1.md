@@ -697,13 +697,13 @@ Expected: PASS — 6 tests.
 
 In `scripts/sync-images.ts`: delete the local `sha256`, `scanImages`, `loadJson`, and `writeJson` definitions, import them from the new module, and replace the body of `runUpload` with the code below. `copyContactFiles`, `runQualityChecks`, and `printBackupReminder` stay exactly as they are.
 
+Import exactly these three — `scanImages` is still used by `runDevSync` (line 415)
+and `runBuildCheck` (line 454), and `loadJson` by `runBuildCheck` (line 471).
+`writeJson` and `sha256` were used only by `runUpload`, so they must NOT be
+imported: an unused import fails `pnpm lint` (`--max-warnings 0`).
+
 ```ts
-import {
-  loadJson,
-  scanImages,
-  syncImagesToCdn,
-  writeJson,
-} from "./lib/imageSync";
+import { loadJson, scanImages, syncImagesToCdn } from "./lib/imageSync";
 ```
 
 ```ts
