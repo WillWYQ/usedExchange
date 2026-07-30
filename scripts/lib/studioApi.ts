@@ -30,7 +30,27 @@ export type StudioRequest = {
   projectRoot: string;
 };
 
-export type StudioResponse = { status: number; body: unknown };
+/** One server-sent event. `data` is JSON-serialised by the transport. */
+export type SseEvent = { event: string; data: unknown };
+
+export type JsonResponse = { status: number; body: unknown };
+export type FileResponse = { status: number; file: string; contentType: string };
+export type SseResponse = { status: number; events: AsyncIterable<SseEvent> };
+
+// Three variants rather than one JSON shape: studio has to serve image bytes
+// for thumbnails and stream upload progress, and neither fits a buffered JSON
+// body. The handler still never touches an http object — it names a file on
+// disk or yields events, and studio/vite.config.ts does the writing. That is
+// what keeps this module drivable from Vitest with no server running.
+export type StudioResponse = JsonResponse | FileResponse | SseResponse;
+
+export function isFileResponse(res: StudioResponse): res is FileResponse {
+  return "file" in res;
+}
+
+export function isSseResponse(res: StudioResponse): res is SseResponse {
+  return "events" in res;
+}
 
 export type StudioItem = {
   id: string;

@@ -3,7 +3,22 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import * as loaderModule from "@/lib/content/loader";
-import { handleStudioRequest, resolveItemDir, StudioError, listStudioItems } from "./studioApi";
+import {
+  handleStudioRequest,
+  resolveItemDir,
+  StudioError,
+  listStudioItems,
+  isFileResponse,
+  isSseResponse,
+  type JsonResponse,
+} from "./studioApi";
+
+// All routes exercised in this file return the JSON variant of StudioResponse;
+// this narrows the union so `.body` type-checks without re-asserting at every
+// call site.
+function asJson(res: Awaited<ReturnType<typeof handleStudioRequest>>): JsonResponse {
+  return res as JsonResponse;
+}
 
 const PROJECT_ROOT = process.cwd();
 
@@ -39,7 +54,7 @@ describe("handleStudioRequest", () => {
       projectRoot: PROJECT_ROOT,
     });
     expect(res.status).toBe(200);
-    const body = res.body as { items: unknown[] };
+    const body = asJson(res).body as { items: unknown[] };
     expect(Array.isArray(body.items)).toBe(true);
   });
 
@@ -155,7 +170,7 @@ describe("POST /api/items/bulk-status", () => {
     const res = await bulkStatus(["electronics/desk-lamp", "books/cs61a"], "sold");
 
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ ok: 2, failed: [] });
+    expect(asJson(res).body).toMatchObject({ ok: 2, failed: [] });
     const text = await readItemJson("books/cs61a");
     expect(text).toContain('"status": "sold"');
     expect(text).toMatch(/"sold_date": "\d{4}-\d{2}-\d{2}"/);
@@ -194,7 +209,7 @@ describe("POST /api/items/bulk-status", () => {
     const res = await bulkStatus(["electronics/desk-lamp"], "sold");
 
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ ok: 1, failed: [] });
+    expect(asJson(res).body).toMatchObject({ ok: 1, failed: [] });
     const text = await readItemJson("electronics/desk-lamp");
     expect(text).toContain('"sold_date": "2026-01-15"');
     expect(text).toContain('"status": "sold"');
@@ -204,7 +219,7 @@ describe("POST /api/items/bulk-status", () => {
     await seedItem("electronics/desk-lamp");
     const res = await bulkStatus(["electronics/desk-lamp"], "sold");
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ ok: 1, failed: [] });
+    expect(asJson(res).body).toMatchObject({ ok: 1, failed: [] });
     const text = await readItemJson("electronics/desk-lamp");
     expect(text).toMatch(/"sold_date": "\d{4}-\d{2}-\d{2}"/);
     expect(text).not.toContain('"sold_date": null');
@@ -216,7 +231,7 @@ describe("POST /api/items/bulk-status", () => {
     const res = await bulkStatus(["electronics/desk-lamp", "books/missing"], "sold");
 
     expect(res.status).toBe(200);
-    const body = res.body as { ok: number; failed: Array<{ id: string; error: string }> };
+    const body = asJson(res).body as { ok: number; failed: Array<{ id: string; error: string }> };
     expect(body.ok).toBe(1);
     expect(body.failed).toHaveLength(1);
     expect(body.failed[0]?.id).toBe("books/missing");
@@ -235,12 +250,35 @@ describe("POST /api/items/bulk-status", () => {
 
   it("rejects a traversal id", async () => {
     const res = await bulkStatus(["../../etc/passwd"], "sold");
-    const body = res.body as { ok: number; failed: Array<{ id: string; error: string }> };
+    const body = asJson(res).body as { ok: number; failed: Array<{ id: string; error: string }> };
     expect(body.ok).toBe(0);
     expect(body.failed[0]?.id).toBe("../../etc/passwd");
     // Asserts the write was refused by the path-containment layer specifically,
     // not merely failed for some other reason (e.g. ENOENT on the traversal
     // target) that would pass even with resolveItemDir's guards deleted.
     expect(body.failed[0]?.error).toMatch(/kebab-case|escapes content\/items/);
+  });
+});
+
+describe("response variants", () => {
+  it("recognises a JSON response", () => {
+    const res = { status: 200, body: { ok: true } };
+    expect(isFileResponse(res)).toBe(false);
+    expect(isSseResponse(res)).toBe(false);
+  });
+
+  it("recognises a file response", () => {
+    const res = { status: 200, file: "/tmp/a.jpg", contentType: "image/jpeg" };
+    expect(isFileResponse(res)).toBe(true);
+    expect(isSseResponse(res)).toBe(false);
+  });
+
+  it("recognises an SSE response", () => {
+    const events = (async function* () {
+      yield { event: "ping", data: null };
+    })();
+    const res = { status: 200, events };
+    expect(isSseResponse(res)).toBe(true);
+    expect(isFileResponse(res)).toBe(false);
   });
 });
