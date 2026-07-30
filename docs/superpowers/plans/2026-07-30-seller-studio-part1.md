@@ -6,7 +6,18 @@
 
 **Architecture:** `pnpm studio` starts a single Vite dev server bound to `127.0.0.1`. A Vite middleware plugin routes `/api/*` to a framework-independent handler in `scripts/lib/studioApi.ts`; everything else is served as a React frontend from `studio/`. All `item.json` writes go through surgical JSONC edits so comments and `reserved_for` survive. Nothing is added to `app/`, so the static export is untouched.
 
-**Tech Stack:** TypeScript, Vite 5 + `@vitejs/plugin-react`, React 19, Vitest, `jsonc-parser`, Tailwind-free hand-written CSS tokens, `@fontsource` fonts.
+**Tech Stack:** TypeScript, Vite 8 + `@vitejs/plugin-react`, React 19, Vitest, `jsonc-parser`, Tailwind-free hand-written CSS tokens, `@fontsource` fonts.
+
+> **Corrections applied after execution.** Four things this plan got wrong were
+> found while running it, and are fixed in the text below: the bulk-status route
+> needs `return await` (a bare `return` lets the rejection escape the `try`);
+> every module reachable from the Vite config graph must use relative imports,
+> not the `@/…` alias, or `pnpm studio` greets the seller with "Module not
+> found" boxes; the failed-row marker needs its own `--error` token rather than
+> `--stamp`; and the `/api/*` middleware needs a CSRF guard, because a
+> cross-origin `text/plain` POST is a CORS-simple request that reaches the write
+> path unchallenged. The install command is also unpinned, which resolved to
+> Vite 8 rather than the Vite 5 this line used to claim.
 
 **Spec:** `docs/superpowers/specs/2026-07-29-seller-studio-design.md` (+ `_zh`). Part 1 covers spec phases 1–3; Part 2 covers images, edit form, publish, and downstream distribution.
 
@@ -179,7 +190,10 @@ Create `scripts/lib/itemEdit.ts`:
 // especially destructive here. modify/applyEdits touch only the target range.
 
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser";
-import { itemJsonSchema } from "@/lib/content/schema";
+// Relative, not "@/…": this module is reachable from the Vite config graph
+// (studioApi.ts imports it), and Vite's config bundler does not honour
+// tsconfig path aliases — it externalises them and warns on every startup.
+import { itemJsonSchema } from "../../lib/content/schema";
 
 export type FieldEdit = { path: (string | number)[]; value: unknown };
 
@@ -899,8 +913,13 @@ Create `scripts/lib/studioApi.ts`:
 
 import fsPromises from "fs/promises";
 import path from "path";
-import { loadAllItemsRaw } from "@/lib/content/loader";
-import { isValidSlug } from "@/lib/utils/slug";
+// Relative, not "@/…" — see the note in itemEdit.ts. Converting these also
+// forces lib/content/loader.ts's own imports to become relative, because
+// Vite then inlines that module instead of externalising it. The cascade
+// stops there (config.ts is a type-only import; schema/concurrency/slug
+// have no aliased imports of their own).
+import { loadAllItemsRaw } from "../../lib/content/loader";
+import { isValidSlug } from "../../lib/utils/slug";
 
 const IMAGE_EXT = /\.(jpg|jpeg|png|webp|gif)$/i;
 
@@ -1705,7 +1724,10 @@ Then add the route inside `handleStudioRequest`'s `try` block, before the 404 re
       if (req.method !== "POST") {
         return { status: 405, body: { error: "POST only" } };
       }
-      return handleBulkStatus(req);
+      // `return await`, not a bare `return`: returning a rejecting promise out
+      // of the try block lets the rejection land after the block exits, so the
+      // catch below never converts a StudioError into its 4xx status.
+      return await handleBulkStatus(req);
     }
 ```
 
@@ -1845,7 +1867,9 @@ Append to `studio/src/tokens.css`:
 }
 
 tr.failed td {
-  box-shadow: inset 3px 0 0 var(--stamp);
+  /* --error (see tokens block), never --stamp: a row that FAILED to be marked
+     sold must not wear the colour the seller reads as "sold". */
+  box-shadow: inset 3px 0 0 var(--error);
 }
 ```
 
