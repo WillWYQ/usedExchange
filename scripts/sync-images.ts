@@ -10,13 +10,12 @@
 import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
-import crypto from "crypto";
 import sharp from "sharp";
 import { siteConfig } from "@/content/config";
 import type { ImageStorageAdapter } from "@/lib/images/adapter";
 import { copyIfChanged } from "@/lib/images/local";
-import { stripImageMetadata } from "@/lib/images/stripMetadata";
 import { mapWithConcurrency } from "@/lib/utils/concurrency";
+import { loadJson, scanImages, syncImagesToCdn } from "./lib/imageSync";
 
 // ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -27,7 +26,6 @@ const PUBLIC_ITEMS = path.join(CWD, "public", "items");
 const PUBLIC_CONTACT = path.join(CWD, "public", "contact");
 const MANIFEST_PATH = path.join(CWD, "lib", "generated", "image-manifest.json");
 const CHECKSUMS_PATH = path.join(CWD, ".image-cache", "checksums.json");
-const IMAGE_EXT = /\.(jpg|jpeg|png|webp|gif)$/i;
 
 // ── Env loading ───────────────────────────────────────────────────────────────
 // tsx does not load .env.local automatically; parse it before reading process.env.
@@ -61,65 +59,9 @@ const mode = modeIdx !== -1 ? args[modeIdx + 1] : undefined;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function sha256(filePath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const hash = crypto.createHash("sha256");
-    fs.createReadStream(filePath)
-      .on("data", (chunk) => hash.update(chunk))
-      .on("end", () => resolve(hash.digest("hex")))
-      .on("error", reject);
-  });
-}
-
-// Bounded concurrency for CDN PUTs (network-latency bound — R2/S3 handle
-// concurrent writes fine) and content-tree walks (FD-bound) is provided by the
-// shared lib/utils/concurrency.ts helper, imported above. CDN uploads were
-// previously serialized by a plain for…of loop (N sequential round-trips);
-// bounding concurrency cuts wall-clock time roughly by `limit`x while keeping
-// memory and the open-file-descriptor count predictable.
-
-async function loadJson<T>(filePath: string, fallback: T): Promise<T> {
-  try {
-    const raw = await fsPromises.readFile(filePath, "utf-8");
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-async function writeJson(filePath: string, data: unknown): Promise<void> {
-  await fsPromises.mkdir(path.dirname(filePath), { recursive: true });
-  await fsPromises.writeFile(filePath, JSON.stringify(data, null, 2) + "\n", "utf-8");
-}
-
-/** Scan a directory tree for image files; returns [{sourcePath, manifestKey}]. */
-async function scanImages(
-  root: string,
-): Promise<Array<{ sourcePath: string; manifestKey: string }>> {
-  const results: Array<{ sourcePath: string; manifestKey: string }> = [];
-
-  async function walk(dir: string): Promise<void> {
-    let entries: fs.Dirent[];
-    try {
-      entries = await fsPromises.readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.name.startsWith("_")) continue;
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        await walk(fullPath);
-      } else if (IMAGE_EXT.test(entry.name)) {
-        const manifestKey = path.relative(root, fullPath).replace(/\\/g, "/");
-        results.push({ sourcePath: fullPath, manifestKey });
-      }
-    }
-  }
-
-  await walk(root);
-  return results;
-}
+// Bounded concurrency for content-tree walks (FD-bound) and photo-quality
+// metadata reads is provided by the shared lib/utils/concurrency.ts helper,
+// imported above. CDN upload concurrency lives in scripts/lib/imageSync.ts.
 
 /** Copy all files from content/contact/ → public/contact/. Returns count copied. */
 async function copyContactFiles(): Promise<number> {
@@ -264,139 +206,47 @@ function printBackupReminder(): void {
 // ── Mode: upload ──────────────────────────────────────────────────────────────
 
 async function runUpload(): Promise<void> {
-  // 1. Instantiate adapter — validates required env vars, throws on missing
   const adapter = await createAdapter();
 
-  // 2. Load saved checksums (incremental skip cache)
-  const savedChecksums = await loadJson<Record<string, string>>(CHECKSUMS_PATH, {});
-  adapter.loadChecksums(savedChecksums);
-
-  // 3. Load existing manifest — needed to preserve URLs for unchanged Vercel Blob files
-  const existingManifest = await loadJson<Record<string, string>>(MANIFEST_PATH, {});
-
-  // 4. Scan content/items/ for images
   if (!fs.existsSync(CONTENT_ITEMS)) {
     console.error("[upload-images] content/items/ not found — nothing to upload");
     process.exit(1);
   }
 
-  const images = await scanImages(CONTENT_ITEMS);
-
-  // 5. Upload/sync each image (bounded concurrency) and collect manifest URLs.
-  // Each worker returns its outcome rather than mutating shared counters/objects
-  // directly, so concurrent closures can't race on `newManifest`/`uploaded`/`skipped`.
-  const UPLOAD_CONCURRENCY = 8;
-  type SyncOutcome = {
-    manifestKey: string;
-    manifestUrl: string;
-    uploaded: boolean;
-    stripped: boolean;
-    error?: string;
-  };
-
-  const outcomes = await mapWithConcurrency(images, UPLOAD_CONCURRENCY, async ({ sourcePath, manifestKey }) => {
-    // FIX M2: isolate per-file failures. A single unreadable/locked photo or a
-    // transient CDN error must not reject the whole Promise.all and abort the
-    // entire batch (the previous behaviour discarded all successful uploads and
-    // never wrote the manifest). On failure we preserve any existing manifest
-    // URL so a previously-uploaded file keeps working, and report at the end.
-    try {
-      const checksum = await sha256(sourcePath);
-      const isNewOrChanged = savedChecksums[manifestKey] !== checksum;
-
-      // Only re-encode files that are actually being (re)uploaded — unchanged
-      // files are skipped by the adapter, so stripping them would be wasted work.
-      let body: Buffer | undefined;
-      let stripped = false;
-      if (isNewOrChanged) {
-        const original = await fsPromises.readFile(sourcePath);
-        const ext = path.extname(sourcePath).slice(1);
-        body = await stripImageMetadata(original, ext);
-        stripped = ext.toLowerCase() !== "gif";
-      }
-
-      const url = await adapter.syncImage(sourcePath, manifestKey, checksum, body);
-
-      if (url === "") {
-        // Vercel Blob skip signal: file unchanged — preserve existing manifest URL
-        return { manifestKey, manifestUrl: existingManifest[manifestKey] ?? "", uploaded: false, stripped: false } satisfies SyncOutcome;
-      }
-      if (!isNewOrChanged) {
-        // Checksum match (R2 / local): file unchanged — URL reconstructed by adapter
-        return { manifestKey, manifestUrl: url, uploaded: false, stripped: false } satisfies SyncOutcome;
-      }
-      // New or changed file
-      return { manifestKey, manifestUrl: url, uploaded: true, stripped } satisfies SyncOutcome;
-    } catch (err: unknown) {
-      return {
-        manifestKey,
-        manifestUrl: existingManifest[manifestKey] ?? "",
-        uploaded: false,
-        stripped: false,
-        error: err instanceof Error ? err.message : String(err),
-      } satisfies SyncOutcome;
-    }
+  const result = await syncImagesToCdn({
+    adapter,
+    contentItemsDir: CONTENT_ITEMS,
+    manifestPath: MANIFEST_PATH,
+    checksumsPath: CHECKSUMS_PATH,
   });
 
-  const newManifest: Record<string, string> = {};
-  let uploaded = 0;
-  let skipped = 0;
-  let stripped = 0;
-  const failures: Array<{ manifestKey: string; error: string }> = [];
-  for (const outcome of outcomes) {
-    if (outcome.error !== undefined) {
-      failures.push({ manifestKey: outcome.manifestKey, error: outcome.error });
-      // Keep a manifest entry only if we preserved a prior good URL — never
-      // write an empty URL for a file that has never uploaded successfully.
-      if (outcome.manifestUrl) newManifest[outcome.manifestKey] = outcome.manifestUrl;
-      continue;
-    }
-    newManifest[outcome.manifestKey] = outcome.manifestUrl;
-    if (outcome.uploaded) uploaded++;
-    else skipped++;
-    if (outcome.stripped) stripped++;
-  }
-
-  // 6. Purge stale manifest entries (deleted item folders)
-  const activeKeys = new Set(images.map((i) => i.manifestKey));
-  const purged = Object.keys(existingManifest).filter((k) => !activeKeys.has(k)).length;
-
-  // 7. Copy QR codes: content/contact/ → public/contact/
+  // Copy QR codes: content/contact/ → public/contact/
   await copyContactFiles();
 
-  // 8. Write updated manifest (committed to git)
-  await writeJson(MANIFEST_PATH, newManifest);
+  // Advisory quality checks (never block the upload)
+  const warnings = await runQualityChecks(result.images);
 
-  // 9. Persist updated checksum cache (gitignored)
-  await writeJson(CHECKSUMS_PATH, adapter.getUpdatedChecksums());
-
-  // 10. Advisory quality checks (never blocks the upload)
-  const warnings = await runQualityChecks(images);
-
-  // 11. Summary
-  const total = images.length;
   const provider = siteConfig.imageStorage.provider;
   console.log(
-    `[upload-images] provider=${provider}  uploaded=${uploaded}  skipped=${skipped}  failed=${failures.length}  purged=${purged}  total=${total}  warnings=${warnings.length}`,
+    `[upload-images] provider=${provider}  uploaded=${result.uploaded}  skipped=${result.skipped}  failed=${result.failures.length}  purged=${result.purged}  total=${result.total}  warnings=${warnings.length}`,
   );
-  if (uploaded > 0) {
-    console.log(`  🔒 stripped EXIF/GPS metadata from ${stripped}/${uploaded} uploaded image(s)`);
+  if (result.uploaded > 0) {
+    console.log(
+      `  🔒 stripped EXIF/GPS metadata from ${result.stripped}/${result.uploaded} uploaded image(s)`,
+    );
   }
-  if (warnings.length > 0) {
-    for (const w of warnings) console.warn(`  ⚠️  ${w}`);
-  }
+  for (const w of warnings) console.warn(`  ⚠️  ${w}`);
 
-  // 12. Backup reminder
   printBackupReminder();
 
-  // 13. Report per-file failures last (most visible) and exit non-zero so CI /
-  // the seller notices — but only AFTER the manifest + checksum cache have been
-  // written, so the successful uploads in this run are never lost.
-  if (failures.length > 0) {
-    console.error(`\n[upload-images] ${failures.length} file(s) failed to upload:`);
-    for (const f of failures) console.error(`  ✗ ${f.manifestKey}: ${f.error}`);
+  // Report per-file failures last (most visible) and exit non-zero — but only
+  // after the manifest and checksum cache have been written, so successful
+  // uploads in this run are never lost.
+  if (result.failures.length > 0) {
+    console.error(`\n[upload-images] ${result.failures.length} file(s) failed to upload:`);
+    for (const f of result.failures) console.error(`  ✗ ${f.manifestKey}: ${f.error}`);
     console.error(
-      `\nThe manifest was still written for the ${uploaded + skipped} successful file(s); ` +
+      `\nThe manifest was still written for the ${result.uploaded + result.skipped} successful file(s); ` +
         `re-run "pnpm upload-images" to retry the failed ones.`,
     );
     process.exit(1);
