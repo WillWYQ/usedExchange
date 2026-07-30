@@ -81,6 +81,10 @@ exports/
 # search-index.json is written to public/ (not lib/generated/) so SearchBar can fetch it via HTTP.
 public/search-index.json
 
+# ── Agent scratch (isolated worktrees + implementation ledgers) ──────────────
+.claude/worktrees/
+.superpowers/
+
 # ── Editor / IDE ──────────────────────────────────────────────────────────────
 .vscode/settings.json
 .idea/
