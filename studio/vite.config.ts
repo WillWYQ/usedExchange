@@ -31,6 +31,17 @@ function studioApiPlugin(): Plugin {
 
         const chunks: Buffer[] = [];
         req.on("data", (chunk: Buffer) => chunks.push(chunk));
+        // Attaching a "data" listener above puts the stream in flowing mode.
+        // If the seller closes the tab mid-request, the request stream emits
+        // "error" (e.g. ECONNRESET); an EventEmitter with no "error" listener
+        // throws on that event, which would take down the whole dev server.
+        req.on("error", (err: Error) => {
+          if (!res.writableEnded) {
+            res.statusCode = 400;
+            res.setHeader("content-type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ error: err.message }));
+          }
+        });
         req.on("end", () => {
           void handleStudioRequest({
             method: req.method ?? "GET",
