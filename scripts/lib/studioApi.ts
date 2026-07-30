@@ -86,7 +86,16 @@ export async function listStudioItems(projectRoot: string): Promise<StudioItem[]
 
   return Promise.all(
     items.map(async (item) => {
-      const dir = resolveItemDir(projectRoot, item.categorySlug, item.itemSlug);
+      let imageCount = 0;
+      try {
+        const dir = resolveItemDir(projectRoot, item.categorySlug, item.itemSlug);
+        imageCount = await countImages(dir);
+      } catch {
+        // Item's directory cannot be resolved (e.g., invalid slug in folder name).
+        // Still return the item with imageCount: 0 so the seller can see the
+        // malformed folder and fix it, rather than hiding the entire list.
+      }
+
       const amounts = item.price.tiers.map((t) => t.amount);
       return {
         id: `${item.categorySlug}/${item.itemSlug}`,
@@ -96,7 +105,7 @@ export async function listStudioItems(projectRoot: string): Promise<StudioItem[]
         status: item.status,
         currency: item.price.currency,
         lowestTierAmount: amounts.length > 0 ? Math.min(...amounts) : null,
-        imageCount: await countImages(dir),
+        imageCount,
       } satisfies StudioItem;
     }),
   );
