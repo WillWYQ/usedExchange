@@ -1,0 +1,122 @@
+/* Spec §14.2–14.3. Fonts are bundled from @fontsource packages so studio works
+   with no network. Palette is the carbon-copy consignment form: cool grey-blue
+   paper, cool pen ink, and stamp red reserved exclusively for `sold`. */
+
+@import "@fontsource/courier-prime/400.css";
+@import "@fontsource/courier-prime/700.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/archivo-narrow/600.css";
+
+:root {
+  --carbon-pale: #e4ebef;
+  --carbon-rule: #c2cfd6;
+  --ink: #1b2a35;
+  --ink-soft: #5c6e7a;
+  --stamp: #b3241e;
+  --pending: #8a6a12;
+
+  --font-data: "Courier Prime", ui-monospace, monospace;
+  --font-ui: "IBM Plex Sans", system-ui, sans-serif;
+  --font-head: "Archivo Narrow", var(--font-ui);
+
+  --step-0: 0.875rem;
+  --step-1: 1rem;
+  --step-2: 1.25rem;
+  --gap: 0.75rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--carbon-pale);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.studio-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--gap);
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--carbon-rule);
+}
+
+.studio-head h1 {
+  margin: 0;
+  font-family: var(--font-head);
+  font-size: var(--step-2);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio-head .counts {
+  font-family: var(--font-data);
+  color: var(--ink-soft);
+}
+
+.item-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.item-table th {
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: var(--step-0);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--ink-soft);
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--carbon-rule);
+}
+
+.item-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--carbon-rule);
+}
+
+.item-table td.data {
+  font-family: var(--font-data);
+}
+
+.status-sold {
+  color: var(--stamp);
+  font-family: var(--font-head);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.status-pending {
+  color: var(--pending);
+}
+
+/* Narrow screens: the table collapses to stacked cards. */
+@media (max-width: 40rem) {
+  .item-table thead {
+    display: none;
+  }
+  .item-table tr {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.25rem var(--gap);
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--carbon-rule);
+  }
+  .item-table td {
+    border: 0;
+    padding: 0;
+  }
+}
