@@ -10,8 +10,10 @@
 
 import fsPromises from "fs/promises";
 import path from "path";
+import { z } from "zod";
 import { loadAllItemsRaw } from "@/lib/content/loader";
 import { isValidSlug } from "@/lib/utils/slug";
+import { applyFieldEdits } from "./itemEdit";
 
 const IMAGE_EXT = /\.(jpg|jpeg|png|webp|gif)$/i;
 
@@ -111,6 +113,82 @@ export async function listStudioItems(projectRoot: string): Promise<StudioItem[]
   );
 }
 
+// Input validation deliberately does NOT reuse itemJsonSchema's field schemas:
+// several of them carry .catch(...) (see lib/content/schema.ts:126-131), so
+// safeParse("liquidated") would *succeed* and silently yield "available". An
+// explicit enum is the only way to reject bad input here.
+const bulkStatusBodySchema = z.object({
+  ids: z.array(z.string()).min(1),
+  status: z.enum(["available", "pending", "reserved", "sold", "draft"]),
+});
+
+export type BulkStatusResult = {
+  ok: number;
+  failed: Array<{ id: string; error: string }>;
+};
+
+function parseJsonBody<T>(body: Buffer, schema: z.ZodType<T>): T {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(body.toString("utf-8"));
+  } catch {
+    throw new StudioError(400, "request body is not valid JSON");
+  }
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) {
+    throw new StudioError(400, parsed.error.issues.map((i) => i.message).join("; "));
+  }
+  return parsed.data;
+}
+
+async function applyStatus(
+  projectRoot: string,
+  id: string,
+  status: string,
+  today: string,
+): Promise<void> {
+  const slashIdx = id.indexOf("/");
+  if (slashIdx === -1) throw new StudioError(400, `id must be "<category>/<item>": got "${id}"`);
+
+  const dir = resolveItemDir(projectRoot, id.slice(0, slashIdx), id.slice(slashIdx + 1));
+  const jsonPath = path.join(dir, "item.json");
+  const text = await fsPromises.readFile(jsonPath, "utf-8");
+
+  // sold_date is bound to status: entering sold stamps today, leaving sold
+  // clears it, so the two fields can never disagree.
+  const next = applyFieldEdits(text, [
+    { path: ["status"], value: status },
+    { path: ["sold_date"], value: status === "sold" ? today : null },
+  ]);
+
+  await fsPromises.writeFile(jsonPath, next, "utf-8");
+}
+
+async function handleBulkStatus(req: StudioRequest): Promise<StudioResponse> {
+  const { ids, status } = parseJsonBody(req.body, bulkStatusBodySchema);
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Each item is written independently and failures are reported per item. No
+  // rollback: undoing half-written files can itself fail, and the successful
+  // writes are work the seller does not want discarded. Matches the failure
+  // philosophy in imageSync.ts.
+  const result: BulkStatusResult = { ok: 0, failed: [] };
+
+  for (const id of ids) {
+    try {
+      await applyStatus(req.projectRoot, id, status, today);
+      result.ok++;
+    } catch (err: unknown) {
+      result.failed.push({
+        id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return { status: 200, body: result };
+}
+
 export async function handleStudioRequest(req: StudioRequest): Promise<StudioResponse> {
   const pathname = req.url.split("?")[0] ?? "";
 
@@ -120,6 +198,16 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
         return { status: 405, body: { error: "GET only" } };
       }
       return { status: 200, body: { items: await listStudioItems(req.projectRoot) } };
+    }
+
+    if (pathname === "/api/items/bulk-status") {
+      if (req.method !== "POST") {
+        return { status: 405, body: { error: "POST only" } };
+      }
+      // `await`, not a bare return: a promise returned out of this try block
+      // rejects after the block has exited, so StudioError would escape the
+      // catch below instead of becoming its 400/404 response.
+      return await handleBulkStatus(req);
     }
 
     return { status: 404, body: { error: `no route for ${pathname}` } };
