@@ -8,9 +8,13 @@ import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
 import crypto from "crypto";
-import type { ImageStorageAdapter } from "@/lib/images/adapter";
-import { stripImageMetadata } from "@/lib/images/stripMetadata";
-import { mapWithConcurrency } from "@/lib/utils/concurrency";
+// Relative, not "@/…": this module is (as of Part 2) reachable from
+// studio/vite.config.ts's config graph, where the "@/" alias does not
+// resolve. See the comment at the top of studioApi.ts's imports for the
+// full explanation.
+import type { ImageStorageAdapter } from "../../lib/images/adapter";
+import { stripImageMetadata } from "../../lib/images/stripMetadata";
+import { mapWithConcurrency } from "../../lib/utils/concurrency";
 
 const IMAGE_EXT = /\.(jpg|jpeg|png|webp|gif)$/i;
 const UPLOAD_CONCURRENCY = 8;
@@ -19,8 +23,18 @@ export type ScannedImage = { sourcePath: string; manifestKey: string };
 
 export type ImageSyncProgress =
   | { type: "scanned"; total: number }
-  | { type: "file"; manifestKey: string; index: number; total: number; uploaded: boolean }
-  | { type: "file-failed"; manifestKey: string; index: number; total: number; error: string };
+  // `completed` is a running count of files that have finished (succeeded or
+  // failed), not a stable index into `images`: at UPLOAD_CONCURRENCY > 1,
+  // workers finish out of submission order, so images[completed] would not
+  // point at the file this event describes.
+  | { type: "file"; manifestKey: string; completed: number; total: number; uploaded: boolean }
+  | {
+      type: "file-failed";
+      manifestKey: string;
+      completed: number;
+      total: number;
+      error: string;
+    };
 
 export type ImageSyncResult = {
   total: number;
@@ -160,7 +174,7 @@ export async function syncImagesToCdn(options: ImageSyncOptions): Promise<ImageS
         emit({
           type: "file",
           manifestKey,
-          index: completed,
+          completed,
           total: images.length,
           uploaded,
         });
@@ -176,7 +190,7 @@ export async function syncImagesToCdn(options: ImageSyncOptions): Promise<ImageS
         emit({
           type: "file-failed",
           manifestKey,
-          index: completed,
+          completed,
           total: images.length,
           error,
         });
