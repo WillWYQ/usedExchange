@@ -5,7 +5,10 @@
 // especially destructive here. modify/applyEdits touch only the target range.
 
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser";
-import { itemJsonSchema } from "@/lib/content/schema";
+// Relative, not "@/…": this module is reachable from studio/vite.config.ts's
+// config graph (via studioApi.ts), where the "@/" alias does not resolve. See
+// the comment at the top of studioApi.ts's imports for the full explanation.
+import { itemJsonSchema } from "../../lib/content/schema";
 
 export type FieldEdit = { path: (string | number)[]; value: unknown };
 

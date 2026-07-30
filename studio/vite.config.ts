@@ -3,6 +3,7 @@ import { fileURLToPath } from "url";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { handleStudioRequest } from "../scripts/lib/studioApi";
+import { checkStudioCsrf } from "./csrfGuard";
 
 const studioDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(studioDir, "..");
@@ -15,6 +16,18 @@ function studioApiPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         if (!req.url?.startsWith("/api/")) return next();
+
+        const csrfRejection = checkStudioCsrf(req.method ?? "GET", {
+          origin: req.headers.origin,
+          host: req.headers.host,
+          "content-type": req.headers["content-type"],
+        });
+        if (csrfRejection !== null) {
+          res.statusCode = csrfRejection.status;
+          res.setHeader("content-type", "application/json; charset=utf-8");
+          res.end(JSON.stringify(csrfRejection.body));
+          return;
+        }
 
         const chunks: Buffer[] = [];
         req.on("data", (chunk: Buffer) => chunks.push(chunk));

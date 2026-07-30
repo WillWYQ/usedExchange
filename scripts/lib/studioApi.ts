@@ -11,8 +11,14 @@
 import fsPromises from "fs/promises";
 import path from "path";
 import { z } from "zod";
-import { loadAllItemsRaw } from "@/lib/content/loader";
-import { isValidSlug } from "@/lib/utils/slug";
+// Relative, not "@/…": this module is imported from studio/vite.config.ts, and
+// Vite's config bundler does not resolve the "@/" alias (it only applies inside
+// the dev server that this very config file produces). An unresolved "@/"
+// import here isn't just cosmetic — it makes Vite treat the module as external
+// and skip bundling it, so correctness would depend on tsx's tsconfig-paths
+// hook resolving it at runtime, an undeclared and untested resolution chain.
+import { loadAllItemsRaw } from "../../lib/content/loader";
+import { isValidSlug } from "../../lib/utils/slug";
 import { applyFieldEdits } from "./itemEdit";
 
 const IMAGE_EXT = /\.(jpg|jpeg|png|webp|gif)$/i;

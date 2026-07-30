@@ -187,6 +187,9 @@ describe("POST /api/items/bulk-status", () => {
     expect(body.ok).toBe(1);
     expect(body.failed).toHaveLength(1);
     expect(body.failed[0]?.id).toBe("books/missing");
+    // Asserts the failure is genuinely "no such item" (ENOENT reading item.json),
+    // not some unrelated bug that happens to also produce ok:0 for this id.
+    expect(body.failed[0]?.error).toMatch(/ENOENT/);
     expect(await readItemJson("electronics/desk-lamp")).toContain('"status": "sold"');
   });
 
@@ -199,8 +202,12 @@ describe("POST /api/items/bulk-status", () => {
 
   it("rejects a traversal id", async () => {
     const res = await bulkStatus(["../../etc/passwd"], "sold");
-    const body = res.body as { ok: number; failed: Array<{ id: string }> };
+    const body = res.body as { ok: number; failed: Array<{ id: string; error: string }> };
     expect(body.ok).toBe(0);
     expect(body.failed[0]?.id).toBe("../../etc/passwd");
+    // Asserts the write was refused by the path-containment layer specifically,
+    // not merely failed for some other reason (e.g. ENOENT on the traversal
+    // target) that would pass even with resolveItemDir's guards deleted.
+    expect(body.failed[0]?.error).toMatch(/kebab-case|escapes content\/items/);
   });
 });

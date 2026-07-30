@@ -2,10 +2,15 @@ import fs from "fs/promises";
 import type { Dirent } from "fs";
 import path from "path";
 import { parse as parseJsonc, type ParseError } from "jsonc-parser";
-import { siteConfig } from "@/content/config";
-import { itemJsonSchema, categoryJsonSchema } from "@/lib/content/schema";
-import { mapWithConcurrency } from "@/lib/utils/concurrency";
-import type { Item, Category } from "@/lib/content/types";
+// Relative, not "@/…": this module is reachable from studio/vite.config.ts's
+// config graph (via scripts/lib/studioApi.ts), where the "@/" alias does not
+// resolve — Vite's config bundler only applies aliases from the dev server
+// config that this very file helps produce. See scripts/lib/studioApi.ts's
+// import comment for the full explanation.
+import { siteConfig } from "../../content/config";
+import { itemJsonSchema, categoryJsonSchema } from "./schema";
+import { mapWithConcurrency } from "../utils/concurrency";
+import type { Item, Category } from "./types";
 
 const CONTENT_ROOT = path.join(process.cwd(), "content", "items");
 const IMAGE_EXT = /\.(jpg|jpeg|png|webp|gif)$/i;
