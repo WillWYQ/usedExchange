@@ -10,9 +10,13 @@
 //   2. If an Origin header is present, it must match this server's own origin.
 //      Real cross-origin requests always carry a browser-set Origin that page
 //      script cannot forge, so this is a second, independent line of defense.
-// GET is unaffected: Vite's own CORS and allowedHosts checks already cover reads
-// (see studio task-4-6 review finding 1), so only state-changing POSTs are
-// checked here.
+// GET/HEAD are unaffected: Vite's own CORS and allowedHosts checks already
+// cover reads (see studio task-4-6 review finding 1), so only non-safe
+// methods are checked here. The guard fails closed on the method check: every
+// method other than GET/HEAD is checked, not just POST, so a future PUT/
+// PATCH/DELETE route (Part 2 adds R2 credentials and git operations behind
+// this same middleware) is protected the moment it exists, rather than
+// silently unguarded until someone remembers to widen this check.
 //
 // Kept in its own module (not inline in vite.config.ts) so it is unit-testable:
 // Vitest's default excludes skip any file named `*.config.*`, which a
@@ -28,7 +32,7 @@ export function checkStudioCsrf(
   method: string,
   headers: { origin?: HeaderLike; host?: HeaderLike; "content-type"?: HeaderLike },
 ): { status: number; body: { error: string } } | null {
-  if (method !== "POST") return null;
+  if (method === "GET" || method === "HEAD") return null;
 
   const contentType = firstHeader(headers["content-type"]);
   if (contentType === undefined || !contentType.toLowerCase().startsWith("application/json")) {

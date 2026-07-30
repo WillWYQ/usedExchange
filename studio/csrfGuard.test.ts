@@ -65,4 +65,26 @@ describe("checkStudioCsrf", () => {
     expect(result).not.toBeNull();
     expect(result?.status).toBe(403);
   });
+
+  it("allows HEAD regardless of headers, same as GET", () => {
+    expect(
+      checkStudioCsrf("HEAD", { origin: "https://evil.example", host: "127.0.0.1:5174" }),
+    ).toBeNull();
+  });
+
+  it("rejects a PUT with a foreign origin — fails closed on unrecognized state-changing methods", () => {
+    const result = checkStudioCsrf("PUT", {
+      origin: "https://evil.example",
+      host: "127.0.0.1:5174",
+      "content-type": "application/json",
+    });
+    expect(result).not.toBeNull();
+    expect(result?.status).toBe(403);
+  });
+
+  it("rejects a PUT with no content-type at all — the method is no longer exempt by default", () => {
+    const result = checkStudioCsrf("PUT", { host: "127.0.0.1:5174" });
+    expect(result).not.toBeNull();
+    expect(result?.status).toBe(415);
+  });
 });
