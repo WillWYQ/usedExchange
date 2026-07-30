@@ -1,0 +1,269 @@
+/* Spec §14.2–14.3. Fonts are bundled from @fontsource packages so studio works
+   with no network. Palette is the carbon-copy consignment form: cool grey-blue
+   paper, cool pen ink, and stamp red reserved exclusively for `sold`. */
+
+@import "@fontsource/courier-prime/400.css";
+@import "@fontsource/courier-prime/700.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/archivo-narrow/600.css";
+
+:root {
+  --carbon-pale: #e4ebef;
+  --carbon-rule: #c2cfd6;
+  --ink: #1b2a35;
+  --ink-soft: #5c6e7a;
+  --stamp: #b3241e;
+  --pending: #8a6a12;
+  --error: #5b4b8c; /* mimeograph violet — failed-write marker only; keeps --stamp red exclusive to `sold` */
+
+  --font-data: "Courier Prime", ui-monospace, monospace;
+  --font-ui: "IBM Plex Sans", system-ui, sans-serif;
+  --font-head: "Archivo Narrow", var(--font-ui);
+
+  --step-0: 0.875rem;
+  --step-1: 1rem;
+  --step-2: 1.25rem;
+  --gap: 0.75rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--carbon-pale);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.studio-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--gap);
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--carbon-rule);
+}
+
+.studio-head h1 {
+  margin: 0;
+  font-family: var(--font-head);
+  font-size: var(--step-2);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio-head .counts {
+  font-family: var(--font-data);
+  color: var(--ink-soft);
+}
+
+.item-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.item-table th {
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: var(--step-0);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--ink-soft);
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--carbon-rule);
+}
+
+.item-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--carbon-rule);
+}
+
+.item-table td.data {
+  font-family: var(--font-data);
+}
+
+.status-sold {
+  color: var(--stamp);
+  font-family: var(--font-head);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.status-pending {
+  color: var(--pending);
+}
+
+/* Narrow screens: the table collapses to stacked cards. */
+/* Narrow screens: each row becomes a consignment-slip card. The row has six
+   cells, so a two-column grid would stack them into three rows of unlabelled
+   pairs — with the column headers hidden, nothing says which value is which.
+   Each cell is placed explicitly instead:
+
+       [x] IKEA desk lamp                    $15.00
+           houseware      available           4 img
+*/
+@media (max-width: 40rem) {
+  .item-table thead {
+    display: none;
+  }
+
+  .item-table tr {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    column-gap: var(--gap);
+    row-gap: 0.15rem;
+    align-items: baseline;
+    padding: 0.625rem 0.75rem;
+    border-bottom: 1px solid var(--carbon-rule);
+  }
+
+  .item-table td {
+    border: 0;
+    padding: 0;
+  }
+
+  /* The checkbox spans both lines, pinned to the first. */
+  .item-table td:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    align-self: start;
+  }
+
+  /* First line: the name, with the price closing it. */
+  .item-table td:nth-child(2) {
+    grid-column: 2 / 4;
+    grid-row: 1;
+    font-weight: 500;
+  }
+
+  .item-table td:nth-child(5) {
+    grid-column: 4;
+    grid-row: 1;
+    text-align: right;
+  }
+
+  /* Second line: the meta strip — category, status, image count. */
+  .item-table td:nth-child(3) {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .item-table td:nth-child(4) {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
+  .item-table td:nth-child(6) {
+    grid-column: 4;
+    grid-row: 2;
+    text-align: right;
+  }
+
+  .item-table td:nth-child(3),
+  .item-table td:nth-child(6) {
+    color: var(--ink-soft);
+  }
+
+  /* The column header is gone, so the bare count needs its own unit. */
+  .item-table td:nth-child(6)::after {
+    content: " img";
+  }
+
+  /* One failure bar down the card, not one per cell. */
+  .item-table tr.failed td {
+    box-shadow: none;
+  }
+
+  .item-table tr.failed {
+    box-shadow: inset 3px 0 0 var(--error);
+  }
+}
+
+/* §14.5 — the SOLD rubber stamp is the one bold element in studio. It presses
+   onto rows the seller just marked sold, then the row settles. Everything around
+   it stays quiet: no decorative radii, no gradients, no stacked shadows. */
+
+.stamp {
+  display: inline-block;
+  padding: 0.05em 0.35em;
+  border: 2px solid var(--stamp);
+  color: var(--stamp);
+  font-family: var(--font-head);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transform: rotate(-4deg);
+  /* Uneven ink: the edge breaks up where a real stamp lifts off the paper. */
+  mask-image: radial-gradient(circle at 30% 40%, #000 78%, transparent 100%);
+}
+
+.stamp-press {
+  animation: stamp-press 260ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+@keyframes stamp-press {
+  0% {
+    transform: rotate(-4deg) scale(1.6);
+    opacity: 0;
+  }
+  60% {
+    transform: rotate(-4deg) scale(0.96);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(-4deg) scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stamp-press {
+    animation: none;
+  }
+}
+
+.bulk-toolbar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: 0.625rem 1rem;
+  background: var(--carbon-pale);
+  border-top: 1px solid var(--carbon-rule);
+}
+
+.bulk-toolbar .count {
+  font-family: var(--font-data);
+  color: var(--ink-soft);
+}
+
+.bulk-toolbar button {
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  padding: 0.3rem 0.7rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--ink);
+  cursor: pointer;
+}
+
+.bulk-toolbar button:hover {
+  color: var(--carbon-pale);
+  background: var(--ink);
+}
+
+tr.failed td {
+  box-shadow: inset 3px 0 0 var(--error);
+}
