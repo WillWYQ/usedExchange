@@ -318,9 +318,27 @@ describe("GET image routes", () => {
   });
 
   it("rejects a traversal filename", async () => {
+    // Asserts *which* layer refused, not just the status: a bare 400 would
+    // still pass with the containment guard in handleImageGet deleted (see
+    // that function's comment on why `rel !== filename` alone is
+    // tautological for a plain "../" payload). Mirrors the discipline in
+    // resolveItemDir's own traversal tests above (asserting
+    // /kebab-case|escapes content\/items/).
+    //
+    // There is no second case here exercising the containment layer directly:
+    // IMAGE_FILENAME_RE requires the first character to be alphanumeric and
+    // forbids "/" anywhere, so any string that satisfies the allowlist is
+    // necessarily a single path component that is never exactly ".." — on
+    // POSIX, path.join/path.relative can only resolve outside `dir` via a
+    // literal ".." path *segment*, which no allowlist-passing filename can
+    // form. Verified empirically (see task-2-report.md, fix round 1) rather
+    // than assumed.
     await seedItem("electronics/desk-lamp");
     const res = await get("/api/items/electronics/desk-lamp/images/..%2Fitem.json");
     expect(res.status).toBe(400);
+    expect(asJson(res).body).toMatchObject({
+      error: expect.stringContaining("not an image filename"),
+    });
   });
 
   it("rejects a bad category slug", async () => {

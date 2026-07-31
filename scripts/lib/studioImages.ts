@@ -5,6 +5,7 @@
 // places is how the two copies drift apart.
 
 import fsPromises from "fs/promises";
+import type { Dirent } from "fs";
 import path from "path";
 
 // Photo names are not slugs: they carry an extension, and cameras produce
@@ -51,14 +52,18 @@ export function sniffImageType(bytes: Buffer): ImageKind | null {
  * studio must sort identically or the seller's preview lies about the order.
  */
 export async function listImageFiles(dir: string): Promise<string[]> {
-  let entries: string[];
+  let entries: Dirent[];
   try {
-    entries = await fsPromises.readdir(dir);
+    // withFileTypes so a directory that happens to be named like an image
+    // (e.g. "cover.jpg") is excluded rather than listed — matching
+    // studioApi.ts's countImages, which already filters on isFile().
+    entries = await fsPromises.readdir(dir, { withFileTypes: true });
   } catch {
     return [];
   }
   return entries
-    .filter((name) => isValidImageFilename(name))
+    .filter((entry) => entry.isFile() && isValidImageFilename(entry.name))
+    .map((entry) => entry.name)
     .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 }
 

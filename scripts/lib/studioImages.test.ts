@@ -76,4 +76,14 @@ describe("listImageFiles", () => {
   it("returns an empty list for a directory that does not exist", async () => {
     expect(await listImageFiles(path.join(dir, "nope"))).toEqual([]);
   });
+
+  it("excludes directories, even ones with an image-like name", async () => {
+    // A directory literally named "cover.jpg" would previously slip through
+    // readdir() without withFileTypes and be listed as if it were a photo,
+    // disagreeing with countImages (which already filters on isFile()) and
+    // producing a FileResponse the middleware can't stream (EISDIR on read).
+    await fs.mkdir(path.join(dir, "cover.jpg"));
+    await fs.writeFile(path.join(dir, "01-front.jpg"), PNG);
+    expect(await listImageFiles(dir)).toEqual(["01-front.jpg"]);
+  });
 });

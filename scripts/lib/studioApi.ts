@@ -255,8 +255,13 @@ async function handleImageGet(
 
   // Containment again, not because the name could contain a separator — the
   // allowlist forbids that — but because this is the layer that would still
-  // hold if the allowlist is ever relaxed.
-  if (path.relative(dir, filePath) !== filename) {
+  // hold if the allowlist is ever relaxed. `rel !== filename` alone is
+  // tautological for a plain "../" payload: path.join normalizes it away
+  // before path.relative re-derives it, so the two strings round-trip back to
+  // equal. rel.startsWith("..") and path.isAbsolute(rel) are what actually
+  // catch it — the same shape resolveItemDir uses above.
+  const rel = path.relative(dir, filePath);
+  if (rel !== filename || rel.startsWith("..") || path.isAbsolute(rel)) {
     throw new StudioError(400, "resolved path escapes the item folder");
   }
 
