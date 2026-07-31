@@ -43,6 +43,15 @@ const config = [
       "no-console": "off",
     },
   },
+  {
+    // studio/ is a plain Vite + React app, not Next.js — it has no next/image
+    // component to switch to, so the Next-specific image-optimization rule
+    // does not apply to its thumbnail <img> tags.
+    files: ["studio/**/*.tsx"],
+    rules: {
+      "@next/next/no-img-element": "off",
+    },
+  },
 ];
 
 export default config;
