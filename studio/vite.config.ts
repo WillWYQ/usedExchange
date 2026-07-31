@@ -152,10 +152,12 @@ function studioApiPlugin(): Plugin {
                   // between events: "close" only sets a flag the loop checks
                   // between iterations, so calling return() directly is what
                   // actually asks the generator to stop now rather than after
-                  // its next yield. Task 5's sync mutex is released in
-                  // exactly that generator's `finally`, so skipping this
-                  // would let an abandoned request hold the lock for the
-                  // rest of the session.
+                  // its next yield. This does NOT release the sync mutex —
+                  // that is bound via .finally() to the sync work itself in
+                  // studioSync.ts's streamImageSync, not to this generator's
+                  // lifetime (see the comment there), so an abandoned request
+                  // stops driving this loop but the mutex correctly stays
+                  // held until the real work on disk actually finishes.
                   await iterator.return?.();
                   res.off("close", onClientClosed);
                   res.off("error", onClientClosed);

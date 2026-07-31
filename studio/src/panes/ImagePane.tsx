@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { deleteImage, fetchImages, reorderImages, uploadImage, type StudioItem } from "../api";
+import {
+  deleteImage,
+  fetchImages,
+  reorderImages,
+  uploadImage,
+  type ImageEntry,
+  type StudioItem,
+} from "../api";
 
 export function ImagePane({
   item,
@@ -10,7 +17,7 @@ export function ImagePane({
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const [files, setFiles] = useState<string[]>([]);
+  const [files, setFiles] = useState<ImageEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -60,7 +67,13 @@ export function ImagePane({
         try {
           setFiles(await uploadImage(item.id, file));
         } catch (err: unknown) {
-          failed.push(`${file.name} (${err instanceof Error ? err.message : String(err)})`);
+          const msg = err instanceof Error ? err.message : String(err);
+          // The server's error message already names the file (it is built
+          // from the same filename the browser just sent), so prefixing
+          // file.name again would double it up: `photo.jpg ("photo.jpg" is
+          // not an image filename…)`. Only prefix when the message doesn't
+          // already say which file it's about.
+          failed.push(msg.includes(file.name) ? msg : `${file.name}: ${msg}`);
         }
       }
       if (failed.length > 0) throw new Error(`Could not add ${failed.join(", ")}`);
@@ -75,7 +88,7 @@ export function ImagePane({
     next.splice(index, 0, moved);
     setDragFrom(null);
     await run(async () => {
-      setFiles(await reorderImages(item.id, next));
+      setFiles(await reorderImages(item.id, next.map((entry) => entry.name)));
     });
   }
 
@@ -100,6 +113,12 @@ export function ImagePane({
         onDrop={(e) => {
           e.preventDefault();
           setDragOver(false);
+          // A second drop while a batch is still in flight would start a
+          // concurrent run(): the two setFiles sequences interleave, and
+          // whichever finally() runs first clears `busy` for both. Ignore
+          // the drop instead — the dropzone already looks busy (the "Choose
+          // photos" input is disabled), this just makes the drop match.
+          if (busy) return;
           if (e.dataTransfer.files.length > 0) void addFiles(e.dataTransfer.files);
         }}
       >
@@ -122,23 +141,41 @@ export function ImagePane({
       {files.length === 0 && <p>No photos yet. The listing needs at least one.</p>}
 
       <ol className="thumb-grid">
-        {files.map((file, index) => (
+        {files.map((entry, index) => (
           <li
-            key={file}
-            className="thumb"
-            draggable
+            key={entry.name}
+            className={entry.editable ? "thumb" : "thumb thumb-readonly"}
+            draggable={entry.editable}
             onDragStart={() => setDragFrom(index)}
+            onDragEnd={() => setDragFrom(null)}
             onDragOver={(e) => e.preventDefault()}
-            onDrop={() => void drop(index)}
+            onDrop={(e) => {
+              e.preventDefault();
+              void drop(index);
+            }}
           >
-            <img src={`/api/items/${item.id}/images/${encodeURIComponent(file)}`} alt="" />
-            <span className="thumb-name">{file}</span>
+            {entry.editable ? (
+              <img src={`/api/items/${item.id}/images/${encodeURIComponent(entry.name)}`} alt="" />
+            ) : (
+              <div className="thumb-placeholder" aria-hidden="true">
+                No preview
+              </div>
+            )}
+            <span className="thumb-name">{entry.name}</span>
+            {!entry.editable && (
+              <p className="thumb-note">
+                Studio can&apos;t work with this file&apos;s name (spaces, parentheses, or similar
+                characters) — the site will still publish it. Rename it to letters, digits, and
+                hyphens to manage it here.
+              </p>
+            )}
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || !entry.editable}
+              title={entry.editable ? undefined : "Rename this file before studio can remove it"}
               onClick={() =>
                 void run(async () => {
-                  setFiles(await deleteImage(item.id, file));
+                  setFiles(await deleteImage(item.id, entry.name));
                 })
               }
             >

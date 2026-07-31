@@ -24,14 +24,17 @@ import { getSyncRunner, isSyncRunning, streamImageSync } from "./studioSync";
 import {
   contentTypeFor,
   deleteImage,
+  IMAGE_EXTENSIONS,
   isValidImageFilename,
   listImageFiles,
   reorderImages,
+  sanitizeUploadFilename,
   sniffImageType,
   writeImage,
+  type ImageEntry,
 } from "./studioImages";
 
-const IMAGE_EXT = /\.(jpg|jpeg|png|webp|gif)$/i;
+export type { ImageEntry };
 
 export type StudioRequest = {
   method: string;
@@ -101,12 +104,11 @@ export function resolveItemDir(projectRoot: string, category: string, name: stri
 }
 
 async function countImages(dir: string): Promise<number> {
-  try {
-    const entries = await fsPromises.readdir(dir, { withFileTypes: true });
-    return entries.filter((e) => e.isFile() && IMAGE_EXT.test(e.name)).length;
-  } catch {
-    return 0;
-  }
+  // Delegates to listImageFiles rather than re-implementing the same readdir
+  // + filter: the table's IMG column and the image pane's grid must count
+  // the same thing, or the seller sees a number that disagrees with what
+  // they can see and manage — the exact bug this shared function closes.
+  return (await listImageFiles(dir)).length;
 }
 
 export async function listStudioItems(projectRoot: string): Promise<StudioItem[]> {
@@ -262,10 +264,31 @@ async function handleImageUpload(
 ): Promise<StudioResponse> {
   const { filename, contentBase64 } = parseJsonBody(req.body, uploadBodySchema);
 
-  if (!isValidImageFilename(filename)) {
+  // Normalise before validating: a macOS screenshot ("Screenshot 2026-07-30
+  // at 10.00.00.png") or a browser-downloaded duplicate ("photo (1).jpg") is
+  // exactly how a non-technical seller acquires photos, and neither is
+  // malformed — they just fall outside the character allowlist. Sanitising
+  // means the seller never has to rename anything themselves; writeImage's
+  // wx collision loop below already handles the sanitised name colliding
+  // with an existing file.
+  const sanitized = sanitizeUploadFilename(filename);
+
+  if (!isValidImageFilename(sanitized)) {
+    // Two genuinely different problems get two different messages: an
+    // unsupported extension is a format problem (the seller needs to
+    // convert or re-export the photo); anything else survives sanitising
+    // with no usable characters at all before the extension (e.g. "??.jpg"),
+    // which is not a format problem and must not be reported as one.
+    const ext = path.extname(sanitized).slice(1).toLowerCase();
+    if (!(IMAGE_EXTENSIONS as readonly string[]).includes(ext)) {
+      throw new StudioError(
+        400,
+        `"${filename}" is not an image filename — use .jpg, .png, .webp or .gif`,
+      );
+    }
     throw new StudioError(
       400,
-      `"${filename}" is not an image filename — use .jpg, .png, .webp or .gif`,
+      `"${filename}" has no usable filename left after removing spaces and unsupported characters — rename it to start with a letter or digit`,
     );
   }
 
@@ -278,11 +301,11 @@ async function handleImageUpload(
   // decide. A .jpg that is really an HTML document never reaches content/.
   const kind = sniffImageType(bytes);
   if (kind === null) {
-    throw new StudioError(400, `${filename} is not a JPEG, PNG, WebP or GIF`);
+    throw new StudioError(400, `"${filename}" is not a JPEG, PNG, WebP or GIF`);
   }
 
   const dir = resolveItemDir(req.projectRoot, category, item);
-  const written = await writeImage(dir, filename, bytes);
+  const written = await writeImage(dir, sanitized, bytes);
 
   return { status: 201, body: { file: written, files: await listImageFiles(dir) } };
 }
@@ -346,12 +369,13 @@ async function handleImageReorder(
 ): Promise<StudioResponse> {
   const { order } = parseJsonBody(req.body, reorderBodySchema);
 
-  for (const name of order) {
-    if (!isValidImageFilename(name)) {
-      throw new StudioError(400, `not an image filename: "${name}"`);
-    }
-  }
-
+  // No per-name allowlist check here on purpose: `order` must be able to
+  // name a non-editable file (one listImageFiles reports but the allowlist
+  // would reject) so it is never silently dropped from the folder's
+  // accounting — reorderImages' own sameSet check, matched against a real
+  // directory listing, is the actual gate, and it refuses (rather than
+  // renames) any file the allowlist would reject. See studioImages.ts's
+  // reorderImages doc comment.
   const dir = resolveItemDir(req.projectRoot, category, item);
   try {
     return { status: 200, body: { files: await reorderImages(dir, order) } };

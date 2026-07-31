@@ -21,9 +21,16 @@ export function SyncBar({ onFinished }: { onFinished: () => void }) {
           );
         } else if (evt.event === "done") {
           const d = evt.data;
+          // Whole premise of studio is not leaving pnpm studio: when photos
+          // fail, name which ones and why right here, not just a count the
+          // seller then has to go find the terminal to explain.
+          const failureDetail =
+            d.failures.length > 0
+              ? "\n" + d.failures.map((f) => `${f.manifestKey}: ${f.error}`).join("\n")
+              : "";
           setStatus(
             `Pushed ${d.uploaded}, skipped ${d.skipped}` +
-              (d.failures.length > 0 ? `, ${d.failures.length} failed` : ""),
+              (d.failures.length > 0 ? `, ${d.failures.length} failed${failureDetail}` : ""),
           );
           onFinished();
         } else {
@@ -45,7 +52,11 @@ export function SyncBar({ onFinished }: { onFinished: () => void }) {
         {running ? "Pushing to CDN…" : "Push photos to CDN"}
       </button>
       {status !== null && <span className="sync-status">{status}</span>}
-      {error !== null && <span role="alert">{error}</span>}
+      {error !== null && (
+        <span className="sync-error" role="alert">
+          {error}
+        </span>
+      )}
     </div>
   );
 }

@@ -2,11 +2,13 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
+import crypto from "crypto";
 import {
   deleteImage,
   isValidImageFilename,
   listImageFiles,
   reorderImages,
+  sanitizeUploadFilename,
   sniffImageType,
   writeImage,
 } from "./studioImages";
@@ -21,6 +23,13 @@ const WEBP = Buffer.concat([
   Buffer.from("24000000", "hex"),
   Buffer.from("WEBPVP8 "),
 ]);
+
+// Most of these tests only care about names, not the editable flag — every
+// name they seed is already allowlist-valid, so this documents that instead
+// of repeating `{ name, editable: true }` at every call site.
+function editableEntries(names: string[]): Array<{ name: string; editable: boolean }> {
+  return names.map((name) => ({ name, editable: true }));
+}
 
 let dir: string;
 
@@ -53,6 +62,35 @@ describe("isValidImageFilename", () => {
     expect(isValidImageFilename("notes.txt")).toBe(false);
     expect(isValidImageFilename("item.json")).toBe(false);
   });
+
+  it("accepts a legitimate double dot that is not a traversal segment", () => {
+    // The regex alone (no bolted-on "!name.includes('..')") is what decides
+    // this: "photo..jpg" is an ordinary filename, not "../" — the leading
+    // character requirement and the ban on "/" already close the actual
+    // traversal hole, as the "rejects traversal and separators" case above
+    // confirms.
+    expect(isValidImageFilename("photo..jpg")).toBe(true);
+  });
+});
+
+describe("sanitizeUploadFilename", () => {
+  it("replaces spaces and disallowed characters with a hyphen and collapses runs", () => {
+    expect(sanitizeUploadFilename("photo (1).jpg")).toBe("photo-1-.jpg");
+  });
+
+  it("strips a leading dot or hyphen but keeps the extension", () => {
+    expect(sanitizeUploadFilename("-cover.png")).toBe("cover.png");
+    expect(sanitizeUploadFilename("..secret.png")).toBe("secret.png");
+  });
+
+  it("leaves an already-valid name untouched", () => {
+    expect(sanitizeUploadFilename("01-front.jpg")).toBe("01-front.jpg");
+  });
+
+  it("produces a name that passes isValidImageFilename for a macOS screenshot", () => {
+    const sanitized = sanitizeUploadFilename("Screenshot 2026-07-30 at 10.00.00.png");
+    expect(isValidImageFilename(sanitized)).toBe(true);
+  });
 });
 
 describe("sniffImageType", () => {
@@ -77,7 +115,9 @@ describe("listImageFiles", () => {
     for (const name of ["02-Side.JPG", "01-front.jpg", "10-back.png", "notes.txt"]) {
       await fs.writeFile(path.join(dir, name), PNG);
     }
-    expect(await listImageFiles(dir)).toEqual(["01-front.jpg", "02-Side.JPG", "10-back.png"]);
+    expect(await listImageFiles(dir)).toEqual(
+      editableEntries(["01-front.jpg", "02-Side.JPG", "10-back.png"]),
+    );
   });
 
   it("returns an empty list for a directory that does not exist", async () => {
@@ -91,7 +131,21 @@ describe("listImageFiles", () => {
     // producing a FileResponse the middleware can't stream (EISDIR on read).
     await fs.mkdir(path.join(dir, "cover.jpg"));
     await fs.writeFile(path.join(dir, "01-front.jpg"), PNG);
-    expect(await listImageFiles(dir)).toEqual(["01-front.jpg"]);
+    expect(await listImageFiles(dir)).toEqual(editableEntries(["01-front.jpg"]));
+  });
+
+  it("lists a file the site will ship but studio cannot rename, marked not editable", async () => {
+    // A seller-placed file with characters outside studio's write allowlist
+    // (spaces) still has the right extension, so the published site ships
+    // it (lib/content/loader.ts's IMAGE_EXT is extension-only). Studio must
+    // show it too, or the pane's count silently disagrees with the site.
+    await writeImage(dir, "apple.jpg", JPG);
+    await fs.writeFile(path.join(dir, "Screenshot 2026-07-30 at 10.00.00.png"), PNG);
+
+    expect(await listImageFiles(dir)).toEqual([
+      { name: "apple.jpg", editable: true },
+      { name: "Screenshot 2026-07-30 at 10.00.00.png", editable: false },
+    ]);
   });
 });
 
@@ -126,7 +180,7 @@ describe("deleteImage", () => {
     await writeImage(dir, "01-front.png", PNG);
     await writeImage(dir, "02-side.png", PNG);
 
-    expect(await deleteImage(dir, "01-front.png")).toEqual(["02-side.png"]);
+    expect(await deleteImage(dir, "01-front.png")).toEqual(editableEntries(["02-side.png"]));
   });
 
   it("throws when the file is not there", async () => {
@@ -142,7 +196,7 @@ describe("reorderImages", () => {
 
     const files = await reorderImages(dir, ["cherry.png", "apple.png", "banana.png"]);
 
-    expect(files).toEqual(["01-cherry.png", "02-apple.png", "03-banana.png"]);
+    expect(files).toEqual(editableEntries(["01-cherry.png", "02-apple.png", "03-banana.png"]));
     // listImageFiles sorts the same way the site does, so this IS the order
     // the published page will show.
     expect(await listImageFiles(dir)).toEqual(files);
@@ -154,7 +208,7 @@ describe("reorderImages", () => {
 
     const files = await reorderImages(dir, ["02-banana.png", "01-apple.png"]);
 
-    expect(files).toEqual(["01-banana.png", "02-apple.png"]);
+    expect(files).toEqual(editableEntries(["01-banana.png", "02-apple.png"]));
   });
 
   it("survives an order that swaps two names into each other's slots", async () => {
@@ -167,7 +221,7 @@ describe("reorderImages", () => {
     // name) is covered separately below.
     const files = await reorderImages(dir, ["02-banana.png", "01-apple.png"]);
 
-    expect(files).toEqual(["01-banana.png", "02-apple.png"]);
+    expect(files).toEqual(editableEntries(["01-banana.png", "02-apple.png"]));
     expect(await fs.readdir(dir)).toHaveLength(2);
   });
 
@@ -183,7 +237,7 @@ describe("reorderImages", () => {
 
     const files = await reorderImages(dir, ["02-photo.jpg", "01-photo.jpg"]);
 
-    expect(files).toEqual(["01-photo.jpg", "02-photo.jpg"]);
+    expect(files).toEqual(editableEntries(["01-photo.jpg", "02-photo.jpg"]));
     // order[0] ("02-photo.jpg", PNG bytes) becomes targets[0] ("01-photo.jpg");
     // order[1] ("01-photo.jpg", JPG bytes) becomes targets[1] ("02-photo.jpg").
     expect(await fs.readFile(path.join(dir, "01-photo.jpg"))).toEqual(PNG);
@@ -206,16 +260,63 @@ describe("reorderImages", () => {
 
     const files = await reorderImages(dir, names);
 
-    expect(files[0]).toBe("01-photo0.png");
-    expect(files[9]).toBe("10-photo9.png");
+    expect(files[0]).toEqual({ name: "01-photo0.png", editable: true });
+    expect(files[9]).toEqual({ name: "10-photo9.png", editable: true });
     expect(await listImageFiles(dir)).toEqual(files);
   });
 
-  it("refuses to run when wreckage from an interrupted reorder is already present", async () => {
+  describe("a non-editable file present in the folder", () => {
+    it("is included in the required order but never renamed", async () => {
+      await writeImage(dir, "apple.png", PNG);
+      await writeImage(dir, "banana.png", PNG);
+      await fs.writeFile(path.join(dir, "cherry pie.png"), PNG);
+
+      // Current alphabetical order is apple, banana, cherry pie — the
+      // requested order leaves "cherry pie.png" at the same index (2), so
+      // the reorder is allowed even though it cannot be renamed.
+      const files = await reorderImages(dir, ["banana.png", "apple.png", "cherry pie.png"]);
+
+      expect(files).toEqual([
+        { name: "01-banana.png", editable: true },
+        { name: "02-apple.png", editable: true },
+        { name: "cherry pie.png", editable: false },
+      ]);
+      // Untouched on disk — no numeric prefix, no rename attempted.
+      expect(await fs.readdir(dir)).toContain("cherry pie.png");
+    });
+
+    it("refuses the whole operation if the requested order would move it", async () => {
+      await writeImage(dir, "apple.png", PNG);
+      await writeImage(dir, "banana.png", PNG);
+      await fs.writeFile(path.join(dir, "cherry pie.png"), PNG);
+
+      // "cherry pie.png" currently sits at index 2 (alphabetical: apple,
+      // banana, cherry pie); this order asks for it at index 0.
+      await expect(
+        reorderImages(dir, ["cherry pie.png", "apple.png", "banana.png"]),
+      ).rejects.toThrow(/cherry pie\.png/);
+
+      // Nothing moved: refusing must happen before any rename in this run.
+      expect((await fs.readdir(dir)).sort()).toEqual([
+        "apple.png",
+        "banana.png",
+        "cherry pie.png",
+      ]);
+    });
+
+    it("omitting it from the order is still refused as an incomplete order, not silently dropped", async () => {
+      await writeImage(dir, "apple.png", PNG);
+      await fs.writeFile(path.join(dir, "cherry pie.png"), PNG);
+
+      await expect(reorderImages(dir, ["apple.png"])).rejects.toThrow(/every image/);
+    });
+  });
+
+  it("refuses to run when a leftover temp file cannot be identified", async () => {
     await writeImage(dir, "01-apple.png", PNG);
     await writeImage(dir, "02-banana.png", PNG);
-    // Simulates a process that died between reorderImages' two passes on a
-    // previous run: a parked file left behind under the temp-name pattern.
+    // Predates the recovery scheme: no embedded original filename to
+    // recover to, so studio cannot safely rename it back on its own.
     await fs.writeFile(path.join(dir, ".studio-reorder-deadrun-0.tmp"), PNG);
 
     await expect(reorderImages(dir, ["02-banana.png", "01-apple.png"])).rejects.toThrow(
@@ -228,5 +329,35 @@ describe("reorderImages", () => {
       "01-apple.png",
       "02-banana.png",
     ]);
+  });
+
+  it("recovers files parked by an interrupted reorder, then completes the new one", async () => {
+    await writeImage(dir, "banana.png", PNG);
+    // Simulates a process that died between reorderImages' two passes on a
+    // previous run: "apple.png" is parked under its embedded original name,
+    // never having reached its target. listImageFiles can't see it (leading
+    // dot), so before recovery the folder looks like it holds only one photo.
+    const parkedName = `.studio-reorder-${crypto.randomUUID()}-apple.png.tmp`;
+    await fs.writeFile(path.join(dir, parkedName), PNG);
+    expect(await listImageFiles(dir)).toEqual(editableEntries(["banana.png"]));
+
+    const files = await reorderImages(dir, ["apple.png", "banana.png"]);
+
+    expect(files).toEqual(editableEntries(["01-apple.png", "02-banana.png"]));
+    const onDisk = await fs.readdir(dir);
+    expect(onDisk).not.toContain(parkedName);
+    expect(onDisk.sort()).toEqual(["01-apple.png", "02-banana.png"]);
+  });
+
+  it("refuses to recover a leftover if its original name would collide with an existing file", async () => {
+    await writeImage(dir, "apple.png", PNG);
+    const parkedName = `.studio-reorder-${crypto.randomUUID()}-apple.png.tmp`;
+    await fs.writeFile(path.join(dir, parkedName), JPG);
+
+    await expect(reorderImages(dir, ["apple.png"])).rejects.toThrow(/interrupted reorder/);
+
+    // Neither file touched — refusing must not lose either copy.
+    expect(await fs.readFile(path.join(dir, "apple.png"))).toEqual(PNG);
+    expect(await fs.readFile(path.join(dir, parkedName))).toEqual(JPG);
   });
 });
