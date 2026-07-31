@@ -20,7 +20,13 @@ import { z } from "zod";
 import { loadAllItemsRaw } from "../../lib/content/loader";
 import { isValidSlug } from "../../lib/utils/slug";
 import { applyFieldEdits, readItemField } from "./itemEdit";
-import { contentTypeFor, isValidImageFilename, listImageFiles } from "./studioImages";
+import {
+  contentTypeFor,
+  isValidImageFilename,
+  listImageFiles,
+  sniffImageType,
+  writeImage,
+} from "./studioImages";
 
 const IMAGE_EXT = /\.(jpg|jpeg|png|webp|gif)$/i;
 
@@ -241,6 +247,43 @@ async function handleImageList(
   return { status: 200, body: { files: await listImageFiles(dir) } };
 }
 
+const uploadBodySchema = z.object({
+  filename: z.string().min(1),
+  contentBase64: z.string().min(1),
+});
+
+async function handleImageUpload(
+  req: StudioRequest,
+  category: string,
+  item: string,
+): Promise<StudioResponse> {
+  const { filename, contentBase64 } = parseJsonBody(req.body, uploadBodySchema);
+
+  if (!isValidImageFilename(filename)) {
+    throw new StudioError(
+      400,
+      `"${filename}" is not an image filename — use .jpg, .png, .webp or .gif`,
+    );
+  }
+
+  const bytes = Buffer.from(contentBase64, "base64");
+  if (bytes.length === 0) {
+    throw new StudioError(400, "uploaded file is empty");
+  }
+
+  // The extension is whatever the browser sent; the header bytes are what
+  // decide. A .jpg that is really an HTML document never reaches content/.
+  const kind = sniffImageType(bytes);
+  if (kind === null) {
+    throw new StudioError(400, `${filename} is not a JPEG, PNG, WebP or GIF`);
+  }
+
+  const dir = resolveItemDir(req.projectRoot, category, item);
+  const written = await writeImage(dir, filename, bytes);
+
+  return { status: 201, body: { file: written, files: await listImageFiles(dir) } };
+}
+
 async function handleImageGet(
   req: StudioRequest,
   category: string,
@@ -329,6 +372,9 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
         return filename === undefined
           ? await handleImageList(req, category, item)
           : await handleImageGet(req, category, item, filename);
+      }
+      if (req.method === "POST" && filename === undefined) {
+        return await handleImageUpload(req, category, item);
       }
       return { status: 405, body: { error: `method not allowed: ${req.method}` } };
     }

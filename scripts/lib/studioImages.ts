@@ -75,3 +75,34 @@ export function contentTypeFor(filename: string): string {
   if (ext === "gif") return "image/gif";
   return "image/jpeg";
 }
+
+/**
+ * Write photo bytes into an item folder without ever clobbering an existing
+ * file: a seller who drops two photos that happen to share a camera filename
+ * must end up with both. Returns the filename actually used.
+ */
+export async function writeImage(
+  dir: string,
+  filename: string,
+  bytes: Buffer,
+): Promise<string> {
+  await fsPromises.mkdir(dir, { recursive: true });
+
+  const ext = path.extname(filename);
+  const base = filename.slice(0, filename.length - ext.length);
+
+  let candidate = filename;
+  let suffix = 1;
+  for (;;) {
+    try {
+      // wx fails if the path exists, which makes the check and the write one
+      // atomic step — a stat-then-write pair can lose a race with itself.
+      await fsPromises.writeFile(path.join(dir, candidate), bytes, { flag: "wx" });
+      return candidate;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      candidate = `${base}-${suffix}${ext}`;
+      suffix++;
+    }
+  }
+}

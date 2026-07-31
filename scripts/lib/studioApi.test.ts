@@ -12,6 +12,7 @@ import {
   isSseResponse,
   type JsonResponse,
 } from "./studioApi";
+import { listImageFiles } from "./studioImages";
 
 // All routes exercised in this file return the JSON variant of StudioResponse;
 // this narrows the union so `.body` type-checks without re-asserting at every
@@ -355,6 +356,79 @@ describe("GET image routes", () => {
       projectRoot: sandbox,
     });
     expect(res.status).toBe(405);
+  });
+});
+
+function postImage(id: string, filename: string, bytes: Buffer) {
+  return handleStudioRequest({
+    method: "POST",
+    url: `/api/items/${id}/images`,
+    body: Buffer.from(
+      JSON.stringify({ filename, contentBase64: bytes.toString("base64") }),
+    ),
+    projectRoot: sandbox,
+  });
+}
+
+describe("POST image upload", () => {
+  beforeEach(async () => {
+    sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "studio-api-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(sandbox, { recursive: true, force: true });
+  });
+
+  it("writes the photo and returns the new listing", async () => {
+    await seedItem("electronics/desk-lamp");
+
+    const res = await postImage("electronics/desk-lamp", "01-front.png", PNG_BYTES);
+
+    expect(res.status).toBe(201);
+    expect(asJson(res).body).toEqual({ file: "01-front.png", files: ["01-front.png"] });
+    const onDisk = await fs.readFile(
+      path.join(sandbox, "content", "items", "electronics", "desk-lamp", "01-front.png"),
+    );
+    expect(onDisk).toEqual(PNG_BYTES);
+  });
+
+  it("rejects a file whose bytes are not an image, whatever the extension says", async () => {
+    await seedItem("electronics/desk-lamp");
+
+    const res = await postImage(
+      "electronics/desk-lamp",
+      "evil.jpg",
+      Buffer.from("<!doctype html><script>alert(1)</script>"),
+    );
+
+    expect(res.status).toBe(400);
+    expect(await listImageFiles(
+      path.join(sandbox, "content", "items", "electronics", "desk-lamp"),
+    )).toEqual([]);
+  });
+
+  it("rejects a traversal filename", async () => {
+    await seedItem("electronics/desk-lamp");
+    const res = await postImage("electronics/desk-lamp", "../item.json", PNG_BYTES);
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an empty upload", async () => {
+    await seedItem("electronics/desk-lamp");
+    const res = await postImage("electronics/desk-lamp", "01-front.png", Buffer.alloc(0));
+    expect(res.status).toBe(400);
+  });
+
+  it("keeps both photos when the filename collides", async () => {
+    await seedItem("electronics/desk-lamp");
+    await postImage("electronics/desk-lamp", "01-front.png", PNG_BYTES);
+
+    const res = await postImage("electronics/desk-lamp", "01-front.png", PNG_BYTES);
+
+    expect(res.status).toBe(201);
+    const body = asJson(res).body as { file: string; files: string[] };
+    expect(body.file).toBe("01-front-1.png");
+    expect(body.files).toHaveLength(2);
   });
 });
 

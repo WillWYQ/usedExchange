@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
-import { isValidImageFilename, listImageFiles, sniffImageType } from "./studioImages";
+import { isValidImageFilename, listImageFiles, sniffImageType, writeImage } from "./studioImages";
 
 // Real headers, not invented bytes — a sniffer that passes on fabricated input
 // proves nothing.
@@ -85,5 +85,31 @@ describe("listImageFiles", () => {
     await fs.mkdir(path.join(dir, "cover.jpg"));
     await fs.writeFile(path.join(dir, "01-front.jpg"), PNG);
     expect(await listImageFiles(dir)).toEqual(["01-front.jpg"]);
+  });
+});
+
+describe("writeImage", () => {
+  it("writes the bytes under the given name", async () => {
+    const written = await writeImage(dir, "01-front.png", PNG);
+    expect(written).toBe("01-front.png");
+    expect(await fs.readFile(path.join(dir, "01-front.png"))).toEqual(PNG);
+  });
+
+  it("does not overwrite an existing photo", async () => {
+    await writeImage(dir, "01-front.png", PNG);
+    const second = await writeImage(dir, "01-front.png", JPG);
+
+    expect(second).not.toBe("01-front.png");
+    expect(second).toMatch(/^01-front-\d+\.png$/);
+    // The original is untouched — a seller who drags the same filename twice
+    // must not silently lose the first photo.
+    expect(await fs.readFile(path.join(dir, "01-front.png"))).toEqual(PNG);
+    expect(await fs.readFile(path.join(dir, second))).toEqual(JPG);
+  });
+
+  it("creates the item folder when it does not exist yet", async () => {
+    const fresh = path.join(dir, "new-item");
+    await writeImage(fresh, "01-front.png", PNG);
+    expect(await fs.readFile(path.join(fresh, "01-front.png"))).toEqual(PNG);
   });
 });
