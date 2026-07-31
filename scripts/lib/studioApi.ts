@@ -277,9 +277,20 @@ async function handleImageUpload(
     // Two genuinely different problems get two different messages: an
     // unsupported extension is a format problem (the seller needs to
     // convert or re-export the photo); anything else survives sanitising
-    // with no usable characters at all before the extension (e.g. "??.jpg"),
-    // which is not a format problem and must not be reported as one.
-    const ext = path.extname(sanitized).slice(1).toLowerCase();
+    // with no usable characters at all before the extension (e.g. "??.jpg",
+    // "照片.jpg"), which is not a format problem and must not be reported as
+    // one.
+    //
+    // The extension check runs against the ORIGINAL filename, not the
+    // sanitised one: sanitising a name with no usable base characters
+    // collapses it to just the extension (e.g. ".jpg"), and Node's
+    // path.extname treats a string that is *only* an extension as a dotfile
+    // with no extension at all (path.extname(".jpg") === "") — checking the
+    // sanitised name there would misroute a perfectly good extension into
+    // this branch and tell the seller their JPEG isn't a JPEG. The original
+    // filename's base was never emptied by sanitising, so it doesn't have
+    // this problem.
+    const ext = path.extname(filename).slice(1).toLowerCase();
     if (!(IMAGE_EXTENSIONS as readonly string[]).includes(ext)) {
       throw new StudioError(
         400,

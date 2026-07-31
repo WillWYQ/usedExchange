@@ -30,7 +30,17 @@ export async function fetchItems(): Promise<StudioItem[]> {
   if (!res.ok) {
     throw new Error(errorMessage(body, `GET /api/items failed with ${res.status} ${res.statusText}`));
   }
-  return (body?.items as StudioItem[] | undefined) ?? [];
+  // A 200 with no parseable `items` array is not "no items" — it's a
+  // malformed response (a wiring bug, or a body that parsed as JSON but
+  // wasn't the shape we expect). Falling back to [] here would render as an
+  // empty table with no error, which looks identical to a seller's first
+  // run with zero listings and gives no signal that anything is wrong.
+  if (!Array.isArray(body?.items)) {
+    throw new Error(
+      `GET /api/items returned an unreadable response (${res.status} ${res.statusText})`,
+    );
+  }
+  return body.items as StudioItem[];
 }
 
 export async function bulkStatus(ids: string[], status: string): Promise<BulkStatusResult> {

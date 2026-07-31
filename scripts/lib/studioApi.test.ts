@@ -454,6 +454,49 @@ describe("POST image upload", () => {
     });
   });
 
+  it("sanitises a leading underscore and uploads successfully", async () => {
+    // "_cover.jpg" has a perfectly usable base ("cover") and a valid
+    // extension; only the leading underscore ever made it invalid. Must not
+    // be told to fix a "format" that was never broken.
+    await seedItem("electronics/desk-lamp");
+
+    const res = await postImage("electronics/desk-lamp", "_cover.jpg", PNG_BYTES);
+
+    expect(res.status).toBe(201);
+    expect(asJson(res).body).toEqual({
+      file: "cover.jpg",
+      files: [{ name: "cover.jpg", editable: true }],
+    });
+  });
+
+  it("reports the character/empty-base message, not the format message, for a CJK filename that sanitises to an empty base", async () => {
+    // Regression: the extension check used to run against the *sanitised*
+    // name. "照片.jpg" sanitises to ".jpg" (empty base), and
+    // path.extname(".jpg") === "" — Node treats a string that is only an
+    // extension as a dotfile with none — so the old check misrouted a
+    // perfectly valid .jpg extension into the format-message branch and
+    // told the seller their JPEG wasn't one.
+    await seedItem("electronics/desk-lamp");
+
+    const res = await postImage("electronics/desk-lamp", "照片.jpg", PNG_BYTES);
+
+    expect(res.status).toBe(400);
+    const body = asJson(res).body as { error: string };
+    expect(body.error).not.toContain("use .jpg, .png, .webp or .gif");
+    expect(body.error).toContain("照片.jpg");
+  });
+
+  it("reports the character/empty-base message, not the format message, for a filename that sanitises to nothing but punctuation", async () => {
+    await seedItem("electronics/desk-lamp");
+
+    const res = await postImage("electronics/desk-lamp", "??.jpg", PNG_BYTES);
+
+    expect(res.status).toBe(400);
+    const body = asJson(res).body as { error: string };
+    expect(body.error).not.toContain("use .jpg, .png, .webp or .gif");
+    expect(body.error).toContain("??.jpg");
+  });
+
   it("rejects a file whose bytes are not an image, whatever the extension says", async () => {
     await seedItem("electronics/desk-lamp");
 
@@ -599,14 +642,16 @@ describe("DELETE and reorder image routes", () => {
     ).toEqual(["apple.png", "banana.png", "cherry pie.png", "item.json"]);
   });
 
-  it("reorders editable images around a non-editable one left in place", async () => {
+  it("reorders editable images around a non-editable one that stays at the position it will actually occupy (the end)", async () => {
     await seedItem("electronics/desk-lamp");
     await seedImage("electronics/desk-lamp", "apple.png");
     await seedImage("electronics/desk-lamp", "banana.png");
     await seedImage("electronics/desk-lamp", "cherry pie.png");
 
     // Current alphabetical order: apple, banana, cherry pie — "cherry
-    // pie.png" stays at index 2, so this is allowed.
+    // pie.png" stays at index 2, the one slot renumbering the two editable
+    // files around it can never take away (numeric prefixes always sort
+    // ahead of a name starting with a letter), so this is allowed.
     const res = await handleStudioRequest({
       method: "POST",
       url: "/api/items/electronics/desk-lamp/images/reorder",
@@ -624,6 +669,43 @@ describe("DELETE and reorder image routes", () => {
         { name: "cherry pie.png", editable: false },
       ],
     });
+  });
+
+  it("400s and names the file when a reorder leaves its index unchanged but renumbering its neighbours would still move it", async () => {
+    // Regression: comparing only the non-editable file's pre-rename index
+    // against its requested index misses that renumbering the editable
+    // files around it moves it too, once a numeric prefix outranks its
+    // unprefixed, letter-led name in the sort.
+    await seedItem("electronics/desk-lamp");
+    await seedImage("electronics/desk-lamp", "apple.png");
+    // Non-editable (a space) and, alphabetically, the middle of the three.
+    await seedImage("electronics/desk-lamp", "banana pie.png");
+    await seedImage("electronics/desk-lamp", "cherry.png");
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/items/electronics/desk-lamp/images/reorder",
+      // Same relative order as the current listing — "banana pie.png"
+      // keeps its index (1) — which is exactly what a pre-rename-only
+      // check would have accepted.
+      body: Buffer.from(
+        JSON.stringify({ order: ["apple.png", "banana pie.png", "cherry.png"] }),
+      ),
+      projectRoot: sandbox,
+    });
+
+    expect(res.status).toBe(400);
+    expect(asJson(res).body).toMatchObject({
+      error: expect.stringContaining("banana pie.png"),
+    });
+    // Nothing renamed.
+    expect(
+      (
+        await fs.readdir(
+          path.join(sandbox, "content", "items", "electronics", "desk-lamp"),
+        )
+      ).sort(),
+    ).toEqual(["apple.png", "banana pie.png", "cherry.png", "item.json"]);
   });
 });
 

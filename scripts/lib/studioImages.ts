@@ -31,23 +31,26 @@ export function isValidImageFilename(name: string): boolean {
 /**
  * Best-effort normalisation of a browser-supplied filename so an ordinary
  * seller upload — a macOS screenshot with spaces, a browser download with a
- * "(1)" collision suffix — lands with a name studio can list, delete, and
- * reorder, with no rename the seller has to perform by hand: replace spaces
- * and anything outside the allowlist with a hyphen, collapse runs of
- * hyphens, and strip a leading dot or hyphen (the allowlist forbids both as
- * a first character). The extension is left untouched.
+ * "(1)" collision suffix, a camera export that starts with an underscore —
+ * lands with a name studio can list, delete, and reorder, with no rename the
+ * seller has to perform by hand: replace spaces and anything outside the
+ * allowlist with a hyphen, collapse runs of hyphens, and strip any leading
+ * character that isn't a letter or digit (the allowlist requires the first
+ * character to be alphanumeric — a leading dot, hyphen, *or* underscore all
+ * fail it, even though underscore is allowed anywhere else in the name).
+ * The extension is left untouched.
  *
  * Never throws and never guarantees a valid result — a name with no usable
- * characters before the extension (e.g. "???.jpg") sanitises to just the
- * extension. The caller re-validates the result with isValidImageFilename
- * and reports whatever is still wrong.
+ * characters before the extension (e.g. "???.jpg", "照片.jpg") sanitises to
+ * just the extension. The caller re-validates the result with
+ * isValidImageFilename and reports whatever is still wrong.
  */
 export function sanitizeUploadFilename(filename: string): string {
   const ext = path.extname(filename);
   let base = filename.slice(0, filename.length - ext.length);
   base = base.replace(/[^a-zA-Z0-9._-]/g, "-");
   base = base.replace(/-{2,}/g, "-");
-  base = base.replace(/^[.-]+/, "");
+  base = base.replace(/^[^a-zA-Z0-9]+/, "");
   return `${base}${ext}`;
 }
 
@@ -249,9 +252,14 @@ export async function deleteImage(dir: string, filename: string): Promise<ImageE
  * non-editable alike — exactly once, so a non-conforming file the seller
  * placed by hand is never silently dropped from the folder's accounting.
  * Studio still refuses to rename such a file (that would write a name the
- * allowlist itself would reject — the safety boundary), so if the requested
- * order does not leave it exactly where it already sits, the whole operation
- * is refused rather than moving it.
+ * allowlist itself would reject — the safety boundary), so the whole
+ * operation is refused rather than moving one. "Moving" is judged against
+ * the position it will actually end up in once every editable file is
+ * renamed and the folder resorts — not its raw index in `order` — because a
+ * numeric prefix always sorts ahead of a name that starts with a letter, so
+ * a non-editable file anywhere but last is pushed to the end by its
+ * renumbered neighbours even when its own index in `order` was left
+ * unchanged.
  *
  * The renames run in two passes through temporary names. A single pass is
  * unsafe whenever two files strip to the same base name — e.g. "01-photo.jpg"
@@ -285,9 +293,44 @@ export async function reorderImages(dir: string, order: string[]): Promise<Image
     );
   }
 
+  const editableByName = new Map(present.map((e) => [e.name, e.editable]));
+
+  // Number only the renamable (editable) files, sequentially from 1 in
+  // `order`'s order, rather than by raw position in `order`. Numbering by
+  // raw position would leave a gap wherever a non-editable file sits (e.g.
+  // one at index 0 would make the survivors "02-", "03-" with no "01-").
+  const renamableCount = order.filter((name) => editableByName.get(name) === true).length;
+  const width = Math.max(2, String(renamableCount).length);
+  let nextNumber = 1;
+  const finalNameFor = new Map<string, string>();
+  for (const name of order) {
+    if (editableByName.get(name) === true) {
+      const stripped = name.replace(NUMERIC_PREFIX_RE, "");
+      finalNameFor.set(name, `${String(nextNumber).padStart(width, "0")}-${stripped}`);
+      nextNumber++;
+    } else {
+      // Never renamed — see the doc comment above and the refusal check
+      // just below, which is what actually enforces that.
+      finalNameFor.set(name, name);
+    }
+  }
+
+  // The check itself: simulate the listing that would exist on disk after
+  // every editable file is renamed, sorted the same way listImageFiles (and
+  // the site) sorts, and compare each non-editable file's position there
+  // against the position it was requested at. Comparing raw indices in
+  // `order` against raw indices in the current listing (what an earlier
+  // version of this check did) misses that renumbering itself moves things:
+  // it is the *post-rename* position that has to match, not the pre-rename
+  // one.
+  const simulatedFinalOrder = order
+    .map((name) => finalNameFor.get(name)!)
+    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
   for (const entry of present) {
     if (entry.editable) continue;
-    if (presentNames.indexOf(entry.name) !== order.indexOf(entry.name)) {
+    const requestedIndex = order.indexOf(entry.name);
+    const finalIndex = simulatedFinalOrder.indexOf(finalNameFor.get(entry.name)!);
+    if (finalIndex !== requestedIndex) {
       throw new Error(
         `"${entry.name}" must be renamed to letters, digits, and hyphens before studio can reorder it — ` +
           `rename it in Finder (or your file manager) and try again`,
@@ -295,16 +338,9 @@ export async function reorderImages(dir: string, order: string[]): Promise<Image
     }
   }
 
-  const width = Math.max(2, String(order.length).length);
-  const targets = order.map((name, i) => {
-    const stripped = name.replace(NUMERIC_PREFIX_RE, "");
-    return `${String(i + 1).padStart(width, "0")}-${stripped}`;
-  });
-
-  const editableByName = new Map(present.map((e) => [e.name, e.editable]));
   const renamable = order
-    .map((name, i) => ({ name, target: targets[i]! }))
-    .filter(({ name }) => editableByName.get(name) === true);
+    .filter((name) => editableByName.get(name) === true)
+    .map((name) => ({ name, target: finalNameFor.get(name)! }));
 
   // Pass 1: park everything under names that cannot collide with a target or
   // with another run's leftovers.

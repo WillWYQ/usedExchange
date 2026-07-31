@@ -91,6 +91,24 @@ describe("sanitizeUploadFilename", () => {
     const sanitized = sanitizeUploadFilename("Screenshot 2026-07-30 at 10.00.00.png");
     expect(isValidImageFilename(sanitized)).toBe(true);
   });
+
+  it("strips a leading underscore, not just a leading dot or hyphen", () => {
+    // The allowlist requires the first character to be alphanumeric —
+    // underscore fails that even though it's allowed everywhere else in the
+    // name (IMG_2043.JPEG is valid). "_cover.jpg" has a perfectly usable
+    // base ("cover") and a valid extension; only the leading character was
+    // ever the problem.
+    expect(sanitizeUploadFilename("_cover.jpg")).toBe("cover.jpg");
+  });
+
+  it("produces an empty base (just the extension) when nothing survives, not a name with no extension", () => {
+    // "___.jpg": every character is stripped as a leading run (three
+    // underscores, none of them alphanumeric), leaving an empty base. This
+    // is the input studioApi.ts's empty-base branch has to detect —
+    // asserted here so that check has a name-only, not just character-only,
+    // regression guard.
+    expect(sanitizeUploadFilename("___.jpg")).toBe(".jpg");
+  });
 });
 
 describe("sniffImageType", () => {
@@ -266,14 +284,17 @@ describe("reorderImages", () => {
   });
 
   describe("a non-editable file present in the folder", () => {
-    it("is included in the required order but never renamed", async () => {
+    it("is included in the required order but never renamed, when it stays at the position it will actually occupy (the end)", async () => {
       await writeImage(dir, "apple.png", PNG);
       await writeImage(dir, "banana.png", PNG);
       await fs.writeFile(path.join(dir, "cherry pie.png"), PNG);
 
       // Current alphabetical order is apple, banana, cherry pie — the
-      // requested order leaves "cherry pie.png" at the same index (2), so
-      // the reorder is allowed even though it cannot be renamed.
+      // requested order leaves "cherry pie.png" at the same index (2). This
+      // is the one shape where an unchanged index is also correct: every
+      // renamed file gets a numeric prefix, numeric prefixes always sort
+      // ahead of a name starting with a letter, so the last slot is the
+      // only slot renumbering can never take away from it.
       const files = await reorderImages(dir, ["banana.png", "apple.png", "cherry pie.png"]);
 
       expect(files).toEqual([
@@ -285,7 +306,40 @@ describe("reorderImages", () => {
       expect(await fs.readdir(dir)).toContain("cherry pie.png");
     });
 
-    it("refuses the whole operation if the requested order would move it", async () => {
+    it("is refused even when its requested index is unchanged, if renumbering the editable files around it would still move it", async () => {
+      // Regression for the "moved anyway" bug: comparing only the file's
+      // pre-rename index against its requested index missed that every
+      // editable file gets a numeric prefix, and numeric prefixes always
+      // sort ahead of a name that starts with a letter — so a non-editable
+      // file anywhere but last is shoved to the end once its neighbours are
+      // renumbered, no matter what index was requested for it, unchanged or
+      // not.
+      await writeImage(dir, "apple.png", PNG);
+      // Non-editable (a space), and alphabetically the middle of the three —
+      // "apple" < "banana pie" < "cherry".
+      await fs.writeFile(path.join(dir, "banana pie.png"), PNG);
+      await writeImage(dir, "cherry.png", PNG);
+
+      // Present (pre-rename) order is apple(0), "banana pie.png"(1),
+      // cherry(2). This request leaves "banana pie.png" at the same index
+      // (1) it already occupies — the exact shape a pre-rename-only check
+      // would accept, and which the old implementation of this function did
+      // accept (verified: it silently produced "01-apple.png",
+      // "03-cherry.png", "banana pie.png" on disk, an order that does not
+      // match what was requested).
+      await expect(
+        reorderImages(dir, ["apple.png", "banana pie.png", "cherry.png"]),
+      ).rejects.toThrow(/banana pie\.png/);
+
+      // Nothing renamed: refusing must happen before any rename in this run.
+      expect((await fs.readdir(dir)).sort()).toEqual([
+        "apple.png",
+        "banana pie.png",
+        "cherry.png",
+      ]);
+    });
+
+    it("refuses the whole operation if the requested order moves it even by its pre-rename index", async () => {
       await writeImage(dir, "apple.png", PNG);
       await writeImage(dir, "banana.png", PNG);
       await fs.writeFile(path.join(dir, "cherry pie.png"), PNG);
