@@ -101,6 +101,7 @@ export function App() {
         const openItem = items.find((i) => i.id === openItemId);
         return openItem === undefined ? null : (
           <ImagePane
+            key={openItem.id}
             item={openItem}
             onClose={() => setOpenItemId(null)}
             onChanged={() => void refresh()}

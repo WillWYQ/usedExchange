@@ -31,11 +31,22 @@ export function ImagePane({
     setError(null);
     try {
       await work();
-      onChanged();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
+      // The grid can now disagree with disk — a delete 404s because another
+      // tab (or a stale drawer) already removed the file, or addFiles wrote
+      // some photos before its trailing throw for the failed one. Resync so
+      // a ghost thumbnail doesn't linger with no way to clear itself besides
+      // closing and reopening the drawer. A failed refresh must not replace
+      // the error above with a different one — that's the message the seller
+      // actually needs to see.
+      refresh().catch(() => {});
     } finally {
       setBusy(false);
+      // Unconditional, not just on success: the outer table's imageCount has
+      // to reflect what's really on disk even when this call ends in error —
+      // addFiles can write real files before its trailing throw.
+      onChanged();
     }
   }
 
