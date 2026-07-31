@@ -20,6 +20,7 @@ import { z } from "zod";
 import { loadAllItemsRaw } from "../../lib/content/loader";
 import { isValidSlug } from "../../lib/utils/slug";
 import { applyFieldEdits, readItemField } from "./itemEdit";
+import { getSyncRunner, isSyncRunning, streamImageSync } from "./studioSync";
 import {
   contentTypeFor,
   deleteImage,
@@ -359,6 +360,19 @@ async function handleImageReorder(
   }
 }
 
+function handleSyncImages(): StudioResponse {
+  const runner = getSyncRunner();
+  if (runner === null) {
+    // Only reachable if studio was started without registering a runner —
+    // a wiring bug, not something the seller can cause.
+    throw new StudioError(503, "image sync is not available in this session");
+  }
+  if (isSyncRunning()) {
+    throw new StudioError(409, "an image sync is already running");
+  }
+  return { status: 200, events: streamImageSync(runner) };
+}
+
 export async function handleStudioRequest(req: StudioRequest): Promise<StudioResponse> {
   const pathname = req.url.split("?")[0] ?? "";
 
@@ -425,6 +439,13 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
         return await handleImageDelete(req, category, item, filename);
       }
       return { status: 405, body: { error: `method not allowed: ${req.method}` } };
+    }
+
+    if (pathname === "/api/sync-images") {
+      if (req.method !== "POST") {
+        return { status: 405, body: { error: "POST only" } };
+      }
+      return handleSyncImages();
     }
 
     return { status: 404, body: { error: `no route for ${pathname}` } };

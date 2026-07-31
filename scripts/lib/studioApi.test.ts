@@ -13,6 +13,7 @@ import {
   type JsonResponse,
 } from "./studioApi";
 import { listImageFiles } from "./studioImages";
+import { setSyncRunner } from "./studioSync";
 
 // All routes exercised in this file return the JSON variant of StudioResponse;
 // this narrows the union so `.body` type-checks without re-asserting at every
@@ -520,5 +521,59 @@ describe("response variants", () => {
     const res = { status: 200, events };
     expect(isSseResponse(res)).toBe(true);
     expect(isFileResponse(res)).toBe(false);
+  });
+});
+
+describe("POST /api/sync-images", () => {
+  afterEach(() => {
+    setSyncRunner(null);
+  });
+
+  function post() {
+    return handleStudioRequest({
+      method: "POST",
+      url: "/api/sync-images",
+      body: Buffer.from("{}"),
+      projectRoot: sandbox,
+    });
+  }
+
+  it("405s a GET", async () => {
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/sync-images",
+      body: Buffer.alloc(0),
+      projectRoot: sandbox,
+    });
+    expect(res.status).toBe(405);
+  });
+
+  it("503s when no runner is registered", async () => {
+    const res = await post();
+    expect(res.status).toBe(503);
+  });
+
+  it("returns an SSE response once a runner is registered", async () => {
+    setSyncRunner(async () => ({
+      total: 0,
+      uploaded: 0,
+      skipped: 0,
+      stripped: 0,
+      purged: 0,
+      manifest: {},
+      images: [],
+      failures: [],
+    }));
+
+    const res = await post();
+
+    expect(res.status).toBe(200);
+    expect(isSseResponse(res)).toBe(true);
+    // Drain it so the mutex is released before the next test.
+    if (isSseResponse(res)) {
+      for await (const _evt of res.events) {
+        // consume
+      }
+    }
   });
 });

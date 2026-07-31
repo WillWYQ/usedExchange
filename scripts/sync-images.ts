@@ -15,6 +15,7 @@ import { siteConfig } from "@/content/config";
 import type { ImageStorageAdapter } from "@/lib/images/adapter";
 import { copyIfChanged } from "@/lib/images/local";
 import { mapWithConcurrency } from "@/lib/utils/concurrency";
+import { loadDotEnvLocal } from "./lib/loadEnv";
 import { loadJson, scanImages, syncImagesToCdn } from "./lib/imageSync";
 
 // ── Paths ─────────────────────────────────────────────────────────────────────
@@ -29,25 +30,6 @@ const CHECKSUMS_PATH = path.join(CWD, ".image-cache", "checksums.json");
 
 // ── Env loading ───────────────────────────────────────────────────────────────
 // tsx does not load .env.local automatically; parse it before reading process.env.
-
-function loadDotEnvLocal(): void {
-  const envPath = path.join(CWD, ".env.local");
-  if (!fs.existsSync(envPath)) return;
-
-  const lines = fs.readFileSync(envPath, "utf-8").split("\n");
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line || line.startsWith("#")) continue;
-    const eqIdx = line.indexOf("=");
-    if (eqIdx === -1) continue;
-    const key = line.slice(0, eqIdx).trim();
-    // Remove optional surrounding quotes from value
-    const value = line.slice(eqIdx + 1).trim().replace(/^(["'])(.*)\1$/, "$2");
-    if (key && process.env[key] === undefined) {
-      process.env[key] = value;
-    }
-  }
-}
 
 loadDotEnvLocal();
 

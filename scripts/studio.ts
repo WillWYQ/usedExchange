@@ -6,6 +6,11 @@
 import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
+import { loadDotEnvLocal } from "./lib/loadEnv";
+import { setSyncRunner } from "./lib/studioSync";
+import { syncImagesToCdn } from "./lib/imageSync";
+import { siteConfig } from "@/content/config";
+import type { ImageStorageAdapter } from "@/lib/images/adapter";
 
 const DEFAULT_PORT = 5174;
 const require = createRequire(import.meta.url);
@@ -46,6 +51,27 @@ function parsePort(args: string[]): number {
   return port;
 }
 
+/**
+ * The adapter for the configured provider. Mirrors createAdapter() in
+ * scripts/sync-images.ts, which is private to that CLI; duplicating a
+ * three-branch switch is cheaper than a third extraction with one consumer.
+ * All three constructors take no arguments; the R2 one throws when any CF_R2_*
+ * variable is missing, which is why loadDotEnvLocal() runs first.
+ */
+async function createAdapter(): Promise<ImageStorageAdapter> {
+  const provider = siteConfig.imageStorage.provider;
+  if (provider === "cloudflare-r2") {
+    const { CloudflareR2Adapter } = await import("@/lib/images/cloudflare-r2");
+    return new CloudflareR2Adapter();
+  }
+  if (provider === "vercel-blob") {
+    const { VercelBlobAdapter } = await import("@/lib/images/vercel-blob");
+    return new VercelBlobAdapter();
+  }
+  const { LocalAdapter } = await import("@/lib/images/local");
+  return new LocalAdapter();
+}
+
 async function main(): Promise<void> {
   assertViteInstalled();
 
@@ -54,6 +80,23 @@ async function main(): Promise<void> {
 
   const port = parsePort(process.argv.slice(2));
   const { createServer } = await import("vite");
+
+  loadDotEnvLocal();
+
+  const cwd = process.cwd();
+  // The adapter is constructed per run, not once at startup: the R2 constructor
+  // throws on missing credentials, and that must surface as an "error" event on
+  // the seller's progress stream rather than preventing studio from starting at
+  // all — they may only want the item table.
+  setSyncRunner(async (onProgress) =>
+    syncImagesToCdn({
+      adapter: await createAdapter(),
+      contentItemsDir: path.join(cwd, "content", "items"),
+      manifestPath: path.join(cwd, "lib", "generated", "image-manifest.json"),
+      checksumsPath: path.join(cwd, ".image-cache", "checksums.json"),
+      onProgress,
+    }),
+  );
 
   const server = await createServer({
     configFile,
