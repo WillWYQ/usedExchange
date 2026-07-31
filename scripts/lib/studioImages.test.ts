@@ -161,12 +161,33 @@ describe("reorderImages", () => {
     await writeImage(dir, "01-apple.png", PNG);
     await writeImage(dir, "02-banana.png", PNG);
 
-    // A naive one-pass rename would hit EEXIST here: 02-banana -> 01-banana
-    // while 01-apple still occupies its own slot in the same numbering space.
+    // Just an ordering check, not a collision check: "apple" and "banana" are
+    // different base names, so even a naive one-pass rename would produce the
+    // same correct result here. The real collision hazard (same stripped base
+    // name) is covered separately below.
     const files = await reorderImages(dir, ["02-banana.png", "01-apple.png"]);
 
     expect(files).toEqual(["01-banana.png", "02-apple.png"]);
     expect(await fs.readdir(dir)).toHaveLength(2);
+  });
+
+  it("keeps both files and their own bytes when two names strip to the same base", async () => {
+    // "01-photo.jpg" and "02-photo.jpg" both strip to "photo.jpg". A naive
+    // one-pass rename renames the first source straight to its final target —
+    // here that target is the *other* file's current name — and fs.rename
+    // overwrites an existing destination silently on POSIX (no EEXIST). That
+    // clobbers the second file before it gets its own turn to move, losing it
+    // with no error. The two-pass version must keep both.
+    await writeImage(dir, "01-photo.jpg", JPG);
+    await writeImage(dir, "02-photo.jpg", PNG);
+
+    const files = await reorderImages(dir, ["02-photo.jpg", "01-photo.jpg"]);
+
+    expect(files).toEqual(["01-photo.jpg", "02-photo.jpg"]);
+    // order[0] ("02-photo.jpg", PNG bytes) becomes targets[0] ("01-photo.jpg");
+    // order[1] ("01-photo.jpg", JPG bytes) becomes targets[1] ("02-photo.jpg").
+    expect(await fs.readFile(path.join(dir, "01-photo.jpg"))).toEqual(PNG);
+    expect(await fs.readFile(path.join(dir, "02-photo.jpg"))).toEqual(JPG);
   });
 
   it("rejects an order that does not name exactly the files present", async () => {
@@ -188,5 +209,24 @@ describe("reorderImages", () => {
     expect(files[0]).toBe("01-photo0.png");
     expect(files[9]).toBe("10-photo9.png");
     expect(await listImageFiles(dir)).toEqual(files);
+  });
+
+  it("refuses to run when wreckage from an interrupted reorder is already present", async () => {
+    await writeImage(dir, "01-apple.png", PNG);
+    await writeImage(dir, "02-banana.png", PNG);
+    // Simulates a process that died between reorderImages' two passes on a
+    // previous run: a parked file left behind under the temp-name pattern.
+    await fs.writeFile(path.join(dir, ".studio-reorder-deadrun-0.tmp"), PNG);
+
+    await expect(reorderImages(dir, ["02-banana.png", "01-apple.png"])).rejects.toThrow(
+      /interrupted reorder/,
+    );
+
+    // Nothing moved: refusing must happen before any rename in this run.
+    expect((await fs.readdir(dir)).sort()).toEqual([
+      ".studio-reorder-deadrun-0.tmp",
+      "01-apple.png",
+      "02-banana.png",
+    ]);
   });
 });

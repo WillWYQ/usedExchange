@@ -7,6 +7,7 @@
 import fsPromises from "fs/promises";
 import type { Dirent } from "fs";
 import path from "path";
+import crypto from "crypto";
 
 // Photo names are not slugs: they carry an extension, and cameras produce
 // names like IMG_2043.JPEG. Dots, dashes and underscores are allowed after the
@@ -109,6 +110,11 @@ export async function writeImage(
 
 const NUMERIC_PREFIX_RE = /^\d+-/;
 
+// Matches only reorderImages' own parked names, never a real photo:
+// isValidImageFilename already rejects a leading "." for any filename, so
+// this pattern and that allowlist can never both match the same string.
+const TEMP_NAME_RE = /^\.studio-reorder-.*\.tmp$/;
+
 export async function deleteImage(dir: string, filename: string): Promise<string[]> {
   try {
     await fsPromises.unlink(path.join(dir, filename));
@@ -127,9 +133,21 @@ export async function deleteImage(dir: string, filename: string): Promise<string
  * Order has to live in the filenames: the site build has no per-item ordering
  * field, and lib/content/loader.ts derives item.images by sorting filenames.
  *
- * The renames run in two passes through temporary names. A single pass would
- * collide whenever the new numbering reuses a slot the old numbering still
- * holds — reversing two photos is enough to trigger it.
+ * The renames run in two passes through temporary names. A single pass is
+ * unsafe whenever two files strip to the same base name — e.g. "01-photo.jpg"
+ * and "02-photo.jpg" both strip to "photo.jpg". `fs.rename` overwrites an
+ * existing destination silently on POSIX (no EEXIST, no error), so renaming
+ * one source straight to its final target can clobber the other file before
+ * it has had its own turn to move, destroying it with no error raised.
+ * Parking every source under a temp name first, then moving all of them into
+ * place, means no target name is ever occupied by a file that still needs to
+ * be read.
+ *
+ * The temp names carry a random per-call id so a second reorder can never
+ * collide with wreckage left behind by an interrupted one — the same silent
+ * overwrite would otherwise destroy that orphaned photo with no warning. If
+ * temp-shaped files are already present, the whole operation refuses instead
+ * of renaming around them.
  */
 export async function reorderImages(dir: string, order: string[]): Promise<string[]> {
   const present = await listImageFiles(dir);
@@ -143,14 +161,32 @@ export async function reorderImages(dir: string, order: string[]): Promise<strin
     );
   }
 
+  // Refuse rather than rename around leftovers from an interrupted reorder:
+  // reusing those slots is exactly how the orphaned photo gets silently
+  // overwritten (see the function doc comment above).
+  let rawEntries: string[];
+  try {
+    rawEntries = await fsPromises.readdir(dir);
+  } catch {
+    rawEntries = [];
+  }
+  const leftovers = rawEntries.filter((name) => TEMP_NAME_RE.test(name));
+  if (leftovers.length > 0) {
+    throw new Error(
+      `found leftover file(s) from an interrupted reorder: ${leftovers.join(", ")} — this folder needs manual attention before it can be reordered again`,
+    );
+  }
+
   const width = Math.max(2, String(order.length).length);
   const targets = order.map((name, i) => {
     const stripped = name.replace(NUMERIC_PREFIX_RE, "");
     return `${String(i + 1).padStart(width, "0")}-${stripped}`;
   });
 
-  // Pass 1: park everything under names that cannot collide with a target.
-  const parked = order.map((_, i) => `.studio-reorder-${i}.tmp`);
+  // Pass 1: park everything under names that cannot collide with a target or
+  // with another run's leftovers.
+  const runId = crypto.randomUUID();
+  const parked = order.map((_, i) => `.studio-reorder-${runId}-${i}.tmp`);
   for (let i = 0; i < order.length; i++) {
     await fsPromises.rename(path.join(dir, order[i]!), path.join(dir, parked[i]!));
   }
