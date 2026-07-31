@@ -22,8 +22,10 @@ import { isValidSlug } from "../../lib/utils/slug";
 import { applyFieldEdits, readItemField } from "./itemEdit";
 import {
   contentTypeFor,
+  deleteImage,
   isValidImageFilename,
   listImageFiles,
+  reorderImages,
   sniffImageType,
   writeImage,
 } from "./studioImages";
@@ -317,6 +319,46 @@ async function handleImageGet(
   return { status: 200, file: filePath, contentType: contentTypeFor(filename) };
 }
 
+const reorderBodySchema = z.object({ order: z.array(z.string()).min(1) });
+
+async function handleImageDelete(
+  req: StudioRequest,
+  category: string,
+  item: string,
+  filename: string,
+): Promise<StudioResponse> {
+  if (!isValidImageFilename(filename)) {
+    throw new StudioError(400, `not an image filename: "${filename}"`);
+  }
+  const dir = resolveItemDir(req.projectRoot, category, item);
+  try {
+    return { status: 200, body: { files: await deleteImage(dir, filename) } };
+  } catch (err: unknown) {
+    throw new StudioError(404, err instanceof Error ? err.message : String(err));
+  }
+}
+
+async function handleImageReorder(
+  req: StudioRequest,
+  category: string,
+  item: string,
+): Promise<StudioResponse> {
+  const { order } = parseJsonBody(req.body, reorderBodySchema);
+
+  for (const name of order) {
+    if (!isValidImageFilename(name)) {
+      throw new StudioError(400, `not an image filename: "${name}"`);
+    }
+  }
+
+  const dir = resolveItemDir(req.projectRoot, category, item);
+  try {
+    return { status: 200, body: { files: await reorderImages(dir, order) } };
+  } catch (err: unknown) {
+    throw new StudioError(400, err instanceof Error ? err.message : String(err));
+  }
+}
+
 export async function handleStudioRequest(req: StudioRequest): Promise<StudioResponse> {
   const pathname = req.url.split("?")[0] ?? "";
 
@@ -375,6 +417,12 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
       }
       if (req.method === "POST" && filename === undefined) {
         return await handleImageUpload(req, category, item);
+      }
+      if (req.method === "POST" && filename === "reorder") {
+        return await handleImageReorder(req, category, item);
+      }
+      if (req.method === "DELETE" && filename !== undefined) {
+        return await handleImageDelete(req, category, item, filename);
       }
       return { status: 405, body: { error: `method not allowed: ${req.method}` } };
     }

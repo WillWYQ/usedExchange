@@ -106,3 +106,59 @@ export async function writeImage(
     }
   }
 }
+
+const NUMERIC_PREFIX_RE = /^\d+-/;
+
+export async function deleteImage(dir: string, filename: string): Promise<string[]> {
+  try {
+    await fsPromises.unlink(path.join(dir, filename));
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`no such image: ${filename}`);
+    }
+    throw err;
+  }
+  return listImageFiles(dir);
+}
+
+/**
+ * Persist a display order by renaming files to `NN-<name>`.
+ *
+ * Order has to live in the filenames: the site build has no per-item ordering
+ * field, and lib/content/loader.ts derives item.images by sorting filenames.
+ *
+ * The renames run in two passes through temporary names. A single pass would
+ * collide whenever the new numbering reuses a slot the old numbering still
+ * holds — reversing two photos is enough to trigger it.
+ */
+export async function reorderImages(dir: string, order: string[]): Promise<string[]> {
+  const present = await listImageFiles(dir);
+
+  const sameSet =
+    order.length === present.length && new Set(order).size === order.length &&
+    order.every((name) => present.includes(name));
+  if (!sameSet) {
+    throw new Error(
+      `the order must name every image in the folder exactly once (folder has ${present.length}: ${present.join(", ")})`,
+    );
+  }
+
+  const width = Math.max(2, String(order.length).length);
+  const targets = order.map((name, i) => {
+    const stripped = name.replace(NUMERIC_PREFIX_RE, "");
+    return `${String(i + 1).padStart(width, "0")}-${stripped}`;
+  });
+
+  // Pass 1: park everything under names that cannot collide with a target.
+  const parked = order.map((_, i) => `.studio-reorder-${i}.tmp`);
+  for (let i = 0; i < order.length; i++) {
+    await fsPromises.rename(path.join(dir, order[i]!), path.join(dir, parked[i]!));
+  }
+
+  // Pass 2: move them into place.
+  for (let i = 0; i < parked.length; i++) {
+    await fsPromises.rename(path.join(dir, parked[i]!), path.join(dir, targets[i]!));
+  }
+
+  return listImageFiles(dir);
+}

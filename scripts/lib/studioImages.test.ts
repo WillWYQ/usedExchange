@@ -2,7 +2,14 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
-import { isValidImageFilename, listImageFiles, sniffImageType, writeImage } from "./studioImages";
+import {
+  deleteImage,
+  isValidImageFilename,
+  listImageFiles,
+  reorderImages,
+  sniffImageType,
+  writeImage,
+} from "./studioImages";
 
 // Real headers, not invented bytes — a sniffer that passes on fabricated input
 // proves nothing.
@@ -111,5 +118,75 @@ describe("writeImage", () => {
     const fresh = path.join(dir, "new-item");
     await writeImage(fresh, "01-front.png", PNG);
     expect(await fs.readFile(path.join(fresh, "01-front.png"))).toEqual(PNG);
+  });
+});
+
+describe("deleteImage", () => {
+  it("removes the file and returns what is left", async () => {
+    await writeImage(dir, "01-front.png", PNG);
+    await writeImage(dir, "02-side.png", PNG);
+
+    expect(await deleteImage(dir, "01-front.png")).toEqual(["02-side.png"]);
+  });
+
+  it("throws when the file is not there", async () => {
+    await expect(deleteImage(dir, "ghost.png")).rejects.toThrow(/ghost\.png/);
+  });
+});
+
+describe("reorderImages", () => {
+  it("renames files so the loader's alphabetical sort matches the requested order", async () => {
+    await writeImage(dir, "apple.png", PNG);
+    await writeImage(dir, "banana.png", PNG);
+    await writeImage(dir, "cherry.png", PNG);
+
+    const files = await reorderImages(dir, ["cherry.png", "apple.png", "banana.png"]);
+
+    expect(files).toEqual(["01-cherry.png", "02-apple.png", "03-banana.png"]);
+    // listImageFiles sorts the same way the site does, so this IS the order
+    // the published page will show.
+    expect(await listImageFiles(dir)).toEqual(files);
+  });
+
+  it("strips an existing numeric prefix instead of stacking a second one", async () => {
+    await writeImage(dir, "01-apple.png", PNG);
+    await writeImage(dir, "02-banana.png", PNG);
+
+    const files = await reorderImages(dir, ["02-banana.png", "01-apple.png"]);
+
+    expect(files).toEqual(["01-banana.png", "02-apple.png"]);
+  });
+
+  it("survives an order that swaps two names into each other's slots", async () => {
+    await writeImage(dir, "01-apple.png", PNG);
+    await writeImage(dir, "02-banana.png", PNG);
+
+    // A naive one-pass rename would hit EEXIST here: 02-banana -> 01-banana
+    // while 01-apple still occupies its own slot in the same numbering space.
+    const files = await reorderImages(dir, ["02-banana.png", "01-apple.png"]);
+
+    expect(files).toEqual(["01-banana.png", "02-apple.png"]);
+    expect(await fs.readdir(dir)).toHaveLength(2);
+  });
+
+  it("rejects an order that does not name exactly the files present", async () => {
+    await writeImage(dir, "01-apple.png", PNG);
+    await writeImage(dir, "02-banana.png", PNG);
+
+    await expect(reorderImages(dir, ["01-apple.png"])).rejects.toThrow(/every image/);
+    await expect(
+      reorderImages(dir, ["01-apple.png", "02-banana.png", "ghost.png"]),
+    ).rejects.toThrow(/every image/);
+  });
+
+  it("pads to two digits so ten or more photos still sort correctly", async () => {
+    const names = Array.from({ length: 11 }, (_, i) => `photo${i}.png`);
+    for (const name of names) await writeImage(dir, name, PNG);
+
+    const files = await reorderImages(dir, names);
+
+    expect(files[0]).toBe("01-photo0.png");
+    expect(files[9]).toBe("10-photo9.png");
+    expect(await listImageFiles(dir)).toEqual(files);
   });
 });

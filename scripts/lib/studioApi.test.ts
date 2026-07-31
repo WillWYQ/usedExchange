@@ -432,6 +432,74 @@ describe("POST image upload", () => {
   });
 });
 
+describe("DELETE and reorder image routes", () => {
+  beforeEach(async () => {
+    sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "studio-api-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(sandbox, { recursive: true, force: true });
+  });
+
+  it("deletes one image and returns the rest", async () => {
+    await seedItem("electronics/desk-lamp");
+    await seedImage("electronics/desk-lamp", "01-front.png");
+    await seedImage("electronics/desk-lamp", "02-side.png");
+
+    const res = await handleStudioRequest({
+      method: "DELETE",
+      url: "/api/items/electronics/desk-lamp/images/01-front.png",
+      body: Buffer.alloc(0),
+      projectRoot: sandbox,
+    });
+
+    expect(res.status).toBe(200);
+    expect(asJson(res).body).toEqual({ files: ["02-side.png"] });
+  });
+
+  it("404s deleting an image that is not there", async () => {
+    await seedItem("electronics/desk-lamp");
+    const res = await handleStudioRequest({
+      method: "DELETE",
+      url: "/api/items/electronics/desk-lamp/images/ghost.png",
+      body: Buffer.alloc(0),
+      projectRoot: sandbox,
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("reorders by renaming with numeric prefixes", async () => {
+    await seedItem("electronics/desk-lamp");
+    await seedImage("electronics/desk-lamp", "apple.png");
+    await seedImage("electronics/desk-lamp", "banana.png");
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/items/electronics/desk-lamp/images/reorder",
+      body: Buffer.from(JSON.stringify({ order: ["banana.png", "apple.png"] })),
+      projectRoot: sandbox,
+    });
+
+    expect(res.status).toBe(200);
+    expect(asJson(res).body).toEqual({ files: ["01-banana.png", "02-apple.png"] });
+  });
+
+  it("400s a reorder that does not name every image", async () => {
+    await seedItem("electronics/desk-lamp");
+    await seedImage("electronics/desk-lamp", "apple.png");
+    await seedImage("electronics/desk-lamp", "banana.png");
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/items/electronics/desk-lamp/images/reorder",
+      body: Buffer.from(JSON.stringify({ order: ["apple.png"] })),
+      projectRoot: sandbox,
+    });
+
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("response variants", () => {
   it("recognises a JSON response", () => {
     const res = { status: 200, body: { ok: true } };
