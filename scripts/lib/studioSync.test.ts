@@ -4,6 +4,7 @@ import type { SseEvent } from "./studioApi";
 import {
   getSyncRunner,
   isSyncRunning,
+  resetSyncStateForTests,
   setSyncRunner,
   streamImageSync,
 } from "./studioSync";
@@ -29,7 +30,7 @@ async function collect(gen: AsyncGenerator<SseEvent>): Promise<SseEvent[]> {
 }
 
 afterEach(() => {
-  setSyncRunner(null);
+  resetSyncStateForTests();
 });
 
 describe("the sync runner registry", () => {
@@ -104,16 +105,40 @@ describe("streamImageSync", () => {
     expect(isSyncRunning()).toBe(false);
   });
 
-  it("releases the mutex when the consumer abandons the stream", async () => {
-    // The seller closes the tab mid-sync: the middleware stops iterating, so
-    // the generator's finally block is the only thing that can free the lock.
-    const gen = streamImageSync(async () => {
-      await new Promise((r) => setTimeout(r, 10));
+  it("keeps the mutex held when the consumer abandons the stream while the sync is still in flight", async () => {
+    // The seller closes the tab mid-sync: the middleware calls
+    // iterator.return() on client disconnect (studio/vite.config.ts), which
+    // must NOT free the lock while syncImagesToCdn is still writing
+    // lib/generated/image-manifest.json and .image-cache/checksums.json — a
+    // second sync starting from a reopened tab would overlap the orphaned
+    // one. The runner below emits one progress event and then blocks on a
+    // gate the test controls, so gen.next() resolves while the run is
+    // genuinely still in flight (parked on a yield, not on the internal
+    // 50ms poll gap) — the position a real sync is in most of the time.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    const gen = streamImageSync(async (onProgress) => {
+      onProgress({ type: "scanned", total: 1 });
+      await gate;
       return emptyResult();
     });
 
-    await gen.next();
+    const { value, done } = await gen.next();
+    expect(done).toBe(false);
+    expect(value).toMatchObject({ event: "progress" });
+
     await gen.return(undefined as never);
+    // The work has not finished — the gate is still closed — so the lock
+    // must still be held even though the stream itself was abandoned.
+    expect(isSyncRunning()).toBe(true);
+
+    // Once the write actually completes, the lock releases on its own; no
+    // consumer needs to still be listening for that to happen.
+    release();
+    await new Promise((r) => setTimeout(r, 0));
     expect(isSyncRunning()).toBe(false);
   });
 });
