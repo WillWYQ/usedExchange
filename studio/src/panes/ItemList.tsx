@@ -30,6 +30,7 @@ export function ItemList({
   justStampedIds,
   onToggle,
   onToggleAll,
+  onOpen,
 }: {
   items: StudioItem[];
   selectedIds: Set<string>;
@@ -37,6 +38,7 @@ export function ItemList({
   justStampedIds: Set<string>;
   onToggle: (id: string) => void;
   onToggleAll: (checked: boolean) => void;
+  onOpen: (id: string) => void;
 }) {
   const allSelected = items.length > 0 && items.every((i) => selectedIds.has(i.id));
 
@@ -70,7 +72,11 @@ export function ItemList({
                 aria-label={`Select ${item.name}`}
               />
             </td>
-            <td>{item.name}</td>
+            <td>
+              <button type="button" className="name-button" onClick={() => onOpen(item.id)}>
+                {item.name}
+              </button>
+            </td>
             <td className="data">{item.categorySlug}</td>
             <td>
               <StatusCell status={item.status} pressed={justStampedIds.has(item.id)} />
