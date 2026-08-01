@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { execFile } from "child_process";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
+import { promisify } from "util";
 import * as loaderModule from "@/lib/content/loader";
 import {
   handleStudioRequest,
@@ -14,6 +16,8 @@ import {
 } from "./studioApi";
 import { listImageFiles } from "./studioImages";
 import { getSyncRunner, resetSyncStateForTests, setSyncRunner, streamImageSync } from "./studioSync";
+
+const run = promisify(execFile);
 
 // All routes exercised in this file return the JSON variant of StudioResponse;
 // this narrows the union so `.body` type-checks without re-asserting at every
@@ -1225,14 +1229,41 @@ describe("publish routes", () => {
     return root;
   }
 
+  // A real git repository with a bare `origin`, wired the same way
+  // scripts/lib/studioGit.test.ts's makeRepo() is: this file has to prove the
+  // route actually calls readChanges/publishChanges end to end, not just that
+  // it returns SOME 200. (Fix round 1, finding 5: a handleChanges that
+  // unconditionally threw 400, and a handlePublish that returned a hardcoded
+  // {commit:"deadbeef",files:[]} without ever calling publishChanges, both
+  // passed every test in this file before this helper existed.)
+  async function makeGitProject(itemJson: string): Promise<string> {
+    const root = await project(itemJson);
+    const origin = path.join(root, "..", `${path.basename(root)}-origin.git`);
+    tempProjects.push(origin);
+
+    await run("git", ["init", "--bare", "--initial-branch=main", origin]);
+    await run("git", ["init", "--initial-branch=main"], { cwd: root });
+    await run("git", ["config", "user.email", "seller@example.com"], { cwd: root });
+    await run("git", ["config", "user.name", "Seller"], { cwd: root });
+    await run("git", ["config", "commit.gpgsign", "false"], { cwd: root });
+    await fs.mkdir(path.join(root, "lib", "generated"), { recursive: true });
+    await fs.writeFile(path.join(root, "lib", "generated", "image-manifest.json"), "{}\n");
+    await run("git", ["add", "content", "lib"], { cwd: root });
+    await run("git", ["commit", "-m", "initial"], { cwd: root });
+    await run("git", ["remote", "add", "origin", origin], { cwd: root });
+    await run("git", ["push", "-u", "origin", "main"], { cwd: root });
+
+    return root;
+  }
+
   afterEach(async () => {
     resetSyncStateForTests();
     await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
     tempProjects = [];
   });
 
-  it("GET /api/changes returns branch and files", async () => {
-    const root = await project(ITEM_JSON); // not a git repo
+  it("GET /api/changes 400s when the project root is not a git repository", async () => {
+    const root = await project(ITEM_JSON);
     const res = await handleStudioRequest({
       method: "GET",
       url: "/api/changes",
@@ -1241,6 +1272,55 @@ describe("publish routes", () => {
     });
     expect(res.status).toBe(400);
     expect((asJson(res).body as { error: string }).error).toMatch(/not a git repository/);
+  });
+
+  it("GET /api/changes returns branch and files from a real repository", async () => {
+    const root = await makeGitProject(ITEM_JSON);
+    await fs.writeFile(
+      path.join(root, "content", "items", "electronics", "desk-lamp", "item.json"),
+      ITEM_JSON.replace("Desk lamp", "Reading lamp"),
+    );
+
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/changes",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(200);
+    const body = asJson(res).body as { branch: string; files: Array<{ path: string }> };
+    expect(body.branch).toBe("main");
+    expect(body.files.map((f) => f.path)).toEqual([
+      "content/items/electronics/desk-lamp/item.json",
+    ]);
+  });
+
+  it("POST /api/publish commits and pushes a real repository, returning what shipped", async () => {
+    const root = await makeGitProject(ITEM_JSON);
+    await fs.writeFile(
+      path.join(root, "content", "items", "electronics", "desk-lamp", "item.json"),
+      ITEM_JSON.replace("Desk lamp", "Reading lamp"),
+    );
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/publish",
+      body: Buffer.from(JSON.stringify({ message: "chore: rename the lamp" })),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(200);
+    const body = asJson(res).body as { commit: string; files: Array<{ path: string }> };
+    expect(body.commit).toMatch(/^[0-9a-f]{7,40}$/);
+    expect(body.files.map((f) => f.path)).toEqual([
+      "content/items/electronics/desk-lamp/item.json",
+    ]);
+
+    // Proves the commit actually reached the remote, not just the local repo
+    // — a hardcoded-return mutation would never touch git at all.
+    const { stdout } = await run("git", ["log", "-1", "--pretty=%s", "origin/main"], {
+      cwd: root,
+    });
+    expect(stdout.trim()).toBe("chore: rename the lamp");
   });
 
   it("POST /api/publish is refused while an image sync is running", async () => {

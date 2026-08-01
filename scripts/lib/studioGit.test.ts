@@ -96,6 +96,41 @@ describe("readChanges", () => {
     created.push(dir);
     await expect(readChanges(dir)).rejects.toBeInstanceOf(GitError);
   });
+
+  // Fix round 1, IMPORTANT 2: `git rev-parse --abbrev-ref HEAD` fails on a
+  // repo with zero commits ("unborn branch") with a raw "fatal: ambiguous
+  // argument 'HEAD'" — readChanges must not surface that as an uncaught 500.
+  it("does not throw on a repo with zero commits (unborn branch)", async () => {
+    const base = await fs.mkdtemp(path.join(os.tmpdir(), "studio-unborn-"));
+    created.push(base);
+    const repo = path.join(base, "site");
+    await fs.mkdir(repo);
+    await git(repo, ["init", "--initial-branch=main"]);
+    await git(repo, ["config", "user.email", "seller@example.com"]);
+    await git(repo, ["config", "user.name", "Seller"]);
+    await git(repo, ["config", "commit.gpgsign", "false"]);
+
+    const itemDir = path.join(repo, "content", "items", "electronics", "desk-lamp");
+    await fs.mkdir(itemDir, { recursive: true });
+    await fs.writeFile(path.join(itemDir, "item.json"), `{ "name": "Desk lamp" }\n`);
+
+    const { branch, files } = await readChanges(repo);
+    expect(branch).toBe("main");
+    expect(files.map((f) => f.path)).toEqual([
+      "content/items/electronics/desk-lamp/item.json",
+    ]);
+  });
+
+  // Fix round 1, IMPORTANT 2 (second half): a bare repo has a .git dir (so
+  // assertRepo passes) but no working tree, so `git status` fails with its
+  // own raw "must be run in a work tree" — must come back as a clean
+  // GitError, not an uncaught 500.
+  it("throws a friendly GitError against a bare repository", async () => {
+    const repo = await makeRepo();
+    const origin = path.join(path.dirname(repo), "origin.git");
+    await expect(readChanges(origin)).rejects.toBeInstanceOf(GitError);
+    await expect(readChanges(origin)).rejects.toMatchObject({ status: 400 });
+  });
 });
 
 describe("publishChanges", () => {
@@ -169,5 +204,88 @@ describe("publishChanges", () => {
     // failed, not that nothing was saved.
     const { stdout } = await run("git", ["log", "--oneline"], { cwd: repo });
     expect(stdout.trim().split("\n")).toHaveLength(2);
+  });
+
+  // Fix round 1, CRITICAL 1: `git add` names its paths, but `git commit` had
+  // no pathspec, so it committed the ENTIRE index — including anything
+  // staged out-of-band before publishChanges ever ran. Reproduced against
+  // the real bug: a repo with a legit item.json edit, plus README.md and
+  // .env.local staged by hand (an interrupted `pnpm push`, a `git add -p`
+  // session, any other tool), published a commit containing all three and
+  // pushed the seller's R2 secret to the remote while reporting a one-file
+  // publish. publishChanges must refuse outright — not commit the safe file
+  // and silently leave the rest staged, and never push anything.
+  it("refuses to publish, and commits nothing, when unrelated files are staged out-of-band", async () => {
+    const repo = await makeRepo();
+    const itemDir = path.join(repo, "content", "items", "electronics", "desk-lamp");
+    await fs.writeFile(path.join(itemDir, "item.json"), `{ "name": "Reading lamp" }\n`);
+    await fs.writeFile(path.join(repo, "README.md"), "# edited\n");
+
+    // .env.local already holds CF_R2_SECRET=hunter2 from makeRepo(); stage it
+    // and README.md exactly as an out-of-band `git add` would.
+    await git(repo, ["add", "README.md", ".env.local"]);
+
+    await expect(publishChanges(repo, "chore: update listings")).rejects.toMatchObject({
+      status: 409,
+    });
+
+    // No commit at all — not even a partial one containing just the safe
+    // item.json change — and nothing reached origin.
+    const { stdout: log } = await run("git", ["log", "--oneline"], { cwd: repo });
+    expect(log.trim().split("\n")).toHaveLength(1);
+    const { stdout: originLog } = await run("git", ["log", "-1", "--pretty=%H"], {
+      cwd: path.join(path.dirname(repo), "origin.git"),
+    });
+    const { stdout: localInitial } = await run("git", ["rev-list", "--max-parents=0", "HEAD"], {
+      cwd: repo,
+    });
+    expect(originLog.trim()).toBe(localInitial.trim());
+  });
+
+  // Fix round 1, IMPORTANT 3: after a push failure, the commit lands locally
+  // but stays unpushed. A retry must actually finish the job (push the
+  // stranded commit) rather than reporting 409 "nothing to publish" forever,
+  // since content/ genuinely does match HEAD by then.
+  it("pushes a stranded local commit on retry instead of reporting nothing to publish", async () => {
+    const repo = await makeRepo();
+    const origin = path.join(path.dirname(repo), "origin.git");
+    const itemDir = path.join(repo, "content", "items", "electronics", "desk-lamp");
+    await fs.writeFile(path.join(itemDir, "item.json"), `{ "name": "Reading lamp" }\n`);
+
+    await git(repo, ["remote", "set-url", "origin", path.join(repo, "does-not-exist.git")]);
+    await expect(publishChanges(repo, "chore: update listings")).rejects.toBeInstanceOf(
+      GitError,
+    );
+
+    // The seller fixes the remote (network restored, credentials refreshed)
+    // and retries.
+    await git(repo, ["remote", "set-url", "origin", origin]);
+    const result = await publishChanges(repo, "chore: retry");
+
+    expect(result.commit).toMatch(/^[0-9a-f]{7,40}$/);
+    expect(result.files).toEqual([]);
+    const { stdout } = await run("git", ["rev-list", "--count", "origin/main..HEAD"], {
+      cwd: repo,
+    });
+    expect(stdout.trim()).toBe("0");
+  });
+
+  // Fix round 1, IMPORTANT 4: a commit made from a detached HEAD is reachable
+  // only through the reflog — invisible the moment the seller checks out a
+  // branch. Refuse before committing, not after.
+  it("refuses to publish from a detached HEAD, committing nothing", async () => {
+    const repo = await makeRepo();
+    const { stdout: sha } = await run("git", ["rev-parse", "HEAD"], { cwd: repo });
+    await git(repo, ["checkout", sha.trim()]);
+
+    const itemDir = path.join(repo, "content", "items", "electronics", "desk-lamp");
+    await fs.writeFile(path.join(itemDir, "item.json"), `{ "name": "Reading lamp" }\n`);
+
+    await expect(publishChanges(repo, "chore: update listings")).rejects.toMatchObject({
+      status: 400,
+    });
+
+    const { stdout: log } = await run("git", ["log", "--oneline"], { cwd: repo });
+    expect(log.trim().split("\n")).toHaveLength(1);
   });
 });
