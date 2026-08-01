@@ -19,7 +19,7 @@ import { z } from "zod";
 // hook resolving it at runtime, an undeclared and untested resolution chain.
 import { loadAllItemsRaw } from "../../lib/content/loader";
 import { isValidSlug } from "../../lib/utils/slug";
-import { applyFieldEdits, readItemField } from "./itemEdit";
+import { applyFieldEdits, readItemField, readItemForEdit, type FieldEdit } from "./itemEdit";
 import { getSyncRunner, isSyncRunning, streamImageSync } from "./studioSync";
 import {
   contentTypeFor,
@@ -408,6 +408,112 @@ function handleSyncImages(): StudioResponse {
   return { status: 200, events: streamImageSync(runner) };
 }
 
+// /api/items/<category>/<item> — the bare item, no trailing segment. Anchored
+// on $ so it can never swallow the /images routes above it.
+const ITEM_ROUTE_RE = /^\/api\/items\/([^/]+)\/([^/]+)$/;
+
+async function readItemJson(req: StudioRequest, category: string, item: string): Promise<{
+  jsonPath: string;
+  text: string;
+}> {
+  const dir = resolveItemDir(req.projectRoot, category, item);
+  const jsonPath = path.join(dir, "item.json");
+  try {
+    return { jsonPath, text: await fsPromises.readFile(jsonPath, "utf-8") };
+  } catch {
+    throw new StudioError(404, `no such item: ${category}/${item}`);
+  }
+}
+
+async function handleItemGet(
+  req: StudioRequest,
+  category: string,
+  item: string,
+): Promise<StudioResponse> {
+  const { text } = await readItemJson(req, category, item);
+  return { status: 200, body: { fields: readItemForEdit(text) } };
+}
+
+// `value: z.unknown()` rather than a concrete type: itemFields.ts owns value
+// validation, and it validates against the schema for THAT path. Duplicating a
+// weaker check here would only produce a second, disagreeing answer.
+const patchBodySchema = z.object({
+  edits: z
+    .array(
+      z.object({
+        path: z.array(z.union([z.string(), z.number()])).min(1),
+        value: z.unknown(),
+      }),
+    )
+    .min(1),
+});
+
+/**
+ * Rejects an edit that indexes `price.tiers` beyond the array's current
+ * length. assertEditableValue (itemFields.ts) is a pure validator — it has no
+ * access to the document, so an out-of-range index like
+ * `["price", "tiers", 5]` on a 1-element array validates cleanly there, and
+ * jsonc-parser's `modify()` then *appends* rather than erroring: a UI
+ * off-by-one silently creates a tier instead of failing (Task 1 review,
+ * deferred here because only the handler — which has just read the file —
+ * can see the array it would index into). Appending at exactly the current
+ * length is legitimate: that is how the studio form adds a new tier.
+ */
+function assertTierIndicesInRange(text: string, edits: FieldEdit[]): void {
+  const rawPrice = readItemField(text, "price") as { tiers?: unknown[] } | undefined;
+  const tiersLength = Array.isArray(rawPrice?.tiers) ? rawPrice.tiers.length : 0;
+
+  for (const edit of edits) {
+    const [head, second, third] = edit.path;
+    if (head === "price" && second === "tiers" && typeof third === "number" && third > tiersLength) {
+      throw new StudioError(
+        400,
+        `"price.tiers.${third}" is out of range: the array currently has ${tiersLength} item(s) (append at index ${tiersLength} to add one)`,
+      );
+    }
+  }
+}
+
+async function handleItemPatch(
+  req: StudioRequest,
+  category: string,
+  item: string,
+): Promise<StudioResponse> {
+  const { edits: parsedEdits } = parseJsonBody(req.body, patchBodySchema);
+  // z.unknown() accepts `undefined`, so Zod infers `value` as an OPTIONAL
+  // property on the parsed object — not present, versus FieldEdit's `value:
+  // unknown`, which is always present (possibly holding `undefined`). Those
+  // are different shapes to the type checker even though every parsed edit
+  // already carries a `value` key at runtime (patchBodySchema's `.object()`
+  // only omits it when the request itself omitted it, which is a legitimate
+  // "set this field to undefined" edit, not a malformed one). This map is a
+  // type-level normalisation, not a behavioural one.
+  const edits: FieldEdit[] = parsedEdits.map((e) => ({ path: e.path, value: e.value }));
+  const { jsonPath, text } = await readItemJson(req, category, item);
+
+  assertTierIndicesInRange(text, edits);
+
+  // applyFieldEdits validates every path and value before touching the string,
+  // so a rejected batch never reaches writeFile and the file on disk is
+  // unchanged — including the valid edits that shared the batch.
+  let next: string;
+  try {
+    next = applyFieldEdits(text, edits);
+  } catch (err: unknown) {
+    throw new StudioError(400, err instanceof Error ? err.message : String(err));
+  }
+
+  await fsPromises.writeFile(jsonPath, next, "utf-8");
+
+  // Re-read rather than returning `next`: the response is the file, and if
+  // anything about the write differed from what we computed the seller sees the
+  // truth. Same single-source-of-truth rule the item table follows.
+  return {
+    status: 200,
+    body: { fields: readItemForEdit(await fsPromises.readFile(jsonPath, "utf-8")) },
+  };
+}
+
 export async function handleStudioRequest(req: StudioRequest): Promise<StudioResponse> {
   const pathname = req.url.split("?")[0] ?? "";
 
@@ -473,6 +579,30 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
       if (req.method === "DELETE" && filename !== undefined) {
         return await handleImageDelete(req, category, item, filename);
       }
+      return { status: 405, body: { error: `method not allowed: ${req.method}` } };
+    }
+
+    const itemMatch = ITEM_ROUTE_RE.exec(pathname);
+    if (itemMatch !== null) {
+      const [, categoryRaw, itemRaw] = itemMatch;
+      if (categoryRaw === undefined || itemRaw === undefined) {
+        return { status: 400, body: { error: "malformed item route" } };
+      }
+
+      // Decoded per segment after the route match, never before — the same
+      // ordering the image routes use, and for the same reason: the allowlist
+      // must inspect exactly the string the filesystem will receive.
+      let category: string;
+      let item: string;
+      try {
+        category = decodeURIComponent(categoryRaw);
+        item = decodeURIComponent(itemRaw);
+      } catch {
+        return { status: 400, body: { error: "malformed URL encoding" } };
+      }
+
+      if (req.method === "GET") return await handleItemGet(req, category, item);
+      if (req.method === "PATCH") return await handleItemPatch(req, category, item);
       return { status: 405, body: { error: `method not allowed: ${req.method}` } };
     }
 

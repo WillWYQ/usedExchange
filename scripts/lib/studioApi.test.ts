@@ -785,3 +785,205 @@ describe("POST /api/sync-images", () => {
     }
   });
 });
+
+// Renamed from the brief's `ITEM_JSON` — that name is already a top-level
+// const above (used by the bulk-status and image-route describe blocks with a
+// different shape), and both live in the same module scope.
+const PATCH_ITEM_JSON = `{
+  "name": "Desk lamp",
+  "status": "draft", // options: "available" | "pending" | "reserved" | "sold" | "draft"
+  "quantity": 1,
+  "reserved_for": "alice@example.com",
+  "price": { "currency": "USD", "tiers": [{ "label": "Pickup", "amount": 20 }] }
+}
+`;
+
+async function makeTempProject(itemJson: string): Promise<string> {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-patch-"));
+  const dir = path.join(root, "content", "items", "electronics", "desk-lamp");
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, "item.json"), itemJson, "utf-8");
+  return root;
+}
+
+describe("GET /api/items/:cat/:name", () => {
+  let tempProjects: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+
+  async function project(itemJson: string): Promise<string> {
+    const root = await makeTempProject(itemJson);
+    tempProjects.push(root);
+    return root;
+  }
+
+  it("returns the editable fields", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/items/electronics/desk-lamp",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(200);
+    const fields = (asJson(res).body as { fields: Record<string, unknown> }).fields;
+    expect(fields["name"]).toBe("Desk lamp");
+    expect(fields["status"]).toBe("draft");
+  });
+
+  it("never returns reserved_for", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/items/electronics/desk-lamp",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    const body = JSON.stringify(asJson(res).body);
+    expect(body).not.toContain("reserved_for");
+    expect(body).not.toContain("alice@example.com");
+  });
+
+  it("404s for an item that does not exist", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/items/electronics/nope",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("400s on a traversal payload", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/items/..%2F..%2Fetc/passwd",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("PATCH /api/items/:cat/:name", () => {
+  let tempProjects: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+
+  async function project(itemJson: string): Promise<string> {
+    const root = await makeTempProject(itemJson);
+    tempProjects.push(root);
+    return root;
+  }
+
+  function patch(root: string, edits: unknown, url = "/api/items/electronics/desk-lamp") {
+    return handleStudioRequest({
+      method: "PATCH",
+      url,
+      body: Buffer.from(JSON.stringify({ edits })),
+      projectRoot: root,
+    });
+  }
+
+  it("writes a changed field and preserves comments and reserved_for", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await patch(root, [{ path: ["name"], value: "Reading lamp" }]);
+    expect(res.status).toBe(200);
+
+    const onDisk = await fs.readFile(
+      path.join(root, "content", "items", "electronics", "desk-lamp", "item.json"),
+      "utf-8",
+    );
+    expect(onDisk).toContain('"name": "Reading lamp"');
+    expect(onDisk).toContain("// options:");
+    expect(onDisk).toContain('"reserved_for": "alice@example.com"');
+  });
+
+  it("returns the re-read fields, not the request echo", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await patch(root, [{ path: ["price", "tiers", 0, "amount"], value: 24 }]);
+    const fields = (asJson(res).body as { fields: Record<string, unknown> }).fields;
+    expect((fields["price"] as { tiers: { amount: number }[] }).tiers[0]?.amount).toBe(24);
+  });
+
+  it("rejects an edit to reserved_for and leaves the file untouched", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const jsonPath = path.join(root, "content", "items", "electronics", "desk-lamp", "item.json");
+    const before = await fs.readFile(jsonPath, "utf-8");
+
+    const res = await patch(root, [{ path: ["reserved_for"], value: "bob@example.com" }]);
+    expect(res.status).toBe(400);
+    expect(await fs.readFile(jsonPath, "utf-8")).toBe(before);
+  });
+
+  it("rejects an invalid value and leaves the file untouched", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const jsonPath = path.join(root, "content", "items", "electronics", "desk-lamp", "item.json");
+    const before = await fs.readFile(jsonPath, "utf-8");
+
+    const res = await patch(root, [
+      { path: ["name"], value: "Fine" },
+      { path: ["status"], value: "liquidated" },
+    ]);
+    expect(res.status).toBe(400);
+    // Not partially applied: the valid first edit must not land either.
+    expect(await fs.readFile(jsonPath, "utf-8")).toBe(before);
+  });
+
+  it("rejects a malformed edits array", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    expect((await patch(root, "nope")).status).toBe(400);
+    expect((await patch(root, [])).status).toBe(400);
+    expect((await patch(root, [{ path: [], value: 1 }])).status).toBe(400);
+  });
+
+  it("405s on PUT", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await handleStudioRequest({
+      method: "PUT",
+      url: "/api/items/electronics/desk-lamp",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(405);
+  });
+
+  // Task 1 review, deferred here: assertEditableValue cannot see the document,
+  // so an out-of-range tier index validates and jsonc-parser's modify() then
+  // appends rather than erroring. Only this handler has the file in hand to
+  // bound-check against.
+  it("rejects an edit that indexes price.tiers beyond the array's current length", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const jsonPath = path.join(root, "content", "items", "electronics", "desk-lamp", "item.json");
+    const before = await fs.readFile(jsonPath, "utf-8");
+
+    // PATCH_ITEM_JSON's price.tiers has exactly one entry (index 0), so index
+    // 5 is well beyond it — an off-by-one in the UI, not a legitimate append.
+    const res = await patch(root, [{ path: ["price", "tiers", 5, "amount"], value: 30 }]);
+    expect(res.status).toBe(400);
+    expect(asJson(res).body).toMatchObject({
+      error: expect.stringContaining("price.tiers.5"),
+    });
+    expect(await fs.readFile(jsonPath, "utf-8")).toBe(before);
+  });
+
+  it("allows appending a new tier at exactly the array's current length", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await patch(root, [
+      { path: ["price", "tiers", 1], value: { label: "Shipped", amount: 35 } },
+    ]);
+    expect(res.status).toBe(200);
+    const fields = (asJson(res).body as { fields: Record<string, unknown> }).fields;
+    const tiers = (fields["price"] as { tiers: { label: string; amount: number }[] }).tiers;
+    expect(tiers).toHaveLength(2);
+    expect(tiers[1]).toMatchObject({ label: "Shipped", amount: 35 });
+  });
+});
