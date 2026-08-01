@@ -1,5 +1,9 @@
+import { readdirSync, readFileSync } from "fs";
+import path from "path";
 import { describe, expect, it } from "vitest";
+import { assertEditableValue } from "./itemFields";
 import { applyFieldEdits, isEditableField, readItemField, readItemForEdit } from "./itemEdit";
+import { buildItemTemplate } from "./itemTemplate";
 
 // A realistic item.json: JSONC comments from `pnpm create-item`, plus the
 // private reserved_for field that Iron Rule 4 protects.
@@ -158,4 +162,82 @@ describe("readItemForEdit", () => {
   it("omits fields the file does not contain", () => {
     expect(Object.keys(readItemForEdit(`{ "name": "x" }`))).toEqual(["name"]);
   });
+
+  // Iron Rule 4 ("never returned by an API") applies at every depth, not just
+  // the top level. readItemForEdit used to pick top-level keys and then hand
+  // the nested value through verbatim, so reserved_for smuggled inside price,
+  // dimensions, or a price.tiers entry survived the pick untouched. These
+  // three cover the nesting shapes the grammar actually declares.
+  it("never returns reserved_for nested inside price", () => {
+    const doc = `{ "name": "x", "price": { "currency": "USD", "reserved_for": "a@b" } }`;
+    const price = readItemForEdit(doc)["price"] as Record<string, unknown>;
+    expect(Object.keys(price)).not.toContain("reserved_for");
+    expect(price["currency"]).toBe("USD");
+  });
+
+  it("never returns reserved_for nested inside dimensions", () => {
+    const doc = `{
+      "name": "x",
+      "dimensions": { "length": 1, "width": 2, "height": 3, "unit": "cm", "reserved_for": "a@b" }
+    }`;
+    const dimensions = readItemForEdit(doc)["dimensions"] as Record<string, unknown>;
+    expect(Object.keys(dimensions)).not.toContain("reserved_for");
+    expect(dimensions["length"]).toBe(1);
+  });
+
+  it("never returns reserved_for nested inside a price.tiers entry", () => {
+    const doc = `{
+      "name": "x",
+      "price": { "tiers": [{ "label": "Pickup", "amount": 10, "reserved_for": "a@b" }] }
+    }`;
+    const price = readItemForEdit(doc)["price"] as Record<string, unknown>;
+    const tiers = price["tiers"] as Record<string, unknown>[];
+    const tier = tiers[0];
+    if (tier === undefined) throw new Error("expected a tier at index 0");
+    expect(Object.keys(tier)).not.toContain("reserved_for");
+    expect(tier["amount"]).toBe(10);
+  });
+});
+
+describe("round-trip against this repo's real item.json files", () => {
+  // The regression test for CRITICAL 1/2 as a class (task-1-findings.md): every
+  // field readItemForEdit shows a seller must itself satisfy
+  // assertEditableValue, or "studio can edit this project's own data" is a
+  // hope, not a test. Walks every item.json actually checked into
+  // content/items/ plus a freshly built `pnpm create-item` template (whose
+  // dimensions/weight placeholder is the null-leaves shape Critical 1 covers).
+  function findItemJsonFiles(dir: string): string[] {
+    const out: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        out.push(...findItemJsonFiles(full));
+      } else if (entry.isFile() && entry.name === "item.json") {
+        out.push(full);
+      }
+    }
+    return out;
+  }
+
+  const contentRoot = path.join(process.cwd(), "content", "items");
+  const realFiles = findItemJsonFiles(contentRoot).map(
+    (file) => [path.relative(contentRoot, file), readFileSync(file, "utf8")] as const,
+  );
+  const templateText = JSON.stringify(buildItemTemplate("Test item", "2026-08-01"));
+
+  it("found at least one real item.json to check", () => {
+    // A guard against this test silently checking nothing if content/items/
+    // ever moves or the fixture data is deleted.
+    expect(realFiles.length).toBeGreaterThan(0);
+  });
+
+  it.each([...realFiles, ["buildItemTemplate placeholder", templateText] as const])(
+    "every field readItemForEdit returns for %s round-trips through assertEditableValue",
+    (_label, text) => {
+      const fields = readItemForEdit(text);
+      for (const [fieldPath, value] of Object.entries(fields)) {
+        expect(() => assertEditableValue([fieldPath], value)).not.toThrow();
+      }
+    },
+  );
 });

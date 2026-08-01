@@ -8,11 +8,7 @@ import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser";
 // Relative, not "@/…": this module is reachable from studio/vite.config.ts's
 // config graph (via studioApi.ts), where the "@/" alias does not resolve. See
 // the comment at the top of studioApi.ts's imports for the full explanation.
-import {
-  assertEditableValue,
-  EDITABLE_TOP_LEVEL_FIELDS,
-  isEditableField,
-} from "./itemFields";
+import { assertEditableValue, isEditableField, pickEditableFields } from "./itemFields";
 
 export type FieldEdit = { path: (string | number)[]; value: unknown };
 
@@ -52,9 +48,12 @@ export function readItemField(text: string, field: string): unknown {
 /**
  * The editable fields present in `text`, for the studio form.
  *
- * A PICK list, not an omit list (Iron Rule 4). reserved_for is excluded because
- * it is not in itemJsonSchema, and so is any other private field added to
- * item.json later — without anyone remembering to update a deny list here.
+ * A PICK list, not an omit list (Iron Rule 4), and deep: itemFields.ts's
+ * pickEditableFields rebuilds price/dimensions/weight/tiers from known keys
+ * rather than passing the parsed objects through, so reserved_for is excluded
+ * whether it sits at the top level or nested inside one of those — and so is
+ * any other private field added to item.json later, at any depth, without
+ * anyone remembering to update a deny list here.
  *
  * Values are returned exactly as they appear on disk, NOT run through Zod: the
  * form's job is to show the seller what the file actually says so they can
@@ -64,12 +63,5 @@ export function readItemField(text: string, field: string): unknown {
 export function readItemForEdit(text: string): Record<string, unknown> {
   const raw = parseJsonc(text) as Record<string, unknown> | undefined;
   if (raw === undefined || raw === null || typeof raw !== "object") return {};
-
-  const out: Record<string, unknown> = {};
-  for (const field of EDITABLE_TOP_LEVEL_FIELDS) {
-    if (Object.prototype.hasOwnProperty.call(raw, field)) {
-      out[field] = raw[field];
-    }
-  }
-  return out;
+  return pickEditableFields(raw);
 }

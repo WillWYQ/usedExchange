@@ -8,18 +8,31 @@
 // .preprocess(), or .default(). itemJsonSchema.shape.status.safeParse("liquidated")
 // SUCCEEDS and yields "available"; nullableNumber.safeParse("banana") SUCCEEDS and
 // yields null. Using it to validate input would silently accept junk and rewrite
-// it. The schemas below have no .catch, no .preprocess and no .default, so a
-// safeParse failure IS the rejection. scripts/lib/studioApi.ts's bulk-status enum
-// documents the same trap for one field; this generalises it to all of them.
+// it. The schemas below carry no such wrapper, so a safeParse failure IS the
+// rejection. scripts/lib/studioApi.ts's bulk-status enum documents the same trap
+// for one field; this generalises it to all of them. itemFields.test.ts asserts
+// this file's own source contains none of those three method calls, outside
+// comments, so the premise cannot silently regress.
 //
-// The mirror can drift from itemJsonSchema. itemFields.test.ts asserts the two
-// key sets are identical, so adding a schema field without adding an editor here
-// fails the suite.
+// "Strict" means strict about VALIDITY, not about presence: where
+// lib/content/schema.ts marks a nested field optional (e.g. price.show_tiers,
+// price.shipping_payer, a tier's miles_min/miles_max), the schemas below match
+// that optionality exactly — this project's own on-disk item.json files omit
+// those keys routinely, and a stricter-than-canonical schema would make every
+// shipped item unsaveable. Optional means "may be absent"; it never means "may
+// be junk when present".
+//
+// The mirror can drift from itemJsonSchema, at the top level and at every
+// nested level (price, a price tier, dimensions, weight). itemFields.test.ts
+// asserts all of those key sets are identical, so adding a schema field
+// without adding an editor here fails the suite.
 
 import { z } from "zod";
-// Relative, not "@/…": reachable from studio/vite.config.ts's config graph.
-// See the import comment in scripts/lib/studioApi.ts.
-import { itemJsonSchema } from "../../lib/content/schema";
+// No import of lib/content/schema.ts here: nothing in this file needs
+// itemJsonSchema at runtime any more (the drift guards that compare against
+// it live in itemFields.test.ts, which imports it directly), and this module
+// having zero dependency on the loader schema is itself evidence the two are
+// independent implementations, not a lazy fork of one.
 
 // ── Leaf schemas ─────────────────────────────────────────────────────────────
 
@@ -31,16 +44,39 @@ const stringList = z.array(z.string());
 // without its coercion: a negative number or a numeric string is a rejection
 // here, not a silent null.
 const nullableAmount = z.number().nonnegative().nullable();
-const positiveNumber = z.number().positive();
+
+// A positive number, but null is also valid as "not set": `pnpm create-item`
+// (scripts/lib/itemTemplate.ts) writes dimensions/weight as
+// { length: null, width: null, height: null, unit } / { value: null, unit }
+// as their intentional placeholder shape, and a seller must be able to clear
+// a dimension back to that state. Zero is still rejected — it isn't "unset",
+// it's an invalid measurement.
+const nullablePositiveNumber = z.number().positive().nullable();
 
 // YYYY-MM-DD, and a real calendar date — "2026-02-31" matches the regex but is
 // not a day. Date.parse of an ISO date is UTC and exact, so a round-trip through
 // toISOString is the cheapest correct check.
+//
+// This is one .superRefine rather than two .refine()s: Zod 3 marks a failed
+// .refine() as merely "dirty", not "aborted", so a SECOND .refine() still runs
+// on a value the first one already rejected. new Date("<garbage>").toISOString()
+// throws a RangeError (not a Zod issue) on an Invalid Date, so a malformed
+// string — "banana", "2026-13-45", a year outside Date's representable range —
+// used to crash safeParse itself instead of failing it, which surfaced as an
+// uncaught 500 rather than a 400 naming the field. The explicit `return` below
+// after the format issue is what stops that second check from ever running on
+// a string the first one already flagged.
 const isoDate = z
   .string()
-  .refine((v) => /^\d{4}-\d{2}-\d{2}$/.test(v), { message: "expected YYYY-MM-DD" })
-  .refine((v) => new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v, {
-    message: "not a real calendar date",
+  .superRefine((v, ctx) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "expected YYYY-MM-DD" });
+      return;
+    }
+    const d = new Date(`${v}T00:00:00Z`);
+    if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "not a real calendar date" });
+    }
   })
   .nullable();
 
@@ -69,27 +105,34 @@ const tierSchema = z
   })
   .strict();
 
-const dimensionsSchema = z
+const dimensionsObjectSchema = z
   .object({
-    length: positiveNumber,
-    width: positiveNumber,
-    height: positiveNumber,
+    length: nullablePositiveNumber,
+    width: nullablePositiveNumber,
+    height: nullablePositiveNumber,
     unit: z.enum(["cm", "in"]),
   })
-  .strict()
-  .nullable();
+  .strict();
+const dimensionsSchema = dimensionsObjectSchema.nullable();
 
-const weightSchema = z
-  .object({ value: positiveNumber, unit: z.enum(["kg", "lb"]) })
-  .strict()
-  .nullable();
+const weightObjectSchema = z
+  .object({ value: nullablePositiveNumber, unit: z.enum(["kg", "lb"]) })
+  .strict();
+const weightSchema = weightObjectSchema.nullable();
 
+// currency/tiers/negotiable/show_tiers/shipping_payer are all optional here,
+// matching lib/content/schema.ts's priceSchema exactly (every one of them is
+// .optional().default(...) there). No shipped item.json in this repo carries a
+// show_tiers key — `grep -L show_tiers content/items/*/*/item.json` matches
+// every file — so requiring it would make every existing item unsaveable.
+// .strict() is kept: unknown keys must still be rejected. Optional is not lax;
+// a currency/tiers/etc value that IS present is still fully validated below.
 const priceSchema = z
   .object({
-    currency: text,
-    tiers: z.array(tierSchema),
-    negotiable: bool,
-    show_tiers: bool,
+    currency: text.optional(),
+    tiers: z.array(tierSchema).optional(),
+    negotiable: bool.optional(),
+    show_tiers: bool.optional(),
     shipping_payer: z.enum(["seller", "buyer"]).optional(),
   })
   .strict();
@@ -135,34 +178,33 @@ const TOP_LEVEL: Record<string, z.ZodType<unknown>> = {
   description_zh: text,
 };
 
-const PRICE_LEAVES: Record<string, z.ZodType<unknown>> = {
-  currency: text,
-  tiers: z.array(tierSchema),
-  negotiable: bool,
-  show_tiers: bool,
-  shipping_payer: z.enum(["seller", "buyer"]),
-};
-
-const TIER_LEAVES: Record<string, z.ZodType<unknown>> = {
-  label: text,
-  miles_min: z.number().nonnegative(),
-  miles_max: z.number().nonnegative(),
-  amount: z.number().nonnegative(),
-};
-
-const DIMENSION_LEAVES: Record<string, z.ZodType<unknown>> = {
-  length: positiveNumber,
-  width: positiveNumber,
-  height: positiveNumber,
-  unit: z.enum(["cm", "in"]),
-};
-
-const WEIGHT_LEAVES: Record<string, z.ZodType<unknown>> = {
-  value: positiveNumber,
-  unit: z.enum(["kg", "lb"]),
-};
+// Leaf maps are DERIVED from each object schema's own `.shape` rather than
+// hand-copied. Hand-copying is exactly how these drifted before: PRICE_LEAVES
+// once required currency/tiers/negotiable/show_tiers that priceSchema itself
+// made optional (rejecting every real item.json in this repo), and
+// PRICE_LEAVES.shipping_payer / TIER_LEAVES.miles_min / TIER_LEAVES.miles_max
+// once dropped the `.optional()` their object siblings carried — making
+// "unset" unreachable for a leaf-level write, even though jsonc-parser's
+// modify() only clears a key when given `undefined`. Deriving the maps makes
+// that class of divergence structurally impossible: there is exactly one place
+// each nested field's schema is written.
+const PRICE_LEAVES: Record<string, z.ZodType<unknown>> = priceSchema.shape;
+const TIER_LEAVES: Record<string, z.ZodType<unknown>> = tierSchema.shape;
+const DIMENSION_LEAVES: Record<string, z.ZodType<unknown>> = dimensionsObjectSchema.shape;
+const WEIGHT_LEAVES: Record<string, z.ZodType<unknown>> = weightObjectSchema.shape;
 
 export const EDITABLE_TOP_LEVEL_FIELDS: readonly string[] = Object.keys(TOP_LEVEL);
+
+// Nested-field key sets, exported only so itemFields.test.ts's drift guard can
+// compare them against itemJsonSchema's own nested shapes (mirrors
+// EDITABLE_TOP_LEVEL_FIELDS one level down). Not meant as a second allowlist —
+// resolveFieldSchema below is still the only place path-editability is decided.
+export const EDITABLE_NESTED_FIELDS = {
+  price: Object.keys(PRICE_LEAVES),
+  priceTier: Object.keys(TIER_LEAVES),
+  dimensions: Object.keys(DIMENSION_LEAVES),
+  weight: Object.keys(WEIGHT_LEAVES),
+} as const;
 
 // Plain objects inherit "__proto__", "constructor" and "toString" from
 // Object.prototype, so `PRICE_LEAVES["__proto__"]` is truthy even though
@@ -238,7 +280,74 @@ export function assertEditableValue(path: (string | number)[], value: unknown): 
   }
 }
 
-// Referenced so the drift guard in itemFields.test.ts has a live import to
-// compare against, and so this module fails to compile if the schema module
-// stops exporting itemJsonSchema.
-export const SCHEMA_FIELD_COUNT = Object.keys(itemJsonSchema.shape).length;
+// ── Reading (studio's read side of Iron Rule 4) ─────────────────────────────
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Keeps only `map`'s own keys from `value`, or null when `value` isn't an object at all. */
+function pickOwnKeys(
+  map: Record<string, z.ZodType<unknown>>,
+  value: unknown,
+): Record<string, unknown> | null {
+  if (!isPlainObject(value)) return null;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(map)) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      out[key] = value[key];
+    }
+  }
+  return out;
+}
+
+/**
+ * Deep-picks one top-level field's on-disk value down to only the keys this
+ * grammar declares for it. A private key stashed inside `price`, `dimensions`,
+ * `weight`, or a `price.tiers[]` entry — reserved_for or anything else absent
+ * from itemJsonSchema — is dropped here, not merely at the top level. Every
+ * other top-level field is a scalar or a string array in this grammar (see
+ * resolveFieldSchema's "no path may descend into one"), so there is no nested
+ * object for a private key to hide inside.
+ *
+ * Values that survive the pick are returned exactly as they appear on disk,
+ * not schema-coerced — same reasoning as pickEditableFields below: the form
+ * must show the seller what the file actually says.
+ */
+function pickEditableValue(field: string, rawValue: unknown): unknown {
+  if (field === "price") {
+    const picked = pickOwnKeys(PRICE_LEAVES, rawValue);
+    if (picked === null) return rawValue;
+    if (Array.isArray(picked["tiers"])) {
+      picked["tiers"] = (picked["tiers"] as unknown[]).map(
+        (tier) => pickOwnKeys(TIER_LEAVES, tier) ?? tier,
+      );
+    }
+    return picked;
+  }
+  if (field === "dimensions") {
+    return rawValue === null ? null : (pickOwnKeys(DIMENSION_LEAVES, rawValue) ?? rawValue);
+  }
+  if (field === "weight") {
+    return rawValue === null ? null : (pickOwnKeys(WEIGHT_LEAVES, rawValue) ?? rawValue);
+  }
+  return rawValue;
+}
+
+/**
+ * The editable fields present in `raw`, deep-picked to this grammar so no
+ * private key at ANY depth (Iron Rule 4: "never returned by an API") can leak
+ * into what studio serves to the browser. A pick list, not an omit list: a
+ * private field added to item.json later — at the top level or nested inside
+ * price/dimensions/weight/a tier — is excluded automatically, with no change
+ * here.
+ */
+export function pickEditableFields(raw: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const field of EDITABLE_TOP_LEVEL_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(raw, field)) {
+      out[field] = pickEditableValue(field, raw[field]);
+    }
+  }
+  return out;
+}
