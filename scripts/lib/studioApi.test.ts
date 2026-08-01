@@ -908,10 +908,38 @@ describe("PATCH /api/items/:cat/:name", () => {
   });
 
   it("returns the re-read fields, not the request echo", async () => {
+    // fix round 1, finding MINOR 5: asserting the value from the edit landed
+    // in the response proves nothing about WHERE the response came from — a
+    // handler that returned `readItemForEdit(next)` (the in-memory computed
+    // text, never touching disk again) would pass that assertion too, since
+    // `next` and the file's real bytes normally agree. Mocking writeFile so
+    // what actually lands on disk DIFFERS from `next` closes that gap: only
+    // a genuine second `readFile` of the file can produce this value.
     const root = await project(PATCH_ITEM_JSON);
-    const res = await patch(root, [{ path: ["price", "tiers", 0, "amount"], value: 24 }]);
-    const fields = (asJson(res).body as { fields: Record<string, unknown> }).fields;
-    expect((fields["price"] as { tiers: { amount: number }[] }).tiers[0]?.amount).toBe(24);
+    const jsonPath = path.join(root, "content", "items", "electronics", "desk-lamp", "item.json");
+    const DIFFERENT_FROM_THE_EDIT = `{ "name": "Whatever actually landed on disk" }\n`;
+    const originalWriteFile = fs.writeFile;
+
+    const writeSpy = vi
+      .spyOn(fs, "writeFile")
+      .mockImplementation(async (target, _data, options) => {
+        if (target === jsonPath) {
+          return originalWriteFile(target, DIFFERENT_FROM_THE_EDIT, options);
+        }
+        return originalWriteFile(target, _data, options);
+      });
+
+    try {
+      const res = await patch(root, [{ path: ["name"], value: "Reading lamp" }]);
+      expect(res.status).toBe(200);
+      const fields = (asJson(res).body as { fields: Record<string, unknown> }).fields;
+      // Neither "Reading lamp" (the request) nor "Desk lamp" (the original
+      // on-disk value / what `next` would compute to) — only a real second
+      // read of the file, after the mocked write above, produces this.
+      expect(fields["name"]).toBe("Whatever actually landed on disk");
+    } finally {
+      writeSpy.mockRestore();
+    }
   });
 
   it("rejects an edit to reserved_for and leaves the file untouched", async () => {
@@ -985,5 +1013,109 @@ describe("PATCH /api/items/:cat/:name", () => {
     const tiers = (fields["price"] as { tiers: { label: string; amount: number }[] }).tiers;
     expect(tiers).toHaveLength(2);
     expect(tiers[1]).toMatchObject({ label: "Shipped", amount: 35 });
+  });
+
+  // fix round 1, finding IMPORTANT 1: `index === length` is only a legitimate
+  // append when the batch actually completes the tier it creates. A single
+  // leaf write landing at the append slot (a stale form editing "tier 2's
+  // price" after another tab or the CLI removed a tier) must not silently
+  // create a tier missing "label".
+  it("rejects a single-leaf write that lands at the append index but leaves the new tier incomplete", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const jsonPath = path.join(root, "content", "items", "electronics", "desk-lamp", "item.json");
+    const before = await fs.readFile(jsonPath, "utf-8");
+
+    // PATCH_ITEM_JSON's price.tiers has one entry (index 0); index 1 is a
+    // legal append position, but this batch only ever sets "amount" — no
+    // "label" — for it.
+    const res = await patch(root, [{ path: ["price", "tiers", 1, "amount"], value: 35 }]);
+    expect(res.status).toBe(400);
+    expect(asJson(res).body).toMatchObject({
+      error: expect.stringContaining("price.tiers.1"),
+    });
+    // Not silently clamped onto an existing tier, and not written as a
+    // half-formed object either: nothing on disk changed at all.
+    expect(await fs.readFile(jsonPath, "utf-8")).toBe(before);
+  });
+
+  it("allows a legitimate multi-leaf append that together completes the new tier", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await patch(root, [
+      { path: ["price", "tiers", 1, "label"], value: "Shipped" },
+      { path: ["price", "tiers", 1, "amount"], value: 35 },
+    ]);
+    expect(res.status).toBe(200);
+    const fields = (asJson(res).body as { fields: Record<string, unknown> }).fields;
+    const tiers = (fields["price"] as { tiers: { label: string; amount: number }[] }).tiers;
+    expect(tiers).toHaveLength(2);
+    expect(tiers[1]).toMatchObject({ label: "Shipped", amount: 35 });
+  });
+
+  // fix round 1, finding IMPORTANT 2: bounds must be evaluated against the
+  // array as the batch itself leaves it, not a pre-batch snapshot — in both
+  // directions.
+  describe("tier bounds against a batch that also replaces price wholesale", () => {
+    it("does not false-reject an index that the same batch's own wholesale replace just grew the array to cover", async () => {
+      const root = await project(PATCH_ITEM_JSON);
+      const res = await patch(root, [
+        {
+          path: ["price"],
+          value: {
+            currency: "USD",
+            tiers: [
+              { label: "Pickup", amount: 20 },
+              { label: "Local delivery", amount: 30 },
+              { label: "Shipped", amount: 40 },
+            ],
+          },
+        },
+        { path: ["price", "tiers", 2, "amount"], value: 99 },
+      ]);
+      expect(res.status).toBe(200);
+      const fields = (asJson(res).body as { fields: Record<string, unknown> }).fields;
+      const tiers = (fields["price"] as { tiers: { label: string; amount: number }[] }).tiers;
+      expect(tiers).toHaveLength(3);
+      expect(tiers[2]).toMatchObject({ label: "Shipped", amount: 99 });
+    });
+
+    it("does not false-accept — and silently clamp — an index the same batch's own wholesale replace just made out of range", async () => {
+      const root = await project(PATCH_ITEM_JSON);
+      const jsonPath = path.join(
+        root,
+        "content",
+        "items",
+        "electronics",
+        "desk-lamp",
+        "item.json",
+      );
+      const before = await fs.readFile(jsonPath, "utf-8");
+
+      const res = await patch(root, [
+        // Replaces price wholesale with no tiers at all.
+        { path: ["price"], value: { currency: "USD" } },
+        // Pre-batch, index 1 looked legal (the original array has length 1,
+        // so 1 was the append slot). After the edit above, the array this
+        // batch itself is building has length 0 — index 1 is genuinely out
+        // of range now, and must be rejected, not clamped onto index 0.
+        { path: ["price", "tiers", 1], value: { label: "X", amount: 9 } },
+      ]);
+      expect(res.status).toBe(400);
+      expect(asJson(res).body).toMatchObject({
+        error: expect.stringContaining("price.tiers.1"),
+      });
+      expect(await fs.readFile(jsonPath, "utf-8")).toBe(before);
+    });
+  });
+
+  // fix round 1, finding MINOR 4: a non-integer index is rejected for being
+  // an invalid path, not for being "out of range" — the bounds check must
+  // not shadow assertEditableValue's own, more specific reason.
+  it("reports a non-integer tier index as an invalid path, not an out-of-range one", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await patch(root, [{ path: ["price", "tiers", 1.5, "amount"], value: 30 }]);
+    expect(res.status).toBe(400);
+    const body = asJson(res).body as { error: string };
+    expect(body.error).not.toMatch(/out of range/);
+    expect(body.error).toMatch(/outside the item\.json schema/);
   });
 });

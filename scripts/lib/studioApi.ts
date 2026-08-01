@@ -20,6 +20,13 @@ import { z } from "zod";
 import { loadAllItemsRaw } from "../../lib/content/loader";
 import { isValidSlug } from "../../lib/utils/slug";
 import { applyFieldEdits, readItemField, readItemForEdit, type FieldEdit } from "./itemEdit";
+// assertEditableValue, directly: handleItemPatch needs to validate a
+// COMPOSED tier object (built up from several leaf edits in the same batch)
+// against the exact schema a whole-tier write would have to satisfy, and
+// that schema — along with the "is this even a legal index" grammar — is
+// itemFields.ts's alone to own. Re-deriving either here would be a second,
+// disagreeing answer the moment itemFields.ts's grammar changes.
+import { assertEditableValue } from "./itemFields";
 import { getSyncRunner, isSyncRunning, streamImageSync } from "./studioSync";
 import {
   contentTypeFor,
@@ -448,27 +455,118 @@ const patchBodySchema = z.object({
     .min(1),
 });
 
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
- * Rejects an edit that indexes `price.tiers` beyond the array's current
- * length. assertEditableValue (itemFields.ts) is a pure validator — it has no
- * access to the document, so an out-of-range index like
- * `["price", "tiers", 5]` on a 1-element array validates cleanly there, and
- * jsonc-parser's `modify()` then *appends* rather than erroring: a UI
- * off-by-one silently creates a tier instead of failing (Task 1 review,
- * deferred here because only the handler — which has just read the file —
- * can see the array it would index into). Appending at exactly the current
- * length is legitimate: that is how the studio form adds a new tier.
+ * Rejects a PATCH batch whose net effect on `price.tiers` either indexes
+ * beyond the array's true length, or leaves a newly-appended tier
+ * incomplete. Two independent gaps in the first version of this check (fix
+ * round 1, findings IMPORTANT 1 and IMPORTANT 2):
+ *
+ *  - IMPORTANT 2: bounds were checked against a snapshot of `tiers` taken
+ *    once, before the batch, but a batch can also replace `price` or
+ *    `price.tiers` wholesale — which changes the array's real length mid
+ *    batch. A stale snapshot both false-rejects an edit landing inside an
+ *    array the batch itself just grew, and — the more serious direction —
+ *    false-*accepts* an edit the batch's own earlier edit just made
+ *    genuinely out of range, which jsonc-parser's modify() then silently
+ *    clamps into the wrong slot: the exact failure mode this check exists to
+ *    stop, reopened by a different path to it.
+ *  - IMPORTANT 1: checking only the index missed that a batch appending a
+ *    tier via a SINGLE leaf edit (e.g. only `{path:["price","tiers",1,
+ *    "amount"], value:35}`, no "label") lands `index === length` — a
+ *    legitimate append position — while leaving the object it creates
+ *    missing a required field. assertEditableValue validates that one
+ *    leaf's own value (a plain, valid number) and has no way to see that the
+ *    object it lands inside is incomplete; jsonc-parser writes it anyway.
+ *
+ * This walks the batch in the same order applyFieldEdits will apply it,
+ * maintaining a plain-JS working copy of `tiers` — updated by every edit
+ * that touches `price`, `price.tiers`, or `price.tiers[i]`, in order — so
+ * bounds are always checked against what the array will actually be at that
+ * point in the batch, not a stale snapshot. Once the whole batch has been
+ * walked, every tier that was newly appended via one or more LEAF writes
+ * (never a single whole-object write at `path.length === 3`, which
+ * assertEditableValue already fully validates as a unit) is re-validated
+ * against the exact schema a whole-object write would have had to satisfy.
+ *
+ * Only reached after every edit's own path/value pairing has already passed
+ * assertEditableValue (see handleItemPatch): a non-integer or negative
+ * "index" like `["price","tiers",1.5,...]` is therefore never seen here in
+ * practice — resolveFieldSchema already refused it with its own, more
+ * specific reason (fix round 1, finding MINOR 4). The isNonNegativeInteger
+ * guard below is defense in depth, not the primary gate.
  */
-function assertTierIndicesInRange(text: string, edits: FieldEdit[]): void {
-  const rawPrice = readItemField(text, "price") as { tiers?: unknown[] } | undefined;
-  const tiersLength = Array.isArray(rawPrice?.tiers) ? rawPrice.tiers.length : 0;
+function assertTierBatchIsWellFormed(text: string, edits: FieldEdit[]): void {
+  const rawPrice = readItemField(text, "price") as { tiers?: unknown } | undefined;
+  let tiers: unknown[] = Array.isArray(rawPrice?.tiers) ? [...rawPrice.tiers] : [];
+  // Indices completed within this batch by at least one LEAF write — the
+  // only ones whose completeness this batch could possibly have broken. A
+  // whole-object write at path.length === 3 removes its index from this set
+  // the moment it lands (see the `path.length === 3` branch below).
+  const appendedByLeaf = new Set<number>();
 
   for (const edit of edits) {
-    const [head, second, third] = edit.path;
-    if (head === "price" && second === "tiers" && typeof third === "number" && third > tiersLength) {
+    const [p0, p1, p2, p3] = edit.path;
+    if (p0 !== "price") continue;
+
+    if (edit.path.length === 1) {
+      // Whole "price" replaced: re-derive tiers from the new value entirely,
+      // discarding whatever this batch had built up for it so far.
+      const nextTiers = (edit.value as { tiers?: unknown } | null | undefined)?.tiers;
+      tiers = Array.isArray(nextTiers) ? [...nextTiers] : [];
+      appendedByLeaf.clear();
+      continue;
+    }
+    if (p1 !== "tiers") continue;
+
+    if (edit.path.length === 2) {
+      // Whole "price.tiers" replaced.
+      tiers = Array.isArray(edit.value) ? [...(edit.value as unknown[])] : [];
+      appendedByLeaf.clear();
+      continue;
+    }
+    if (!isNonNegativeInteger(p2)) continue;
+
+    if (p2 > tiers.length) {
       throw new StudioError(
         400,
-        `"price.tiers.${third}" is out of range: the array currently has ${tiersLength} item(s) (append at index ${tiersLength} to add one)`,
+        `"price.tiers.${p2}" is out of range: the array currently has ${tiers.length} item(s) (append at index ${tiers.length} to add one)`,
+      );
+    }
+    const isNewIndex = p2 === tiers.length;
+
+    if (edit.path.length === 3) {
+      // Whole-tier object write — already fully schema-checked elsewhere, so
+      // it always leaves a complete tier at this index.
+      tiers[p2] = edit.value;
+      appendedByLeaf.delete(p2);
+      continue;
+    }
+
+    if (edit.path.length === 4 && typeof p3 === "string") {
+      if (isNewIndex) appendedByLeaf.add(p2);
+      const base = isPlainRecord(tiers[p2]) ? { ...tiers[p2] } : {};
+      base[p3] = edit.value;
+      tiers[p2] = base;
+    }
+  }
+
+  for (const idx of appendedByLeaf) {
+    try {
+      assertEditableValue(["price", "tiers", idx], tiers[idx]);
+    } catch (err: unknown) {
+      throw new StudioError(
+        400,
+        `"price.tiers.${idx}" is incomplete once this batch is applied: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
       );
     }
   }
@@ -491,11 +589,25 @@ async function handleItemPatch(
   const edits: FieldEdit[] = parsedEdits.map((e) => ({ path: e.path, value: e.value }));
   const { jsonPath, text } = await readItemJson(req, category, item);
 
-  assertTierIndicesInRange(text, edits);
+  // Each edit's own path/value pairing is checked first, so a genuinely
+  // malformed edit (an unknown field, a non-integer array index, an invalid
+  // value for its OWN path) is reported with assertEditableValue's specific
+  // reason rather than being pre-empted by the batch-level tier check below
+  // (fix round 1, finding MINOR 4).
+  try {
+    for (const edit of edits) assertEditableValue(edit.path, edit.value);
+  } catch (err: unknown) {
+    throw new StudioError(400, err instanceof Error ? err.message : String(err));
+  }
 
-  // applyFieldEdits validates every path and value before touching the string,
-  // so a rejected batch never reaches writeFile and the file on disk is
-  // unchanged — including the valid edits that shared the batch.
+  assertTierBatchIsWellFormed(text, edits);
+
+  // applyFieldEdits re-validates every path and value (redundant with the
+  // loop just above, but cheap, and keeps applyFieldEdits' own contract — "a
+  // rejected batch leaves the file untouched" — true standing entirely on
+  // its own) before touching the string, so a rejected batch never reaches
+  // writeFile and the file on disk is unchanged, including the valid edits
+  // that shared the batch.
   let next: string;
   try {
     next = applyFieldEdits(text, edits);

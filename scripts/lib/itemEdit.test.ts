@@ -197,6 +197,63 @@ describe("readItemForEdit", () => {
     expect(Object.keys(tier)).not.toContain("reserved_for");
     expect(tier["amount"]).toBe(10);
   });
+
+  // fix round 1, finding IMPORTANT 3: pickEditableValue's "shape didn't match
+  // the grammar" fallback used to be `pickOwnKeys(...) ?? rawValue` — a pick
+  // list with a raw pass-through for anything pickOwnKeys couldn't handle. A
+  // malformed item.json (not something studio itself writes, but not
+  // something it may assume never exists either) could put reserved_for
+  // behind any of these shapes and have it survive to a GET response. Every
+  // one of these is a literal reproduction from the review finding.
+  describe("never leaks reserved_for through a malformed nested shape (Iron Rule 4)", () => {
+    it("price.tiers present but not an array (an object, not a list)", () => {
+      const doc = `{ "name": "x", "price": { "tiers": { "reserved_for": "a@b" } } }`;
+      const price = readItemForEdit(doc)["price"] as Record<string, unknown>;
+      const body = JSON.stringify(price);
+      expect(body).not.toContain("reserved_for");
+      expect(body).not.toContain("a@b");
+    });
+
+    it("price itself is an array, not an object", () => {
+      const doc = `{ "name": "x", "price": [{ "reserved_for": "a@b" }] }`;
+      const fields = readItemForEdit(doc);
+      const body = JSON.stringify(fields);
+      expect(body).not.toContain("reserved_for");
+      expect(body).not.toContain("a@b");
+    });
+
+    it("price is a bare primitive — shown as-is, not omitted (a primitive can't carry a nested key)", () => {
+      const doc = `{ "name": "x", "price": "20 dollars" }`;
+      expect(readItemForEdit(doc)["price"]).toBe("20 dollars");
+    });
+
+    it("dimensions is an array, not an object", () => {
+      const doc = `{ "name": "x", "dimensions": [{ "reserved_for": "a@b" }] }`;
+      const fields = readItemForEdit(doc);
+      const body = JSON.stringify(fields);
+      expect(body).not.toContain("reserved_for");
+      expect(body).not.toContain("a@b");
+    });
+
+    it("weight is a bare primitive — shown as-is, not omitted", () => {
+      const doc = `{ "name": "x", "weight": "3kg-ish" }`;
+      expect(readItemForEdit(doc)["weight"]).toBe("3kg-ish");
+    });
+
+    it("a price.tiers entry that is itself an array, not a plain object", () => {
+      const doc = `{
+        "name": "x",
+        "price": { "tiers": [ [ { "reserved_for": "a@b" } ] ] }
+      }`;
+      const price = readItemForEdit(doc)["price"] as Record<string, unknown>;
+      const body = JSON.stringify(price);
+      expect(body).not.toContain("reserved_for");
+      expect(body).not.toContain("a@b");
+      // Nulled in place, not dropped: the array still has one entry at index 0.
+      expect((price["tiers"] as unknown[]).length).toBe(1);
+      expect((price["tiers"] as unknown[])[0]).toBeNull();
+    });
+  });
 });
 
 describe("round-trip against this repo's real item.json files", () => {

@@ -301,6 +301,16 @@ function pickOwnKeys(
   return out;
 }
 
+// A string/number/boolean/null cannot carry a nested key, so it is the one
+// shape a "value didn't match the grammar" fallback may still show the
+// seller: they see `"price": "20 dollars"` is wrong and can fix it in the
+// form, which is the whole point of showing raw, uncoerced values at all.
+// Every other shape (an array, in particular) COULD carry a nested key, so it
+// is never eligible for a raw pass-through — see pickEditableValue below.
+function isPrimitiveJsonValue(value: unknown): value is string | number | boolean | null {
+  return value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+}
+
 /**
  * Deep-picks one top-level field's on-disk value down to only the keys this
  * grammar declares for it. A private key stashed inside `price`, `dimensions`,
@@ -313,23 +323,51 @@ function pickOwnKeys(
  * Values that survive the pick are returned exactly as they appear on disk,
  * not schema-coerced — same reasoning as pickEditableFields below: the form
  * must show the seller what the file actually says.
+ *
+ * Returns `undefined` — a value no on-disk field can ever legitimately hold,
+ * since it is parsed from JSON text — to mean "omit this field/key entirely".
+ * That sentinel exists because pickOwnKeys returning null ("this isn't a
+ * plain object at all") used to fall back to `?? rawValue`: a pick list with
+ * a raw-value fallback for "shape didn't match" is an omit list wearing a
+ * pick list's clothes, and Iron Rule 4 is absolute — a malformed item.json
+ * with `"price": {"tiers": {"reserved_for": "..."}}` (a non-array `tiers`,
+ * so it skipped the tiers-specific filtering below entirely) or
+ * `"price": [{"reserved_for": "..."}]` (an array where an object was
+ * expected, so pickOwnKeys bailed out to null and the fallback returned the
+ * whole array untouched) used to return the secret from a GET response.
  */
 function pickEditableValue(field: string, rawValue: unknown): unknown {
   if (field === "price") {
     const picked = pickOwnKeys(PRICE_LEAVES, rawValue);
-    if (picked === null) return rawValue;
-    if (Array.isArray(picked["tiers"])) {
-      picked["tiers"] = (picked["tiers"] as unknown[]).map(
-        (tier) => pickOwnKeys(TIER_LEAVES, tier) ?? tier,
-      );
+    if (picked === null) {
+      return isPrimitiveJsonValue(rawValue) ? rawValue : undefined;
+    }
+    if (Object.prototype.hasOwnProperty.call(picked, "tiers")) {
+      if (Array.isArray(picked["tiers"])) {
+        picked["tiers"] = (picked["tiers"] as unknown[]).map((tier) => {
+          const pickedTier = pickOwnKeys(TIER_LEAVES, tier);
+          if (pickedTier !== null) return pickedTier;
+          // A tiers[] entry that isn't a plain object at all (e.g. a nested
+          // array) is nulled IN PLACE rather than dropped from the array:
+          // dropping it would shift every later tier's index, and indices
+          // are exactly what a seller's edit and the tier-bounds check in
+          // studioApi.ts both address by position.
+          return isPrimitiveJsonValue(tier) ? tier : null;
+        });
+      } else if (!isPrimitiveJsonValue(picked["tiers"])) {
+        // "tiers" present but not an array at all (e.g. an object) — the
+        // per-entry mapping above never runs, so this is a second,
+        // independent place the same class of leak was reachable from.
+        delete picked["tiers"];
+      }
     }
     return picked;
   }
-  if (field === "dimensions") {
-    return rawValue === null ? null : (pickOwnKeys(DIMENSION_LEAVES, rawValue) ?? rawValue);
-  }
-  if (field === "weight") {
-    return rawValue === null ? null : (pickOwnKeys(WEIGHT_LEAVES, rawValue) ?? rawValue);
+  if (field === "dimensions" || field === "weight") {
+    if (rawValue === null) return null;
+    const picked = pickOwnKeys(field === "dimensions" ? DIMENSION_LEAVES : WEIGHT_LEAVES, rawValue);
+    if (picked !== null) return picked;
+    return isPrimitiveJsonValue(rawValue) ? rawValue : undefined;
   }
   return rawValue;
 }
@@ -346,7 +384,12 @@ export function pickEditableFields(raw: Record<string, unknown>): Record<string,
   const out: Record<string, unknown> = {};
   for (const field of EDITABLE_TOP_LEVEL_FIELDS) {
     if (Object.prototype.hasOwnProperty.call(raw, field)) {
-      out[field] = pickEditableValue(field, raw[field]);
+      const value = pickEditableValue(field, raw[field]);
+      // pickEditableValue's `undefined` sentinel means "the on-disk shape
+      // for this field could hide a private key and isn't a primitive we can
+      // safely show" — omit the key rather than set it to undefined, so a
+      // consumer that iterates Object.keys never even sees it listed.
+      if (value !== undefined) out[field] = value;
     }
   }
   return out;
