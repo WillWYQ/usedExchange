@@ -1119,3 +1119,96 @@ describe("PATCH /api/items/:cat/:name", () => {
     expect(body.error).toMatch(/outside the item\.json schema/);
   });
 });
+
+describe("POST /api/items", () => {
+  // Tracked and removed in afterEach, same pattern makeTempProject/project use
+  // above — each test mints its own tmpdir via emptyProject() and must not
+  // leak it.
+  let tempProjects: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+
+  function create(root: string, body: unknown) {
+    return handleStudioRequest({
+      method: "POST",
+      url: "/api/items",
+      body: Buffer.from(JSON.stringify(body)),
+      projectRoot: root,
+    });
+  }
+
+  async function emptyProject(): Promise<string> {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-create-"));
+    await fs.mkdir(path.join(root, "content", "items"), { recursive: true });
+    tempProjects.push(root);
+    return root;
+  }
+
+  it("creates item.json from the template", async () => {
+    const root = await emptyProject();
+    const res = await create(root, { category: "electronics", name: "desk-lamp" });
+    expect(res.status).toBe(201);
+    expect((asJson(res).body as { id: string }).id).toBe("electronics/desk-lamp");
+
+    const text = await fs.readFile(
+      path.join(root, "content", "items", "electronics", "desk-lamp", "item.json"),
+      "utf-8",
+    );
+    expect(text).toContain('"status": "draft"');
+    expect(text).toContain("// options:");
+    // Iron Rule 4 — the scaffold never writes it.
+    expect(text).not.toContain("reserved_for");
+  });
+
+  it("derives a display name from the slug", async () => {
+    const root = await emptyProject();
+    await create(root, { category: "electronics", name: "usb-c-hub" });
+    const text = await fs.readFile(
+      path.join(root, "content", "items", "electronics", "usb-c-hub", "item.json"),
+      "utf-8",
+    );
+    expect(text).toContain('"name": "Usb C Hub"');
+  });
+
+  it("creates the category folder when it does not exist", async () => {
+    const root = await emptyProject();
+    expect((await create(root, { category: "garden", name: "hose" })).status).toBe(201);
+    await expect(
+      fs.stat(path.join(root, "content", "items", "garden")),
+    ).resolves.toBeDefined();
+  });
+
+  it("409s rather than overwriting an existing item", async () => {
+    const root = await emptyProject();
+    await create(root, { category: "electronics", name: "desk-lamp" });
+    const jsonPath = path.join(
+      root, "content", "items", "electronics", "desk-lamp", "item.json",
+    );
+    await fs.writeFile(jsonPath, `{ "name": "Edited by hand" }`, "utf-8");
+
+    const res = await create(root, { category: "electronics", name: "desk-lamp" });
+    expect(res.status).toBe(409);
+    expect(await fs.readFile(jsonPath, "utf-8")).toContain("Edited by hand");
+  });
+
+  it("400s on a non-slug category or name", async () => {
+    const root = await emptyProject();
+    expect((await create(root, { category: "Electronics", name: "x" })).status).toBe(400);
+    expect((await create(root, { category: "e", name: "desk lamp" })).status).toBe(400);
+    expect((await create(root, { category: "..", name: "x" })).status).toBe(400);
+  });
+
+  it("405s on DELETE /api/items", async () => {
+    const root = await emptyProject();
+    const res = await handleStudioRequest({
+      method: "DELETE",
+      url: "/api/items",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(405);
+  });
+});

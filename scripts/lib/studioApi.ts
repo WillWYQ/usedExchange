@@ -17,9 +17,11 @@ import { z } from "zod";
 // import here isn't just cosmetic — it makes Vite treat the module as external
 // and skip bundling it, so correctness would depend on tsx's tsconfig-paths
 // hook resolving it at runtime, an undeclared and untested resolution chain.
+import { siteConfig } from "../../content/config";
 import { loadAllItemsRaw } from "../../lib/content/loader";
 import { isValidSlug } from "../../lib/utils/slug";
 import { applyFieldEdits, readItemField, readItemForEdit, type FieldEdit } from "./itemEdit";
+import { buildItemTemplate, renderItemTemplateJsonc } from "./itemTemplate";
 // assertEditableValue, directly: handleItemPatch needs to validate a
 // COMPOSED tier object (built up from several leaf edits in the same batch)
 // against the exact schema a whole-tier write would have to satisfy, and
@@ -626,15 +628,72 @@ async function handleItemPatch(
   };
 }
 
+const createItemBodySchema = z.object({
+  category: z.string().min(1),
+  name: z.string().min(1),
+});
+
+async function handleItemCreate(req: StudioRequest): Promise<StudioResponse> {
+  const { category, name } = parseJsonBody(req.body, createItemBodySchema);
+
+  // resolveItemDir runs the slug allowlist AND the containment assertion, so
+  // this is the same two-layer check every other write path uses.
+  const dir = resolveItemDir(req.projectRoot, category, name);
+  const jsonPath = path.join(dir, "item.json");
+
+  try {
+    await fsPromises.access(jsonPath);
+    throw new StudioError(409, `${category}/${name} already exists`);
+  } catch (err: unknown) {
+    // access() rejects when the file is absent — that is the good path here.
+    // A StudioError thrown in the try block above must not be swallowed by it.
+    if (err instanceof StudioError) throw err;
+  }
+
+  // recursive: true also creates the category folder. `pnpm create-item`
+  // requires an existing category, but studio must not: a seller with no
+  // categories yet cannot create one anywhere else in this UI, which would make
+  // the create button a dead end on a fresh site. No _category.json is written
+  // — lib/content/loader.ts derives a display name from the slug when it is
+  // absent, so the category is complete without one.
+  await fsPromises.mkdir(dir, { recursive: true });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const displayName = name.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const template = buildItemTemplate(
+    displayName,
+    today,
+    siteConfig.measurementUnit,
+    siteConfig.defaultPriceTiers,
+  );
+
+  // "wx" rather than a plain write: two create requests for the same slug can
+  // interleave between the access() check above and here, and the loser must
+  // not silently flatten the winner's file.
+  try {
+    await fsPromises.writeFile(jsonPath, renderItemTemplateJsonc(template), { flag: "wx" });
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new StudioError(409, `${category}/${name} already exists`);
+    }
+    throw err;
+  }
+
+  return { status: 201, body: { id: `${category}/${name}` } };
+}
+
 export async function handleStudioRequest(req: StudioRequest): Promise<StudioResponse> {
   const pathname = req.url.split("?")[0] ?? "";
 
   try {
     if (pathname === "/api/items") {
-      if (req.method !== "GET") {
-        return { status: 405, body: { error: "GET only" } };
+      if (req.method === "GET") {
+        return { status: 200, body: { items: await listStudioItems(req.projectRoot) } };
       }
-      return { status: 200, body: { items: await listStudioItems(req.projectRoot) } };
+      if (req.method === "POST") {
+        return await handleItemCreate(req);
+      }
+      return { status: 405, body: { error: "GET or POST only" } };
     }
 
     if (pathname === "/api/items/bulk-status") {
