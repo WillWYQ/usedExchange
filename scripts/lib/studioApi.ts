@@ -29,6 +29,7 @@ import { buildItemTemplate, renderItemTemplateJsonc } from "./itemTemplate";
 // itemFields.ts's alone to own. Re-deriving either here would be a second,
 // disagreeing answer the moment itemFields.ts's grammar changes.
 import { assertEditableValue } from "./itemFields";
+import { GitError, publishChanges, readChanges } from "./studioGit";
 import { getSyncRunner, isSyncRunning, streamImageSync } from "./studioSync";
 import {
   contentTypeFor,
@@ -682,6 +683,44 @@ async function handleItemCreate(req: StudioRequest): Promise<StudioResponse> {
   return { status: 201, body: { id: `${category}/${name}` } };
 }
 
+const publishBodySchema = z.object({
+  message: z.string().min(1).max(500),
+});
+
+function asStudioError(err: unknown): never {
+  if (err instanceof GitError) throw new StudioError(err.status, err.message);
+  throw err;
+}
+
+async function handleChanges(req: StudioRequest): Promise<StudioResponse> {
+  try {
+    return { status: 200, body: await readChanges(req.projectRoot) };
+  } catch (err: unknown) {
+    asStudioError(err);
+  }
+}
+
+async function handlePublish(req: StudioRequest): Promise<StudioResponse> {
+  // An image sync writes lib/generated/image-manifest.json. Committing while
+  // that is in flight ships a manifest that omits photos which were in fact
+  // uploaded — broken images on the live site, with a green publish in studio.
+  // A 409 is enough: the sync finishes in seconds to minutes and the seller can
+  // simply publish after.
+  if (isSyncRunning()) {
+    throw new StudioError(
+      409,
+      "an image sync is still running — wait for it to finish, then publish",
+    );
+  }
+
+  const { message } = parseJsonBody(req.body, publishBodySchema);
+  try {
+    return { status: 200, body: await publishChanges(req.projectRoot, message) };
+  } catch (err: unknown) {
+    asStudioError(err);
+  }
+}
+
 export async function handleStudioRequest(req: StudioRequest): Promise<StudioResponse> {
   const pathname = req.url.split("?")[0] ?? "";
 
@@ -782,6 +821,20 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
         return { status: 405, body: { error: "POST only" } };
       }
       return handleSyncImages();
+    }
+
+    if (pathname === "/api/changes") {
+      if (req.method !== "GET") {
+        return { status: 405, body: { error: "GET only" } };
+      }
+      return await handleChanges(req);
+    }
+
+    if (pathname === "/api/publish") {
+      if (req.method !== "POST") {
+        return { status: 405, body: { error: "POST only" } };
+      }
+      return await handlePublish(req);
     }
 
     return { status: 404, body: { error: `no route for ${pathname}` } };

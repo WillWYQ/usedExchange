@@ -13,7 +13,7 @@ import {
   type JsonResponse,
 } from "./studioApi";
 import { listImageFiles } from "./studioImages";
-import { setSyncRunner } from "./studioSync";
+import { getSyncRunner, resetSyncStateForTests, setSyncRunner, streamImageSync } from "./studioSync";
 
 // All routes exercised in this file return the JSON variant of StudioResponse;
 // this narrows the union so `.body` type-checks without re-asserting at every
@@ -1210,5 +1210,88 @@ describe("POST /api/items", () => {
       projectRoot: root,
     });
     expect(res.status).toBe(405);
+  });
+});
+
+describe("publish routes", () => {
+  // Tracked and removed in afterEach, same pattern makeTempProject/project use
+  // above — each test mints its own tmpdir via makeTempProject and must not
+  // leak it.
+  let tempProjects: string[] = [];
+
+  async function project(itemJson: string): Promise<string> {
+    const root = await makeTempProject(itemJson);
+    tempProjects.push(root);
+    return root;
+  }
+
+  afterEach(async () => {
+    resetSyncStateForTests();
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+
+  it("GET /api/changes returns branch and files", async () => {
+    const root = await project(ITEM_JSON); // not a git repo
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/changes",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(400);
+    expect((asJson(res).body as { error: string }).error).toMatch(/not a git repository/);
+  });
+
+  it("POST /api/publish is refused while an image sync is running", async () => {
+    const root = await project(ITEM_JSON);
+
+    // Hold the mutex with a runner that emits one progress event and then
+    // never settles, then confirm publish refuses. A commit taken mid-sync
+    // would ship a half-written lib/generated/image-manifest.json.
+    //
+    // The runner must emit at least once before blocking: streamImageSync's
+    // generator only resolves a `.next()` call by reaching a `yield`, and with
+    // no progress event ever pushed it would sit forever on its internal
+    // 50ms poll `await` (which does not resolve `.next()`) — hanging this
+    // test, not exercising the 409. `running` is already true by the time
+    // this first event is emitted; it flips synchronously at the top of
+    // streamImageSync, before the runner is even invoked. Same shape
+    // studioSync.test.ts uses for "genuinely still in flight" cases.
+    setSyncRunner((onProgress) => {
+      onProgress({ type: "scanned", total: 1 });
+      return new Promise(() => {});
+    });
+    const stream = streamImageSync(getSyncRunner()!);
+    await stream.next(); // yields the progress event; `running` is already true
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/publish",
+      body: Buffer.from(JSON.stringify({ message: "chore: update listings" })),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(409);
+    expect((asJson(res).body as { error: string }).error).toMatch(/sync/i);
+
+    await stream.return(undefined);
+  });
+
+  it("405s on the wrong methods", async () => {
+    const root = await project(ITEM_JSON);
+    expect(
+      (
+        await handleStudioRequest({
+          method: "POST", url: "/api/changes", body: Buffer.from("{}"), projectRoot: root,
+        })
+      ).status,
+    ).toBe(405);
+    expect(
+      (
+        await handleStudioRequest({
+          method: "GET", url: "/api/publish", body: Buffer.alloc(0), projectRoot: root,
+        })
+      ).status,
+    ).toBe(405);
   });
 });
