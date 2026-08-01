@@ -3,7 +3,24 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import * as loaderModule from "@/lib/content/loader";
-import { handleStudioRequest, resolveItemDir, StudioError, listStudioItems } from "./studioApi";
+import {
+  handleStudioRequest,
+  resolveItemDir,
+  StudioError,
+  listStudioItems,
+  isFileResponse,
+  isSseResponse,
+  type JsonResponse,
+} from "./studioApi";
+import { listImageFiles } from "./studioImages";
+import { setSyncRunner } from "./studioSync";
+
+// All routes exercised in this file return the JSON variant of StudioResponse;
+// this narrows the union so `.body` type-checks without re-asserting at every
+// call site.
+function asJson(res: Awaited<ReturnType<typeof handleStudioRequest>>): JsonResponse {
+  return res as JsonResponse;
+}
 
 const PROJECT_ROOT = process.cwd();
 
@@ -39,7 +56,7 @@ describe("handleStudioRequest", () => {
       projectRoot: PROJECT_ROOT,
     });
     expect(res.status).toBe(200);
-    const body = res.body as { items: unknown[] };
+    const body = asJson(res).body as { items: unknown[] };
     expect(Array.isArray(body.items)).toBe(true);
   });
 
@@ -155,7 +172,7 @@ describe("POST /api/items/bulk-status", () => {
     const res = await bulkStatus(["electronics/desk-lamp", "books/cs61a"], "sold");
 
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ ok: 2, failed: [] });
+    expect(asJson(res).body).toMatchObject({ ok: 2, failed: [] });
     const text = await readItemJson("books/cs61a");
     expect(text).toContain('"status": "sold"');
     expect(text).toMatch(/"sold_date": "\d{4}-\d{2}-\d{2}"/);
@@ -194,7 +211,7 @@ describe("POST /api/items/bulk-status", () => {
     const res = await bulkStatus(["electronics/desk-lamp"], "sold");
 
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ ok: 1, failed: [] });
+    expect(asJson(res).body).toMatchObject({ ok: 1, failed: [] });
     const text = await readItemJson("electronics/desk-lamp");
     expect(text).toContain('"sold_date": "2026-01-15"');
     expect(text).toContain('"status": "sold"');
@@ -204,7 +221,7 @@ describe("POST /api/items/bulk-status", () => {
     await seedItem("electronics/desk-lamp");
     const res = await bulkStatus(["electronics/desk-lamp"], "sold");
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ ok: 1, failed: [] });
+    expect(asJson(res).body).toMatchObject({ ok: 1, failed: [] });
     const text = await readItemJson("electronics/desk-lamp");
     expect(text).toMatch(/"sold_date": "\d{4}-\d{2}-\d{2}"/);
     expect(text).not.toContain('"sold_date": null');
@@ -216,7 +233,7 @@ describe("POST /api/items/bulk-status", () => {
     const res = await bulkStatus(["electronics/desk-lamp", "books/missing"], "sold");
 
     expect(res.status).toBe(200);
-    const body = res.body as { ok: number; failed: Array<{ id: string; error: string }> };
+    const body = asJson(res).body as { ok: number; failed: Array<{ id: string; error: string }> };
     expect(body.ok).toBe(1);
     expect(body.failed).toHaveLength(1);
     expect(body.failed[0]?.id).toBe("books/missing");
@@ -235,12 +252,536 @@ describe("POST /api/items/bulk-status", () => {
 
   it("rejects a traversal id", async () => {
     const res = await bulkStatus(["../../etc/passwd"], "sold");
-    const body = res.body as { ok: number; failed: Array<{ id: string; error: string }> };
+    const body = asJson(res).body as { ok: number; failed: Array<{ id: string; error: string }> };
     expect(body.ok).toBe(0);
     expect(body.failed[0]?.id).toBe("../../etc/passwd");
     // Asserts the write was refused by the path-containment layer specifically,
     // not merely failed for some other reason (e.g. ENOENT on the traversal
     // target) that would pass even with resolveItemDir's guards deleted.
     expect(body.failed[0]?.error).toMatch(/kebab-case|escapes content\/items/);
+  });
+});
+
+const PNG_BYTES = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
+
+async function seedImage(id: string, filename: string): Promise<void> {
+  const dir = path.join(sandbox, "content", "items", ...id.split("/"));
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, filename), PNG_BYTES);
+}
+
+function get(url: string) {
+  return handleStudioRequest({
+    method: "GET",
+    url,
+    body: Buffer.alloc(0),
+    projectRoot: sandbox,
+  });
+}
+
+describe("GET image routes", () => {
+  beforeEach(async () => {
+    sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "studio-api-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(sandbox, { recursive: true, force: true });
+  });
+
+  it("lists an item's images in loader order", async () => {
+    await seedItem("electronics/desk-lamp");
+    await seedImage("electronics/desk-lamp", "02-Side.JPG");
+    await seedImage("electronics/desk-lamp", "01-front.jpg");
+
+    const res = await get("/api/items/electronics/desk-lamp/images");
+
+    expect(res.status).toBe(200);
+    expect(asJson(res).body).toEqual({
+      files: [
+        { name: "01-front.jpg", editable: true },
+        { name: "02-Side.JPG", editable: true },
+      ],
+    });
+  });
+
+  it("lists a file the site will ship but studio cannot rename, marked not editable", async () => {
+    await seedItem("electronics/desk-lamp");
+    await seedImage("electronics/desk-lamp", "apple.jpg");
+    // A file the seller placed by hand — spaces and parentheses are outside
+    // studio's write allowlist, but the published site ships it regardless
+    // (extension-only check), so studio must show it, just not let it be
+    // renamed or deleted here.
+    await seedImage("electronics/desk-lamp", "Screenshot 2026-07-30 at 10.00.00.png");
+
+    const res = await get("/api/items/electronics/desk-lamp/images");
+
+    expect(res.status).toBe(200);
+    expect(asJson(res).body).toEqual({
+      files: [
+        { name: "apple.jpg", editable: true },
+        { name: "Screenshot 2026-07-30 at 10.00.00.png", editable: false },
+      ],
+    });
+  });
+
+  it("serves one image as a file response", async () => {
+    await seedItem("electronics/desk-lamp");
+    await seedImage("electronics/desk-lamp", "01-front.jpg");
+
+    const res = await get("/api/items/electronics/desk-lamp/images/01-front.jpg");
+
+    expect(res.status).toBe(200);
+    expect(isFileResponse(res)).toBe(true);
+    if (isFileResponse(res)) {
+      expect(res.contentType).toBe("image/jpeg");
+      expect(res.file.endsWith("01-front.jpg")).toBe(true);
+    }
+  });
+
+  it("404s an image that is not there", async () => {
+    await seedItem("electronics/desk-lamp");
+    const res = await get("/api/items/electronics/desk-lamp/images/missing.jpg");
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects a traversal filename", async () => {
+    // Asserts *which* layer refused, not just the status: a bare 400 would
+    // still pass with the containment guard in handleImageGet deleted (see
+    // that function's comment on why `rel !== filename` alone is
+    // tautological for a plain "../" payload). Mirrors the discipline in
+    // resolveItemDir's own traversal tests above (asserting
+    // /kebab-case|escapes content\/items/).
+    //
+    // There is no second case here exercising the containment layer directly:
+    // IMAGE_FILENAME_RE requires the first character to be alphanumeric and
+    // forbids "/" anywhere, so any string that satisfies the allowlist is
+    // necessarily a single path component that is never exactly ".." — on
+    // POSIX, path.join/path.relative can only resolve outside `dir` via a
+    // literal ".." path *segment*, which no allowlist-passing filename can
+    // form. Verified empirically (see task-2-report.md, fix round 1) rather
+    // than assumed.
+    await seedItem("electronics/desk-lamp");
+    const res = await get("/api/items/electronics/desk-lamp/images/..%2Fitem.json");
+    expect(res.status).toBe(400);
+    expect(asJson(res).body).toMatchObject({
+      error: expect.stringContaining("not an image filename"),
+    });
+  });
+
+  it("rejects a bad category slug", async () => {
+    const res = await get("/api/items/Electronics/desk-lamp/images");
+    expect(res.status).toBe(400);
+  });
+
+  it("405s a POST-less method on the image collection", async () => {
+    await seedItem("electronics/desk-lamp");
+    const res = await handleStudioRequest({
+      method: "PUT",
+      url: "/api/items/electronics/desk-lamp/images",
+      body: Buffer.alloc(0),
+      projectRoot: sandbox,
+    });
+    expect(res.status).toBe(405);
+  });
+});
+
+function postImage(id: string, filename: string, bytes: Buffer) {
+  return handleStudioRequest({
+    method: "POST",
+    url: `/api/items/${id}/images`,
+    body: Buffer.from(
+      JSON.stringify({ filename, contentBase64: bytes.toString("base64") }),
+    ),
+    projectRoot: sandbox,
+  });
+}
+
+describe("POST image upload", () => {
+  beforeEach(async () => {
+    sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "studio-api-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(sandbox, { recursive: true, force: true });
+  });
+
+  it("writes the photo and returns the new listing", async () => {
+    await seedItem("electronics/desk-lamp");
+
+    const res = await postImage("electronics/desk-lamp", "01-front.png", PNG_BYTES);
+
+    expect(res.status).toBe(201);
+    expect(asJson(res).body).toEqual({
+      file: "01-front.png",
+      files: [{ name: "01-front.png", editable: true }],
+    });
+    const onDisk = await fs.readFile(
+      path.join(sandbox, "content", "items", "electronics", "desk-lamp", "01-front.png"),
+    );
+    expect(onDisk).toEqual(PNG_BYTES);
+  });
+
+  it("sanitises a macOS-style filename with spaces and parentheses, and reports the stored name", async () => {
+    await seedItem("electronics/desk-lamp");
+
+    const res = await postImage("electronics/desk-lamp", "photo (1).jpg", PNG_BYTES);
+
+    expect(res.status).toBe(201);
+    const body = asJson(res).body as {
+      file: string;
+      files: Array<{ name: string; editable: boolean }>;
+    };
+    // The seller never has to rename anything: the raw browser filename is
+    // rejected by the allowlist, but studio normalises it instead of
+    // bouncing the upload back with a confusing "not an image filename".
+    expect(body.file).not.toBe("photo (1).jpg");
+    expect(body.file).toMatch(/^[a-z0-9][a-z0-9._-]*\.jpg$/i);
+    expect(body.files).toEqual([{ name: body.file, editable: true }]);
+    const onDisk = await fs.readFile(
+      path.join(sandbox, "content", "items", "electronics", "desk-lamp", body.file),
+    );
+    expect(onDisk).toEqual(PNG_BYTES);
+  });
+
+  it("still rejects an unsupported extension with the format message, after sanitising", async () => {
+    await seedItem("electronics/desk-lamp");
+
+    const res = await postImage("electronics/desk-lamp", "notes (draft).txt", PNG_BYTES);
+
+    expect(res.status).toBe(400);
+    expect(asJson(res).body).toMatchObject({
+      error: expect.stringContaining("use .jpg, .png, .webp or .gif"),
+    });
+  });
+
+  it("sanitises a leading underscore and uploads successfully", async () => {
+    // "_cover.jpg" has a perfectly usable base ("cover") and a valid
+    // extension; only the leading underscore ever made it invalid. Must not
+    // be told to fix a "format" that was never broken.
+    await seedItem("electronics/desk-lamp");
+
+    const res = await postImage("electronics/desk-lamp", "_cover.jpg", PNG_BYTES);
+
+    expect(res.status).toBe(201);
+    expect(asJson(res).body).toEqual({
+      file: "cover.jpg",
+      files: [{ name: "cover.jpg", editable: true }],
+    });
+  });
+
+  it("reports the character/empty-base message, not the format message, for a CJK filename that sanitises to an empty base", async () => {
+    // Regression: the extension check used to run against the *sanitised*
+    // name. "照片.jpg" sanitises to ".jpg" (empty base), and
+    // path.extname(".jpg") === "" — Node treats a string that is only an
+    // extension as a dotfile with none — so the old check misrouted a
+    // perfectly valid .jpg extension into the format-message branch and
+    // told the seller their JPEG wasn't one.
+    await seedItem("electronics/desk-lamp");
+
+    const res = await postImage("electronics/desk-lamp", "照片.jpg", PNG_BYTES);
+
+    expect(res.status).toBe(400);
+    const body = asJson(res).body as { error: string };
+    expect(body.error).not.toContain("use .jpg, .png, .webp or .gif");
+    expect(body.error).toContain("照片.jpg");
+  });
+
+  it("reports the character/empty-base message, not the format message, for a filename that sanitises to nothing but punctuation", async () => {
+    await seedItem("electronics/desk-lamp");
+
+    const res = await postImage("electronics/desk-lamp", "??.jpg", PNG_BYTES);
+
+    expect(res.status).toBe(400);
+    const body = asJson(res).body as { error: string };
+    expect(body.error).not.toContain("use .jpg, .png, .webp or .gif");
+    expect(body.error).toContain("??.jpg");
+  });
+
+  it("rejects a file whose bytes are not an image, whatever the extension says", async () => {
+    await seedItem("electronics/desk-lamp");
+
+    const res = await postImage(
+      "electronics/desk-lamp",
+      "evil.jpg",
+      Buffer.from("<!doctype html><script>alert(1)</script>"),
+    );
+
+    expect(res.status).toBe(400);
+    expect(await listImageFiles(
+      path.join(sandbox, "content", "items", "electronics", "desk-lamp"),
+    )).toEqual([]);
+  });
+
+  it("rejects a traversal filename", async () => {
+    await seedItem("electronics/desk-lamp");
+    const res = await postImage("electronics/desk-lamp", "../item.json", PNG_BYTES);
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an empty upload", async () => {
+    await seedItem("electronics/desk-lamp");
+    const res = await postImage("electronics/desk-lamp", "01-front.png", Buffer.alloc(0));
+    expect(res.status).toBe(400);
+  });
+
+  it("keeps both photos when the filename collides", async () => {
+    await seedItem("electronics/desk-lamp");
+    await postImage("electronics/desk-lamp", "01-front.png", PNG_BYTES);
+
+    const res = await postImage("electronics/desk-lamp", "01-front.png", PNG_BYTES);
+
+    expect(res.status).toBe(201);
+    const body = asJson(res).body as { file: string; files: string[] };
+    expect(body.file).toBe("01-front-1.png");
+    expect(body.files).toHaveLength(2);
+  });
+});
+
+describe("DELETE and reorder image routes", () => {
+  beforeEach(async () => {
+    sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "studio-api-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(sandbox, { recursive: true, force: true });
+  });
+
+  it("deletes one image and returns the rest", async () => {
+    await seedItem("electronics/desk-lamp");
+    await seedImage("electronics/desk-lamp", "01-front.png");
+    await seedImage("electronics/desk-lamp", "02-side.png");
+
+    const res = await handleStudioRequest({
+      method: "DELETE",
+      url: "/api/items/electronics/desk-lamp/images/01-front.png",
+      body: Buffer.alloc(0),
+      projectRoot: sandbox,
+    });
+
+    expect(res.status).toBe(200);
+    expect(asJson(res).body).toEqual({ files: [{ name: "02-side.png", editable: true }] });
+  });
+
+  it("404s deleting an image that is not there", async () => {
+    await seedItem("electronics/desk-lamp");
+    const res = await handleStudioRequest({
+      method: "DELETE",
+      url: "/api/items/electronics/desk-lamp/images/ghost.png",
+      body: Buffer.alloc(0),
+      projectRoot: sandbox,
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("reorders by renaming with numeric prefixes", async () => {
+    await seedItem("electronics/desk-lamp");
+    await seedImage("electronics/desk-lamp", "apple.png");
+    await seedImage("electronics/desk-lamp", "banana.png");
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/items/electronics/desk-lamp/images/reorder",
+      body: Buffer.from(JSON.stringify({ order: ["banana.png", "apple.png"] })),
+      projectRoot: sandbox,
+    });
+
+    expect(res.status).toBe(200);
+    expect(asJson(res).body).toEqual({
+      files: [
+        { name: "01-banana.png", editable: true },
+        { name: "02-apple.png", editable: true },
+      ],
+    });
+  });
+
+  it("400s a reorder that does not name every image", async () => {
+    await seedItem("electronics/desk-lamp");
+    await seedImage("electronics/desk-lamp", "apple.png");
+    await seedImage("electronics/desk-lamp", "banana.png");
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/items/electronics/desk-lamp/images/reorder",
+      body: Buffer.from(JSON.stringify({ order: ["apple.png"] })),
+      projectRoot: sandbox,
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("400s and names the file when a reorder would move a non-editable image", async () => {
+    await seedItem("electronics/desk-lamp");
+    await seedImage("electronics/desk-lamp", "apple.png");
+    await seedImage("electronics/desk-lamp", "banana.png");
+    // Not writable by studio (a space), but still present and still shipped
+    // by the site — the route must not 400 it out of the order up front
+    // (that would make it impossible to ever include), only refuse the
+    // whole reorder if it would actually have to move.
+    await seedImage("electronics/desk-lamp", "cherry pie.png");
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/items/electronics/desk-lamp/images/reorder",
+      body: Buffer.from(
+        JSON.stringify({ order: ["cherry pie.png", "apple.png", "banana.png"] }),
+      ),
+      projectRoot: sandbox,
+    });
+
+    expect(res.status).toBe(400);
+    expect(asJson(res).body).toMatchObject({
+      error: expect.stringContaining("cherry pie.png"),
+    });
+    // Nothing renamed.
+    expect(
+      (
+        await fs.readdir(
+          path.join(sandbox, "content", "items", "electronics", "desk-lamp"),
+        )
+      ).sort(),
+    ).toEqual(["apple.png", "banana.png", "cherry pie.png", "item.json"]);
+  });
+
+  it("reorders editable images around a non-editable one that stays at the position it will actually occupy (the end)", async () => {
+    await seedItem("electronics/desk-lamp");
+    await seedImage("electronics/desk-lamp", "apple.png");
+    await seedImage("electronics/desk-lamp", "banana.png");
+    await seedImage("electronics/desk-lamp", "cherry pie.png");
+
+    // Current alphabetical order: apple, banana, cherry pie — "cherry
+    // pie.png" stays at index 2, the one slot renumbering the two editable
+    // files around it can never take away (numeric prefixes always sort
+    // ahead of a name starting with a letter), so this is allowed.
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/items/electronics/desk-lamp/images/reorder",
+      body: Buffer.from(
+        JSON.stringify({ order: ["banana.png", "apple.png", "cherry pie.png"] }),
+      ),
+      projectRoot: sandbox,
+    });
+
+    expect(res.status).toBe(200);
+    expect(asJson(res).body).toEqual({
+      files: [
+        { name: "01-banana.png", editable: true },
+        { name: "02-apple.png", editable: true },
+        { name: "cherry pie.png", editable: false },
+      ],
+    });
+  });
+
+  it("400s and names the file when a reorder leaves its index unchanged but renumbering its neighbours would still move it", async () => {
+    // Regression: comparing only the non-editable file's pre-rename index
+    // against its requested index misses that renumbering the editable
+    // files around it moves it too, once a numeric prefix outranks its
+    // unprefixed, letter-led name in the sort.
+    await seedItem("electronics/desk-lamp");
+    await seedImage("electronics/desk-lamp", "apple.png");
+    // Non-editable (a space) and, alphabetically, the middle of the three.
+    await seedImage("electronics/desk-lamp", "banana pie.png");
+    await seedImage("electronics/desk-lamp", "cherry.png");
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/items/electronics/desk-lamp/images/reorder",
+      // Same relative order as the current listing — "banana pie.png"
+      // keeps its index (1) — which is exactly what a pre-rename-only
+      // check would have accepted.
+      body: Buffer.from(
+        JSON.stringify({ order: ["apple.png", "banana pie.png", "cherry.png"] }),
+      ),
+      projectRoot: sandbox,
+    });
+
+    expect(res.status).toBe(400);
+    expect(asJson(res).body).toMatchObject({
+      error: expect.stringContaining("banana pie.png"),
+    });
+    // Nothing renamed.
+    expect(
+      (
+        await fs.readdir(
+          path.join(sandbox, "content", "items", "electronics", "desk-lamp"),
+        )
+      ).sort(),
+    ).toEqual(["apple.png", "banana pie.png", "cherry.png", "item.json"]);
+  });
+});
+
+describe("response variants", () => {
+  it("recognises a JSON response", () => {
+    const res = { status: 200, body: { ok: true } };
+    expect(isFileResponse(res)).toBe(false);
+    expect(isSseResponse(res)).toBe(false);
+  });
+
+  it("recognises a file response", () => {
+    const res = { status: 200, file: "/tmp/a.jpg", contentType: "image/jpeg" };
+    expect(isFileResponse(res)).toBe(true);
+    expect(isSseResponse(res)).toBe(false);
+  });
+
+  it("recognises an SSE response", () => {
+    const events = (async function* () {
+      yield { event: "ping", data: null };
+    })();
+    const res = { status: 200, events };
+    expect(isSseResponse(res)).toBe(true);
+    expect(isFileResponse(res)).toBe(false);
+  });
+});
+
+describe("POST /api/sync-images", () => {
+  afterEach(() => {
+    setSyncRunner(null);
+  });
+
+  function post() {
+    return handleStudioRequest({
+      method: "POST",
+      url: "/api/sync-images",
+      body: Buffer.from("{}"),
+      projectRoot: sandbox,
+    });
+  }
+
+  it("405s a GET", async () => {
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/sync-images",
+      body: Buffer.alloc(0),
+      projectRoot: sandbox,
+    });
+    expect(res.status).toBe(405);
+  });
+
+  it("503s when no runner is registered", async () => {
+    const res = await post();
+    expect(res.status).toBe(503);
+  });
+
+  it("returns an SSE response once a runner is registered", async () => {
+    setSyncRunner(async () => ({
+      total: 0,
+      uploaded: 0,
+      skipped: 0,
+      stripped: 0,
+      purged: 0,
+      manifest: {},
+      images: [],
+      failures: [],
+    }));
+
+    const res = await post();
+
+    expect(res.status).toBe(200);
+    expect(isSseResponse(res)).toBe(true);
+    // Drain it so the mutex is released before the next test.
+    if (isSseResponse(res)) {
+      for await (const _evt of res.events) {
+        // consume
+      }
+    }
   });
 });

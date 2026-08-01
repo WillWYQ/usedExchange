@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { bulkStatus, fetchItems, type StudioItem } from "./api";
 import { BulkToolbar } from "./panes/BulkToolbar";
+import { ImagePane } from "./panes/ImagePane";
 import { ItemList } from "./panes/ItemList";
+import { SyncBar } from "./panes/SyncBar";
 
 export function App() {
   const [items, setItems] = useState<StudioItem[]>([]);
@@ -10,6 +12,7 @@ export function App() {
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
   const [justStampedIds, setJustStampedIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [openItemId, setOpenItemId] = useState<string | null>(null);
 
   // Studio keeps no local copy of item state: after any write it re-reads the
   // full list, so the table can never drift from what is on disk.
@@ -71,6 +74,7 @@ export function App() {
       <header className="studio-head">
         <h1>Seller Studio</h1>
         <span className="counts">content/ · {items.length} items</span>
+        <SyncBar onFinished={() => void refresh()} />
       </header>
       {error !== null && <p role="alert">{error}</p>}
       {error === null && items.length === 0 && (
@@ -84,6 +88,7 @@ export function App() {
           justStampedIds={justStampedIds}
           onToggle={toggle}
           onToggleAll={toggleAll}
+          onOpen={setOpenItemId}
         />
       )}
       <BulkToolbar
@@ -92,6 +97,17 @@ export function App() {
         onApply={(status) => void apply(status)}
         onClear={() => setSelectedIds(new Set())}
       />
+      {openItemId !== null && (() => {
+        const openItem = items.find((i) => i.id === openItemId);
+        return openItem === undefined ? null : (
+          <ImagePane
+            key={openItem.id}
+            item={openItem}
+            onClose={() => setOpenItemId(null)}
+            onChanged={() => void refresh()}
+          />
+        );
+      })()}
     </>
   );
 }

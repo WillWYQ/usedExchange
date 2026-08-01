@@ -20,8 +20,21 @@ import { z } from "zod";
 import { loadAllItemsRaw } from "../../lib/content/loader";
 import { isValidSlug } from "../../lib/utils/slug";
 import { applyFieldEdits, readItemField } from "./itemEdit";
+import { getSyncRunner, isSyncRunning, streamImageSync } from "./studioSync";
+import {
+  contentTypeFor,
+  deleteImage,
+  IMAGE_EXTENSIONS,
+  isValidImageFilename,
+  listImageFiles,
+  reorderImages,
+  sanitizeUploadFilename,
+  sniffImageType,
+  writeImage,
+  type ImageEntry,
+} from "./studioImages";
 
-const IMAGE_EXT = /\.(jpg|jpeg|png|webp|gif)$/i;
+export type { ImageEntry };
 
 export type StudioRequest = {
   method: string;
@@ -30,7 +43,27 @@ export type StudioRequest = {
   projectRoot: string;
 };
 
-export type StudioResponse = { status: number; body: unknown };
+/** One server-sent event. `data` is JSON-serialised by the transport. */
+export type SseEvent = { event: string; data: unknown };
+
+export type JsonResponse = { status: number; body: unknown };
+export type FileResponse = { status: number; file: string; contentType: string };
+export type SseResponse = { status: number; events: AsyncIterable<SseEvent> };
+
+// Three variants rather than one JSON shape: studio has to serve image bytes
+// for thumbnails and stream upload progress, and neither fits a buffered JSON
+// body. The handler still never touches an http object — it names a file on
+// disk or yields events, and studio/vite.config.ts does the writing. That is
+// what keeps this module drivable from Vitest with no server running.
+export type StudioResponse = JsonResponse | FileResponse | SseResponse;
+
+export function isFileResponse(res: StudioResponse): res is FileResponse {
+  return "file" in res;
+}
+
+export function isSseResponse(res: StudioResponse): res is SseResponse {
+  return "events" in res;
+}
 
 export type StudioItem = {
   id: string;
@@ -71,12 +104,11 @@ export function resolveItemDir(projectRoot: string, category: string, name: stri
 }
 
 async function countImages(dir: string): Promise<number> {
-  try {
-    const entries = await fsPromises.readdir(dir, { withFileTypes: true });
-    return entries.filter((e) => e.isFile() && IMAGE_EXT.test(e.name)).length;
-  } catch {
-    return 0;
-  }
+  // Delegates to listImageFiles rather than re-implementing the same readdir
+  // + filter: the table's IMG column and the image pane's grid must count
+  // the same thing, or the seller sees a number that disagrees with what
+  // they can see and manage — the exact bug this shared function closes.
+  return (await listImageFiles(dir)).length;
 }
 
 export async function listStudioItems(projectRoot: string): Promise<StudioItem[]> {
@@ -208,6 +240,174 @@ async function handleBulkStatus(req: StudioRequest): Promise<StudioResponse> {
   return { status: 200, body: result };
 }
 
+// /api/items/<category>/<item>/images[/<filename>]
+const IMAGE_ROUTE_RE = /^\/api\/items\/([^/]+)\/([^/]+)\/images(?:\/([^/]+))?$/;
+
+async function handleImageList(
+  req: StudioRequest,
+  category: string,
+  item: string,
+): Promise<StudioResponse> {
+  const dir = resolveItemDir(req.projectRoot, category, item);
+  return { status: 200, body: { files: await listImageFiles(dir) } };
+}
+
+const uploadBodySchema = z.object({
+  filename: z.string().min(1),
+  contentBase64: z.string().min(1),
+});
+
+async function handleImageUpload(
+  req: StudioRequest,
+  category: string,
+  item: string,
+): Promise<StudioResponse> {
+  const { filename, contentBase64 } = parseJsonBody(req.body, uploadBodySchema);
+
+  // Normalise before validating: a macOS screenshot ("Screenshot 2026-07-30
+  // at 10.00.00.png") or a browser-downloaded duplicate ("photo (1).jpg") is
+  // exactly how a non-technical seller acquires photos, and neither is
+  // malformed — they just fall outside the character allowlist. Sanitising
+  // means the seller never has to rename anything themselves; writeImage's
+  // wx collision loop below already handles the sanitised name colliding
+  // with an existing file.
+  const sanitized = sanitizeUploadFilename(filename);
+
+  if (!isValidImageFilename(sanitized)) {
+    // Two genuinely different problems get two different messages: an
+    // unsupported extension is a format problem (the seller needs to
+    // convert or re-export the photo); anything else survives sanitising
+    // with no usable characters at all before the extension (e.g. "??.jpg",
+    // "照片.jpg"), which is not a format problem and must not be reported as
+    // one.
+    //
+    // The extension check runs against the ORIGINAL filename, not the
+    // sanitised one: sanitising a name with no usable base characters
+    // collapses it to just the extension (e.g. ".jpg"), and Node's
+    // path.extname treats a string that is *only* an extension as a dotfile
+    // with no extension at all (path.extname(".jpg") === "") — checking the
+    // sanitised name there would misroute a perfectly good extension into
+    // this branch and tell the seller their JPEG isn't a JPEG. The original
+    // filename's base was never emptied by sanitising, so it doesn't have
+    // this problem.
+    const ext = path.extname(filename).slice(1).toLowerCase();
+    if (!(IMAGE_EXTENSIONS as readonly string[]).includes(ext)) {
+      throw new StudioError(
+        400,
+        `"${filename}" is not an image filename — use .jpg, .png, .webp or .gif`,
+      );
+    }
+    throw new StudioError(
+      400,
+      `"${filename}" has no usable filename left after removing spaces and unsupported characters — rename it to start with a letter or digit`,
+    );
+  }
+
+  const bytes = Buffer.from(contentBase64, "base64");
+  if (bytes.length === 0) {
+    throw new StudioError(400, "uploaded file is empty");
+  }
+
+  // The extension is whatever the browser sent; the header bytes are what
+  // decide. A .jpg that is really an HTML document never reaches content/.
+  const kind = sniffImageType(bytes);
+  if (kind === null) {
+    throw new StudioError(400, `"${filename}" is not a JPEG, PNG, WebP or GIF`);
+  }
+
+  const dir = resolveItemDir(req.projectRoot, category, item);
+  const written = await writeImage(dir, sanitized, bytes);
+
+  return { status: 201, body: { file: written, files: await listImageFiles(dir) } };
+}
+
+async function handleImageGet(
+  req: StudioRequest,
+  category: string,
+  item: string,
+  filename: string,
+): Promise<StudioResponse> {
+  if (!isValidImageFilename(filename)) {
+    throw new StudioError(400, `not an image filename: "${filename}"`);
+  }
+  const dir = resolveItemDir(req.projectRoot, category, item);
+  const filePath = path.join(dir, filename);
+
+  // Containment again, not because the name could contain a separator — the
+  // allowlist forbids that — but because this is the layer that would still
+  // hold if the allowlist is ever relaxed. `rel !== filename` alone is
+  // tautological for a plain "../" payload: path.join normalizes it away
+  // before path.relative re-derives it, so the two strings round-trip back to
+  // equal. rel.startsWith("..") and path.isAbsolute(rel) are what actually
+  // catch it — the same shape resolveItemDir uses above.
+  const rel = path.relative(dir, filePath);
+  if (rel !== filename || rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new StudioError(400, "resolved path escapes the item folder");
+  }
+
+  try {
+    await fsPromises.access(filePath);
+  } catch {
+    throw new StudioError(404, `no such image: ${filename}`);
+  }
+
+  return { status: 200, file: filePath, contentType: contentTypeFor(filename) };
+}
+
+const reorderBodySchema = z.object({ order: z.array(z.string()).min(1) });
+
+async function handleImageDelete(
+  req: StudioRequest,
+  category: string,
+  item: string,
+  filename: string,
+): Promise<StudioResponse> {
+  if (!isValidImageFilename(filename)) {
+    throw new StudioError(400, `not an image filename: "${filename}"`);
+  }
+  const dir = resolveItemDir(req.projectRoot, category, item);
+  try {
+    return { status: 200, body: { files: await deleteImage(dir, filename) } };
+  } catch (err: unknown) {
+    throw new StudioError(404, err instanceof Error ? err.message : String(err));
+  }
+}
+
+async function handleImageReorder(
+  req: StudioRequest,
+  category: string,
+  item: string,
+): Promise<StudioResponse> {
+  const { order } = parseJsonBody(req.body, reorderBodySchema);
+
+  // No per-name allowlist check here on purpose: `order` must be able to
+  // name a non-editable file (one listImageFiles reports but the allowlist
+  // would reject) so it is never silently dropped from the folder's
+  // accounting — reorderImages' own sameSet check, matched against a real
+  // directory listing, is the actual gate, and it refuses (rather than
+  // renames) any file the allowlist would reject. See studioImages.ts's
+  // reorderImages doc comment.
+  const dir = resolveItemDir(req.projectRoot, category, item);
+  try {
+    return { status: 200, body: { files: await reorderImages(dir, order) } };
+  } catch (err: unknown) {
+    throw new StudioError(400, err instanceof Error ? err.message : String(err));
+  }
+}
+
+function handleSyncImages(): StudioResponse {
+  const runner = getSyncRunner();
+  if (runner === null) {
+    // Only reachable if studio was started without registering a runner —
+    // a wiring bug, not something the seller can cause.
+    throw new StudioError(503, "image sync is not available in this session");
+  }
+  if (isSyncRunning()) {
+    throw new StudioError(409, "an image sync is already running");
+  }
+  return { status: 200, events: streamImageSync(runner) };
+}
+
 export async function handleStudioRequest(req: StudioRequest): Promise<StudioResponse> {
   const pathname = req.url.split("?")[0] ?? "";
 
@@ -227,6 +427,60 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
       // rejects after the block has exited, so StudioError would escape the
       // catch below instead of becoming its 400/404 response.
       return await handleBulkStatus(req);
+    }
+
+    // Matched against the raw, still-percent-encoded pathname on purpose: an
+    // encoded "%2F" inside what should be a single filename segment must NOT
+    // be mistaken for a literal "/" here, or a traversal payload could smuggle
+    // itself in as an extra route segment that never reaches
+    // isValidImageFilename below. Route matching decides segment boundaries;
+    // decoding happens only after, on the segments this match already
+    // isolated.
+    const imageMatch = IMAGE_ROUTE_RE.exec(pathname);
+    if (imageMatch !== null) {
+      const [, categoryRaw, itemRaw, filenameRaw] = imageMatch;
+      if (categoryRaw === undefined || itemRaw === undefined) {
+        return { status: 400, body: { error: "malformed image route" } };
+      }
+
+      // Decode each segment individually, after the route match and before
+      // any validation runs — never the other way around, or the allowlist
+      // would inspect a different string than the one the filesystem
+      // ultimately receives. A malformed escape sequence (e.g. a lone "%") is
+      // itself a bad request, not a 500.
+      let category: string;
+      let item: string;
+      let filename: string | undefined;
+      try {
+        category = decodeURIComponent(categoryRaw);
+        item = decodeURIComponent(itemRaw);
+        filename = filenameRaw === undefined ? undefined : decodeURIComponent(filenameRaw);
+      } catch {
+        return { status: 400, body: { error: "malformed URL encoding" } };
+      }
+
+      if (req.method === "GET") {
+        return filename === undefined
+          ? await handleImageList(req, category, item)
+          : await handleImageGet(req, category, item, filename);
+      }
+      if (req.method === "POST" && filename === undefined) {
+        return await handleImageUpload(req, category, item);
+      }
+      if (req.method === "POST" && filename === "reorder") {
+        return await handleImageReorder(req, category, item);
+      }
+      if (req.method === "DELETE" && filename !== undefined) {
+        return await handleImageDelete(req, category, item, filename);
+      }
+      return { status: 405, body: { error: `method not allowed: ${req.method}` } };
+    }
+
+    if (pathname === "/api/sync-images") {
+      if (req.method !== "POST") {
+        return { status: 405, body: { error: "POST only" } };
+      }
+      return handleSyncImages();
     }
 
     return { status: 404, body: { error: `no route for ${pathname}` } };
