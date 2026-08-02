@@ -104,19 +104,52 @@ function isPublishablePath(p: string): boolean {
 }
 
 /**
- * Commits reachable from HEAD but not yet on the upstream branch. Used to
- * detect a commit stranded by a prior push failure (see publishChanges).
- * Returns 0 — not an error — when there is no upstream to compare against
- * (a branch that has never been pushed): that is a different, pre-existing
- * situation this function does not attempt to fix.
+ * Commits reachable from HEAD but not yet on the upstream branch, with the
+ * union of paths they touch. Used to detect a commit stranded by a prior push
+ * failure (see publishChanges) — the paths decide whether the stranded work is
+ * studio's to push at all: an out-of-band `git commit` of app code, or of a
+ * secret, is not, and `git push` would ship it wholesale.
+ *
+ * Paths are collected PER COMMIT via diff-tree, not as one @{upstream}..HEAD
+ * endpoint diff: a commit that adds .env.local followed by a commit that
+ * removes it has an EMPTY net diff, but pushing would still put the secret in
+ * the remote's history. (A merge commit yields no paths from plain diff-tree;
+ * publishChanges never creates merges, and refusing less on a shape only a
+ * terminal user can produce is the acceptable direction of error here.)
+ *
+ * Returns null when there is no upstream to compare against (a branch that
+ * has never been pushed): that is a different, pre-existing situation this
+ * function does not attempt to fix — pushOrThrowFriendly names the `push -u`
+ * fix when a push actually fails for that reason.
  */
-async function countUnpushedCommits(projectRoot: string): Promise<number> {
+async function readUnpushed(
+  projectRoot: string,
+): Promise<{ count: number; paths: string[] } | null> {
+  let shasRaw: string;
   try {
-    const out = await git(projectRoot, ["rev-list", "--count", "@{upstream}..HEAD"]);
-    return Number.parseInt(out.trim(), 10) || 0;
+    shasRaw = await git(projectRoot, ["rev-list", "@{upstream}..HEAD"]);
   } catch {
-    return 0;
+    return null;
   }
+  const shas = shasRaw
+    .split("\n")
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
+  const paths = new Set<string>();
+  for (const sha of shas) {
+    const raw = await git(projectRoot, [
+      "diff-tree",
+      "--no-commit-id",
+      "--name-only",
+      "-z",
+      "-r",
+      sha,
+    ]);
+    for (const p of raw.split("\0")) {
+      if (p !== "") paths.add(p);
+    }
+  }
+  return { count: shas.length, paths: [...paths] };
 }
 
 /**
@@ -130,10 +163,18 @@ async function pushOrThrowFriendly(projectRoot: string, commit: string): Promise
     // The commit already landed (this one, or an earlier stranded one this
     // call is retrying). Say so — "publish failed" alone would send the
     // seller looking for lost work that is safely on disk.
+    const reason = gitMessage(err);
+    // "has no upstream branch" is a one-time setup problem with a specific
+    // one-line fix; without naming it, the generic advice ("try again") loops
+    // the seller through the same failure forever.
+    const upstreamHint = /no upstream/i.test(reason)
+      ? `\nThis branch has never been pushed before: run \`git push -u origin <branch>\` once from a terminal to set that up.`
+      : "";
     throw new GitError(
       502,
-      `Changes were committed locally as ${commit}, but the push failed:\n${gitMessage(err)}\n` +
-        `Your work is saved. Fix the problem and run \`git push\` from a terminal, or try again.`,
+      `Changes were committed locally as ${commit}, but the push failed:\n${reason}\n` +
+        `Your work is saved. Fix the problem and run \`git push\` from a terminal, or try again.` +
+        upstreamHint,
     );
   }
 }
@@ -175,10 +216,16 @@ function parseStatusZ(raw: string): ChangedFile[] {
   return files.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-/** The current branch plus every publishable path that differs from HEAD. */
+/**
+ * The current branch, every publishable path that differs from HEAD, and
+ * `unpushed`: the number of local commits waiting to be pushed — but ONLY
+ * when every path those commits touch is publishable (a prior publish whose
+ * push failed). Out-of-band commits of anything else report 0: they are not
+ * studio's to offer a push button for, and publishChanges refuses them too.
+ */
 export async function readChanges(
   projectRoot: string,
-): Promise<{ branch: string; files: ChangedFile[] }> {
+): Promise<{ branch: string; files: ChangedFile[]; unpushed: number }> {
   await assertRepo(projectRoot);
 
   let statusRaw: string;
@@ -211,7 +258,13 @@ export async function readChanges(
     );
   }
 
-  return { branch, files: parseStatusZ(statusRaw) };
+  const stranded = await readUnpushed(projectRoot);
+  const unpushed =
+    stranded !== null && stranded.count > 0 && stranded.paths.every(isPublishablePath)
+      ? stranded.count
+      : 0;
+
+  return { branch, files: parseStatusZ(statusRaw), unpushed };
 }
 
 /**
@@ -258,8 +311,30 @@ export async function publishChanges(
     // terminal. Treat it as unfinished work to finish, not as "nothing to
     // publish": otherwise every retry after a transient network failure
     // reports 409 forever while the live site stays stale.
-    const unpushed = await countUnpushedCommits(projectRoot);
-    if (unpushed > 0) {
+    //
+    // But ONLY when every path the unpushed commits touch is publishable.
+    // `git push` ships whole commits, so an out-of-band `git commit` — a
+    // seller's WIP app change, an agent's experiment, a secret committed by
+    // hand — would ride to the live remote under a green "publish" while the
+    // return value reported zero files. Same failure class as the staged
+    // out-of-band check below, one layer deeper (the index there, HEAD here).
+    const stranded = await readUnpushed(projectRoot);
+    if (stranded !== null && stranded.count > 0) {
+      const disallowed = stranded.paths.filter((p) => !isPublishablePath(p));
+      if (disallowed.length > 0) {
+        throw new GitError(
+          409,
+          `refusing to push: ${
+            stranded.count === 1
+              ? "an unpushed local commit touches"
+              : `${stranded.count} unpushed local commits touch`
+          } files outside content/ and the manifest (${disallowed.slice(0, 3).join(", ")}${
+            disallowed.length > 3 ? ", …" : ""
+          }). Studio only publishes listing changes — push or undo ${
+            stranded.count === 1 ? "that commit" : "those commits"
+          } from a terminal, then try again.`,
+        );
+      }
       const commit = (await git(projectRoot, ["rev-parse", "--short", "HEAD"])).trim();
       await pushOrThrowFriendly(projectRoot, commit);
       return { commit, files: [] };

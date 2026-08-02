@@ -131,6 +131,44 @@ describe("readChanges", () => {
     await expect(readChanges(origin)).rejects.toBeInstanceOf(GitError);
     await expect(readChanges(origin)).rejects.toMatchObject({ status: 400 });
   });
+
+  // Final review, Important 3: after a push failure the stranded commit was
+  // invisible to the UI — files came back [] and the publish button disabled
+  // itself at exactly the moment the retry path existed for. readChanges now
+  // reports how many unpushed commits are waiting, but ONLY when every path
+  // they touch is publishable: an out-of-band `git commit` of app code is not
+  // studio's to offer a push button for.
+  it("reports a stranded publishable commit as unpushed", async () => {
+    const repo = await makeRepo();
+    const itemDir = path.join(repo, "content", "items", "electronics", "desk-lamp");
+    await fs.writeFile(path.join(itemDir, "item.json"), `{ "name": "Reading lamp" }\n`);
+
+    await git(repo, ["remote", "set-url", "origin", path.join(repo, "does-not-exist.git")]);
+    await expect(publishChanges(repo, "chore: update listings")).rejects.toBeInstanceOf(
+      GitError,
+    );
+
+    const { files, unpushed } = await readChanges(repo);
+    expect(files).toEqual([]);
+    expect(unpushed).toBe(1);
+  });
+
+  it("reports zero unpushed for an out-of-band commit touching files outside content/", async () => {
+    const repo = await makeRepo();
+    await fs.mkdir(path.join(repo, "app"), { recursive: true });
+    await fs.writeFile(path.join(repo, "app", "wip.ts"), "// experiment\n");
+    await git(repo, ["add", "app/wip.ts"]);
+    await git(repo, ["commit", "-m", "WIP: do not push"]);
+
+    const { files, unpushed } = await readChanges(repo);
+    expect(files).toEqual([]);
+    expect(unpushed).toBe(0);
+  });
+
+  it("reports zero unpushed on a fully pushed branch", async () => {
+    const repo = await makeRepo();
+    expect((await readChanges(repo)).unpushed).toBe(0);
+  });
 });
 
 describe("publishChanges", () => {
@@ -287,5 +325,102 @@ describe("publishChanges", () => {
 
     const { stdout: log } = await run("git", ["log", "--oneline"], { cwd: repo });
     expect(log.trim().split("\n")).toHaveLength(1);
+  });
+
+  // Final review, Important 1 (reproduced by execution): the retry path
+  // counted ANY unpushed commit as publish-stranded work, so a clean-tree
+  // publish pushed a seller's deliberate local-only commit ("WIP: do not
+  // push", touching app/) to the live remote and reported it as a successful
+  // zero-file publish. Only commits whose every touched path is publishable
+  // are studio's to push.
+  it("refuses to push an out-of-band unpushed commit touching files outside content/", async () => {
+    const repo = await makeRepo();
+    await fs.mkdir(path.join(repo, "app"), { recursive: true });
+    await fs.writeFile(path.join(repo, "app", "wip.ts"), "// experiment with a hardcoded key\n");
+    await git(repo, ["add", "app/wip.ts"]);
+    await git(repo, ["commit", "-m", "WIP: do not push"]);
+
+    await expect(publishChanges(repo, "chore: publish")).rejects.toMatchObject({
+      status: 409,
+    });
+
+    // Nothing reached origin: its tip is still the initial commit.
+    const { stdout: originLog } = await run("git", ["log", "-1", "--pretty=%H"], {
+      cwd: path.join(path.dirname(repo), "origin.git"),
+    });
+    const { stdout: localInitial } = await run("git", ["rev-list", "--max-parents=0", "HEAD"], {
+      cwd: repo,
+    });
+    expect(originLog.trim()).toBe(localInitial.trim());
+  });
+
+  // The paths must be collected PER COMMIT, not as one endpoint diff: a
+  // commit adding .env.local followed by a commit removing it has an empty
+  // net diff, but pushing would still put the secret in the remote's history.
+  it("refuses even when a later unpushed commit reverts the out-of-band one (clean net diff)", async () => {
+    const repo = await makeRepo();
+    const secret = path.join(repo, "secret.txt");
+    await fs.writeFile(secret, "CF_R2_SECRET=hunter2\n");
+    await git(repo, ["add", "secret.txt"]);
+    await git(repo, ["commit", "-m", "oops"]);
+    await git(repo, ["rm", "-q", "secret.txt"]);
+    await git(repo, ["commit", "-m", "remove it"]);
+
+    await expect(publishChanges(repo, "chore: publish")).rejects.toMatchObject({
+      status: 409,
+    });
+    const { stdout } = await run("git", ["rev-list", "--count", "origin/main..HEAD"], {
+      cwd: repo,
+    });
+    expect(stdout.trim()).toBe("2");
+  });
+
+  // Final review, Minor 4: isPublishablePath's boundary was untested — a
+  // naive startsWith("content") passed the whole suite. contentX.md is
+  // outside content/ and must refuse, exactly like README.md.
+  it("refuses a staged path that merely starts with the string 'content'", async () => {
+    const repo = await makeRepo();
+    const itemDir = path.join(repo, "content", "items", "electronics", "desk-lamp");
+    await fs.writeFile(path.join(itemDir, "item.json"), `{ "name": "Reading lamp" }\n`);
+    await fs.writeFile(path.join(repo, "contentX.md"), "# not inside content/\n");
+    await git(repo, ["add", "contentX.md"]);
+
+    await expect(publishChanges(repo, "chore: update listings")).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining("contentX.md"),
+    });
+    const { stdout: log } = await run("git", ["log", "--oneline"], { cwd: repo });
+    expect(log.trim().split("\n")).toHaveLength(1);
+  });
+
+  // Final review, deferred Task 4 minor: a branch with no upstream fails the
+  // push with git's own "no upstream" text — the 502 must tell the seller the
+  // one-time fix (`git push -u`), not just that the push failed.
+  it("names `git push -u` in the 502 when the branch has no upstream", async () => {
+    const base = await fs.mkdtemp(path.join(os.tmpdir(), "studio-noupstream-"));
+    created.push(base);
+    const origin = path.join(base, "origin.git");
+    await run("git", ["init", "--bare", "--initial-branch=main", origin]);
+    const repo = path.join(base, "site");
+    await fs.mkdir(repo);
+    await git(repo, ["init", "--initial-branch=main"]);
+    await git(repo, ["config", "user.email", "seller@example.com"]);
+    await git(repo, ["config", "user.name", "Seller"]);
+    await git(repo, ["config", "commit.gpgsign", "false"]);
+    const itemDir = path.join(repo, "content", "items", "electronics", "desk-lamp");
+    await fs.mkdir(itemDir, { recursive: true });
+    await fs.writeFile(path.join(itemDir, "item.json"), `{ "name": "Desk lamp" }\n`);
+    await fs.mkdir(path.join(repo, "lib", "generated"), { recursive: true });
+    await fs.writeFile(path.join(repo, "lib", "generated", "image-manifest.json"), "{}\n");
+    await git(repo, ["add", "content", "lib"]);
+    await git(repo, ["commit", "-m", "initial"]);
+    await git(repo, ["remote", "add", "origin", origin]);
+    // No `push -u`: the branch has never been pushed and has no upstream.
+
+    await fs.writeFile(path.join(itemDir, "item.json"), `{ "name": "Reading lamp" }\n`);
+    await expect(publishChanges(repo, "chore: update listings")).rejects.toMatchObject({
+      status: 502,
+      message: expect.stringContaining("git push -u"),
+    });
   });
 });

@@ -166,7 +166,15 @@ export async function createItem(category: string, name: string): Promise<string
 }
 
 export type ChangedFile = { code: string; path: string };
-export type Changes = { branch: string; files: ChangedFile[] };
+export type Changes = {
+  branch: string;
+  files: ChangedFile[];
+  /**
+   * Local commits waiting to be pushed — a prior publish whose push failed.
+   * The server reports 0 for out-of-band commits it would refuse to push.
+   */
+  unpushed: number;
+};
 
 export async function fetchChanges(): Promise<Changes> {
   const res = await fetch("/api/changes");
@@ -174,7 +182,11 @@ export async function fetchChanges(): Promise<Changes> {
   if (!res.ok) {
     throw new Error(errorMessage(body, `reading changes failed with ${res.status} ${res.statusText}`));
   }
-  return { branch: String(body?.branch ?? ""), files: (body?.files as ChangedFile[]) ?? [] };
+  return {
+    branch: String(body?.branch ?? ""),
+    files: (body?.files as ChangedFile[]) ?? [],
+    unpushed: Number(body?.unpushed ?? 0),
+  };
 }
 
 export async function publish(message: string): Promise<{ commit: string; files: ChangedFile[] }> {

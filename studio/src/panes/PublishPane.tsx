@@ -17,10 +17,10 @@ export function PublishPane({
 }) {
   const [changes, setChanges] = useState<Changes | null>(null);
   // A git-less project is not an error to shout about — studio still edits
-  // files, it just can't commit them. The distinction is kept in state rather
-  // than sniffing err.message: the server's message contains the phrase, but
-  // coupling the rendering to a substring of a translated/reworded string is
-  // exactly how quiet help text turns into a false alarm later.
+  // files, it just can't commit them. The sniff below couples to the server
+  // message's "not a git repository" phrase; a server test pins that phrase so
+  // a reword there fails loudly instead of silently turning this quiet help
+  // text into a red alert.
   const [notAGitRepo, setNotAGitRepo] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [message, setMessage] = useState(DEFAULT_MESSAGE);
@@ -87,8 +87,19 @@ export function PublishPane({
           {loadError}
         </p>
       )}
-      {changes !== null && changes.files.length === 0 && (
+      {changes !== null && changes.files.length === 0 && changes.unpushed === 0 && (
         <p className="change-empty">Nothing to publish — the working tree is clean.</p>
+      )}
+      {changes !== null && changes.files.length === 0 && changes.unpushed > 0 && (
+        // A prior publish committed but its push failed (e.g. the network
+        // dropped). Without this, a page reload would show "nothing to
+        // publish" and disable the button while the live site stayed stale —
+        // the retry path existing on the server but unreachable from here.
+        <p className="change-empty">
+          {changes.unpushed} committed change{changes.unpushed === 1 ? "" : "s"} from an earlier
+          publish {changes.unpushed === 1 ? "is" : "are"} still waiting to be pushed. Publish
+          again to finish sending {changes.unpushed === 1 ? "it" : "them"}.
+        </p>
       )}
       {changes !== null && changes.files.length > 0 && (
         <ul className="change-list">
@@ -108,7 +119,11 @@ export function PublishPane({
         />
         <button
           type="button"
-          disabled={busy || message.trim() === "" || (changes?.files.length ?? 0) === 0}
+          disabled={
+            busy ||
+            message.trim() === "" ||
+            ((changes?.files.length ?? 0) === 0 && (changes?.unpushed ?? 0) === 0)
+          }
           onClick={() => void submit()}
         >
           {busy ? "Publishing…" : "Publish"}
