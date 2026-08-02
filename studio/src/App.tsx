@@ -65,6 +65,7 @@ export function App() {
         status === "sold" ? new Set(ids.filter((id) => !failed.has(id))) : new Set(),
       );
       await refresh();
+      bumpChanges();
       if (result.failed.length > 0) {
         setError(
           `${result.failed.length} of ${ids.length} items could not be updated: ` +
