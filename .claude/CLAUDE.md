@@ -73,9 +73,9 @@ Checklist for every new config field:
 |---|---|---|
 | docs/DESIGN.md / docs/DESIGN_zh.md | v0.9.2 | 2026-06-09 |
 | docs/TECH_REQUIREMENTS.md / docs/TECH_REQUIREMENTS_zh.md | v0.9.2 | 2026-06-09 |
-| docs/IMPLEMENTATION_PLAN.md / docs/IMPLEMENTATION_PLAN_zh.md | **v1.6** | 2026-06-14 |
-| docs/FEATURES_ROADMAP.md / docs/FEATURES_ROADMAP_zh.md | — | 2026-06-01 |
-| docs/CURRENT_FUNCTIONALITY.md / docs/CURRENT_FUNCTIONALITY_zh.md | — | 2026-06-09 |
+| docs/IMPLEMENTATION_PLAN.md / docs/IMPLEMENTATION_PLAN_zh.md | **v1.7** | 2026-08-02 |
+| docs/FEATURES_ROADMAP.md / docs/FEATURES_ROADMAP_zh.md | — | 2026-08-02 |
+| docs/CURRENT_FUNCTIONALITY.md / docs/CURRENT_FUNCTIONALITY_zh.md | — | 2026-08-02 |
 | docs/ARCHITECTURE.md / docs/ARCHITECTURE_zh.md | v1.1 | 2026-06-09 |
 | docs/setup_instruction.md / docs/setup_instruction_zh.md | — | 2026-06-08 |
 
@@ -91,6 +91,7 @@ Checklist for every new config field:
 | Enable/configure shipping cost estimator | `/setup-shipping` (`.claude/commands/setup-shipping.md`) |
 | Mark an item sold | `pnpm mark-sold <category>/<name>` |
 | Create a new item | `pnpm create-item <category>/<name>` |
+| Manage listings in a browser | `pnpm studio` (local only; see docs/CURRENT_FUNCTIONALITY.md) |
 | Upload photos to CDN | `pnpm upload-images` |
 | Export listings to Facebook Marketplace | `pnpm fb-export` (interactive; outputs `exports/facebook-marketplace.csv`) |
 | Update site to a new template version | `pnpm update-site` (`docs/UPDATE_GUIDE.md`) |

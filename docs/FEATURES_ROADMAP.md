@@ -479,7 +479,7 @@ Already in the Extensibility Register.
 
 ---
 
-### 3.8 Seller Dashboard (Local-Only) 👤
+### 3.8 Seller Dashboard (Local-Only) 👤 ✅ Implemented
 **Effort:** L · **Value:** ⭐⭐⭐
 
 **This is the primary accessibility unlock for the non-CS user segment.** A local-only web UI (runs on `localhost` only, never deployed) that lets the seller manage items visually: add/edit `item.json` fields, change status, trigger uploads — without editing JSON files directly.
@@ -575,7 +575,7 @@ Features shipped in v1 have been moved to the "Shipped in v1" section at the top
 | Offline caching (PWA service worker) | 🎓👤 | v2 |
 | Price drop tracking (history log) | 🎓👤 | v2 |
 | Manual dark mode toggle | 🎓 | v2 |
-| **Seller dashboard (local-only GUI)** | 👤 | v2 — key non-CS growth unlock |
+| **Seller dashboard (local-only GUI)** | 👤 | ✅ Implemented |
 | Multi-seller support | 👤 | v3 / architecture redesign required |
 | Real-time inventory without rebuild | 👤 | v3 |
 | Buyer reservation system | 👤 | v3 |

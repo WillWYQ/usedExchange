@@ -87,4 +87,14 @@ describe("checkStudioCsrf", () => {
     expect(result).not.toBeNull();
     expect(result?.status).toBe(415);
   });
+
+  it("rejects a cross-origin PATCH with a CORS-simple content type", () => {
+    const rejection = checkStudioCsrf("PATCH", {
+      origin: "https://evil.example",
+      host: "127.0.0.1:5174",
+      "content-type": "text/plain",
+    });
+    expect(rejection).not.toBeNull();
+    expect(rejection?.status).toBe(415);
+  });
 });

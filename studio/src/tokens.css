@@ -433,3 +433,290 @@ tr.failed td {
     transition: none;
   }
 }
+
+/* Drawer tabs — the active one is underlined in --ink; no pill, no radius,
+   nothing that would compete with the SOLD stamp (spec §14.5). */
+
+.drawer-tabs {
+  display: flex;
+  gap: var(--gap);
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--carbon-rule);
+}
+
+.tab {
+  padding: 0.3rem 0;
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  color: var(--ink-soft);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.tab-active {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
+/* The edit form. Carbon-copy register: a legend per group, labels above
+   inputs, one rule under each input. No boxes, no pills. */
+
+.edit-form fieldset {
+  margin: 0 0 1.25rem;
+  padding: 0;
+  border: 0;
+}
+
+.edit-form legend {
+  padding: 0;
+  margin-bottom: 0.5rem;
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: var(--step-0);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.75rem;
+}
+
+.field-label {
+  font-size: var(--step-0);
+  color: var(--ink);
+}
+
+.field input[type="text"],
+.field textarea,
+.field select {
+  width: 100%;
+  padding: 0.25rem 0;
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--carbon-rule);
+  border-radius: 0;
+}
+
+.field textarea {
+  resize: vertical;
+  font-family: var(--font-data);
+}
+
+.field input[type="checkbox"] {
+  align-self: flex-start;
+}
+
+.field-hint {
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+}
+
+/* An on-disk value the schema wouldn't produce (e.g. a hand-typed
+   "liquidated" status): the form shows it raw rather than snapping to a
+   legal option, and the violet underline — --error, the failed-write marker
+   — flags that the value came from outside the schema. */
+.field-offlist {
+  border-bottom-color: var(--error) !important;
+}
+
+.form-saved {
+  color: var(--ink-soft);
+}
+
+/* The tier editor: one ruled row per tier, numbers in --font-data like the
+   rest of studio's tabular data. */
+
+.tier-list {
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.tier-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr auto;
+  gap: var(--gap);
+  align-items: end;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--carbon-rule);
+}
+
+.tier-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.tier-cell input {
+  width: 100%;
+  padding: 0.25rem 0;
+  font-family: var(--font-data);
+  font-size: var(--step-0);
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--carbon-rule);
+  border-radius: 0;
+}
+
+.tier-row button {
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  padding: 0.2rem 0.5rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--ink);
+  cursor: pointer;
+}
+
+/* The new-item dialog: a quiet sheet over the table, same paper, one rule
+   above and below — no drop shadow, no radius. */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+  background: rgb(27 42 53 / 0.25);
+}
+
+.dialog {
+  width: min(26rem, calc(100vw - 2rem));
+  padding: 1rem;
+  background: var(--carbon-pale);
+  border-top: 1px solid var(--carbon-rule);
+  border-bottom: 1px solid var(--carbon-rule);
+}
+
+.dialog h2 {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-head);
+  font-size: var(--step-2);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: var(--gap);
+  margin-top: 0.75rem;
+}
+
+.dialog-actions button,
+.studio-head button {
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  padding: 0.3rem 0.7rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--ink);
+  cursor: pointer;
+}
+
+.dialog-actions button:hover,
+.studio-head button:hover {
+  color: var(--carbon-pale);
+  background: var(--ink);
+}
+
+/* The publish pane. Editing without pushing is studio's one true failure
+   mode (spec §14.4), so the uncommitted list is plain tabular data in
+   --font-data and the count lives in the header — no panel chrome, no accent
+   colour, nothing that competes with the SOLD stamp. */
+
+.publish-pane {
+  margin: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--carbon-rule);
+}
+
+.publish-pane h2 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-head);
+  font-size: var(--step-0);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.change-list {
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-data);
+}
+
+.change-list li {
+  padding: 0.1rem 0;
+  overflow-wrap: anywhere;
+}
+
+.change-code {
+  color: var(--ink-soft);
+}
+
+.change-empty,
+.publish-done {
+  color: var(--ink-soft);
+}
+
+.publish-controls {
+  display: flex;
+  gap: var(--gap);
+  align-items: baseline;
+}
+
+.publish-controls input[type="text"] {
+  flex: 1;
+  padding: 0.25rem 0;
+  font-family: var(--font-data);
+  font-size: var(--step-0);
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--carbon-rule);
+  border-radius: 0;
+}
+
+.publish-controls button {
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  padding: 0.3rem 0.7rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--ink);
+  cursor: pointer;
+}
+
+.publish-controls button:hover {
+  color: var(--carbon-pale);
+  background: var(--ink);
+}
+
+.publish-controls button:disabled {
+  cursor: default;
+  color: var(--ink-soft);
+  border-color: var(--carbon-rule);
+  background: transparent;
+}
+
+/* Same treatment as .sync-error: the push-failure message is multi-line and
+   its second line ("Your work is saved…") is the part the seller must not
+   miss, so it keeps its line breaks. */
+.publish-error {
+  white-space: pre-line;
+  color: var(--error);
+}

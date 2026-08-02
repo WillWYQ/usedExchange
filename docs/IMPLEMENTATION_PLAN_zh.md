@@ -1,7 +1,7 @@
 # UsedExchange — 实施计划
 
-**版本：** 1.6  
-**日期：** 2026-06-14  
+**版本：** 1.7  
+**日期：** 2026-08-02  
 **基于：** DESIGN.md v0.9.2 · TECH_REQUIREMENTS.md v0.9.2  
 **假设：** 单人开发者；主要目标 = GitHub Pages + Cloudflare R2
 
@@ -28,6 +28,8 @@
 | 14 | 部署 | 1 | 4, 13 |
 | 15 | AI 技能文件（设置向导 + 物品生成器 + 物品翻译器） | 2 | 3 |
 | 16 | 运费计算器集成（可选） | 2 | 7, 12 |
+| 17 | Facebook Marketplace 智能导出 | 1 | 3 |
+| 18 | 卖家工作台（Seller Studio） | 4 | 4, 15 |
 | **总计** | | **约 26 天** | |
 
 **关键路径：** 0 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 11 → 13 → 14  
@@ -555,6 +557,48 @@ DESIGN_zh.md §21 · TECH_REQUIREMENTS_zh.md §29 · ARCHITECTURE_zh.md（lib/ �
 - 物品超过 50 条时自动拆分为 `facebook-marketplace-1.csv`、`facebook-marketplace-2.csv`……
 - 第二次运行显示步骤 0，含已导出物品数量；选择「跳过」后自动过滤
 - 历史文件写入后若损坏，回退至 `{ runs: [] }` 而不崩溃
+
+---
+
+## Phase 18 — 卖家工作台（Seller Studio）✅
+
+**目标：** `pnpm studio` 启动一个仅在本地运行的网页图形界面（不进入构建产物、从不部署），让卖家在浏览器中管理在售物品：照片上传/排序/CDN 推送、批量改状态、Schema 驱动的编辑表单、创建物品、一键发布——无需手动编辑 `item.json`。
+
+**版本：** v1.7
+
+### 任务
+
+#### 18a — 物品表格与批量改状态（Part 1）
+- [x] `studio/vite.config.ts` + `studio/index.html` + `studio/src/main.tsx` — Vite 开发应用；`studio/` 对 `next build` 不可达
+- [x] `scripts/studio.ts` — `pnpm studio` 启动器：在同一个本地端口上同时提供前端和 API；studio 目录缺失时给出清晰的「未安装」错误
+- [x] `studio/src/App.tsx` + `ItemList.tsx` + `Drawer.tsx` + `BulkToolbar.tsx` — 物品表格、单物品抽屉、批量改状态（available / reserved / pending / sold / draft）
+- [x] `GET /api/items` 返回每个物品及其图片文件；`reserved_for` 从不被读取、写入或发送到客户端
+
+#### 18b — 照片与 CDN 同步（Part 2A）
+- [x] `scripts/lib/studioImages.ts` — 列出物品的图片文件；提供图片文件；通过 API 上传、排序、删除
+- [x] `scripts/lib/studioSync.ts` — 图片同步运行器，带同步互斥锁（一次只允许一次同步）和 SSE 进度流
+- [x] `ImagePane.tsx` + `SyncBar.tsx` — 拖拽上传、拖动排序、带实时进度的 CDN 推送；变更失败后自动重新同步状态
+
+#### 18c — 编辑表单、创建物品与发布（Part 2B）
+- [x] `scripts/lib/itemEdit.ts` + `itemFields.ts` — `item.json` 编辑的严格字段语法；每次写入都对照 schema 校验；拒绝 `reserved_for`
+- [x] `scripts/lib/studioApi.ts` — `GET`/`PATCH /api/items/:cat/:name`（仅写回修改过的字段）、`POST /api/items`（从模板创建）
+- [x] `scripts/lib/studioGit.ts` — `publishChanges()`：提交前重新读取变更清单；图片同步进行中拒绝发布
+- [x] `EditForm.tsx` + `NewItemDialog.tsx` + `PublishPane.tsx` — 分组编辑表单、创建物品对话框、发布面板（未提交变更数量在页头最醒目）
+- [x] 测试覆盖：`scripts/lib/studioApi.test.ts` / `studioImages.test.ts` / `studioSync.test.ts` / `studioGit.test.ts` / `itemEdit.test.ts` / `itemFields.test.ts`（仅后端——无 React 测试）
+
+#### 18d — 分发与文档
+- [x] `scripts/update-site.ts` 的 `TEMPLATE_PATHS` 新增 `studio`，使 `pnpm update-site` 能将其分发给下游站点
+- [x] `docs/UPDATE_GUIDE.md` / `_zh` — 两个语言版本的手动 `git checkout` 路径列表均新增 `studio`
+- [x] `scripts/update-site.test.ts` — 漂移测试，保证 `TEMPLATE_PATHS` 与两份 UPDATE_GUIDE 路径列表保持同步
+- [x] `docs/CURRENT_FUNCTIONALITY.md` / `_zh` — 两个语言版本均新增「卖家工作台」章节
+- [x] `docs/FEATURES_ROADMAP.md` / `_zh` — 两个语言版本均将「卖家仪表板（仅本地 GUI）」标记为 ✅
+- [x] `.claude/CLAUDE.md` — 常用卖家任务表格新增 `pnpm studio` 行
+
+### 验收标准
+- `pnpm studio` 在本地启动 GUI；四种操作（照片、批量改状态、编辑表单、发布）端到端可用
+- 工作台只写入 `content/` 和 `lib/generated/image-manifest.json`；`reserved_for` 从不被读取或写入
+- `pnpm build` 后，所有 studio 标记（Seller Studio、studio-api、`handleStudioRequest`、`StudioError`、carbon-pale、bulk-status、ImagePane、EditForm、PublishPane、stamp-press、fontsource、`publishChanges`）均不出现在 `out/` 中
+- `pnpm update-site` 会复制 `studio/`；若 `TEMPLATE_PATHS` 与任一份 UPDATE_GUIDE 路径列表不一致，漂移测试即失败
 
 ---
 

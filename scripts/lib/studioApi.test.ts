@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { execFile } from "child_process";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
+import { promisify } from "util";
 import * as loaderModule from "@/lib/content/loader";
 import {
   handleStudioRequest,
@@ -13,7 +15,9 @@ import {
   type JsonResponse,
 } from "./studioApi";
 import { listImageFiles } from "./studioImages";
-import { setSyncRunner } from "./studioSync";
+import { getSyncRunner, resetSyncStateForTests, setSyncRunner, streamImageSync } from "./studioSync";
+
+const run = promisify(execFile);
 
 // All routes exercised in this file return the JSON variant of StudioResponse;
 // this narrows the union so `.body` type-checks without re-asserting at every
@@ -211,7 +215,7 @@ describe("POST /api/items/bulk-status", () => {
     const res = await bulkStatus(["electronics/desk-lamp"], "sold");
 
     expect(res.status).toBe(200);
-    expect(asJson(res).body).toMatchObject({ ok: 1, failed: [] });
+    expect(asJson(res).body).toMatchObject({ ok: 0, skipped: 1, failed: [] });
     const text = await readItemJson("electronics/desk-lamp");
     expect(text).toContain('"sold_date": "2026-01-15"');
     expect(text).toContain('"status": "sold"');
@@ -259,6 +263,46 @@ describe("POST /api/items/bulk-status", () => {
     // not merely failed for some other reason (e.g. ENOENT on the traversal
     // target) that would pass even with resolveItemDir's guards deleted.
     expect(body.failed[0]?.error).toMatch(/kebab-case|escapes content\/items/);
+  });
+});
+
+describe("bulk-status counts a no-op as skipped, not ok", () => {
+  it("separates already-sold items from ones it actually wrote", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-bulk-"));
+    const mk = async (slug: string, status: string, soldDate: string | null) => {
+      const dir = path.join(root, "content", "items", "electronics", slug);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(
+        path.join(dir, "item.json"),
+        JSON.stringify({ name: slug, status, sold_date: soldDate }, null, 2) + "\n",
+      );
+    };
+    await mk("already-sold", "sold", "2026-01-15");
+    await mk("still-listed", "available", null);
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/items/bulk-status",
+      body: Buffer.from(
+        JSON.stringify({
+          ids: ["electronics/already-sold", "electronics/still-listed"],
+          status: "sold",
+        }),
+      ),
+      projectRoot: root,
+    });
+
+    const body = asJson(res).body as { ok: number; skipped: number; failed: unknown[] };
+    expect(body.ok).toBe(1);
+    expect(body.skipped).toBe(1);
+    expect(body.failed).toEqual([]);
+
+    // The original sale date is intact — that is what "skipped" is protecting.
+    const text = await fs.readFile(
+      path.join(root, "content", "items", "electronics", "already-sold", "item.json"),
+      "utf-8",
+    );
+    expect(text).toContain("2026-01-15");
   });
 });
 
@@ -783,5 +827,591 @@ describe("POST /api/sync-images", () => {
         // consume
       }
     }
+  });
+});
+
+// Renamed from the brief's `ITEM_JSON` — that name is already a top-level
+// const above (used by the bulk-status and image-route describe blocks with a
+// different shape), and both live in the same module scope.
+const PATCH_ITEM_JSON = `{
+  "name": "Desk lamp",
+  "status": "draft", // options: "available" | "pending" | "reserved" | "sold" | "draft"
+  "quantity": 1,
+  "reserved_for": "alice@example.com",
+  "price": { "currency": "USD", "tiers": [{ "label": "Pickup", "amount": 20 }] }
+}
+`;
+
+async function makeTempProject(itemJson: string): Promise<string> {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-patch-"));
+  const dir = path.join(root, "content", "items", "electronics", "desk-lamp");
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, "item.json"), itemJson, "utf-8");
+  return root;
+}
+
+describe("GET /api/items/:cat/:name", () => {
+  let tempProjects: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+
+  async function project(itemJson: string): Promise<string> {
+    const root = await makeTempProject(itemJson);
+    tempProjects.push(root);
+    return root;
+  }
+
+  it("returns the editable fields", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/items/electronics/desk-lamp",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(200);
+    const fields = (asJson(res).body as { fields: Record<string, unknown> }).fields;
+    expect(fields["name"]).toBe("Desk lamp");
+    expect(fields["status"]).toBe("draft");
+  });
+
+  it("never returns reserved_for", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/items/electronics/desk-lamp",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    const body = JSON.stringify(asJson(res).body);
+    expect(body).not.toContain("reserved_for");
+    expect(body).not.toContain("alice@example.com");
+  });
+
+  it("404s for an item that does not exist", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/items/electronics/nope",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("400s on a traversal payload", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/items/..%2F..%2Fetc/passwd",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("PATCH /api/items/:cat/:name", () => {
+  let tempProjects: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+
+  async function project(itemJson: string): Promise<string> {
+    const root = await makeTempProject(itemJson);
+    tempProjects.push(root);
+    return root;
+  }
+
+  function patch(root: string, edits: unknown, url = "/api/items/electronics/desk-lamp") {
+    return handleStudioRequest({
+      method: "PATCH",
+      url,
+      body: Buffer.from(JSON.stringify({ edits })),
+      projectRoot: root,
+    });
+  }
+
+  it("writes a changed field and preserves comments and reserved_for", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await patch(root, [{ path: ["name"], value: "Reading lamp" }]);
+    expect(res.status).toBe(200);
+
+    const onDisk = await fs.readFile(
+      path.join(root, "content", "items", "electronics", "desk-lamp", "item.json"),
+      "utf-8",
+    );
+    expect(onDisk).toContain('"name": "Reading lamp"');
+    expect(onDisk).toContain("// options:");
+    expect(onDisk).toContain('"reserved_for": "alice@example.com"');
+  });
+
+  it("returns the re-read fields, not the request echo", async () => {
+    // fix round 1, finding MINOR 5: asserting the value from the edit landed
+    // in the response proves nothing about WHERE the response came from — a
+    // handler that returned `readItemForEdit(next)` (the in-memory computed
+    // text, never touching disk again) would pass that assertion too, since
+    // `next` and the file's real bytes normally agree. Mocking writeFile so
+    // what actually lands on disk DIFFERS from `next` closes that gap: only
+    // a genuine second `readFile` of the file can produce this value.
+    const root = await project(PATCH_ITEM_JSON);
+    const jsonPath = path.join(root, "content", "items", "electronics", "desk-lamp", "item.json");
+    const DIFFERENT_FROM_THE_EDIT = `{ "name": "Whatever actually landed on disk" }\n`;
+    const originalWriteFile = fs.writeFile;
+
+    const writeSpy = vi
+      .spyOn(fs, "writeFile")
+      .mockImplementation(async (target, _data, options) => {
+        if (target === jsonPath) {
+          return originalWriteFile(target, DIFFERENT_FROM_THE_EDIT, options);
+        }
+        return originalWriteFile(target, _data, options);
+      });
+
+    try {
+      const res = await patch(root, [{ path: ["name"], value: "Reading lamp" }]);
+      expect(res.status).toBe(200);
+      const fields = (asJson(res).body as { fields: Record<string, unknown> }).fields;
+      // Neither "Reading lamp" (the request) nor "Desk lamp" (the original
+      // on-disk value / what `next` would compute to) — only a real second
+      // read of the file, after the mocked write above, produces this.
+      expect(fields["name"]).toBe("Whatever actually landed on disk");
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
+  it("rejects an edit to reserved_for and leaves the file untouched", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const jsonPath = path.join(root, "content", "items", "electronics", "desk-lamp", "item.json");
+    const before = await fs.readFile(jsonPath, "utf-8");
+
+    const res = await patch(root, [{ path: ["reserved_for"], value: "bob@example.com" }]);
+    expect(res.status).toBe(400);
+    expect(await fs.readFile(jsonPath, "utf-8")).toBe(before);
+  });
+
+  it("rejects an invalid value and leaves the file untouched", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const jsonPath = path.join(root, "content", "items", "electronics", "desk-lamp", "item.json");
+    const before = await fs.readFile(jsonPath, "utf-8");
+
+    const res = await patch(root, [
+      { path: ["name"], value: "Fine" },
+      { path: ["status"], value: "liquidated" },
+    ]);
+    expect(res.status).toBe(400);
+    // Not partially applied: the valid first edit must not land either.
+    expect(await fs.readFile(jsonPath, "utf-8")).toBe(before);
+  });
+
+  it("rejects a malformed edits array", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    expect((await patch(root, "nope")).status).toBe(400);
+    expect((await patch(root, [])).status).toBe(400);
+    expect((await patch(root, [{ path: [], value: 1 }])).status).toBe(400);
+  });
+
+  it("405s on PUT", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await handleStudioRequest({
+      method: "PUT",
+      url: "/api/items/electronics/desk-lamp",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(405);
+  });
+
+  // Task 1 review, deferred here: assertEditableValue cannot see the document,
+  // so an out-of-range tier index validates and jsonc-parser's modify() then
+  // appends rather than erroring. Only this handler has the file in hand to
+  // bound-check against.
+  it("rejects an edit that indexes price.tiers beyond the array's current length", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const jsonPath = path.join(root, "content", "items", "electronics", "desk-lamp", "item.json");
+    const before = await fs.readFile(jsonPath, "utf-8");
+
+    // PATCH_ITEM_JSON's price.tiers has exactly one entry (index 0), so index
+    // 5 is well beyond it — an off-by-one in the UI, not a legitimate append.
+    const res = await patch(root, [{ path: ["price", "tiers", 5, "amount"], value: 30 }]);
+    expect(res.status).toBe(400);
+    expect(asJson(res).body).toMatchObject({
+      error: expect.stringContaining("price.tiers.5"),
+    });
+    expect(await fs.readFile(jsonPath, "utf-8")).toBe(before);
+  });
+
+  it("allows appending a new tier at exactly the array's current length", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await patch(root, [
+      { path: ["price", "tiers", 1], value: { label: "Shipped", amount: 35 } },
+    ]);
+    expect(res.status).toBe(200);
+    const fields = (asJson(res).body as { fields: Record<string, unknown> }).fields;
+    const tiers = (fields["price"] as { tiers: { label: string; amount: number }[] }).tiers;
+    expect(tiers).toHaveLength(2);
+    expect(tiers[1]).toMatchObject({ label: "Shipped", amount: 35 });
+  });
+
+  // fix round 1, finding IMPORTANT 1: `index === length` is only a legitimate
+  // append when the batch actually completes the tier it creates. A single
+  // leaf write landing at the append slot (a stale form editing "tier 2's
+  // price" after another tab or the CLI removed a tier) must not silently
+  // create a tier missing "label".
+  it("rejects a single-leaf write that lands at the append index but leaves the new tier incomplete", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const jsonPath = path.join(root, "content", "items", "electronics", "desk-lamp", "item.json");
+    const before = await fs.readFile(jsonPath, "utf-8");
+
+    // PATCH_ITEM_JSON's price.tiers has one entry (index 0); index 1 is a
+    // legal append position, but this batch only ever sets "amount" — no
+    // "label" — for it.
+    const res = await patch(root, [{ path: ["price", "tiers", 1, "amount"], value: 35 }]);
+    expect(res.status).toBe(400);
+    expect(asJson(res).body).toMatchObject({
+      error: expect.stringContaining("price.tiers.1"),
+    });
+    // Not silently clamped onto an existing tier, and not written as a
+    // half-formed object either: nothing on disk changed at all.
+    expect(await fs.readFile(jsonPath, "utf-8")).toBe(before);
+  });
+
+  it("allows a legitimate multi-leaf append that together completes the new tier", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await patch(root, [
+      { path: ["price", "tiers", 1, "label"], value: "Shipped" },
+      { path: ["price", "tiers", 1, "amount"], value: 35 },
+    ]);
+    expect(res.status).toBe(200);
+    const fields = (asJson(res).body as { fields: Record<string, unknown> }).fields;
+    const tiers = (fields["price"] as { tiers: { label: string; amount: number }[] }).tiers;
+    expect(tiers).toHaveLength(2);
+    expect(tiers[1]).toMatchObject({ label: "Shipped", amount: 35 });
+  });
+
+  // fix round 1, finding IMPORTANT 2: bounds must be evaluated against the
+  // array as the batch itself leaves it, not a pre-batch snapshot — in both
+  // directions.
+  describe("tier bounds against a batch that also replaces price wholesale", () => {
+    it("does not false-reject an index that the same batch's own wholesale replace just grew the array to cover", async () => {
+      const root = await project(PATCH_ITEM_JSON);
+      const res = await patch(root, [
+        {
+          path: ["price"],
+          value: {
+            currency: "USD",
+            tiers: [
+              { label: "Pickup", amount: 20 },
+              { label: "Local delivery", amount: 30 },
+              { label: "Shipped", amount: 40 },
+            ],
+          },
+        },
+        { path: ["price", "tiers", 2, "amount"], value: 99 },
+      ]);
+      expect(res.status).toBe(200);
+      const fields = (asJson(res).body as { fields: Record<string, unknown> }).fields;
+      const tiers = (fields["price"] as { tiers: { label: string; amount: number }[] }).tiers;
+      expect(tiers).toHaveLength(3);
+      expect(tiers[2]).toMatchObject({ label: "Shipped", amount: 99 });
+    });
+
+    it("does not false-accept — and silently clamp — an index the same batch's own wholesale replace just made out of range", async () => {
+      const root = await project(PATCH_ITEM_JSON);
+      const jsonPath = path.join(
+        root,
+        "content",
+        "items",
+        "electronics",
+        "desk-lamp",
+        "item.json",
+      );
+      const before = await fs.readFile(jsonPath, "utf-8");
+
+      const res = await patch(root, [
+        // Replaces price wholesale with no tiers at all.
+        { path: ["price"], value: { currency: "USD" } },
+        // Pre-batch, index 1 looked legal (the original array has length 1,
+        // so 1 was the append slot). After the edit above, the array this
+        // batch itself is building has length 0 — index 1 is genuinely out
+        // of range now, and must be rejected, not clamped onto index 0.
+        { path: ["price", "tiers", 1], value: { label: "X", amount: 9 } },
+      ]);
+      expect(res.status).toBe(400);
+      expect(asJson(res).body).toMatchObject({
+        error: expect.stringContaining("price.tiers.1"),
+      });
+      expect(await fs.readFile(jsonPath, "utf-8")).toBe(before);
+    });
+  });
+
+  // fix round 1, finding MINOR 4: a non-integer index is rejected for being
+  // an invalid path, not for being "out of range" — the bounds check must
+  // not shadow assertEditableValue's own, more specific reason.
+  it("reports a non-integer tier index as an invalid path, not an out-of-range one", async () => {
+    const root = await project(PATCH_ITEM_JSON);
+    const res = await patch(root, [{ path: ["price", "tiers", 1.5, "amount"], value: 30 }]);
+    expect(res.status).toBe(400);
+    const body = asJson(res).body as { error: string };
+    expect(body.error).not.toMatch(/out of range/);
+    expect(body.error).toMatch(/outside the item\.json schema/);
+  });
+});
+
+describe("POST /api/items", () => {
+  // Tracked and removed in afterEach, same pattern makeTempProject/project use
+  // above — each test mints its own tmpdir via emptyProject() and must not
+  // leak it.
+  let tempProjects: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+
+  function create(root: string, body: unknown) {
+    return handleStudioRequest({
+      method: "POST",
+      url: "/api/items",
+      body: Buffer.from(JSON.stringify(body)),
+      projectRoot: root,
+    });
+  }
+
+  async function emptyProject(): Promise<string> {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-create-"));
+    await fs.mkdir(path.join(root, "content", "items"), { recursive: true });
+    tempProjects.push(root);
+    return root;
+  }
+
+  it("creates item.json from the template", async () => {
+    const root = await emptyProject();
+    const res = await create(root, { category: "electronics", name: "desk-lamp" });
+    expect(res.status).toBe(201);
+    expect((asJson(res).body as { id: string }).id).toBe("electronics/desk-lamp");
+
+    const text = await fs.readFile(
+      path.join(root, "content", "items", "electronics", "desk-lamp", "item.json"),
+      "utf-8",
+    );
+    expect(text).toContain('"status": "draft"');
+    expect(text).toContain("// options:");
+    // Iron Rule 4 — the scaffold never writes it.
+    expect(text).not.toContain("reserved_for");
+  });
+
+  it("derives a display name from the slug", async () => {
+    const root = await emptyProject();
+    await create(root, { category: "electronics", name: "usb-c-hub" });
+    const text = await fs.readFile(
+      path.join(root, "content", "items", "electronics", "usb-c-hub", "item.json"),
+      "utf-8",
+    );
+    expect(text).toContain('"name": "Usb C Hub"');
+  });
+
+  it("creates the category folder when it does not exist", async () => {
+    const root = await emptyProject();
+    expect((await create(root, { category: "garden", name: "hose" })).status).toBe(201);
+    await expect(
+      fs.stat(path.join(root, "content", "items", "garden")),
+    ).resolves.toBeDefined();
+  });
+
+  it("409s rather than overwriting an existing item", async () => {
+    const root = await emptyProject();
+    await create(root, { category: "electronics", name: "desk-lamp" });
+    const jsonPath = path.join(
+      root, "content", "items", "electronics", "desk-lamp", "item.json",
+    );
+    await fs.writeFile(jsonPath, `{ "name": "Edited by hand" }`, "utf-8");
+
+    const res = await create(root, { category: "electronics", name: "desk-lamp" });
+    expect(res.status).toBe(409);
+    expect(await fs.readFile(jsonPath, "utf-8")).toContain("Edited by hand");
+  });
+
+  it("400s on a non-slug category or name", async () => {
+    const root = await emptyProject();
+    expect((await create(root, { category: "Electronics", name: "x" })).status).toBe(400);
+    expect((await create(root, { category: "e", name: "desk lamp" })).status).toBe(400);
+    expect((await create(root, { category: "..", name: "x" })).status).toBe(400);
+  });
+
+  it("405s on DELETE /api/items", async () => {
+    const root = await emptyProject();
+    const res = await handleStudioRequest({
+      method: "DELETE",
+      url: "/api/items",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(405);
+  });
+});
+
+describe("publish routes", () => {
+  // Tracked and removed in afterEach, same pattern makeTempProject/project use
+  // above — each test mints its own tmpdir via makeTempProject and must not
+  // leak it.
+  let tempProjects: string[] = [];
+
+  async function project(itemJson: string): Promise<string> {
+    const root = await makeTempProject(itemJson);
+    tempProjects.push(root);
+    return root;
+  }
+
+  // A real git repository with a bare `origin`, wired the same way
+  // scripts/lib/studioGit.test.ts's makeRepo() is: this file has to prove the
+  // route actually calls readChanges/publishChanges end to end, not just that
+  // it returns SOME 200. (Fix round 1, finding 5: a handleChanges that
+  // unconditionally threw 400, and a handlePublish that returned a hardcoded
+  // {commit:"deadbeef",files:[]} without ever calling publishChanges, both
+  // passed every test in this file before this helper existed.)
+  async function makeGitProject(itemJson: string): Promise<string> {
+    const root = await project(itemJson);
+    const origin = path.join(root, "..", `${path.basename(root)}-origin.git`);
+    tempProjects.push(origin);
+
+    await run("git", ["init", "--bare", "--initial-branch=main", origin]);
+    await run("git", ["init", "--initial-branch=main"], { cwd: root });
+    await run("git", ["config", "user.email", "seller@example.com"], { cwd: root });
+    await run("git", ["config", "user.name", "Seller"], { cwd: root });
+    await run("git", ["config", "commit.gpgsign", "false"], { cwd: root });
+    await fs.mkdir(path.join(root, "lib", "generated"), { recursive: true });
+    await fs.writeFile(path.join(root, "lib", "generated", "image-manifest.json"), "{}\n");
+    await run("git", ["add", "content", "lib"], { cwd: root });
+    await run("git", ["commit", "-m", "initial"], { cwd: root });
+    await run("git", ["remote", "add", "origin", origin], { cwd: root });
+    await run("git", ["push", "-u", "origin", "main"], { cwd: root });
+
+    return root;
+  }
+
+  afterEach(async () => {
+    resetSyncStateForTests();
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+
+  it("GET /api/changes 400s when the project root is not a git repository", async () => {
+    const root = await project(ITEM_JSON);
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/changes",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(400);
+    expect((asJson(res).body as { error: string }).error).toMatch(/not a git repository/);
+  });
+
+  it("GET /api/changes returns branch and files from a real repository", async () => {
+    const root = await makeGitProject(ITEM_JSON);
+    await fs.writeFile(
+      path.join(root, "content", "items", "electronics", "desk-lamp", "item.json"),
+      ITEM_JSON.replace("Desk lamp", "Reading lamp"),
+    );
+
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/changes",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(200);
+    const body = asJson(res).body as { branch: string; files: Array<{ path: string }> };
+    expect(body.branch).toBe("main");
+    expect(body.files.map((f) => f.path)).toEqual([
+      "content/items/electronics/desk-lamp/item.json",
+    ]);
+  });
+
+  it("POST /api/publish commits and pushes a real repository, returning what shipped", async () => {
+    const root = await makeGitProject(ITEM_JSON);
+    await fs.writeFile(
+      path.join(root, "content", "items", "electronics", "desk-lamp", "item.json"),
+      ITEM_JSON.replace("Desk lamp", "Reading lamp"),
+    );
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/publish",
+      body: Buffer.from(JSON.stringify({ message: "chore: rename the lamp" })),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(200);
+    const body = asJson(res).body as { commit: string; files: Array<{ path: string }> };
+    expect(body.commit).toMatch(/^[0-9a-f]{7,40}$/);
+    expect(body.files.map((f) => f.path)).toEqual([
+      "content/items/electronics/desk-lamp/item.json",
+    ]);
+
+    // Proves the commit actually reached the remote, not just the local repo
+    // — a hardcoded-return mutation would never touch git at all.
+    const { stdout } = await run("git", ["log", "-1", "--pretty=%s", "origin/main"], {
+      cwd: root,
+    });
+    expect(stdout.trim()).toBe("chore: rename the lamp");
+  });
+
+  it("POST /api/publish is refused while an image sync is running", async () => {
+    const root = await project(ITEM_JSON);
+
+    // Hold the mutex with a runner that emits one progress event and then
+    // never settles, then confirm publish refuses. A commit taken mid-sync
+    // would ship a half-written lib/generated/image-manifest.json.
+    //
+    // The runner must emit at least once before blocking: streamImageSync's
+    // generator only resolves a `.next()` call by reaching a `yield`, and with
+    // no progress event ever pushed it would sit forever on its internal
+    // 50ms poll `await` (which does not resolve `.next()`) — hanging this
+    // test, not exercising the 409. `running` is already true by the time
+    // this first event is emitted; it flips synchronously at the top of
+    // streamImageSync, before the runner is even invoked. Same shape
+    // studioSync.test.ts uses for "genuinely still in flight" cases.
+    setSyncRunner((onProgress) => {
+      onProgress({ type: "scanned", total: 1 });
+      return new Promise(() => {});
+    });
+    const stream = streamImageSync(getSyncRunner()!);
+    await stream.next(); // yields the progress event; `running` is already true
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/publish",
+      body: Buffer.from(JSON.stringify({ message: "chore: update listings" })),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(409);
+    expect((asJson(res).body as { error: string }).error).toMatch(/sync/i);
+
+    await stream.return(undefined);
+  });
+
+  it("405s on the wrong methods", async () => {
+    const root = await project(ITEM_JSON);
+    expect(
+      (
+        await handleStudioRequest({
+          method: "POST", url: "/api/changes", body: Buffer.from("{}"), projectRoot: root,
+        })
+      ).status,
+    ).toBe(405);
+    expect(
+      (
+        await handleStudioRequest({
+          method: "GET", url: "/api/publish", body: Buffer.alloc(0), projectRoot: root,
+        })
+      ).status,
+    ).toBe(405);
   });
 });
