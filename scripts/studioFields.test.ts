@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { isEditableField, resolveFieldSchema } from "./lib/itemFields";
+import { assertEditableValue, isEditableField, resolveFieldSchema } from "./lib/itemFields";
 
 type FieldDescriptor = {
   path: (string | number)[];
@@ -28,6 +28,7 @@ type FieldGroup = { title: string; fields: FieldDescriptor[] };
 type FieldsModule = {
   FIELD_GROUPS: readonly FieldGroup[];
   WHOLE_OBJECT_GROUPS: Readonly<Record<string, string>>;
+  WHOLE_OBJECT_SEEDS: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   pathKey: (p: (string | number)[]) => string;
   readAtPath: (o: Record<string, unknown>, p: (string | number)[]) => unknown;
 };
@@ -130,5 +131,35 @@ describe("studio field descriptors (Task 6)", () => {
     expect(source).toContain('if (next === "" && field.kind === "select") continue;');
     // Off-list on-disk values are rendered raw, not snapped to a legal option.
     expect(source).toContain("field-offlist");
+  });
+
+  // Final review, Important 2: every item.json in this repo lacks a
+  // dimensions object, so the whole-object merge started from {} and a
+  // single-leaf edit produced {length:5} — rejected by the strict schema with
+  // three anonymous "Required"s. The merge base for an absent (or corrupt)
+  // object must be the template's null-leaf shape, leaving only `unit` for
+  // the seller to choose.
+  it("whole-object seeds cover every group and satisfy the grammar once a unit is chosen", () => {
+    const { WHOLE_OBJECT_GROUPS, WHOLE_OBJECT_SEEDS } = loadFields();
+    expect(Object.keys(WHOLE_OBJECT_SEEDS).sort()).toEqual(Object.keys(WHOLE_OBJECT_GROUPS).sort());
+
+    const unitFor: Record<string, string> = { dimensions: "cm", weight: "kg" };
+    for (const [head, seed] of Object.entries(WHOLE_OBJECT_SEEDS)) {
+      for (const key of Object.keys(seed)) {
+        assert.equal(isEditableField([head, key]), true, `${head}.${key} is not a grammar leaf`);
+      }
+      // The seed itself deliberately omits `unit` (the seller must pick one);
+      // with any legal unit added, the whole object must pass the strict
+      // schema exactly as EditForm will send it.
+      expect(() =>
+        assertEditableValue([head], { ...seed, unit: unitFor[head] }),
+      ).not.toThrow();
+    }
+  });
+
+  it("EditForm seeds a missing object from WHOLE_OBJECT_SEEDS and asks for a unit", () => {
+    const source = readFileSync(path.join(ROOT, "studio/src/panes/EditForm.tsx"), "utf-8");
+    expect(source).toContain("WHOLE_OBJECT_SEEDS[head]");
+    expect(source).toContain("pick a unit");
   });
 });

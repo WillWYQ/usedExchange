@@ -274,9 +274,13 @@ export function assertEditableValue(path: (string | number)[], value: unknown): 
   }
   const parsed = schema.safeParse(value);
   if (!parsed.success) {
-    throw new Error(
-      `Invalid value for "${label}": ${parsed.error.issues.map((i) => i.message).join("; ")}`,
+    // Each issue is prefixed with its own path inside the value: a
+    // whole-object write missing several required keys otherwise reads
+    // "Required; Required; Required" with no way to tell WHICH keys.
+    const issues = parsed.error.issues.map((i) =>
+      i.path.length > 0 ? `${i.path.join(".")}: ${i.message}` : i.message,
     );
+    throw new Error(`Invalid value for "${label}": ${issues.join("; ")}`);
   }
 }
 

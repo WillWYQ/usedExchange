@@ -5,6 +5,7 @@ import {
   pathKey,
   readAtPath,
   WHOLE_OBJECT_GROUPS,
+  WHOLE_OBJECT_SEEDS,
   type FieldDescriptor,
 } from "../fields";
 
@@ -111,14 +112,16 @@ function buildEdits(
         const leaf = field.path[1];
         if (typeof leaf !== "string") continue;
         // Merge into the whole object OTHER descriptors in this group may
-        // already have built up this save, falling back to the loaded object,
-        // then to an empty base — so changing two leaves in one save produces
-        // one whole-object edit carrying both.
+        // already have built up this save, falling back to the loaded object.
+        // When the file has no such object at all (true of every item.json in
+        // this repo) — or holds a non-object where one belongs — the base is
+        // the template's null-leaf seed, so a single-leaf edit still produces
+        // a complete object the strict schema accepts.
         const base = changedGroups.get(head) ?? readAtPath(loaded, [head]);
         const merged: Record<string, unknown> =
           typeof base === "object" && base !== null && !Array.isArray(base)
             ? { ...(base as Record<string, unknown>) }
-            : {};
+            : { ...WHOLE_OBJECT_SEEDS[head] };
         merged[leaf] = parsed.value;
         changedGroups.set(head, merged);
         continue;
@@ -129,6 +132,17 @@ function buildEdits(
   }
 
   for (const [head, value] of changedGroups) {
+    // The seed has no `unit` (there is no null unit), so creating the object
+    // from scratch needs the seller to pick one. Saying so here, by the
+    // field's own name, beats the server's terser "unit: Required".
+    if (head in WHOLE_OBJECT_SEEDS && typeof value["unit"] !== "string") {
+      problems.push(
+        head === "dimensions"
+          ? "Size unit: pick a unit to set dimensions"
+          : "Weight unit: pick a unit to set a weight",
+      );
+      continue;
+    }
     edits.push({ path: [head], value });
   }
 

@@ -171,6 +171,17 @@ describe("assertEditableValue — values", () => {
       /price\.tiers\.1\.amount/,
     );
   });
+
+  // Final review, Important 2: a whole-object write missing required keys
+  // produced "Invalid value for "dimensions": Required; Required; Required" —
+  // three anonymous "Required"s with no way to tell WHICH keys are missing.
+  // Every item.json shipped in this repo lacks a dimensions object, so this
+  // was the default experience of setting a first dimension. The issue's own
+  // path must be part of the message.
+  it("names the missing keys inside a whole-object error", () => {
+    expect(() => assertEditableValue(["dimensions"], { length: 1 })).toThrow(/unit: Required/);
+    expect(() => assertEditableValue(["weight"], {})).toThrow(/value: Required/);
+  });
 });
 
 describe("drift guard", () => {

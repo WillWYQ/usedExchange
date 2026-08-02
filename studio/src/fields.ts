@@ -129,6 +129,19 @@ export const WHOLE_OBJECT_GROUPS: Readonly<Record<string, string>> = {
   weight: "weight",
 };
 
+// The merge base when the on-disk object is absent (or not an object at all):
+// the same null-leaf placeholder shape `pnpm create-item` writes. Without it
+// the merge started from {} and a single-leaf edit sent {"length": 5}, which
+// the strict whole-object schema rejects — and since none of this repo's own
+// item.json files carry a dimensions object, that was the DEFAULT experience
+// of typing a first dimension. `unit` is deliberately omitted: it has no null
+// state, so the seller must pick one, and buildEdits says so by name instead
+// of letting the server answer with a bare "unit: Required".
+export const WHOLE_OBJECT_SEEDS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
+  dimensions: { length: null, width: null, height: null },
+  weight: { value: null },
+};
+
 export function pathKey(path: (string | number)[]): string {
   return path.join(".");
 }
