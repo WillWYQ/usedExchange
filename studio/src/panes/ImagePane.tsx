@@ -10,11 +10,9 @@ import {
 
 export function ImagePane({
   item,
-  onClose,
   onChanged,
 }: {
   item: StudioItem;
-  onClose: () => void;
   onChanged: () => void;
 }) {
   const [files, setFiles] = useState<ImageEntry[]>([]);
@@ -93,14 +91,7 @@ export function ImagePane({
   }
 
   return (
-    <aside className="drawer" aria-label={`Photos for ${item.name}`}>
-      <header className="drawer-head">
-        <h2>{item.name}</h2>
-        <button type="button" onClick={onClose}>
-          Close
-        </button>
-      </header>
-
+    <div className="pane" aria-label={`Photos for ${item.name}`}>
       {error !== null && <p role="alert">{error}</p>}
 
       <div
@@ -184,6 +175,6 @@ export function ImagePane({
           </li>
         ))}
       </ol>
-    </aside>
+    </div>
   );
 }

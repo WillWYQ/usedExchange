@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { bulkStatus, fetchItems, type StudioItem } from "./api";
 import { BulkToolbar } from "./panes/BulkToolbar";
-import { ImagePane } from "./panes/ImagePane";
+import { Drawer } from "./panes/Drawer";
 import { ItemList } from "./panes/ItemList";
+import { NewItemDialog } from "./panes/NewItemDialog";
 import { SyncBar } from "./panes/SyncBar";
 
 export function App() {
@@ -13,6 +14,7 @@ export function App() {
   const [justStampedIds, setJustStampedIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
+  const [showNewItem, setShowNewItem] = useState(false);
 
   // Studio keeps no local copy of item state: after any write it re-reads the
   // full list, so the table can never drift from what is on disk.
@@ -80,6 +82,9 @@ export function App() {
       <header className="studio-head">
         <h1>Seller Studio</h1>
         <span className="counts">content/ · {items.length} items</span>
+        <button type="button" onClick={() => setShowNewItem(true)}>
+          New item
+        </button>
         <SyncBar onFinished={() => void refresh()} />
       </header>
       {error !== null && <p role="alert">{error}</p>}
@@ -106,7 +111,7 @@ export function App() {
       {openItemId !== null && (() => {
         const openItem = items.find((i) => i.id === openItemId);
         return openItem === undefined ? null : (
-          <ImagePane
+          <Drawer
             key={openItem.id}
             item={openItem}
             onClose={() => setOpenItemId(null)}
@@ -114,6 +119,18 @@ export function App() {
           />
         );
       })()}
+      {showNewItem && (
+        <NewItemDialog
+          categories={[...new Set(items.map((i) => i.categorySlug))].sort()}
+          onCancel={() => setShowNewItem(false)}
+          onCreated={(id) => {
+            setShowNewItem(false);
+            // Refresh first so the drawer has a row to open for the new item,
+            // then land the seller straight in its editor.
+            void refresh().then(() => setOpenItemId(id));
+          }}
+        />
+      )}
     </>
   );
 }

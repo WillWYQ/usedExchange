@@ -124,6 +124,47 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+export type ItemFields = Record<string, unknown>;
+export type FieldEdit = { path: (string | number)[]; value: unknown };
+
+export async function fetchItemFields(id: string): Promise<ItemFields> {
+  const res = await fetch(`/api/items/${id}`);
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `loading ${id} failed with ${res.status} ${res.statusText}`));
+  }
+  if (body === null || typeof body.fields !== "object" || body.fields === null) {
+    throw new Error(`GET /api/items/${id} returned an unreadable response`);
+  }
+  return body.fields as ItemFields;
+}
+
+export async function patchItem(id: string, edits: FieldEdit[]): Promise<ItemFields> {
+  const res = await fetch(`/api/items/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ edits }),
+  });
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `saving ${id} failed with ${res.status} ${res.statusText}`));
+  }
+  return (body?.fields as ItemFields | undefined) ?? {};
+}
+
+export async function createItem(category: string, name: string): Promise<string> {
+  const res = await fetch("/api/items", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ category, name }),
+  });
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `create failed with ${res.status} ${res.statusText}`));
+  }
+  return (body?.id as string | undefined) ?? `${category}/${name}`;
+}
+
 export type SyncEvent =
   | { event: "progress"; data: { type: string; total?: number; completed?: number; manifestKey?: string } }
   | {
