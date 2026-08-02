@@ -37,6 +37,7 @@ const TEMPLATE_PATHS = [
   "lib",
   "public",
   "scripts",
+  "studio",
   "docs",
   "eslint.config.mjs",
   "next-env.d.ts",

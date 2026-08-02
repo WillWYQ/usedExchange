@@ -87,7 +87,7 @@ git checkout v1.2.0 -- \
   .claude .github \
   .env.example .gitignore LICENSE \
   README.md README_zh.md SETUP_GUIDE.md \
-  app components components.json hooks lib public scripts docs \
+  app components components.json hooks lib public scripts studio docs \
   eslint.config.mjs next-env.d.ts next-sitemap.config.js next.config.ts \
   package.json pnpm-lock.yaml pnpm-workspace.yaml \
   postcss.config.mjs prettier.config.js tsconfig.json vitest.config.ts

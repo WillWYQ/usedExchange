@@ -337,6 +337,23 @@ Scripts run on the seller's machine. All write only to `content/`.
 
 ---
 
+## Seller Studio
+
+A local-only web GUI for managing listings in a browser — an alternative to editing `item.json` by hand. Start it with `pnpm studio` (use `pnpm studio --port 3000` to change the port), then open the printed URL. It runs entirely on the seller's machine: it is never part of the build output, never deployed, and never reachable by site visitors.
+
+Four operations, all from one page:
+
+| Operation | What it does |
+|---|---|
+| Photos | Upload photos by dragging files onto an item, reorder them, and push changes to the CDN |
+| Bulk status | Change `status` (available / reserved / pending / sold / draft) for many items at once |
+| Edit form | Edit any item's fields with a grouped form; only the fields you changed are written back |
+| Publish | Stage `content/` plus the image manifest and create the git commit |
+
+Like the CLI scripts, Studio writes only to `content/` and the image manifest (`lib/generated/image-manifest.json`). It never reads or writes `reserved_for` — private buyer info stays out of the tool entirely.
+
+---
+
 ## Item Status & Visibility
 
 | Status | Recently listed (home) | Category card (home) | `/[category]` page | `/all` page | `/sold` archive | Detail page | Notes |

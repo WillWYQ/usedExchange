@@ -31,9 +31,8 @@ function assertStudioConfigPresent(configFile: string): void {
   if (!fs.existsSync(configFile)) {
     console.error(
       "Error: Seller Studio is not installed in this site.\n" +
-        "  studio/vite.config.ts was not found. `pnpm update-site` does not yet copy the\n" +
-        "  studio/ directory (that lands in a later release) — pull it manually from the\n" +
-        "  template repo, or wait for the release that adds it to `pnpm update-site`.",
+        "  studio/vite.config.ts was not found. Run `pnpm update-site` to pull it from the\n" +
+        "  template, then `pnpm install`, then `pnpm studio` again.",
     );
     process.exit(1);
   }

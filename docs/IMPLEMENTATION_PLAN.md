@@ -1,7 +1,7 @@
 # UsedExchange — Implementation Plan
 
-**Version:** 1.6  
-**Date:** 2026-06-14  
+**Version:** 1.7  
+**Date:** 2026-08-02  
 **Based on:** DESIGN.md v0.9.2 · TECH_REQUIREMENTS.md v0.9.2  
 **Assumption:** Single developer; primary target = GitHub Pages + Cloudflare R2
 
@@ -28,6 +28,8 @@
 | 14 | Deployment | 1 | 4, 13 |
 | 15 | AI Skill Files (Setup Wizard + Item Generator + Item Translator) | 2 | 3 |
 | 16 | Shipping Calculator Integration (Optional) | 2 | 7, 12 |
+| 17 | Facebook Marketplace Smart Export | 1 | 3 |
+| 18 | Seller Studio | 4 | 4, 15 |
 | **Total** | | **~26 days** | |
 
 **Critical path:** 0 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 11 → 13 → 14  
@@ -681,6 +683,48 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md (lib/ Module Refe
 - Items with > 50 selected auto-batch into `facebook-marketplace-1.csv`, `facebook-marketplace-2.csv`, …
 - Second run shows Step 0 with count of previously exported items; selecting "skip" filters them out
 - History file written atomically; corrupted file falls back to `{ runs: [] }` without crashing
+
+---
+
+## Phase 18 — Seller Studio ✅
+
+**Goal:** `pnpm studio` starts a local-only web GUI (never part of the build output, never deployed) for managing listings in a browser: photo upload/reorder/CDN push, bulk status changes, a schema-driven edit form, item creation, and one-click publish — without the seller editing `item.json` by hand.
+
+**Version:** v1.7
+
+### Tasks
+
+#### 18a — Item table & bulk status (Part 1)
+- [x] `studio/vite.config.ts` + `studio/index.html` + `studio/src/main.tsx` — Vite dev app; `studio/` is unreachable from `next build`
+- [x] `scripts/studio.ts` — `pnpm studio` launcher: serves the app and the API on a single local port; clear "not installed" error when the studio directory is missing
+- [x] `studio/src/App.tsx` + `ItemList.tsx` + `Drawer.tsx` + `BulkToolbar.tsx` — item table, per-item drawer, bulk status changes (available / reserved / pending / sold / draft)
+- [x] `GET /api/items` returns every item with its image files; `reserved_for` is never read, written, or sent to the client
+
+#### 18b — Photos & CDN sync (Part 2A)
+- [x] `scripts/lib/studioImages.ts` — list an item's image files; serve image files; upload, reorder, delete through the API
+- [x] `scripts/lib/studioSync.ts` — image-sync runner with a sync mutex (one sync at a time) and server-sent-event progress streaming
+- [x] `ImagePane.tsx` + `SyncBar.tsx` — drag-and-drop upload, drag-to-reorder, CDN push with live progress; state resyncs after a failed mutation
+
+#### 18c — Edit form, item creation & publish (Part 2B)
+- [x] `scripts/lib/itemEdit.ts` + `itemFields.ts` — strict field grammar for `item.json` edits; every write validated against the schema; `reserved_for` denied
+- [x] `scripts/lib/studioApi.ts` — `GET`/`PATCH /api/items/:cat/:name` (changed fields only), `POST /api/items` (create from template)
+- [x] `scripts/lib/studioGit.ts` — `publishChanges()`: re-reads the change list before committing; refuses to publish while an image sync is running
+- [x] `EditForm.tsx` + `NewItemDialog.tsx` + `PublishPane.tsx` — grouped edit form, item creation dialog, publish pane with the uncommitted-change count most prominent in the header
+- [x] Test coverage in `scripts/lib/studioApi.test.ts` / `studioImages.test.ts` / `studioSync.test.ts` / `studioGit.test.ts` / `itemEdit.test.ts` / `itemFields.test.ts` (backend only — no React tests)
+
+#### 18d — Distribution & documentation
+- [x] `studio` added to `TEMPLATE_PATHS` in `scripts/update-site.ts` so `pnpm update-site` delivers it to downstream sites
+- [x] `docs/UPDATE_GUIDE.md` / `_zh` — `studio` added to the manual `git checkout` path list in both languages
+- [x] `scripts/update-site.test.ts` — drift test keeping `TEMPLATE_PATHS` and both UPDATE_GUIDE path lists in sync
+- [x] `docs/CURRENT_FUNCTIONALITY.md` / `_zh` — "Seller Studio" section in both languages
+- [x] `docs/FEATURES_ROADMAP.md` / `_zh` — "Seller dashboard (local-only GUI)" marked ✅ in both languages
+- [x] `.claude/CLAUDE.md` — `pnpm studio` row added to the Common Seller Tasks table
+
+### Acceptance Criteria
+- `pnpm studio` starts the GUI locally; the four operations (photos, bulk status, edit form, publish) work end to end
+- Studio writes only to `content/` and `lib/generated/image-manifest.json`; `reserved_for` is never read or written
+- None of the studio markers (Seller Studio, studio-api, `handleStudioRequest`, `StudioError`, carbon-pale, bulk-status, ImagePane, EditForm, PublishPane, stamp-press, fontsource, `publishChanges`) appear anywhere in `out/` after `pnpm build`
+- `pnpm update-site` copies `studio/`; the drift test fails if `TEMPLATE_PATHS` and either UPDATE_GUIDE path list disagree
 
 ---
 
