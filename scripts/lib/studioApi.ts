@@ -172,6 +172,8 @@ const bulkStatusBodySchema = z.object({
 
 export type BulkStatusResult = {
   ok: number;
+  /** Items already in the target state — nothing was written for them. */
+  skipped: number;
   failed: Array<{ id: string; error: string }>;
 };
 
@@ -194,7 +196,7 @@ async function applyStatus(
   id: string,
   status: string,
   today: string,
-): Promise<void> {
+): Promise<"written" | "skipped"> {
   const slashIdx = id.indexOf("/");
   if (slashIdx === -1) throw new StudioError(400, `id must be "<category>/<item>": got "${id}"`);
 
@@ -214,7 +216,7 @@ async function applyStatus(
   // current value.
   const currentStatus = readItemField(text, "status");
   if (status === "sold" && currentStatus === "sold") {
-    return;
+    return "skipped";
   }
 
   const next = applyFieldEdits(text, [
@@ -223,6 +225,7 @@ async function applyStatus(
   ]);
 
   await fsPromises.writeFile(jsonPath, next, "utf-8");
+  return "written";
 }
 
 async function handleBulkStatus(req: StudioRequest): Promise<StudioResponse> {
@@ -233,12 +236,16 @@ async function handleBulkStatus(req: StudioRequest): Promise<StudioResponse> {
   // rollback: undoing half-written files can itself fail, and the successful
   // writes are work the seller does not want discarded. Matches the failure
   // philosophy in imageSync.ts.
-  const result: BulkStatusResult = { ok: 0, failed: [] };
+  const result: BulkStatusResult = { ok: 0, skipped: 0, failed: [] };
 
   for (const id of ids) {
     try {
-      await applyStatus(req.projectRoot, id, status, today);
-      result.ok++;
+      // "skipped" is not a lesser "ok": reporting an untouched already-sold
+      // item as updated tells the seller their sale date was re-stamped when
+      // the whole point of the guard is that it was not.
+      const outcome = await applyStatus(req.projectRoot, id, status, today);
+      if (outcome === "skipped") result.skipped++;
+      else result.ok++;
     } catch (err: unknown) {
       result.failed.push({
         id,

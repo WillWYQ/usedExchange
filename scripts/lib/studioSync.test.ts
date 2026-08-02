@@ -1,6 +1,7 @@
-import { describe, expect, it, afterEach } from "vitest";
+import { describe, expect, it, afterEach, vi } from "vitest";
 import type { ImageSyncResult } from "./imageSync";
 import type { SseEvent } from "./studioApi";
+import * as loaderModule from "@/lib/content/loader";
 import {
   getSyncRunner,
   isSyncRunning,
@@ -140,5 +141,36 @@ describe("streamImageSync", () => {
     release();
     await new Promise((r) => setTimeout(r, 0));
     expect(isSyncRunning()).toBe(false);
+  });
+});
+
+describe("manifest cache reset on sync settle", () => {
+  it("resets the loader's manifest cache when a sync settles", async () => {
+    const spy = vi.spyOn(loaderModule, "resetManifestCache");
+    setSyncRunner(async () => emptyResult());
+
+    const events = [];
+    for await (const evt of streamImageSync(getSyncRunner()!)) events.push(evt);
+
+    expect(events.at(-1)?.event).toBe("done");
+    // lib/content/loader.ts memoizes the manifest for the process lifetime, and
+    // `pnpm studio` is long-lived — without this every later GET /api/items would
+    // read the manifest from before the upload.
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it("resets the cache even when the sync fails", async () => {
+    const spy = vi.spyOn(loaderModule, "resetManifestCache");
+    setSyncRunner(async () => {
+      throw new Error("R2 credentials missing");
+    });
+
+    const events = [];
+    for await (const evt of streamImageSync(getSyncRunner()!)) events.push(evt);
+
+    expect(events.at(-1)?.event).toBe("error");
+    // A failed run can still have uploaded some files before throwing, so the
+    // cached manifest is untrustworthy either way.
+    expect(spy).toHaveBeenCalled();
   });
 });

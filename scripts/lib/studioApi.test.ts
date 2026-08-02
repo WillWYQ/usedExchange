@@ -215,7 +215,7 @@ describe("POST /api/items/bulk-status", () => {
     const res = await bulkStatus(["electronics/desk-lamp"], "sold");
 
     expect(res.status).toBe(200);
-    expect(asJson(res).body).toMatchObject({ ok: 1, failed: [] });
+    expect(asJson(res).body).toMatchObject({ ok: 0, skipped: 1, failed: [] });
     const text = await readItemJson("electronics/desk-lamp");
     expect(text).toContain('"sold_date": "2026-01-15"');
     expect(text).toContain('"status": "sold"');
@@ -263,6 +263,46 @@ describe("POST /api/items/bulk-status", () => {
     // not merely failed for some other reason (e.g. ENOENT on the traversal
     // target) that would pass even with resolveItemDir's guards deleted.
     expect(body.failed[0]?.error).toMatch(/kebab-case|escapes content\/items/);
+  });
+});
+
+describe("bulk-status counts a no-op as skipped, not ok", () => {
+  it("separates already-sold items from ones it actually wrote", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-bulk-"));
+    const mk = async (slug: string, status: string, soldDate: string | null) => {
+      const dir = path.join(root, "content", "items", "electronics", slug);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(
+        path.join(dir, "item.json"),
+        JSON.stringify({ name: slug, status, sold_date: soldDate }, null, 2) + "\n",
+      );
+    };
+    await mk("already-sold", "sold", "2026-01-15");
+    await mk("still-listed", "available", null);
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/items/bulk-status",
+      body: Buffer.from(
+        JSON.stringify({
+          ids: ["electronics/already-sold", "electronics/still-listed"],
+          status: "sold",
+        }),
+      ),
+      projectRoot: root,
+    });
+
+    const body = asJson(res).body as { ok: number; skipped: number; failed: unknown[] };
+    expect(body.ok).toBe(1);
+    expect(body.skipped).toBe(1);
+    expect(body.failed).toEqual([]);
+
+    // The original sale date is intact — that is what "skipped" is protecting.
+    const text = await fs.readFile(
+      path.join(root, "content", "items", "electronics", "already-sold", "item.json"),
+      "utf-8",
+    );
+    expect(text).toContain("2026-01-15");
   });
 });
 

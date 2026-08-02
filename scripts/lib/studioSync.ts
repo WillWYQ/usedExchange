@@ -15,6 +15,7 @@
 
 import type { ImageSyncProgress, ImageSyncResult } from "./imageSync";
 import type { SseEvent } from "./studioApi";
+import { resetManifestCache } from "../../lib/content/loader";
 
 export type SyncRunner = (
   onProgress: (progress: ImageSyncProgress) => void,
@@ -127,6 +128,18 @@ export async function* streamImageSync(run: SyncRunner): AsyncGenerator<SseEvent
     )
     .finally(() => {
       syncState().running = false;
+      // The manifest on disk has just changed. lib/content/loader.ts memoizes
+      // it for the process lifetime, and `pnpm studio` runs for hours — without
+      // this, every later GET /api/items reads the pre-upload manifest and any
+      // CDN URL studio surfaces is the old one.
+      //
+      // This call has to happen from THIS module, not from scripts/studio.ts.
+      // studio/vite.config.ts inlines every relative import, so studioApi.ts,
+      // this file, and loader.ts all end up in one bundle sharing one loader
+      // instance — while scripts/studio.ts resolves a second, independent copy
+      // through tsx. A reset called there would clear the copy nothing reads.
+      // Same module-instance split that put the mutex on globalThis above.
+      resetManifestCache();
     });
 
   for (;;) {

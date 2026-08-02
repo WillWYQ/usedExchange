@@ -62,6 +62,12 @@ export function App() {
             result.failed.map((f) => `${f.id} (${f.error})`).join(", "),
         );
       }
+      if (result.failed.length === 0 && result.skipped > 0) {
+        setError(
+          `${result.ok} updated, ${result.skipped} already ${status} (left unchanged so the ` +
+            `original date is preserved).`,
+        );
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
