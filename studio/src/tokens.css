@@ -630,3 +630,93 @@ tr.failed td {
   color: var(--carbon-pale);
   background: var(--ink);
 }
+
+/* The publish pane. Editing without pushing is studio's one true failure
+   mode (spec §14.4), so the uncommitted list is plain tabular data in
+   --font-data and the count lives in the header — no panel chrome, no accent
+   colour, nothing that competes with the SOLD stamp. */
+
+.publish-pane {
+  margin: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--carbon-rule);
+}
+
+.publish-pane h2 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-head);
+  font-size: var(--step-0);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.change-list {
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-data);
+}
+
+.change-list li {
+  padding: 0.1rem 0;
+  overflow-wrap: anywhere;
+}
+
+.change-code {
+  color: var(--ink-soft);
+}
+
+.change-empty,
+.publish-done {
+  color: var(--ink-soft);
+}
+
+.publish-controls {
+  display: flex;
+  gap: var(--gap);
+  align-items: baseline;
+}
+
+.publish-controls input[type="text"] {
+  flex: 1;
+  padding: 0.25rem 0;
+  font-family: var(--font-data);
+  font-size: var(--step-0);
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--carbon-rule);
+  border-radius: 0;
+}
+
+.publish-controls button {
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  padding: 0.3rem 0.7rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--ink);
+  cursor: pointer;
+}
+
+.publish-controls button:hover {
+  color: var(--carbon-pale);
+  background: var(--ink);
+}
+
+.publish-controls button:disabled {
+  cursor: default;
+  color: var(--ink-soft);
+  border-color: var(--carbon-rule);
+  background: transparent;
+}
+
+/* Same treatment as .sync-error: the push-failure message is multi-line and
+   its second line ("Your work is saved…") is the part the seller must not
+   miss, so it keeps its line breaks. */
+.publish-error {
+  white-space: pre-line;
+  color: var(--error);
+}

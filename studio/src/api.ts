@@ -165,6 +165,34 @@ export async function createItem(category: string, name: string): Promise<string
   return (body?.id as string | undefined) ?? `${category}/${name}`;
 }
 
+export type ChangedFile = { code: string; path: string };
+export type Changes = { branch: string; files: ChangedFile[] };
+
+export async function fetchChanges(): Promise<Changes> {
+  const res = await fetch("/api/changes");
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `reading changes failed with ${res.status} ${res.statusText}`));
+  }
+  return { branch: String(body?.branch ?? ""), files: (body?.files as ChangedFile[]) ?? [] };
+}
+
+export async function publish(message: string): Promise<{ commit: string; files: ChangedFile[] }> {
+  const res = await fetch("/api/publish", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `publish failed with ${res.status} ${res.statusText}`));
+  }
+  return {
+    commit: String(body?.commit ?? ""),
+    files: (body?.files as ChangedFile[]) ?? [],
+  };
+}
+
 export type SyncEvent =
   | { event: "progress"; data: { type: string; total?: number; completed?: number; manifestKey?: string } }
   | {
