@@ -8,6 +8,7 @@ import { spawnSync } from "child_process";
 import { siteConfig } from "@/content/config";
 import { isValidSlug } from "@/lib/utils/slug";
 import { buildItemTemplate, renderItemTemplateJsonc } from "./lib/itemTemplate";
+import { loadMergedDefaults, mergeDefaultsIntoTemplate } from "./lib/itemDefaults";
 
 // FIX Sec 3: only allow lowercase kebab-case slugs (letters, digits, hyphens).
 // This prevents path-traversal payloads such as "../../etc/cron.d" from being
@@ -78,8 +79,21 @@ async function main() {
 
   const template = buildItemTemplate(displayName, today, siteConfig.measurementUnit, siteConfig.defaultPriceTiers);
 
+  // Same two-tier defaults studio applies (content/items/_defaults.json plus
+  // the category's own), so the CLI and the browser produce identical files.
+  // A broken defaults file stops the create with the file and field named —
+  // better than scaffolding a bare template the seller thinks got defaults.
+  let filled = template;
+  try {
+    const defaults = await loadMergedDefaults(path.join(process.cwd(), "content", "items"), category);
+    filled = mergeDefaultsIntoTemplate(template, defaults);
+  } catch (err: unknown) {
+    console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
+
   const jsonPath = path.join(itemDir, "item.json");
-  await fs.writeFile(jsonPath, renderItemTemplateJsonc(template));
+  await fs.writeFile(jsonPath, renderItemTemplateJsonc(filled));
 
   console.log(`✓ Created ${jsonPath}`);
   console.log(
