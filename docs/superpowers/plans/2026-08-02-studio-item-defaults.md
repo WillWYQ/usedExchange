@@ -1288,7 +1288,12 @@ export function DefaultsPane({
                       checked={state.enabled}
                       aria-label={`Set a default for ${field.label}`}
                       onChange={(e) => {
-                        setDraft((prev) => ({ ...prev, [key]: { ...prev[key], enabled: e.target.checked } }));
+                        // Fallback keeps this compiling under noUncheckedIndexedAccess;
+                        // load() seeds every rendered key, so it is unreachable.
+                        setDraft((prev) => ({
+                          ...prev,
+                          [key]: { ...(prev[key] ?? { enabled: false, raw: "" }), enabled: e.target.checked },
+                        }));
                         setSaved(false);
                       }}
                     />
@@ -1297,7 +1302,10 @@ export function DefaultsPane({
                       value={state.raw}
                       disabled={!state.enabled}
                       onChange={(raw) => {
-                        setDraft((prev) => ({ ...prev, [key]: { ...prev[key], raw } }));
+                        setDraft((prev) => ({
+                          ...prev,
+                          [key]: { ...(prev[key] ?? { enabled: false, raw: "" }), raw },
+                        }));
                         setSaved(false);
                       }}
                     />
