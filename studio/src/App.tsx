@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { bulkStatus, fetchItems, type StudioItem } from "./api";
 import { BulkToolbar } from "./panes/BulkToolbar";
+import { DefaultsPane } from "./panes/DefaultsPane";
 import { Drawer } from "./panes/Drawer";
 import { ItemList } from "./panes/ItemList";
 import { NewItemDialog } from "./panes/NewItemDialog";
@@ -16,6 +17,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [showNewItem, setShowNewItem] = useState(false);
+  const [showDefaults, setShowDefaults] = useState(false);
   // Bumped after every item write and every sync so the publish pane re-reads
   // the working tree. The pane holds the file list; the header needs only the
   // count, which the pane reports back up (null = not a git repo → hide it).
@@ -93,6 +95,9 @@ export function App() {
           content/ · {items.length} items
           {changeCount !== null && changeCount > 0 && <> · {changeCount} uncommitted</>}
         </span>
+        <button type="button" onClick={() => setShowDefaults(true)}>
+          Defaults
+        </button>
         <button type="button" onClick={() => setShowNewItem(true)}>
           New item
         </button>
@@ -152,6 +157,13 @@ export function App() {
             void refresh().then(() => setOpenItemId(id));
             bumpChanges();
           }}
+        />
+      )}
+      {showDefaults && (
+        <DefaultsPane
+          categories={[...new Set(items.map((i) => i.categorySlug))].sort()}
+          onClose={() => setShowDefaults(false)}
+          onSaved={bumpChanges}
         />
       )}
     </>

@@ -720,3 +720,39 @@ tr.failed td {
   white-space: pre-line;
   color: var(--error);
 }
+
+/* The defaults pane reuses the new-item dialog's sheet, wider and scrollable:
+   it can list every defaultable field. Rows pair an enable switch with the
+   shared FieldInput; disabled rows dim rather than disappear, so sellers can
+   see what a switch will bring back. */
+
+.defaults-dialog {
+  width: min(46rem, calc(100vw - 2rem));
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.defaults-scopes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  margin: 0.75rem 0;
+}
+
+.defaults-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gap);
+}
+
+.defaults-row .field {
+  flex: 1;
+}
+
+.defaults-row-off {
+  opacity: 0.55;
+}
+
+.defaults-inherited {
+  opacity: 0.7;
+}
