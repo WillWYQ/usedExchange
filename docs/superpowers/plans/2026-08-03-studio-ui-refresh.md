@@ -1445,6 +1445,9 @@ Add the import `import { ThemeToggle } from "./components/ThemeToggle";`. Replac
               bumpChanges();
             }}
           />
+          <Button onClick={() => setShowDefaults(true)}>
+            Defaults
+          </Button>
           <Button variant="primary" onClick={() => setShowNewItem(true)}>
             New item
           </Button>
