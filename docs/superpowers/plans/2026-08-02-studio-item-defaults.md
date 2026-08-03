@@ -365,9 +365,13 @@ export function mergeDefaultsIntoTemplate<T extends Record<string, unknown>>(
     safe[key] = value;
   }
   const merged = deepMerge(template, safe) as T;
-  merged.name = template.name;
-  merged.listed_date = template.listed_date;
-  merged.status = template.status;
+  // TypeScript only permits property writes to a generic T through a widened
+  // view; the casts are type-level only and change no runtime behavior.
+  const mergedRecord = merged as Record<string, unknown>;
+  const templateRecord = template as Record<string, unknown>;
+  mergedRecord.name = templateRecord.name;
+  mergedRecord.listed_date = templateRecord.listed_date;
+  mergedRecord.status = templateRecord.status;
   return merged;
 }
 
