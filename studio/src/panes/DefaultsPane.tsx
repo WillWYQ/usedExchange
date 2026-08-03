@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchDefaults, saveDefaults } from "../api";
 import { Button } from "../components/Button";
+import { useDialogBehavior } from "../components/useDialogBehavior";
 import { FIELD_GROUPS, pathKey, readAtPath, type FieldGroup } from "../fields";
 import { FieldInput, fromInput, toInput } from "./FieldInput";
 
@@ -79,6 +80,8 @@ export function DefaultsPane({
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const dialogRef = useDialogBehavior(onClose);
+
   const load = useCallback(async (nextScope: string) => {
     setLoaded(false);
     setError(null);
@@ -147,6 +150,7 @@ export function DefaultsPane({
   return (
     <div className="dialog-backdrop" role="presentation" onClick={onClose}>
       <div
+        ref={dialogRef}
         className="dialog defaults-dialog"
         role="dialog"
         aria-modal="true"

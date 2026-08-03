@@ -295,7 +295,14 @@ export function EditForm({ id, onSaved }: { id: string; onSaved: () => void }) {
   }
 
   if (loaded === null) {
-    return error !== null ? <p role="alert" className="alert-error">{error}</p> : <p>Loading…</p>;
+    if (error !== null) return <p role="alert" className="alert-error">{error}</p>;
+    return (
+      <div aria-busy="true" aria-label="Loading item fields">
+        <div className="skeleton" />
+        <div className="skeleton" />
+        <div className="skeleton" />
+      </div>
+    );
   }
 
   const tiersRaw = readAtPath(loaded, ["price", "tiers"]);

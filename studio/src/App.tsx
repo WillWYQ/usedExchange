@@ -119,7 +119,12 @@ export function App() {
         </p>
       )}
       {error === null && items.length === 0 && (
-        <p>No items yet. Run `pnpm create-item &lt;category&gt;/&lt;name&gt;` to add the first one.</p>
+        <div className="empty-state">
+          <p>No items yet.</p>
+          <p>
+            Use <strong>New item</strong> in the header to create your first listing.
+          </p>
+        </div>
       )}
       {items.length > 0 && (
         <ItemList

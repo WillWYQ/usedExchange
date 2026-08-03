@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { StudioItem } from "../api";
 import { Button } from "../components/Button";
 import { EditForm } from "./EditForm";
@@ -14,6 +14,14 @@ export function Drawer({
   onChanged: () => void;
 }) {
   const [tab, setTab] = useState<"photos" | "details">("photos");
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
 
   return (
     <aside className="drawer" aria-label={`${item.name} — item editor`}>

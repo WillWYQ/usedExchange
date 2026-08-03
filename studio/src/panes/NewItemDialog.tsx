@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createItem } from "../api";
 import { Button } from "../components/Button";
+import { useDialogBehavior } from "../components/useDialogBehavior";
 
 // Mirrors lib/utils/slug.ts's SAFE_SLUG_RE — the server is the real gate
 // (resolveItemDir re-checks with the shared allowlist plus a containment
@@ -21,6 +22,8 @@ export function NewItemDialog({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [applyDefaults, setApplyDefaults] = useState(true);
+
+  const dialogRef = useDialogBehavior(onCancel);
 
   async function create() {
     const cat = category.trim();
@@ -43,6 +46,7 @@ export function NewItemDialog({
     <div className="dialog-backdrop" role="presentation" onClick={onCancel}>
       {/* Stop clicks inside the sheet from closing it. */}
       <div
+        ref={dialogRef}
         className="dialog"
         role="dialog"
         aria-modal="true"
