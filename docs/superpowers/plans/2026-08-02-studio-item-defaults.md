@@ -519,6 +519,18 @@ describe("defaults routes", () => {
     expect((asJson(res).body as { error: string }).error).toContain('"name"');
   });
 
+  it("400s GET on a syntactically broken file, naming the file", async () => {
+    const root = await emptyProject();
+    await fs.writeFile(
+      path.join(root, "content", "items", "_defaults.json"),
+      "{not json",
+      "utf-8",
+    );
+    const res = await req(root, "GET", "/api/defaults?scope=site");
+    expect(res.status).toBe(400);
+    expect((asJson(res).body as { error: string }).error).toContain("_defaults.json");
+  });
+
   it("405s POST /api/defaults", async () => {
     const root = await emptyProject();
     expect((await req(root, "POST", "/api/defaults?scope=site", {})).status).toBe(405);
@@ -645,13 +657,22 @@ function readScopeParam(req: StudioRequest): string {
 
 async function handleDefaultsGet(req: StudioRequest): Promise<StudioResponse> {
   const filePath = resolveDefaultsPath(req.projectRoot, readScopeParam(req));
-  const defaults = await readDefaultsFile(filePath);
-  // Validate on read too: a hand-broken file surfaces in the pane with the
-  // field named, instead of loading garbage the seller then saves back.
+  let defaults: Awaited<ReturnType<typeof readDefaultsFile>>;
   try {
+    // One catch for both read and validate: a hand-broken file (syntax or
+    // field) must surface in the pane as a 400 naming the file and field,
+    // exactly as the create path reports it — a 500 would surface as an
+    // opaque error page instead. (fs errors like EACCES becoming 400 is the
+    // same trade-off the create path already makes.)
+    defaults = await readDefaultsFile(filePath);
     validateDefaults(defaults);
   } catch (err: unknown) {
-    throw new StudioError(400, `invalid defaults in ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
+    throw new StudioError(
+      400,
+      err instanceof Error && err.message.startsWith("invalid defaults in")
+        ? err.message
+        : `invalid defaults in ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
   return { status: 200, body: defaults };
 }
