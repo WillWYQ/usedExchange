@@ -235,6 +235,8 @@ pnpm studio (scripts/studio.ts)
             │
             ├─► GET/PATCH /api/items/…   Surgical JSONC edits to content/items/**/item.json
             │                            (comments + reserved_for untouched)
+            ├─► GET/PUT /api/defaults    Sparse two-tier _defaults.json (site-wide or per-category;
+            │                            merged into new items unless applyDefaults: false)
             ├─► POST /api/sync-images    SSE progress stream → imageSync.syncImagesToCdn
             │                            writes lib/generated/image-manifest.json → resets manifest cache
             └─► POST /api/publish        git add content + image-manifest.json → commit → push
@@ -502,7 +504,7 @@ Most scripts run via `tsx` (TypeScript execution, no compilation step). Exceptio
 
 ### `scripts/lib/` — Shared Support Modules
 
-Not standalone runnables — imported by the CLIs above. 10 of the 14 modules have a colocated `*.test.ts` run by `pnpm test` (scripts tests include `scripts/update-site.test.ts` and `scripts/studioFields.test.ts`; the repo-wide suite is ~36 test files / 585 tests).
+Not standalone runnables — imported by the CLIs above. 10 of the 14 modules have a colocated `*.test.ts` run by `pnpm test` (scripts tests include `scripts/update-site.test.ts` and `scripts/studioFields.test.ts`; the repo-wide suite is ~37 test files / 619 tests).
 
 | Module | Purpose |
 |---|---|
@@ -575,10 +577,11 @@ The `studioApiPlugin` middleware in `studio/vite.config.ts` runs every request t
 | Route | Purpose |
 |---|---|
 | `GET /api/items` | List every item with its photos and lowest-tier price (per-item errors isolated) |
-| `POST /api/items` | Create an item (category + kebab-case slug → 36-field template) |
+| `POST /api/items` | Create an item (category + kebab-case slug → 36-field template; optional `applyDefaults: false` scaffolds the bare template without defaults) |
 | `POST /api/items/bulk-status` | Mark a selection sold/pending/available/draft with per-item failure reporting |
 | `GET /api/items/<cat>/<item>` | Read the editable fields of one item |
 | `PATCH /api/items/<cat>/<item>` | Apply `FieldEdit[]` — surgical JSONC writes, comments preserved |
+| `GET/PUT /api/defaults?scope=site\|<cat>` | Read / write the sparse `_defaults.json` for that scope; an empty PUT body deletes the file, and PUT creates missing category folders |
 | `GET …/images`, `GET …/images/<file>` | List photos / serve one photo (containment-checked, `no-store`) |
 | `POST …/images` | Upload (base64, magic-byte sniffing, sanitised filename) |
 | `POST …/images/reorder`, `DELETE …/images/<file>` | Reorder / delete photos |

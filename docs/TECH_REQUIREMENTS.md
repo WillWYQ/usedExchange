@@ -2778,10 +2778,11 @@ creation, CDN sync, and git publish. It is a Vite SPA (`studio/`) served togethe
 | Method + route | Purpose |
 |---|---|
 | `GET /api/items` | List every item (+ image files, lowest-tier amount). Per-item load errors are isolated — one bad `item.json` cannot fail the whole response. |
-| `POST /api/items` | Create a new item (category picker + kebab-case name; server re-checks the shared slug allowlist + containment). |
+| `POST /api/items` | Create a new item (category picker + kebab-case name; server re-checks the shared slug allowlist + containment). Optional `applyDefaults` flag (default `true`); when `false`, the bare template is scaffolded without the two-tier defaults. |
 | `POST /api/items/bulk-status` | Mark sold/pending/available/draft over a selection, with per-item failure reporting. |
 | `GET /api/items/<cat>/<item>` | Read the editable fields of one item. |
 | `PATCH /api/items/<cat>/<item>` | Apply `FieldEdit[]` (path+value) via comment-preserving JSONC edits. |
+| `GET/PUT /api/defaults?scope=site\|<cat>` | Read / write the sparse `_defaults.json` for that scope (`site` → `content/items/_defaults.json`, otherwise the category's own). An empty PUT body deletes the file; PUT creates a missing category folder. Invalid files fail with a 400 naming the file and field. |
 | `GET .../images`, `GET .../images/<filename>` | List / serve a photo (containment-verified; encoded-`%2F` traversal blocked). |
 | `POST .../images`, `POST .../images/reorder`, `DELETE .../images/<filename>` | Upload (base64, magic-byte sniff), reorder, delete. |
 | `POST /api/sync-images` | Start a CDN sync; returns an **SSE** progress stream (`progress`/`done`/`error`). |

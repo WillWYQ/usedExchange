@@ -235,6 +235,8 @@ pnpm studio (scripts/studio.ts)
             │
             ├─► GET/PATCH /api/items/…   对 content/items/**/item.json 的外科式 JSONC 编辑
             │                            （注释与 reserved_for 不受影响）
+            ├─► GET/PUT /api/defaults    稀疏的两层 _defaults.json（全站或按分类；
+            │                            新建物品时合并，除非 applyDefaults: false）
             ├─► POST /api/sync-images    SSE 进度流 → imageSync.syncImagesToCdn
             │                            写入 lib/generated/image-manifest.json → 重置清单缓存
             └─► POST /api/publish        git add content + image-manifest.json → 提交 → 推送
@@ -502,7 +504,7 @@ isTemplateConfigured(): boolean
 
 ### `scripts/lib/` — 共享支持模块
 
-非独立可执行文件——由上述 CLI 导入。14 个模块中的 10 个有共置的 `*.test.ts`，由 `pnpm test` 运行（scripts 测试还包括 `scripts/update-site.test.ts` 和 `scripts/studioFields.test.ts`；全仓库测试套件约 36 个测试文件 / 585 个测试）。
+非独立可执行文件——由上述 CLI 导入。14 个模块中的 10 个有共置的 `*.test.ts`，由 `pnpm test` 运行（scripts 测试还包括 `scripts/update-site.test.ts` 和 `scripts/studioFields.test.ts`；全仓库测试套件约 37 个测试文件 / 619 个测试）。
 
 | 模块 | 用途 |
 |---|---|
@@ -573,10 +575,11 @@ Seller Studio 是用于管理 `content/` 的仅本机浏览器 GUI——以 `pnp
 | 路由 | 用途 |
 |---|---|
 | `GET /api/items` | 列出全部物品及其照片和最低档位价格（单个物品出错互相隔离） |
-| `POST /api/items` | 新建物品（分类 + kebab-case 名称 → 36 字段模板） |
+| `POST /api/items` | 新建物品（分类 + kebab-case 名称 → 36 字段模板；可选 `applyDefaults: false` 脚手架为不含默认值的裸模板） |
 | `POST /api/items/bulk-status` | 批量将所选物品标记为 sold/pending/available/draft，逐项报告失败 |
 | `GET /api/items/<分类>/<物品>` | 读取单个物品的可编辑字段 |
 | `PATCH /api/items/<分类>/<物品>` | 应用 `FieldEdit[]`——外科式 JSONC 写入，注释保留 |
+| `GET/PUT /api/defaults?scope=site\|<分类>` | 读取 / 写入该作用域的稀疏 `_defaults.json`；空 PUT 请求体删除该文件，PUT 会创建缺失的分类文件夹 |
 | `GET …/images`、`GET …/images/<文件>` | 列出照片 / 提供单张照片（经包含性校验，`no-store`） |
 | `POST …/images` | 上传（base64、魔数嗅探、文件名净化） |
 | `POST …/images/reorder`、`DELETE …/images/<文件>` | 重排序 / 删除照片 |

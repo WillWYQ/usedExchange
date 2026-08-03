@@ -2480,10 +2480,11 @@ Seller Studio（`pnpm studio`）是一个**仅本地**的浏览器仪表板，�
 | 方法 + 路由 | 用途 |
 |---|---|
 | `GET /api/items` | 列出每件物品（+ 图片文件、最低档金额）。每物品加载错误相互隔离——一个坏 `item.json` 不会使整个响应失败。 |
-| `POST /api/items` | 创建新物品（分类选择器 + kebab-case 名称；服务器用共享 slug 允许列表 + 包含性重新检查）。 |
+| `POST /api/items` | 创建新物品（分类选择器 + kebab-case 名称；服务器用共享 slug 允许列表 + 包含性重新检查）。可选 `applyDefaults` 标志（默认 `true`）；为 `false` 时脚手架为不含两层默认值的裸模板。 |
 | `POST /api/items/bulk-status` | 对选择批量标记 sold/pending/available/draft，带每物品失败报告。 |
 | `GET /api/items/<cat>/<item>` | 读取单个物品的可编辑字段。 |
 | `PATCH /api/items/<cat>/<item>` | 通过保留注释的 JSONC 编辑应用 `FieldEdit[]`（path+value）。 |
+| `GET/PUT /api/defaults?scope=site\|<cat>` | 读取 / 写入该作用域的稀疏 `_defaults.json`（`site` → `content/items/_defaults.json`，否则为对应分类自己的）。空 PUT 请求体删除该文件；PUT 会创建缺失的分类文件夹。无效文件以 400 失败并指明文件与字段。 |
 | `GET .../images`、`GET .../images/<filename>` | 列出 / 提供照片（包含性验证；编码的 `%2F` 遍历被阻断）。 |
 | `POST .../images`、`POST .../images/reorder`、`DELETE .../images/<filename>` | 上传（base64，魔数字节嗅探）、重新排序、删除。 |
 | `POST /api/sync-images` | 启动 CDN 同步；返回 **SSE** 进度流（`progress`/`done`/`error`）。 |
