@@ -106,7 +106,7 @@ usedExchange/
 ├── studio/                           ← Seller Studio Vite SPA（pnpm studio；仅服务于 127.0.0.1）
 │   ├── index.html, vite.config.ts    ← Vite 入口 + studioApiPlugin 中间件（CSRF → 32 MB 上限 → /api/*）
 │   ├── csrfGuard.ts                  ← checkStudioCsrf——/api/* 中间件的 CSRF/Origin 防护
-│   └── src/                          ← React 应用：App.tsx、api.ts、fields.ts、panes/（ItemList、EditForm、ImagePane、PublishPane、SyncBar 等）
+│   └── src/                          ← React 应用：App.tsx、api.ts、fields.ts、components/（Button、StatusBadge、ThemeToggle、useDialogBehavior）、panes/（ItemList、EditForm、ImagePane、PublishPane、SyncBar 等）
 │
 ├── hooks/                            ← 共享 React Hook：use-outside-click.tsx（useOutsideClick）
 │

@@ -28,11 +28,11 @@
   --radius-pill: 999px;
 
   --status-available-bg: #e3f0e4;
-  --status-available-fg: #1a7f37;
+  --status-available-fg: #166f2d;
   --status-pending-bg: #f5edd6;
-  --status-pending-fg: #8a6a12;
+  --status-pending-fg: #7f6110;
   --status-reserved-bg: #e2ecf7;
-  --status-reserved-fg: #0969da;
+  --status-reserved-fg: #0860c7;
   --status-sold-bg: #f7e3e2;
   --status-sold-fg: #b3241e;
   --status-draft-bg: #eceae6;
@@ -58,7 +58,7 @@
   --accent: #a8bbd6;
   --on-accent: #1a1d21;
   --accent-soft: #5d4a44;
-  --danger: #e06c66;
+  --danger: #ea8480;
   --backdrop: rgb(0 0 0 / 0.55);
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
   --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.5);
@@ -71,7 +71,7 @@
   --status-reserved-bg: #1f3a52;
   --status-reserved-fg: #7ab8f0;
   --status-sold-bg: #4c2624;
-  --status-sold-fg: #e06c66;
+  --status-sold-fg: #ea8480;
   --status-draft-bg: #383234;
   --status-draft-fg: #a89e94;
 }
@@ -101,7 +101,7 @@ input[type="radio"] {
 }
 
 /* ── Buttons ────────────────────────────────────────────────────────────
-   Three variants cover every button in studio. Task 2 routes all buttons
+   Three variants cover every button in studio. All action buttons route
    through the shared Button component, which emits these classes. */
 
 .btn {
@@ -190,8 +190,8 @@ input[type="radio"] {
 }
 
 /* ── Alerts and states ──────────────────────────────────────────────────
-   Every role="alert" message gets .alert-error too (Task 2 wires the
-   class): danger-coloured text on a faint danger wash. */
+   Every role="alert" message gets .alert-error too: danger-coloured text
+   on a faint danger wash. */
 
 .alert-error {
   margin: 0;
@@ -404,7 +404,7 @@ tr.failed td {
 
 /* ── The SOLD stamp ─────────────────────────────────────────────────────
    Kept as the one moment of theatre: pressed once when a row is marked
-   sold (Task 2 settles it into a badge afterwards). Colour rides the
+   sold — it settles into the sold badge afterwards. Colour rides the
    sold status tokens so both themes read as stamp red. */
 
 .stamp {

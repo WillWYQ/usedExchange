@@ -7,6 +7,14 @@ const FOCUSABLE =
 // and focus restored to the trigger on unmount. Attach the returned ref to
 // the dialog's root element (the role="dialog" node).
 //
+// Escape-stacking convention: a dismissible layer calls e.preventDefault()
+// when it consumes Escape, and non-modal layers underneath check
+// e.defaultPrevented before dismissing themselves. stopPropagation alone is
+// not enough — both layers listen on document, and it does not suppress
+// sibling listeners on the same node. The dialog listener registers on the
+// capture phase so it runs before any bubble-phase listener on document
+// (such as the Drawer's), no matter which one was registered first.
+//
 // onClose travels through a ref so an inline arrow from the parent (a fresh
 // identity on every parent render) never re-runs the effect and steals focus
 // back to the first field mid-edit.
@@ -30,6 +38,7 @@ export function useDialogBehavior(onClose: () => void): RefObject<HTMLDivElement
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
+        e.preventDefault();
         e.stopPropagation();
         closeRef.current();
         return;
@@ -48,9 +57,9 @@ export function useDialogBehavior(onClose: () => void): RefObject<HTMLDivElement
       }
     }
 
-    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown", onKeyDown, true);
       restoreTo?.focus();
     };
   }, []);

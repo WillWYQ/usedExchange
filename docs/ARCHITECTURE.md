@@ -106,7 +106,7 @@ usedExchange/
 ├── studio/                           ← Seller Studio Vite SPA (pnpm studio; served only on 127.0.0.1)
 │   ├── index.html, vite.config.ts    ← Vite entry + studioApiPlugin middleware (CSRF → 32 MB cap → /api/*)
 │   ├── csrfGuard.ts                  ← checkStudioCsrf — CSRF/Origin guard for the /api/* middleware
-│   └── src/                          ← React app: App.tsx, api.ts, fields.ts, panes/ (ItemList, EditForm, ImagePane, PublishPane, SyncBar, …)
+│   └── src/                          ← React app: App.tsx, api.ts, fields.ts, components/ (Button, StatusBadge, ThemeToggle, useDialogBehavior), panes/ (ItemList, EditForm, ImagePane, PublishPane, SyncBar, …)
 │
 ├── hooks/                            ← Shared React hooks: use-outside-click.tsx (useOutsideClick)
 │

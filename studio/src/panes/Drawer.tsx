@@ -17,6 +17,9 @@ export function Drawer({
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      // A dialog layered on top consumes Escape and calls preventDefault
+      // (see useDialogBehavior); bail so one Esc doesn't close both.
+      if (e.defaultPrevented) return;
       if (e.key === "Escape") onClose();
     }
     document.addEventListener("keydown", onKeyDown);
