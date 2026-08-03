@@ -10,7 +10,7 @@
 
 UsedExchange is a statically-generated personal web storefront for listing second-hand items for sale. Content is managed entirely through the local file system — no database, no CMS. The seller adds a folder per item, drops in photos and a `item.json` metadata file, then triggers a build; the site regenerates automatically.
 
-The UI is built on [Aceternity UI](https://ui.aceternity.com) (React + Tailwind CSS) for a polished browsing experience. The architecture is modularised so any part — deployment target, image strategy, contact platforms — can be swapped without restructuring the codebase.
+The UI is built on [Aceternity UI](https://ui.aceternity.com) (React + Tailwind CSS). The architecture is modularised so any part — deployment target, image strategy, contact platforms — can be swapped without restructuring the codebase.
 
 ### Target Users
 
@@ -1814,7 +1814,7 @@ The site **never crashes at runtime** due to a UI configuration value.
 
 ## 19. Extensibility Register
 
-The following were previously listed as future features. Those now in v1 have been removed. Only genuinely future items remain.
+The following were previously listed as future features. Those now in v1 have been removed. Only future items remain.
 
 | Future feature | Designated extension point |
 |---|---|

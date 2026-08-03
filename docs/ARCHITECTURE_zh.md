@@ -557,7 +557,7 @@ Seller Studio 是用于管理 `content/` 的仅本机浏览器 GUI——以 `pnp
 ### 启动器（`scripts/studio.ts`）
 
 - 仅绑定 `127.0.0.1`；默认端口 `5174`，可用 `--port <n>` 覆盖（校验范围 1024–65535；`strictPort: false`，端口被占用时自动顺延到下一个空闲端口）。
-- 当 `vite` 未安装（提示指向 `pnpm install`）或 `studio/vite.config.ts` 缺失（提示指向 `pnpm update-site`）时快速失败，并给出可操作的提示。
+- 当 `vite` 未安装（提示指向 `pnpm install`）或 `studio/vite.config.ts` 缺失（提示指向 `pnpm update-site`）时快速失败。
 - 通过 `scripts/lib/loadEnv.ts` 加载 `.env.local` 并打印解析后的 URL。
 - CDN 图片适配器（依据 `siteConfig.imageStorage.provider` 选择 R2 / Vercel Blob / 本地）在每次同步运行时才构建，而非启动时——缺失的 CDN 凭证会在 UI 中以 SSE `error` 事件呈现，而非导致启动失败。
 

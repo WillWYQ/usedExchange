@@ -10,7 +10,7 @@
 
 UsedExchange 是一个静态生成的个人网络商店，用于列出待售的二手物品。内容完全通过本地文件系统管理——无数据库，无 CMS。卖家为每件物品添加一个文件夹，放入照片和 `item.json` 元数据文件，触发构建；站点自动重新生成。
 
-UI 基于 [Aceternity UI](https://ui.aceternity.com)（React + Tailwind CSS）构建，提供精美的浏览体验。架构模块化，任何部分——部署目标、图片策略、联系平台——都可以在不重构代码库的情况下替换。
+UI 基于 [Aceternity UI](https://ui.aceternity.com)（React + Tailwind CSS）构建。架构模块化，任何部分——部署目标、图片策略、联系平台——都可以在不重构代码库的情况下替换。
 
 ### 目标用户
 

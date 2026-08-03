@@ -82,7 +82,7 @@
 
 ### Notes
 - Run only once per machine; subsequent clones get these files from git
-- Some Aceternity components may bring in additional peer dependencies (e.g. `three`, `d3`) — install only what the component truly requires, not the full peer list
+- Some Aceternity components may bring in additional peer dependencies (e.g. `three`, `d3`) — install only what the component requires, not the full peer list
 
 ---
 

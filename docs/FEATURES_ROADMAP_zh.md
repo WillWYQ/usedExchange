@@ -177,7 +177,7 @@ Discord 是 CS 学生的主导通讯平台——校园社区、社团服务器�
 "semester_listed": ""         // 如 "Spring 2026"——帮助买家判断教材是否为当前版本
 ```
 
-所有字段可选，均有优雅的空值/false 默认值。
+所有字段可选，默认为空值/false。
 
 ---
 
@@ -422,7 +422,7 @@ CS 学生出售大量教材。教材的一流支持使站点对该用户群体�
 | 存在运送档位且 `price.shipping_payer === "seller"` | OFFER FREE SHIPPING | Yes/No |
 | 存在开放式档位 | OFFER SHIPPING | Yes/No |
 
-**智能导出历史** (`scripts/lib/exportHistory.ts`)：第二次运行时，步骤 0 会询问是否跳过上次已导出的物品。历史记录以 `{categorySlug}/{itemSlug}`（稳定的文件系统路径）为键，保存于 `exports/.export-history.json`（已加入 gitignore）。每次运行会追加一条 `ExportRun` 记录，包含时间戳、价格策略、物品数量、CSV 文件路径，以及每件物品的 slug、名称和价格。卖家可放心地仅导出新上架物品，不必担心与 FB 已有发布重复。
+**智能导出历史** (`scripts/lib/exportHistory.ts`)：第二次运行时，步骤 0 会询问是否跳过上次已导出的物品。历史记录以 `{categorySlug}/{itemSlug}`（稳定的文件系统路径）为键，保存于 `exports/.export-history.json`（已加入 gitignore）。每次运行会追加一条 `ExportRun` 记录，包含时间戳、价格策略、物品数量、CSV 文件路径，以及每件物品的 slug、名称和价格。卖家可仅导出新上架物品，不必担心与 FB 已有发布重复。
 
 **其余平台**（Craigslist、OfferUp、eBay）仍为路线图待办项，留待未来迭代。
 
@@ -456,7 +456,7 @@ CS 学生出售大量教材。教材的一流支持使站点对该用户群体�
 ### 3.8 卖家工作台（Seller Studio，`pnpm studio`）👤 ✅ 已实现
 **工作量：** L · **价值：** ⭐⭐⭐
 
-**这是非 CS 用户群体可访问性的主要突破。** 通过 `pnpm studio` 启动的仅本地浏览器界面（默认端口 5174，可用 `--port <1024–65535>` 覆盖），让卖家可视化管理物品——无需直接编辑 JSON 文件。它通过 `pnpm update-site` 分发到下游站点，三个实现部分均已完成：**Phase 18a**（物品表格 + 批量状态）、**Phase 18b**（照片 + CDN 同步）、**Phase 18c**（编辑表单 + 物品创建 + git 发布）。
+**这是非 CS 用户群体的主要无障碍功能。** 通过 `pnpm studio` 启动的仅本地浏览器界面（默认端口 5174，可用 `--port <1024–65535>` 覆盖），让卖家可视化管理物品——无需直接编辑 JSON 文件。它通过 `pnpm update-site` 分发到下游站点，三个实现部分均已完成：**Phase 18a**（物品表格 + 批量状态）、**Phase 18b**（照片 + CDN 同步）、**Phase 18c**（编辑表单 + 物品创建 + git 发布）。
 
 **架构：** `studio/` 中的 Vite SPA，由 `tsx scripts/studio.ts` 启动，仅绑定 **127.0.0.1**（从不部署）。与最初的计划不同，它**确实**有后端：`studio/vite.config.ts` 中的 `studioApiPlugin` 中间件将所有 `/api/*` 请求路由到 `scripts/lib/studioApi.ts` 中与框架无关的处理器（Zod 校验、slug 白名单 + 针对 `content/items/` 的路径约束）。CSRF 防护（`studio/csrfGuard.ts`）要求所有非 GET/HEAD 请求携带 `Content-Type: application/json` 且 `Origin` 匹配。
 

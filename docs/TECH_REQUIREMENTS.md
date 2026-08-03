@@ -957,7 +957,7 @@ out/
 
 > **Cloudflare R2 storage note:** Deleting an item purges its manifest entry but does NOT delete the blob from R2. Orphaned files accumulate silently. Manage via Cloudflare Dashboard → R2 → bucket browser. A future `pnpm clean-storage` command is planned.
 
-> **Enabling shipping estimates?** If you configure `siteConfig.shipping`, you must also deploy the
+> **Shipping estimates:** If you configure `siteConfig.shipping`, you must also deploy the
 > `shipping-rate-proxy` Cloudflare Worker separately — see §29.8 and `workers/shipping-rate-proxy/README.md`.
 
 ---
@@ -2058,7 +2058,7 @@ The only new project artifact is the `.claude/` directory containing Markdown fi
 If the seller has no AI coding tool:
 - `pnpm create-item <category>/<name>` creates a template `item.json` manually (Phase 3)
 - `pnpm create-template` creates a `_template.json` they can copy and fill in
-- The skill files serve as reference documentation even without an AI tool
+- The skill files work as reference documentation even without an AI tool
 
 ### 23.7 `content/` Rule — Enforced in Skill Files
 

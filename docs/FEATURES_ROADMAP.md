@@ -58,7 +58,7 @@ Features tagged 🎓 are primarily motivated by the CS student profile. Features
 ---
 
 ## Tier 1 — Quick Wins
-*Low effort, immediately actionable. Many can be added during Phase 13 (hardening) or Phase 10 (contact).*
+*Low effort, can start immediately. Many can be added during Phase 13 (hardening) or Phase 10 (contact).*
 
 ### 1.1 Discord Contact Platform 🎓 ✅ Shipped in v1
 **Effort:** XS · **Value:** ⭐⭐⭐
@@ -197,7 +197,7 @@ These fields cost nothing to add to `item.json` schema during Phase 3 (Content S
 "semester_listed": ""         // e.g. "Spring 2026" — helps buyers know if textbook is current edition
 ```
 
-All optional, all gracefully defaulted to empty/false.
+All optional, all default to empty/false.
 
 ---
 
@@ -456,7 +456,7 @@ CSV writing and photo-folder copying then happen automatically (there is no inte
 | has shipping tier AND `price.shipping_payer === "seller"` | OFFER FREE SHIPPING | Yes/No |
 | has open-ended tier | OFFER SHIPPING | Yes/No |
 
-**Smart Export History** (`scripts/lib/exportHistory.ts`): On the second run, Step 0 asks whether to skip items already exported in a previous session. History is keyed by `{categorySlug}/{itemSlug}` (stable filesystem identity), stored in `exports/.export-history.json` (gitignored). Each run appends an `ExportRun` entry recording the timestamp, price strategy, item count, CSV file paths, and per-item slug + name + price. This lets the seller confidently re-export only newly available items without duplicating existing FB listings.
+**Smart Export History** (`scripts/lib/exportHistory.ts`): On the second run, Step 0 asks whether to skip items already exported in a previous session. History is keyed by `{categorySlug}/{itemSlug}` (stable filesystem identity), stored in `exports/.export-history.json` (gitignored). Each run appends an `ExportRun` entry recording the timestamp, price strategy, item count, CSV file paths, and per-item slug + name + price. This lets the seller re-export only newly available items without duplicating existing FB listings.
 
 **Remaining platforms** (Craigslist, OfferUp, eBay) remain roadmap items for a future iteration.
 
@@ -490,7 +490,7 @@ Already in the Extensibility Register.
 ### 3.8 Seller Studio (`pnpm studio`) 👤 ✅ Implemented
 **Effort:** L · **Value:** ⭐⭐⭐
 
-**This is the primary accessibility unlock for the non-CS user segment.** A local-only browser UI launched with `pnpm studio` (default port 5174, overridable with `--port <1024–65535>`) that lets the seller manage items visually — without editing JSON files directly. It ships to downstream sites via `pnpm update-site`, and all three implementation parts are complete: **Phase 18a** (item table + bulk status), **Phase 18b** (photos + CDN sync), **Phase 18c** (edit form + item creation + git publish).
+**This is the main accessibility feature for the non-CS user segment.** A local-only browser UI launched with `pnpm studio` (default port 5174, overridable with `--port <1024–65535>`) that lets the seller manage items visually — without editing JSON files directly. It ships to downstream sites via `pnpm update-site`, and all three implementation parts are complete: **Phase 18a** (item table + bulk status), **Phase 18b** (photos + CDN sync), **Phase 18c** (edit form + item creation + git publish).
 
 **Architecture:** A Vite SPA in `studio/` started by `tsx scripts/studio.ts`, bound to **127.0.0.1 only** (never deployed). Unlike the original plan, it **does** have a backend: the `studioApiPlugin` middleware in `studio/vite.config.ts` routes all `/api/*` requests to the framework-agnostic handler in `scripts/lib/studioApi.ts` (Zod-validated, slug allowlist + path containment against `content/items/`). A CSRF guard (`studio/csrfGuard.ts`) requires `Content-Type: application/json` and a matching `Origin` on all non-GET/HEAD requests.
 

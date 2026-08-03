@@ -330,7 +330,7 @@ Visitors can read listings in more than one language and switch on the fly.
 - **For sellers:** two steps to add a language:
   1. Add the locale code to `siteConfig.i18n.availableLocales` (e.g. `["en", "zh"]`) **and** add a `translations.{locale}` block in `content/config.ts` with all 87 UI string keys translated. The build fails if this block is missing or incomplete.
   2. Fill in `name_zh` / `description_zh` on each item — by hand or with the `/translate-items` AI skill.
-- **Graceful fallback:** any item without a translation shows the default language — never a blank or an error. Any missing UI string key falls back to the built-in English default.
+- **Fallback:** any item without a translation shows the default language — never a blank or an error. Any missing UI string key falls back to the built-in English default.
 - **Single deployment:** all languages ship in one build; there are no separate per-language sites.
 - **What stays in the default language:** the page `<title>`, social-share (OG) tags, and search-engine structured data render in `defaultLocale` — that is the version crawlers index. The on-page switch is a reading convenience; per-language URLs are a future enhancement.
 
@@ -368,7 +368,7 @@ Five operations, all from one page:
 
 | Operation | What it does |
 |---|---|
-| Create | Add a brand-new item: pick a category and type a kebab-case name — the folder and a full template `item.json` are scaffolded (same 36-field template as `pnpm create-item`) |
+| Create | Add a new item: pick a category and type a kebab-case name — the folder and a full template `item.json` are scaffolded (same 36-field template as `pnpm create-item`) |
 | Photos | Upload photos by dragging files onto an item (filenames sanitised, type sniffed from magic bytes), reorder them by dragging, delete them, and push changes to the CDN with live progress |
 | Bulk status | Change `status` (available / reserved / pending / sold / draft) for many items at once, with per-item failure reporting; items already at the target status are skipped and reported |
 | Edit form | Edit any item's fields with a grouped, schema-driven form; only the fields you changed are written back, preserving JSONC comments |
@@ -378,7 +378,7 @@ Five operations, all from one page:
 
 **CDN sync with live progress.** "Sync to CDN" streams progress over server-sent events (progress / done / error), rendered live in the sync bar; only one sync can run at a time, and publish is refused while a sync is in flight. Sync runs the same EXIF/GPS stripping as `pnpm upload-images`, rewrites the committed image manifest (`lib/generated/image-manifest.json`, which stays in git), and refreshes the in-memory manifest cache so the item list immediately shows fresh CDN URLs. Missing CDN credentials surface as a stream error, not a startup failure.
 
-**Strict edit-form validation.** The edit form is driven by a strict field grammar that mirrors the item schema exactly (no silent coercion): optionality and allowed values match the on-disk schema, so an invalid value is a rejection rather than a quiet rewrite. Writes are surgical JSONC edits — seller comments (`// options: ...`) and formatting survive every save.
+**Strict edit-form validation.** The edit form is driven by a strict field grammar that mirrors the item schema exactly (no silent coercion): optionality and allowed values match the on-disk schema, so invalid values are rejected rather than quietly rewritten. Writes are surgical JSONC edits — seller comments (`// options: ...`) and formatting survive every save.
 
 **Publish safety.** The publish pane shows the uncommitted-change count (also surfaced in the Studio header), the changed-file list, and a commit-message input (required, ≤ 500 characters). Publishing stages **only** `content/` and `lib/generated/image-manifest.json` — exactly what `pnpm push` stages, never `git add -A`, so `.env.local` (with CDN credentials) can never ride along. It refuses out-of-band staged files, refuses detached HEAD, and re-reads the change list at commit time.
 

@@ -559,7 +559,7 @@ Seller Studio is a local-only browser GUI for managing `content/` — started wi
 ### Launcher (`scripts/studio.ts`)
 
 - Binds `127.0.0.1` only; default port `5174`, overridable with `--port <n>` (validated 1024–65535; `strictPort: false`, so a busy port falls through to the next free one).
-- Fails fast with an actionable message when `vite` is not installed (pointing at `pnpm install`) or `studio/vite.config.ts` is missing (pointing at `pnpm update-site`).
+- Fails fast when `vite` is not installed (message points at `pnpm install`) or `studio/vite.config.ts` is missing (message points at `pnpm update-site`).
 - Loads `.env.local` via `scripts/lib/loadEnv.ts` and prints the resolved URL.
 - The CDN image adapter (R2 / Vercel Blob / local, per `siteConfig.imageStorage.provider`) is built per sync run, not at startup — missing CDN credentials surface as an SSE `error` event in the UI, not a launch failure.
 

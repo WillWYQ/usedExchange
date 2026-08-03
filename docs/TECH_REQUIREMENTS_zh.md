@@ -886,7 +886,7 @@ out/
 
 > **Cloudflare R2 存储说明：** 删除物品会清除其清单条目，但**不**从 R2 删除 blob。孤立文件会静默累积。通过 Cloudflare Dashboard → R2 → 存储桶浏览器管理。计划未来提供 `pnpm clean-storage` 命令。
 
-> **要启用运费估算？** 如果配置了 `siteConfig.shipping`，还必须单独部署 `shipping-rate-proxy` Cloudflare Worker——见 §29.8 和 `workers/shipping-rate-proxy/README.md`。
+> **运费估算：** 如果配置了 `siteConfig.shipping`，还必须单独部署 `shipping-rate-proxy` Cloudflare Worker——见 §29.8 和 `workers/shipping-rate-proxy/README.md`。
 
 ---
 
@@ -2300,7 +2300,7 @@ for (const [manifestKey, sourcePath] of imagesToUpload) {
 
 ### 28.1 原理
 
-`content/config.ts` 是 TypeScript，因此编译器能捕获缺失字段和错误类型。但它无法捕获**有效但仍错误的 URL**：`new URL("https://your-domain.com")` 成功，因此忘记设置 `baseUrl` 的卖家会得到一次干净的构建，静默发布占位符 canonical/OG/JSON-LD URL——一个没有错误的 SEO 陷阱。`check-config.ts` 对这类错误大声地使构建失败。
+`content/config.ts` 是 TypeScript，因此编译器能捕获缺失字段和错误类型。但它无法捕获**有效但仍错误的 URL**：`new URL("https://your-domain.com")` 成功，因此忘记设置 `baseUrl` 的卖家会得到一次干净的构建，静默发布占位符 canonical/OG/JSON-LD URL——一个没有错误的 SEO 陷阱。`check-config.ts` 在这类错误时让构建明确失败。
 
 ### 28.2 检查内容
 
@@ -2497,7 +2497,7 @@ Seller Studio（`pnpm studio`）是一个**仅本地**的浏览器仪表板，�
 - **CSRF 守卫**（`studio/csrfGuard.ts`，在 `studio/csrfGuard.test.ts` 中单元测试）：所有非 `GET`/`HEAD` 方法要求 `Content-Type: application/json`（否则 `415`），并且——当存在 `Origin` 头时——它必须等于服务器自身的源（`http://Host`，否则 `403`）。它按方法**失败关闭**，因此未来的 PUT/PATCH/DELETE 路由会自动受保护。
 - **发布安全**（`scripts/lib/studioGit.ts`）：`git add` 只命名可发布路径（`content/` 和 `lib/generated/image-manifest.json`——与 `pnpm push` 相同），**绝不使用 `git add -A`**，因此 `.env.local`（含 CDN 凭据）绝不会被顺带提交。仅用参数数组的 `execFile`（无 shell）；提交消息通过 stdin；处理 detached HEAD / 未出生分支情况。
 - **`reserved_for` 从不被任何 Studio 路径读取、写入或发送**（铁律 4）。
-- 可编辑字段由 `scripts/lib/itemFields.ts` 强制——一个独立的 Zod 镜像（无 `.catch`/`.default`/`.preprocess`，因此 `safeParse` 失败即硬拒绝）；漂移测试断言与 `itemJsonSchema` 在每个嵌套级别的奇偶一致性。
+- 可编辑字段由 `scripts/lib/itemFields.ts` 强制——一个独立的 Zod 镜像（无 `.catch`/`.default`/`.preprocess`，因此 `safeParse` 失败即硬拒绝）；漂移测试断言与 `itemJsonSchema` 在每个嵌套级别的一致性。
 
 ### 30.5 CDN 同步（`scripts/lib/studioSync.ts`）
 
