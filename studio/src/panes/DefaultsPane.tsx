@@ -130,10 +130,12 @@ export function DefaultsPane({
     }
     try {
       await saveDefaults(scope, out);
-      setSaved(true);
       onSaved();
       // Re-read from disk after the write, same rule as EditForm.
       await load(scope);
+      // Set after the re-read: load() clears `saved` in its first lines, so
+      // setting it earlier would batch with that reset and never paint.
+      setSaved(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
