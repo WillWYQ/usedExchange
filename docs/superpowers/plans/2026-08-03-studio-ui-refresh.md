@@ -1296,9 +1296,46 @@ and change the pane's error line to `{error !== null && <p role="alert" classNam
         </Button>
 ```
 
-- [ ] **Step 5: Delete the transitional status classes from `tokens.css`**
+- [ ] **Step 5: Delete the transitional status classes from `tokens.css` and apply the Task 1 review hygiene fixes**
 
 Remove the `.status-sold` and `.status-pending` blocks plus their `Transitional:` comment (they were only there to keep the interim commit looking right; ItemList no longer emits them).
+
+Then three hygiene fixes carried over from the Task 1 review:
+
+a) Move the font package to devDependencies where ibm-plex-sans lives (studio is local-only; fonts are bundled at dev time):
+
+```bash
+pnpm remove @fontsource/ibm-plex-mono
+pnpm add -D @fontsource/ibm-plex-mono@^5.3.0
+```
+
+b) The `.stamp` mask uses a raw `#000`. Masks only consume alpha, so swap it for an opaque token:
+
+```css
+  mask-image: radial-gradient(circle at 30% 40%, var(--ink) 78%, transparent 100%);
+```
+
+c) The `.bulk-toolbar` shadow is a raw non-theme-aware rgb value. Add a token pair and consume it:
+
+In the `:root` block, after `--shadow-lg`:
+
+```css
+  --shadow-bar: 0 -4px 12px rgb(35 31 32 / 0.06);
+```
+
+In the `[data-theme="dark"]` block, after `--shadow-lg`:
+
+```css
+  --shadow-bar: 0 -4px 12px rgb(0 0 0 / 0.3);
+```
+
+And change `.bulk-toolbar` to:
+
+```css
+  box-shadow: var(--shadow-bar);
+```
+
+(The `black` keyword inside `.btn-primary:hover`'s `color-mix` stays: it is a mix primitive for deriving the hover shade, not a literal color in use.)
 
 - [ ] **Step 6: Verify and commit**
 
@@ -1306,7 +1343,7 @@ Run: `pnpm type-check && pnpm lint && pnpm test`
 Expected: all clean.
 
 ```bash
-git add studio/src
+git add studio/src package.json pnpm-lock.yaml
 git commit -m "feat: shared Button and StatusBadge across studio panes
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
