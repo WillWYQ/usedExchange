@@ -85,7 +85,7 @@ export default async function SoldArchivePage() {
   // page weight don't grow unbounded over years of use. The header count
   // intentionally reflects the *total*, not the capped grid, so the seller
   // can see their full sales history at a glance.
-  const limit = siteConfig.soldArchiveDisplayLimit;
+  const limit = siteConfig.soldArchiveDisplayLimit ?? 200;
   const visibleItems = limit > 0 ? items.slice(0, limit) : items;
 
   return (

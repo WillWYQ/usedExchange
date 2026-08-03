@@ -129,8 +129,11 @@ describe("studio field descriptors (Task 6)", () => {
     expect(source).toContain('{ path: ["price", "tiers"], value: rows }');
     // Blank select means "no change" — never sent (strict enums reject "").
     expect(source).toContain('if (next === "" && field.kind === "select") continue;');
-    // Off-list on-disk values are rendered raw, not snapped to a legal option.
-    expect(source).toContain("field-offlist");
+    // Off-list on-disk values are rendered raw, not snapped to a legal
+    // option. The per-field rendering moved from EditForm into FieldInput
+    // when the two were split for the defaults feature.
+    const fieldInput = readFileSync(path.join(ROOT, "studio/src/panes/FieldInput.tsx"), "utf-8");
+    expect(fieldInput).toContain("field-offlist");
   });
 
   // Final review, Important 2: every item.json in this repo lacks a

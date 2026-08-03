@@ -1,8 +1,8 @@
 # UsedExchange — Technical Requirements
 
-**Version:** 0.9.1  
-**Date:** 2026-06-01  
-**Companion:** DESIGN.md v0.9.1
+**Version:** 0.10.0  
+**Date:** 2026-08-02  
+**Companion:** DESIGN.md v0.10.0
 
 ---
 
@@ -32,9 +32,15 @@
 | `clsx` | `^2.1.0` | Conditional class merging |
 | `tailwind-merge` | `^2.3.0` | Tailwind class deduplication (used in `cn()` util) |
 | `fuse.js` | `^7.0.0` | Client-side full-text search; index built at build time |
-| `jsonc-parser` | `^3.3.1` | Parses `item.json`/`_category.json` as JSONC (`//` comments, trailing commas allowed); used by `lib/content/loader.ts` and `scripts/mark-sold.ts` (comment-preserving edits via `modify`/`applyEdits`) |
+| `jsonc-parser` | `^3.3.1` | Parses `item.json`/`_category.json` as JSONC (`//` comments, trailing commas allowed); used by the loader and every JSONC-editing script — `lib/content/loader.ts`, `scripts/mark-sold.ts`, `scripts/lib/itemEdit.ts` (Studio PATCH path + `applyFieldEdits`) |
 | `@vercel/analytics` | `^1.3.0` | Vercel Analytics — no-op outside Vercel; enabled when `siteConfig.analytics.vercel: true` |
 | `@vercel/speed-insights` | `^1.0.0` | Vercel Speed Insights — no-op outside Vercel; enabled when `siteConfig.analytics.speedInsights: true` |
+| `motion` | `^12.40.0` | Animation library used by Aceternity components (imported as `motion/react`; the legacy `framer-motion` package is NOT used) |
+| `three` | `^0.184.0` | WebGL engine for the 3D Aceternity background components |
+| `@react-three/fiber` | `^9.6.1` | React renderer for `three`, used by the 3D background components |
+| `next-themes` | `^0.4.6` | Class-based dark-mode provider (`ThemeProvider`); see §22.2 |
+| `simplex-noise` | `^4.0.3` | Procedural noise for animated Aceternity backgrounds |
+| `mini-svg-data-uri` | `^1.4.4` | Compact SVG data-URI helper used by Aceternity background components |
 
 ### 2.2 Aceternity UI Peer Requirements
 
@@ -42,8 +48,10 @@ Aceternity components are installed individually via their CLI. The following pa
 
 | Package | Version | Purpose |
 |---|---|---|
-| `framer-motion` | `^11.0.0` | Animations used by Aceternity components |
-| `@tabler/icons-react` | `^3.0.0` | Icon set used by contact platform buttons |
+| `motion` | `^12.40.0` | Animations used by Aceternity components (imported as `motion/react`) |
+| `three` / `@react-three/fiber` | `^0.184.0` / `^9.6.1` | 3D Aceternity background components |
+| `simplex-noise` / `mini-svg-data-uri` | `^4.0.3` / `^1.4.4` | Procedural backgrounds used by Aceternity components |
+| `@tabler/icons-react` | `^3.44.0` | Icon set used by contact platform buttons and UI chrome (direct dependency) |
 
 > Aceternity components are copied into `components/ui/` at install time. They are treated as source files — do not install Aceternity as a package dependency.
 >
@@ -66,7 +74,19 @@ Aceternity components are installed individually via their CLI. The following pa
 | `prettier-plugin-tailwindcss` | `^0.6.0` | Sorts Tailwind classes automatically |
 | `tsx` | `^4.15.0` | Runs `scripts/sync-images.ts` and other scripts without a separate compile step |
 | `next-sitemap` | `^4.2.0` | Generates `sitemap.xml` + `robots.txt` in `postbuild` |
-| `sharp` | `^0.33.0` | Strips EXIF/GPS metadata from images before upload (`lib/images/stripMetadata.ts`) and provides image-width quality checks in `scripts/sync-images.ts` |
+| `sharp` | `^0.33.5` | Strips EXIF/GPS metadata from images before upload (`lib/images/stripMetadata.ts`) and provides image-width quality checks in `scripts/sync-images.ts` |
+| `vitest` | `^2.0.0` | Test runner (see §25) |
+| `@vitest/coverage-v8` | `^2.0.0` | v8 coverage reporting for `pnpm test:coverage` |
+| `vite` | `^8.1.5` | Dev server + bundler for Seller Studio (`pnpm studio`) |
+| `@vitejs/plugin-react` | `^6.0.4` | React support for the Studio Vite app |
+| `jsdom` | `^25.0.1` | DOM environment for component tests |
+| `@testing-library/react` | `^16.3.2` | Component rendering/queries in jsdom tests |
+| `@testing-library/dom` | `^10.4.1` | Peer of `@testing-library/react` |
+| `@eslint/eslintrc` | `^3.0.0` | `FlatCompat` bridge so legacy `next/core-web-vitals` config works with ESLint 9 flat config (`eslint.config.mjs`) |
+| `@types/three` | `^0.184.1` | Types for `three` |
+| `@fontsource/archivo-narrow` | `^5.3.0` | Self-hosted font |
+| `@fontsource/courier-prime` | `^5.3.0` | Self-hosted font |
+| `@fontsource/ibm-plex-sans` | `^5.3.0` | Self-hosted font |
 
 ### 2.4 Image Storage Provider Dependencies
 
@@ -136,9 +156,11 @@ The app **must build and serve correctly with zero `.env` file** when `imageStor
 
 ### 3.3 Local development with cloud provider
 
-When running `pnpm dev` locally, the sync script uses the `"local"` provider regardless of
-`content/config.ts` — no cloud credentials are needed for development. To test cloud upload
-locally, run `pnpm upload-images` (a dedicated script that respects the configured provider)
+When running `pnpm dev` locally, the `dev-sync` mode is **provider-agnostic**: it unconditionally
+copies `content/items/**` → `public/items/` and `content/contact/**` → `public/contact/`
+(via `copyIfChanged`) and never consults `siteConfig.imageStorage.provider`. No cloud credentials
+are needed for development. Provider selection only happens in `upload` mode (`pnpm upload-images`)
+and in Seller Studio's sync runner (§30). To test cloud upload locally, run `pnpm upload-images`
 with credentials set in a local `.env.local` file.
 
 ---
@@ -148,6 +170,7 @@ with credentials set in a local `.env.local` file.
 ```ts
 import type { NextConfig } from "next";
 import { siteConfig } from "./content/config";
+import { normalizeR2Url } from "./lib/images/normalizeR2Url";
 
 // Build the list of allowed remote image hostname patterns for next/image.
 // Only needed in "vercel" deploymentMode; static mode uses plain <img>.
@@ -162,8 +185,11 @@ if (siteConfig.imageStorage.provider === "vercel-blob") {
 }
 
 if (siteConfig.imageStorage.provider === "cloudflare-r2") {
-  // Custom R2 public domain (e.g. images.your-domain.com or *.r2.dev)
-  const r2Url = new URL(process.env.CF_R2_PUBLIC_URL ?? "https://example.com");
+  // Custom R2 public domain (e.g. images.your-domain.com or *.r2.dev).
+  // The raw value is passed through normalizeR2Url() (lib/images/normalizeR2Url.ts)
+  // before being parsed with new URL().
+  const raw = process.env.CF_R2_PUBLIC_URL ?? "https://example.com";
+  const r2Url = new URL(normalizeR2Url(raw));
   remotePatterns.push({
     protocol: "https",
     hostname: r2Url.hostname,
@@ -212,8 +238,11 @@ export default nextConfig;
   },
   // "**/*.ts" already covers content/config.ts; the explicit entry below is
   // retained as documentation to make the inclusion of content/ intentional and visible.
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules"]
+  // ".next/types/**/*.ts" pulls in Next.js' generated route types.
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  // "workers" is excluded — the shipping-rate-proxy Worker (§29.6) is an
+  // independently-deployed package with its own tsconfig.json.
+  "exclude": ["node_modules", "workers"]
 }
 ```
 
@@ -304,9 +333,10 @@ export interface ImageStorageAdapter {
 - `syncImage()`: compares SHA-256; if changed, calls S3 `PutObjectCommand` to R2 endpoint; constructs public URL as `${CF_R2_PUBLIC_URL}/${manifestKey}`
 - Requires all `CF_R2_*` env vars; throws descriptive error if any are absent
 
-### Two Execution Modes
+### Three Execution Modes
 
-The script operates in two distinct modes controlled by the `--mode` flag:
+The script operates in three distinct modes controlled by the `--mode` flag (a missing or
+invalid `--mode` value exits 1):
 
 | Mode | Triggered by | Image source | Uploads? | Writes manifest? | Prints backup reminder? |
 |---|---|---|---|---|---|
@@ -334,9 +364,9 @@ All modes always copy `content/contact/**` → `public/contact/` as a final step
     - Any image > 8 MB → warn "{filename} is large; consider resizing before upload"
     - Item folder has images but none named `cover.*` → warn "No cover.* found in {item}; first alphabetical image used"
     - Item folder in content/items/ has no images at all → warn "No images found for {item}"
-11. Print summary: `[upload-images] provider=vercel-blob  uploaded=12  skipped=47  purged=3  total=59  warnings=2`
+11. Print summary: `[upload-images] provider=vercel-blob  uploaded=12  skipped=47  failed=0  purged=3  total=59  warnings=2`. If EXIF/GPS stripping ran, an extra line is printed: `🔒 stripped EXIF/GPS metadata from 12/12 uploaded image(s)`. Per-file failures are listed individually by manifest key.
 12. Print **BACKUP REMINDER** (see below)
-13. Exit code 1 on any unrecoverable error
+13. Exit code: `1` if any file failed to upload (the manifest/checksums are still written for the files that succeeded — re-run to retry) or on any unrecoverable error; advisory quality `warnings` alone leave exit code `0`. See §27.4.
 
 > **Note on orphaned CDN blobs:** Purging a manifest entry removes the URL reference but does **not** delete the file from Vercel Blob or R2. Orphaned blobs accumulate silently. Cloud storage (Blob/R2) is cheap enough that this is acceptable for v1; a future `pnpm clean-storage` command can reconcile the manifest against the CDN bucket.
 
@@ -385,6 +415,7 @@ Printed to stdout after every successful `upload` run:
 ║    • iCloud Drive / Google Drive / Dropbox                   ║
 ║                                                              ║
 ║  Next steps:                                                 ║
+║    pnpm push   — or manually:                                ║
 ║    git add lib/generated/image-manifest.json                 ║
 ║    git add content/**/*.json content/config.ts               ║
 ║    git commit -m "chore: update listings"                    ║
@@ -396,33 +427,57 @@ Printed to stdout after every successful `upload` run:
 ```json
 {
   "scripts": {
-    "setup-ui":        "bash scripts/setup-ui.sh",
-    "upload-images":   "tsx scripts/sync-images.ts --mode upload",
-    "create-item":     "tsx scripts/create-item.ts",
+    "setup-ui": "bash scripts/setup-ui.sh",
+    "studio": "tsx scripts/studio.ts",
+    "upload-images": "tsx scripts/sync-images.ts --mode upload",
+    "create-item": "tsx scripts/create-item.ts",
     "create-template": "tsx scripts/create-template.ts",
-    "new":             "tsx scripts/create-item.ts",
-    "mark-sold":       "tsx scripts/mark-sold.ts",
-    "prebuild":        "tsx scripts/sync-images.ts --mode build-check && tsx scripts/build-search-index.ts",
-    "build":           "next build",
-    "postbuild":       "tsx scripts/postbuild.ts",
-    "dev":             "tsx scripts/sync-images.ts --mode dev-sync && next dev --turbo",
-    "type-check":      "tsc --noEmit",
-    "lint":            "eslint . --max-warnings 0",
-    "format":          "prettier --write ."
+    "new": "tsx scripts/create-item.ts",
+    "mark-sold": "tsx scripts/mark-sold.ts",
+    "fb-export": "tsx scripts/export-facebook.ts",
+    "update-site": "tsx scripts/update-site.ts",
+    "migrate-config": "tsx scripts/migrate-config.ts",
+    "push": "git add content lib/generated/image-manifest.json && git commit -m 'chore: update listings' && git push",
+    "bump": "tsx scripts/bump-version.ts",
+    "prebuild": "tsx scripts/check-config.ts && tsx scripts/sync-images.ts --mode build-check && tsx scripts/build-search-index.ts",
+    "build": "next build",
+    "postbuild": "tsx scripts/postbuild.ts",
+    "dev": "tsx scripts/sync-images.ts --mode dev-sync && next dev --turbo",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   }
 }
 ```
+
+> **`prebuild` is a three-step gate.** It runs `scripts/check-config.ts` first (fails the build on a
+> placeholder `baseUrl` or incomplete i18n translations — see §22.8 and §28), then `sync-images.ts
+> --mode build-check`, then `build-search-index.ts`. Only after all three succeed does `next build` run.
 
 | Script | When to run | Who runs it |
 |---|---|---|
 | `pnpm upload-images` | After adding, replacing, or deleting photos | Seller, on their machine |
 | `pnpm mark-sold <cat>/<name>` | After an item sells — sets `status: "sold"` and `sold_date` | Seller, on their machine |
-| `pnpm build` | Deploy to production — runs `prebuild` (image sync + search index) then `next build` then `postbuild` (sitemap) | GitHub Actions on push (or Vercel on the Vercel path); seller for local builds |
+| `pnpm create-item` / `pnpm new <cat>/<name>` | Scaffold a new `item.json` from the 36-field draft template (`new` is an exact alias of `create-item`) | Seller, on their machine |
+| `pnpm studio [--port N]` | Manage listings in a browser — item editing, photo management, CDN sync, git publish (§30) | Seller, on their machine (local only) |
+| `pnpm fb-export` | Export available/pending/reserved items to a Facebook Marketplace bulk-upload CSV (interactive) | Seller, on their machine |
+| `pnpm update-site [tag] [--list] [--skip-verify]` | Pull a newer upstream template version without touching `content/` | Seller, on their machine |
+| `pnpm migrate-config` | Splice any config fields added by a template upgrade into `content/config.ts` (additive only); also run automatically by `update-site` | Seller, on their machine |
+| `pnpm push` | Commit + push `content/` and the image manifest in one step (`git add content lib/generated/image-manifest.json`) | Seller, on their machine |
+| `pnpm bump` | Interactive version bump + GitHub release (gated on `ci.yml` passing) | Maintainer |
+| `pnpm build` | Deploy to production — runs `prebuild` (check-config + image sync + search index) then `next build` then `postbuild` (sitemap) | GitHub Actions on push (or Vercel on the Vercel path); seller for local builds |
 | `pnpm dev` | Local development preview — note: `public/search-index.json` is NOT rebuilt on `pnpm dev`; run `pnpm build` once first to populate it | Seller, on their machine |
+| `pnpm test` / `test:watch` / `test:coverage` | Run the Vitest suite (once / watch / with v8 coverage); enforced by `ci.yml` (§24) | Developer and CI |
+| `pnpm type-check` / `pnpm lint` / `pnpm format` | Type-check (`tsc --noEmit`), ESLint with zero-warning tolerance, and Prettier format; enforced by `ci.yml` | Developer and CI |
+
+> **Template upgrade walkthrough:** the full `update-site` / `migrate-config` seller workflow is documented in `docs/UPDATE_GUIDE.md` (and the script inventory in `docs/SCRIPTS.md`).
 
 > **`scripts/build-search-index.ts`** — called in the `prebuild` step (before `next build`). Imports `buildSearchIndex()` from `lib/search/index.ts`, writes the fuse.js search index to `public/search-index.json`, and exits 1 on error. Because it runs in `prebuild` (before `next build`), the index is ready when the `SearchBar` fetches it at runtime. `public/search-index.json` is gitignored — it is regenerated on every build.
 
-> **`scripts/postbuild.ts`** — called in the `postbuild` step (after `next build`). Reads `siteConfig.sitemap.enabled`; if true, runs `next-sitemap` to generate `public/sitemap.xml` and `public/robots.txt`; if false, prints a skip message and exits 0. This is the canonical implementation of "the postbuild script checks this before running" from §22.7.
+> **`scripts/postbuild.ts`** — called in the `postbuild` step (after `next build`). Reads `siteConfig.sitemap.enabled`; if true, runs `npx next-sitemap --config next-sitemap.config.js` to generate `out/sitemap.xml` and `out/robots.txt` (next-sitemap `outDir` is `./out`); if false, prints a skip message and exits 0. This is the canonical implementation of "the postbuild script checks this before running" from §22.7.
 
 ---
 
@@ -449,21 +504,44 @@ export async function loadItem(
 //   - status === "available" ONLY (reserved, pending, sold, draft all excluded)
 //   - excludes expired-sold items
 // Results sorted by listedDate descending, limited to siteConfig.recentlyListedCount.
-//
-// ⚠️  Do NOT use this function for the /all page. The /all page aggregates
-// loadItemsByCategory() across every category so it includes reserved, pending,
-// and toggleable-sold items — the same set as any individual category page.
 export async function loadAllItems(): Promise<Item[]>
+
+// Returns EVERY item across all categories with no visibility filtering
+// (draft, sold, and retention rules are NOT applied). Used by scripts that
+// must see the full inventory — e.g. scripts/export-facebook.ts (fb-export)
+// and the search-index builder. Not for page rendering.
+export async function loadAllItemsRaw(): Promise<Item[]>
 
 // Returns ALL sold items for the /sold archive page.
 // No retention filter — shows every item that ever had status "sold".
 // Sorted by soldDate descending (falls back to listedDate if soldDate absent).
 export async function loadSoldItems(): Promise<Item[]>
 
+// Page-level aggregations used by the App Router pages:
+//   app/all/page.tsx  → loadBrowseAllPageData()   (NOT a loadItemsByCategory loop)
+//   app/page.tsx      → loadHomePageData()
+// Each bundles the categories + items + derived metadata the page needs in one call.
+export async function loadBrowseAllPageData(): Promise<{
+  categories: Category[];
+  items: Item[];
+}>
+export async function loadHomePageData(): Promise<{
+  categories: Category[];
+  recentItems: Item[];
+}>
+
+// Clears the in-memory image-manifest cache. Called after a CDN sync (Seller
+// Studio, §30) so the next read picks up freshly written CDN URLs.
+export function resetManifestCache(): void
+
 // Note: buildSearchIndex() is NOT part of loader.ts.
 // It lives in lib/search/index.ts and is called by scripts/build-search-index.ts (prebuild).
 // See §22.1 for the full specification and SearchIndexEntry type.
 ```
+
+> **`/all` page:** `app/all/page.tsx` calls `loadBrowseAllPageData()` — it does **not** aggregate
+> `loadItemsByCategory()` across categories. The result includes reserved, pending, and
+> toggleable-sold items — the same set as any individual category page.
 
 ### Type definitions (abbreviated — see `lib/content/types.ts` for full definitions)
 
@@ -700,7 +778,7 @@ No IE support. CSS Grid and `aspect-ratio` are used freely.
 
 | Concern | Mitigation |
 |---|---|
-| `reserved_for` field | Never rendered on any page; stripped in `Item` type by returning it only in internal loader type |
+| `reserved_for` field | Private buyer info — never read, written, or rendered anywhere. It is intentionally **absent from the Zod schema** (`lib/content/schema.ts`, so Zod's default strip removes it on parse) and excluded from the `Item` type (`lib/content/types.ts`). `schema.test.ts` and `loader.test.ts` assert it never survives parsing/loading; Seller Studio (§30) never reads or sends it. |
 | External links | All `<a>` tags opening new tabs use `rel="noopener noreferrer"` |
 | `original_link` rendering | Validated as URL by Zod before rendering; empty string if invalid |
 | JSON parsing | Zod schema; raw `JSON.parse` errors caught and logged; item skipped |
@@ -713,28 +791,45 @@ No IE support. CSS Grid and `aspect-ratio` are used freely.
 
 ## 16. Linting & Formatting Rules
 
-`.eslintrc` (extends `next/core-web-vitals`), additional rules:
+ESLint 9 **flat config** in `eslint.config.mjs` (there is no `.eslintrc` file). It uses
+`FlatCompat` from `@eslint/eslintrc` to extend `next/core-web-vitals` and `next/typescript`:
 
-```json
-{
-  "rules": {
-    "no-console": ["warn", { "allow": ["warn", "error", "log"] }],
-    "@typescript-eslint/no-explicit-any": "error",
-    "@typescript-eslint/no-unused-vars": "error",
-    "import/no-default-export": "off"
+```js
+// eslint.config.mjs (abridged)
+import { FlatCompat } from "@eslint/eslintrc";
+const compat = new FlatCompat({ baseDirectory: __dirname });
+
+export default [
+  {
+    ignores: [
+      ".next/**", "out/**", "node_modules/**",
+      "components/ui/**",      // Aceternity — auto-generated by pnpm setup-ui
+      "hooks/**",
+      "components/**-demo.tsx",
+      "next-env.d.ts",
+      "workers/**",            // independently-deployed Worker (§29.6)
+    ],
   },
-  "overrides": [
-    {
-      "files": ["scripts/**/*.ts"],
-      "rules": {
-        "no-console": "off"
-      }
-    }
-  ]
-}
+  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  {
+    rules: {
+      "no-console": ["warn", { allow: ["warn", "error", "log"] }],
+      "@typescript-eslint/no-explicit-any": "error",
+      // "_"-prefixed names mark intentionally unused params/vars
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+      "import/no-default-export": "off",
+    },
+  },
+  { files: ["scripts/**/*.ts"], rules: { "no-console": "off" } },
+  // studio/ is a plain Vite app — no next/image to switch to
+  { files: ["studio/**/*.tsx"], rules: { "@next/next/no-img-element": "off" } },
+];
 ```
 
-> The `scripts/` override disables `no-console` for build scripts entirely. The sync script uses `console.log` extensively for progress output — these are intentional, not debug statements.
+> The `scripts/` override disables `no-console` for build scripts entirely — the sync script uses `console.log` extensively for progress output. `pnpm lint` runs with `--max-warnings 0` (zero-warning tolerance) and is enforced by `ci.yml` (§24).
 
 `prettier.config.js`:
 
@@ -854,13 +949,16 @@ out/
 2. - [ ] Drop photos into the item folder
 3. - [ ] Run `pnpm upload-images` → photos uploaded to R2, manifest updated
 4. - [ ] Read and follow the printed **BACKUP REMINDER** — back up your `content/` folder
-5. - [ ] `git add content/**/*.json lib/generated/image-manifest.json && git commit && git push`
+5. - [ ] `pnpm push` (stages `content/` + the image manifest, commits, and pushes) — or publish from Seller Studio's publish pane (§30), which commits exactly those two paths and never `git add -A`
 6. - [ ] GitHub Actions auto-builds and deploys — no CDN interaction; just reads committed manifest
 
 **Code-only changes (no photo edits):**
 - [ ] Edit `content/**/*.json` or `content/config.ts` → `git commit && git push` → GitHub Actions builds immediately
 
 > **Cloudflare R2 storage note:** Deleting an item purges its manifest entry but does NOT delete the blob from R2. Orphaned files accumulate silently. Manage via Cloudflare Dashboard → R2 → bucket browser. A future `pnpm clean-storage` command is planned.
+
+> **Shipping estimates:** If you configure `siteConfig.shipping`, you must also deploy the
+> `shipping-rate-proxy` Cloudflare Worker separately — see §29.8 and `workers/shipping-rate-proxy/README.md`.
 
 ---
 
@@ -984,18 +1082,24 @@ type Props = {
 ### `PricingTable` Component Specification
 
 ```tsx
-// components/item/PricingTable.tsx
-// Presentational component — has no hooks, no "use client" directive.
-// Always rendered inside PricingSection (a client component) in practice,
-// because it renders PricingTableToggle (a client component) as a child.
-// The expand/collapse toggle is a separate client component: PricingTableToggle.tsx
+// components/item/PricingTable.tsx  — "use client"
+// Client component (calls useT() for localised headers/labels).
+// Renders the full tier table and visually accents the resolved tier.
+// It does NOT render the expand/collapse toggle — PricingSection renders
+// PricingTableToggle separately.
 
 type Props = {
   price: Price;
-  resolvedTier: PriceTier | null;   // null → show "Contact for price"
-  negotiable: boolean;
+  resolvedTier: PriceTier | null;   // null (empty tiers) → show "Contact for price"
 };
 ```
+
+**Rendering contract:**
+
+1. If `price.tiers` is empty: render the `t.contactForPrice` message. No table, no toggle.
+2. Otherwise: render a table of all tiers (label / distance / amount columns via
+   `t.pricingLabelHeader` / `t.pricingDistanceHeader` / `t.pricingPriceHeader`), accenting the
+   row that matches `resolvedTier`.
 
 **Initial SSG state:** The static page shell (`app/[category]/[item]/page.tsx`) calls:
 ```ts
@@ -1003,18 +1107,29 @@ import { resolveItemPrice } from "@/lib/utils/pricing";
 // resolveItemPrice is in lib/utils/pricing.ts — no "use client" → safe in server component
 const initialResolvedTier = resolveItemPrice(item.price, { source: "fallback" });
 ```
-Then passes `initialResolvedTier` as a prop to `PricingSection`:
+Then passes it as a prop to `PricingSection`:
 ```tsx
-<PricingSection price={item.price} initialResolvedTier={initialResolvedTier} negotiable={item.price.negotiable} />
+<PricingSection
+  price={item.price}
+  initialResolvedTier={initialResolvedTier}
+  previousLowestPrice={item.previous_lowest_price}   // optional — "Was $X" strikethrough
+  weight={item.weight}
+  dimensions={item.dimensions}
+/>
 ```
-`PricingSection` uses `initialResolvedTier` as its `useState` initial value, ensuring the static HTML always shows the highest price tier — never a blank. After hydration and geo resolution, `PricingSection` re-renders with the correct tier.
 
-**Rendering contract:**
+`PricingSection` (client) does **not** own geo state. It reads `{ geoState, resolved, setManualMiles }`
+from the shared **`DistancePricingContext`** (`useDistancePricingContext()`), provided by a
+`DistancePricingProvider` that wraps the item detail page. `DistancePricingProvider` is what owns the
+geolocation/distance state — this avoids `PricingSection` and `ContactSection` each running their own
+`useGeolocation()` and prompting the browser for location twice. `PricingSection` renders
+`LocationPriceBar` (geo status), the optional `previousLowestPrice` strikethrough, `PricingTableToggle`
+(the expand/collapse pricing UI), and `ShippingEstimator` (weight/dimensions passed through — see §29.5).
 
-1. If `resolvedTier` is `null`: render a single "Contact for price" row. No expand toggle.
-2. Otherwise: render **one row** showing `resolvedTier.label` and `resolvedTier.amount` (with "OBO" if `negotiable`). Below it, render a `PricingTableToggle` client component.
+`initialResolvedTier` matches the provider's initial hook state (`{ source: "fallback" }`), so the
+static HTML shows the highest tier with no content flash on hydration.
 
-**`PricingTableToggle` (client component wrapper):**
+**`PricingTableToggle` (client component, rendered by `PricingSection`):**
 
 ```tsx
 // components/item/PricingTableToggle.tsx  — "use client"
@@ -1051,11 +1166,18 @@ The slider's initial `max` is set to the highest resolved price across all items
 
 ### `"use client"` component list (updated)
 
+> This table lists the components that carry a `"use client"` directive and **why**. It is not an
+> exhaustive inventory — see ARCHITECTURE.md for the full component list. `app/` itself contains
+> **zero** `"use client"` directives (every route is a server component); client behaviour lives in
+> `components/`.
+
 | Component | Reason |
 |---|---|
 | `RecentlyListedSection` | Owns geo + distance state for home page |
-| `ItemGrid` | Owns distance state for category page; re-renders on distance change |
-| `PricingSection` | Owns geo + distance state for item detail page; wraps LocationPriceBar + PricingTable |
+| `ItemGrid` | Reads distance state for category page; re-renders on distance change |
+| `PricingSection` | Reads geo/distance from `DistancePricingContext`; renders LocationPriceBar + PricingTableToggle + ShippingEstimator |
+| `PricingTable` | Calls `useT()` for localised table headers/labels |
+| `DistancePricingContext` | Provider owns geolocation + distance state shared by PricingSection/ContactSection |
 | `ItemGallery` | Photo carousel interaction |
 | `LocationPriceBar` | Geolocation API + user input |
 | `PricingTableToggle` | Expand/collapse state for tier list |
@@ -1074,8 +1196,21 @@ The slider's initial `max` is set to the highest resolved price across all items
 | `LocaleSwitcher` | Calls `setLocale()` from `LocaleProvider` context on user interaction; conditionally rendered (hidden when `availableLocales.length ≤ 1`) |
 | `ItemCard` | Localises its title via `useLocale()`; always rendered inside a client parent (`ItemGrid` / `RecentlyListedSection`) so the title switches with the locale |
 | `LocalizedItemContent` | Item detail `<h1>` name + react-markdown description; reads `useLocale()` so both re-render on a locale switch (SSG still emits `defaultLocale`) |
+| `ThemeProvider` / `ThemeToggle` | `next-themes` class-based dark mode + visitor toggle (§22.2) |
+| `MeasurementUnitProvider` / `MeasurementUnitToggle` | Metric/imperial selection; per-locale unit override (§22.13) |
+| `NewlyListedClient` | `/newly-listed` page grouping against the visitor's clock/last-visit |
+| `SearchBarClient` | fuse.js query + results state |
+| `SiteHeader` | Nav state, search, locale/theme/unit toggles |
+| `MetadataTable` / `StatusBadge` / `ConditionBadge` | Localise labels via `useT()`; condition guide interaction |
+| `ShippingEstimator` | ZIP input + `useShippingRate` fetch (§29.5) |
+| `ProjectIntro` / `UISlotPlayground` | Intro shown while `baseUrl` is unconfigured; slot preview |
+| `BackgroundEffect` / `ItemGridAdapter` / `GalleryAdapter` / `ItemCardAdapter` | Wrap client-side Aceternity components (§21) |
 
-> **`PricingTable` reclassification note:** `PricingTable` is NOT in this list. It was previously documented as a server component but was reclassified to a **presentational component** (no `"use client"`, no hooks). It renders `PricingTableToggle` (a client component) as a child, so in practice it always runs in a client subtree. The server-side page (`page.tsx`) calls `resolveItemPrice` as a pure function for the SSG initial render and passes the result as `initialResolvedTier` prop to `PricingSection`, not directly to `PricingTable`.
+> **`PricingTable` is a client component.** It was previously documented as a server/presentational
+> component, but it now carries `"use client"` and calls `useT()` for localised headers. The
+> server-side page (`page.tsx`) still calls `resolveItemPrice` as a pure function for the SSG initial
+> render and passes the result as `initialResolvedTier` to `PricingSection`. `lib/utils/pricing.ts`
+> itself has **no** `"use client"` directive, so it remains importable by both server and client code.
 
 ### Security & Privacy
 
@@ -1195,13 +1330,29 @@ export type ItemCardOption =
   | "direction-aware-hover"
   | "glare-card";
 
+export type PriceFilterStrategy =
+  | "none"
+  | "percentile"
+  | "logarithmic"
+  | "preset-buckets"
+  | "iqr";
+
 export type UIConfig = {
   background: BackgroundOption;
   itemGrid:   ItemGridOption;
   gallery:    GalleryOption;
   itemCard:   ItemCardOption;
+  // Optional (Iron Rule 8 — TS-optional with runtime defaults; downstream
+  // configs that omit them still type-check after a template upgrade).
+  priceFilterStrategy?: PriceFilterStrategy;   // consumers read with ?? "none"
+  priceFilterBuckets?: number[];               // bucket edges for "preset-buckets"
 };
 ```
+
+> **Price filtering (optional):** When `ui.priceFilterStrategy` is set to something other than
+> `"none"`, `FilterBar` / `ItemGrid` offer a price-range control computed by
+> `lib/utils/priceFilterStrategies.ts` (unit-tested). Consumers default to `"none"` when the field is
+> absent (`?? "none"` / destructure default), so existing configs need no change.
 
 Added to `SiteConfig` in `lib/config/types.ts`:
 ```ts
@@ -1338,21 +1489,26 @@ type Props = {
 **Build-time index generation** (`lib/search/index.ts`):
 ```ts
 export type SearchIndexEntry = {
-  slug: string;          // "{categorySlug}/{itemSlug}"
-  href: string;          // "/houseware/ikea-lamp"
   name: string;
-  description: string;
+  description: string;    // truncated to 200 chars (DESCRIPTION_EXCERPT_LENGTH)
   brand: string;
   model: string;
   tags: string[];
   course: string;        // textbook field
   isbn: string;
   edition: string;       // textbook field; searchable (e.g. "3rd Edition")
+  categorySlug: string;  // client builds the route from categorySlug + itemSlug
+  itemSlug: string;
   coverImage: string | null;
 };
 
 export async function buildSearchIndex(): Promise<SearchIndexEntry[]>
 ```
+
+> There is no pre-computed `slug`/`href` field — entries carry `categorySlug` and `itemSlug`
+> separately and the client assembles the route. `description` is truncated to 200 characters to keep
+> the index small. **Visibility:** `buildSearchIndex` (via `loadAllItemsRaw`) includes only
+> `available`, `pending`, and `reserved` items — `draft` and `sold` items are excluded.
 
 The index is written to `public/search-index.json` during the `prebuild` step (before `next build`), by `scripts/build-search-index.ts`. It is gitignored (regenerated on every build; not committed). It must go to `public/` — not `lib/generated/` — so Next.js serves it as a static file that `SearchBar` can fetch via HTTP at runtime.
 
@@ -1368,17 +1524,27 @@ The index is written to `public/search-index.json` during the `prebuild` step (b
 
 ---
 
-### 22.2 Dark Mode (Auto — System Preference)
+### 22.2 Dark Mode (System Default + Visitor Override)
 
-**Tailwind v4 setup — CSS-first, no `tailwind.config.ts` needed for dark mode:**
+Dark mode is **class-based**, driven by `next-themes` (`^0.4.6`, see §2.1). It defaults to the OS
+preference but lets the visitor override it via a toggle; the choice persists in `localStorage`.
 
-In Tailwind v4, `darkMode: "media"` is the **default behaviour** — `prefers-color-scheme` is followed automatically without any configuration entry.
+- `components/theme/ThemeProvider.tsx` wraps `app/layout.tsx`:
+  `<NextThemesProvider attribute="class" defaultTheme="system" enableSystem>`.
+- `ThemeToggle` (a client component) is rendered in `SiteHeader` for both desktop and mobile nav.
+- `attribute="class"` means `next-themes` toggles a `dark` class on `<html>`; `globals.css` declares a
+  `@custom-variant dark` rule so Tailwind v4 `dark:` utilities respond to that class (not a media query).
+- The visitor's explicit choice is persisted to `localStorage`; absent a choice, `enableSystem` follows
+  `prefers-color-scheme`.
+
+**Tailwind v4 setup — CSS-first:**
 
 ```css
 /* app/globals.css */
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
-/* No dark mode directive needed — v4 defaults to media-query dark mode */
+/* Class-based dark mode for next-themes: */
+@custom-variant dark (&:where(.dark, .dark *));
 ```
 
 ```js
@@ -1388,8 +1554,7 @@ export default { plugins: { "@tailwindcss/postcss": {} } };
 
 > ⚠️ Do **not** add `darkMode: "media"` to `tailwind.config.ts`. That is Tailwind v3 syntax and is a no-op (or causes deprecation warnings) in v4. The `tailwind.config.ts` file is optional in v4 and used only for theme extension — omit it unless you need to extend the default theme.
 
-- No toggle needed; no user action required; no JavaScript involved
-- All Tailwind `dark:` variant classes respond to OS/browser `prefers-color-scheme`
+- All Tailwind `dark:` variant classes respond to the `.dark` class managed by `next-themes`
 - Aceternity components installed via `npx shadcn@latest` are Tailwind v4 compatible
 
 ---
@@ -1400,27 +1565,34 @@ All scripts write ONLY to `content/` — sellers never touch any other directory
 
 #### `pnpm create-item <category>/<name>` (`scripts/create-item.ts`)
 
-1. Validates that `<category>` matches an existing folder in `content/items/` (or creates it with a warning)
-2. Creates `content/items/<category>/<name>/` folder
-3. Copies `content/items/<category>/_template.json` if it exists; otherwise copies `content/items/_template.json`; otherwise uses the built-in default template
-4. Renames the copy to `item.json`; substitutes `{name}` placeholder with the humanised item name
-5. Opens `item.json` in `$EDITOR` if set; otherwise prints: "Created content/items/<category>/<name>/item.json — edit it now."
-6. Exits 0
+1. **Validates both `<category>` and `<name>` as kebab-case slugs via `isValidSlug` BEFORE any
+   filesystem access** — this is the path-traversal guard (the same validator `generateStaticParams` uses).
+2. Requires the category folder to already exist (exits 1 if missing — it does **not** create it) and
+   the item folder to **not** exist (exits 1 if it does).
+3. Scaffolds `item.json` from the **built-in 36-field draft template** (`scripts/lib/itemTemplate.ts`):
+   `status: "draft"`, today's date, and — honouring `content/config.ts` — the site's `measurementUnit`
+   and `defaultPriceTiers` (built-in 3-tier pickup/shipping fallback when absent). The template
+   deliberately omits the private `reserved_for` (Iron Rule 4) — counting it, the full schema has
+   37 fields.
+4. Writes `content/items/<category>/<name>/item.json` and prints `✓ Created …` plus next-steps text.
+5. If `$EDITOR` is set, opens the new file via `spawnSync` with an argument array (no shell interpolation).
 
 #### `pnpm mark-sold <category>/<name>` (`scripts/mark-sold.ts`)
 
-1. Validates that `content/items/<category>/<name>/item.json` exists; exits 1 with a clear error if not found
-2. Reads the current `item.json`
-3. Sets `status: "sold"` and `sold_date: <today in ISO 8601 format (YYYY-MM-DD)>`
-4. Writes the updated `item.json` in place (preserves all other fields)
-5. Prints: `Marked content/items/<category>/<name> as sold (sold_date: YYYY-MM-DD).`
-6. Exits 0
+1. **Validates `<category>` and `<name>` as kebab-case slugs BEFORE any filesystem access** (path-traversal guard).
+2. Reads the current `item.json`. **Idempotent:** if `status` is already `"sold"`, prints
+   `[mark-sold] <item> is already marked as sold.` and exits 0 without writing.
+3. Otherwise applies a **surgical JSONC edit** (`scripts/lib/markSold.ts` + `itemEdit.ts`, using
+   jsonc-parser `modify`/`applyEdits` — never a parse/`JSON.stringify` round trip) setting
+   `status: "sold"` and `sold_date: <today YYYY-MM-DD>`. This preserves `//` comments and every other
+   field, including `reserved_for`.
+4. Prints `✓ Marked <item> as sold (sold_date: YYYY-MM-DD).` and exits 0.
 
 This script exists so non-technical users (the "potential" user persona) can mark items sold without opening or editing a JSON file directly. It is the CLI equivalent of the SETUP_GUIDE.md step 2.
 
 #### `pnpm create-template [category]` (`scripts/create-template.ts`)
 
-1. If `[category]` provided: creates `content/items/<category>/_template.json`
+1. If `[category]` provided: creates `content/items/<category>/_template.json` (the category directory must already exist — exits 1 otherwise)
 2. Without argument: creates `content/items/_template.json` (global default)
 3. Template is a full `item.json` with all fields present as descriptive placeholder strings
 4. Prints instructions on how to use the template
@@ -1504,12 +1676,16 @@ All added in `generateMetadata` for item detail pages:
 ```js
 /** @type {import('next-sitemap').IConfig} */
 module.exports = {
-  // NEXT_PUBLIC_SITE_URL is injected by scripts/postbuild.ts (falls back to siteConfig.baseUrl).
-  // Do NOT use require('./content/config') here — next-sitemap runs as a plain Node.js child process
-  // (not via tsx), so TypeScript files cannot be required directly.
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+  // Read directly from process.env; falls back to the placeholder domain when unset.
+  // In CI this comes from the NEXT_PUBLIC_SITE_URL Actions Variable (§24); locally set it in .env.local.
+  // next-sitemap runs as a plain Node.js child process (not tsx), so do NOT require('./content/config').
+  siteUrl: process.env["NEXT_PUBLIC_SITE_URL"] || "https://your-domain.com",
   generateRobotsTxt: true,
-  exclude: ['/preview/*'],
+  // Static export writes pages to ./out, so the sitemap/robots go there too.
+  outDir: "./out",
+  robotsTxtOptions: {
+    policies: [{ userAgent: "*", allow: "/" }],
+  },
 };
 ```
 
@@ -1521,22 +1697,16 @@ import { execSync } from "child_process";
 
 if (siteConfig.sitemap.enabled) {
   console.log("[postbuild] generating sitemap...");
-  // Inject NEXT_PUBLIC_SITE_URL so next-sitemap.config.js can read it via process.env.
-  // next-sitemap runs as a plain Node.js child process (not tsx) and cannot require() TypeScript
-  // files, so we resolve the URL here (where tsx is active) and pass it via env.
-  execSync("next-sitemap", {
-    stdio: "inherit",
-    env: {
-      ...process.env,
-      NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL ?? siteConfig.baseUrl,
-    },
-  });
+  // No env injection — the URL is resolved by next-sitemap.config.js itself from
+  // process.env.NEXT_PUBLIC_SITE_URL (set as a CI Variable) or its built-in fallback.
+  execSync("npx next-sitemap --config next-sitemap.config.js", { stdio: "inherit" });
 } else {
-  console.log("[postbuild] sitemap.enabled is false — skipping next-sitemap");
+  console.log("[postbuild] sitemap disabled — skipping");
 }
 ```
 
-`postbuild` runs `scripts/postbuild.ts` → conditionally generates `public/sitemap.xml` + `public/robots.txt`.
+`postbuild` runs `scripts/postbuild.ts` → conditionally generates `out/sitemap.xml` + `out/robots.txt`
+(next-sitemap's `outDir` is `./out`, matching the static-export output).
 
 The sitemap only generates when `siteConfig.sitemap.enabled === true`. The `postbuild` script checks this before running. This is the authoritative implementation of that conditional.
 
@@ -1550,7 +1720,7 @@ The sitemap only generates when `siteConfig.sitemap.enabled === true`. The `post
 
 | Layer | What it covers | Where it lives | Who fills it |
 |---|---|---|---|
-| **UI strings** | All 71 button/label/badge/header strings | `content/config.ts` → `i18n.translations.{locale}` | Seller (via `/setup` or manual edit) |
+| **UI strings** | All 87 button/label/badge/header strings | `content/config.ts` → `i18n.translations.{locale}` | Seller (via `/setup` or manual edit) |
 | **Item content** | `name` and `description` per item | `content/items/**/item.json` → `name_{locale}`, `description_{locale}` | `/translate-items` AI skill or manual edit |
 
 ### SiteConfig i18n type (`lib/config/types.ts`)
@@ -1564,11 +1734,17 @@ export type I18nConfig = {
 };
 ```
 
-### `UIStrings` type (71 keys, `lib/config/types.ts`)
+### `UIStrings` type (87 keys, `lib/config/types.ts`)
 
-Covers every visible UI label: navigation links, section headings, contact labels, offer form, share button, metadata table headers, condition/status badges, filter/sort options, freshness label, page banners, condition guide descriptions, location bar strings, pricing table headers.
+Covers every visible UI label: navigation links, section headings, contact labels, offer form, share button, metadata table headers, condition/status badges, filter/sort + price-filter options, freshness label, page banners, condition guide descriptions, location bar strings, pricing table headers, shipping estimator (§29.7), mobile-nav, and Newly Listed page strings.
 
-The `EN_FALLBACK` constant in `lib/i18n/translations.ts` provides the built-in English default for every key — guarantees no UI label is ever blank even if `content/config.ts` is misconfigured.
+The `EN_FALLBACK` constant in `lib/i18n/translations.ts` provides the built-in English default for all 87 keys — guarantees no UI label is ever blank even if `content/config.ts` is misconfigured.
+
+> **Required vs optional keys:** `scripts/check-config.ts` (run in `prebuild`) enforces a
+> **73-key `REQUIRED_KEYS` subset** — the keys every enabled locale must provide (see §28). The
+> remaining ~14 keys are optional at build time and fall back to the default locale / `EN_FALLBACK`:
+> the six shipping keys (§29.7), the two price-filter keys (`filterPriceBucketAll`,
+> `filterPriceIncludesOutliers`), and the Newly Listed page keys.
 
 ### Runtime architecture — locale switching
 
@@ -1595,7 +1771,7 @@ useT() hook     — returns the active locale's UIStrings dict (merged: EN_FALLB
 
 ```ts
 // lib/i18n/translations.ts
-// EN_FALLBACK: UIStrings — built-in English default for all 71 keys.
+// EN_FALLBACK: UIStrings — built-in English default for all 87 keys.
 // Used by both useT() (client) and getTranslations() (server) as the safety net.
 
 // lib/i18n/getTranslations.ts
@@ -1630,12 +1806,12 @@ Server-only surfaces (`generateMetadata`, `<title>`, OG tags, JSON-LD) call `get
 
 ### Build-time completeness enforcement
 
-`scripts/check-config.ts` validates on every build that every locale in `availableLocales` has a `translations` entry with all 71 required keys. Build fails with a descriptive error if any locale is missing or incomplete — prevents silent English fallback.
+`scripts/check-config.ts` validates on every build that every locale in `availableLocales` has a `translations` entry with all **73 `REQUIRED_KEYS`** (with default-locale fallback). Build fails with a descriptive error if any locale is missing or incomplete — prevents silent English fallback. See §28 for the full check-config specification.
 
 ### Adding a new locale
 
 1. Add the locale code to `siteConfig.i18n.availableLocales` in `content/config.ts`.
-2. Add a `translations.{locale}` block with all 71 `UIStrings` keys translated.
+2. Add a `translations.{locale}` block with all 87 `UIStrings` keys translated (at minimum the 73 `REQUIRED_KEYS` enforced by `check-config`).
 3. Add `name_{locale}` and `description_{locale}` to the Zod schema (`lib/content/schema.ts`) and `Item` type (`lib/content/types.ts`) — mirrors the existing `name_zh` / `description_zh` pattern.
 4. Run `/translate-items` AI skill to batch-fill `name_{locale}` / `description_{locale}` on each `item.json`, or add them manually.
 5. `LocaleSwitcher` appears automatically once `availableLocales.length > 1`.
@@ -1725,6 +1901,38 @@ No code, no git commands, no terminal jargon in the guide. All actions reference
 
 ---
 
+### 22.13 Measurement Units & Optional Config Fields
+
+**Measurement units (optional, Iron Rule 8).** Two config fields control display units:
+
+| Field | Type | Runtime default |
+|---|---|---|
+| `siteConfig.measurementUnit` | `"metric" \| "imperial"` (optional) | `"metric"` |
+| `siteConfig.i18n.localeMeasurementUnits` | `Partial<Record<string, "metric" \| "imperial">>` (optional) | falls through to `measurementUnit` |
+
+`lib/utils/units.ts` resolves the effective unit with the chain
+`localeMeasurementUnits?.[locale] ?? measurementUnit ?? "metric"`. It sets the units `pnpm create-item`
+writes into new `item.json` files and the display fallback; per-item values are always stored in the
+unit the seller entered and converted for display. `MeasurementUnitProvider` / `MeasurementUnitToggle`
+(client components) let a visitor switch metric/imperial.
+
+**Other `SiteConfig` fields (all backward-compatible per Iron Rule 8 unless noted):**
+
+| Field | Required? | Notes |
+|---|---|---|
+| `defaultPriceTiers?` | optional | Written into new items by `create-item`/Studio; built-in 3-tier pickup/shipping fallback when absent |
+| `shipping?` | optional | Absent/`enabled: false` → `ShippingEstimator` renders nothing (§29) |
+| `ui.priceFilterStrategy?` / `ui.priceFilterBuckets?` | optional | Consumers default to `"none"` (§21) |
+| `measurementUnit?` / `i18n.localeMeasurementUnits?` | optional | See above |
+| `soldArchiveDisplayLimit?` | optional `number` | Caps how many sold items render on `/sold` (0 = no cap). Read with `?? 200` in `app/sold/page.tsx` (runtime default 200) and registered in `scripts/lib/configDefaults.ts`, so `pnpm migrate-config` / `update-site` auto-injects it into downstream configs that predate the field. |
+
+> **Template-state gating** (`lib/utils/templateStatus.ts`): `PLACEHOLDER_DOMAIN` (`"your-domain.com"`)
+> and `DEMO_DOMAIN` decide whether `/` renders the catalog or the `ProjectIntro` page. While `baseUrl`
+> still contains the placeholder, `isTemplateConfigured()` is false and the home page shows the
+> project-introduction view — `scripts/check-config.ts` (§28) fails the production build on the same signal.
+
+---
+
 ## 23. AI Skill Files — Technical Specification
 
 See DESIGN.md §20 for the design rationale, seller workflows, and compatibility table. This section covers the skill file format and required content.
@@ -1735,7 +1943,17 @@ See DESIGN.md §20 for the design rationale, seller workflows, and compatibility
 
 ### 23.1 Skill File Structure
 
-All three skill files live in `.claude/skills/` and follow this template:
+On the working (develop) branch the four skill files live in **`.claude/commands/`** and follow this template:
+
+```
+.claude/commands/
+├── setup.md              ← build content/config.ts from scratch (was "setup-wizard")
+├── update-items.md       ← generate item.json from photos
+├── translate-items.md    ← localise item name/description
+└── setup-shipping.md     ← configure siteConfig.shipping + the rate-proxy Worker
+```
+
+Each follows this template:
 
 ```markdown
 # Skill: <name>
@@ -1776,7 +1994,7 @@ The skill file must include:
 | Scope | Accept natural language scope from user ("just electronics", "the iphone folder", "everything") |
 | Fallback | If photos are unclear, prefer empty string over a guess for brand/model fields |
 
-### 23.3 `setup-wizard.md` — Required Content
+### 23.3 `setup.md` — Required Content
 
 The skill file must include:
 
@@ -1803,12 +2021,26 @@ The `.claude/` directory also contains a `CLAUDE.md` project file. Claude Code r
 
 ```
 .claude/
-├── CLAUDE.md          ← loaded automatically by Claude Code; project context
-└── skills/
-    ├── update-items.md
-    ├── setup-wizard.md
-    └── translate-items.md
+├── CLAUDE.md              ← loaded automatically by Claude Code; project context
+├── commands/              ← seller skills on the develop branch
+│   ├── setup.md
+│   ├── update-items.md
+│   ├── translate-items.md
+│   └── setup-shipping.md
+└── seller/                ← source for the release-branch promotion (see below)
+    └── CLAUDE.md
 ```
+
+**Release-branch promotion (`release-seller.yml`):** On a `v*` tag, the `Release Seller Template`
+workflow (§24) resets the `release` branch and promotes seller artifacts: it copies
+`.claude/seller/CLAUDE.md` → `.claude/CLAUDE.md` and every other `.claude/seller/*.md` →
+`.claude/skills/<name>.md`. So downstream sellers who clone the `release` branch get their skills from
+`.claude/skills/`, not `.claude/commands/`.
+
+> **Report-only gap:** `.claude/seller/` currently holds only `CLAUDE.md` and no skill files, so the
+> `release` branch would be promoted with an empty `.claude/skills/`. This contradicts the intent of
+> `release-seller.yml` and should be reconciled (either populate `.claude/seller/` with the skill files
+> or copy them from `.claude/commands/`).
 
 ### 23.5 No Dependencies Added
 
@@ -1816,7 +2048,7 @@ The `.claude/` directory also contains a `CLAUDE.md` project file. Claude Code r
 |---|---|
 | `@anthropic-ai/sdk` | Not needed — AI tool provides its own API access |
 | `ANTHROPIC_API_KEY` env var | Not needed — seller's AI subscription handles auth |
-| `scripts/agents/` directory | Replaced by `.claude/skills/` instruction files |
+| `scripts/agents/` directory | Replaced by `.claude/commands/` instruction files (promoted to `.claude/skills/` on the release branch — see §23.4) |
 | `pnpm agent:*` scripts | Replaced by `/skill-name` in Claude Code or natural language |
 
 The only new project artifact is the `.claude/` directory containing Markdown files.
@@ -1826,13 +2058,15 @@ The only new project artifact is the `.claude/` directory containing Markdown fi
 If the seller has no AI coding tool:
 - `pnpm create-item <category>/<name>` creates a template `item.json` manually (Phase 3)
 - `pnpm create-template` creates a `_template.json` they can copy and fill in
-- The skill files serve as reference documentation even without an AI tool
+- The skill files work as reference documentation even without an AI tool
 
 ### 23.7 `content/` Rule — Enforced in Skill Files
 
-All three skill files include an explicit instruction:
+All four skill files include an explicit output-scope instruction. `setup.md`, `update-items.md`, and `translate-items.md` carry the full rule:
 
 > **Do not modify any files outside the `content/` directory. Do not edit `app/`, `components/`, `lib/`, `scripts/`, or any configuration files. Your output is limited to: `content/config.ts`, `content/items/*/item.json`, and `content/items/*/_category.json`.**
+
+`setup-shipping.md` applies the same principle with a narrower scope: its output is restricted to `content/config.ts` (plus item-level `weight`/`dimensions`/`shipping_payer` additions via normal item edits) — it never writes Worker code or app code (see §23.9).
 
 ---
 
@@ -1877,11 +2111,31 @@ name_es: string;
 description_es: string;
 ```
 
+### 23.9 `setup-shipping.md` — Required Content
+
+The skill file must include:
+
+| Section | Content |
+|---|---|
+| Trigger | "Walk the seller through enabling the optional shipping estimator (§29)" |
+| Config steps | Add `siteConfig.shipping` (`enabled`, `proxyUrl`, `defaultPayer`, `origin {zip, country}`) to `content/config.ts` |
+| Worker deploy | Point to `workers/shipping-rate-proxy/README.md`; `wrangler deploy`, `ALLOWED_ORIGIN` = exact `baseUrl`, secrets via `wrangler secret put` |
+| Item requirements | Remind the seller each shippable item needs `weight` and `dimensions`, and an open-ended shipping tier |
+| Output rules | Write only to `content/config.ts` (and item `weight`/`dimensions` via normal item edits); never touch Worker code or app code |
+
 ---
 
 ## 24. CI/CD Pipeline — GitHub Actions Workflow Specification
 
-The workflow file lives at `.github/workflows/deploy.yml` and ships with the project. It handles build + deploy to GitHub Pages on every push to the `release` branch. No CDN credentials are needed in CI — the build reads the committed `lib/generated/image-manifest.json`.
+Three workflow files live in `.github/workflows/` and ship with the project:
+
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| `deploy.yml` | push to `release`, `workflow_run` of "Release Seller Template", manual | Build + deploy the static site to GitHub Pages |
+| `ci.yml` | push to `develop`/`release`, PRs, manual | Quality gate: `pnpm type-check` + `lint` + `test` (§24.5) |
+| `release-seller.yml` | `v*` tag, manual | Reset the `release` branch and promote seller skills (§24.6) |
+
+No CDN credentials are needed in any of them — the build reads the committed `lib/generated/image-manifest.json`.
 
 ### 24.1 Workflow File
 
@@ -1892,6 +2146,9 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [release]
+  workflow_run:
+    workflows: ["Release Seller Template"]   # also deploy right after a release
+    types: [completed]
   workflow_dispatch:        # allow manual trigger from GitHub UI
 
 permissions:
@@ -1900,27 +2157,30 @@ permissions:
   id-token: write           # required for OIDC-based Pages deployment
 
 concurrency:
-  group: pages
-  cancel-in-progress: false # do not cancel in-progress deploys; finish them
+  group: "pages"
+  cancel-in-progress: true  # cancel superseded deploys on a new push
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # For workflow_run triggers, only proceed if the release workflow succeeded.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: release      # always build the release branch
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: pnpm        # caches ~/.pnpm-store between runs
+          node-version: "20"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-        # --frozen-lockfile: fails if pnpm-lock.yaml is out of sync (CI safety net)
 
       - name: Build
         run: pnpm build
@@ -1933,7 +2193,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: out/         # Next.js static export output directory
+          path: ./out       # Next.js static export output directory
 
   deploy:
     needs: build
@@ -1947,7 +2207,8 @@ jobs:
         id: deployment
 ```
 
-> **Test gate:** §25.5 adds a `test` job that runs before this `build` job (`build: needs: test`) so builds proceed only after tests pass. The workflow above shows the build + deploy core; merge in the `test` job from §25.5 when wiring CI.
+> **Test gate:** tests run in the separate `ci.yml` quality-gate workflow (§24.5), not as a job inside
+> `deploy.yml`. `deploy.yml` only builds + deploys the already-vetted `release` branch.
 
 ### 24.2 GitHub Repository Setup (one-time)
 
@@ -1965,6 +2226,7 @@ GitHub Actions emails the repository owner automatically on workflow failure. No
 
 | Failure | Script | Exit code | Cause |
 |---|---|---|---|
+| `prebuild` config check fails | `scripts/check-config.ts` | 1 | `baseUrl` still contains the placeholder domain, or a listed locale is missing/incomplete in `i18n.translations` (73 required keys) — see §28 |
 | `prebuild` sync-images fails | `scripts/sync-images.ts` | 1 | Unreadable `content/items/` directory (file permission error) |
 | `prebuild` search-index fails | `scripts/build-search-index.ts` | 1 | `loadCategories()` throws (malformed directory structure) |
 | TypeScript errors | `next build` | 1 | Type errors in app code (not in `content/` — those are Zod-validated) |
@@ -1985,6 +2247,48 @@ Vercel auto-deploys on push to `release` when the repo is connected (set deploy 
 | Output directory | `.next` (Vercel mode) or `out/` (static mode — set `Output Directory` to `out` in Vercel settings) |
 | Environment variables | `NEXT_PUBLIC_SITE_URL`, `BLOB_READ_WRITE_TOKEN` (if using Vercel Blob) |
 
+### 24.5 `ci.yml` — Quality Gate
+
+Runs on push to `develop`/`release` and on pull requests. This is where the test/lint/type-check gate
+actually lives (the requirement §25.5 once ascribed to a `deploy.yml` test job):
+
+```yaml
+# .github/workflows/ci.yml (abridged)
+on:
+  push:
+    branches: [develop, release]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  quality:
+    name: Type-check, lint, and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: "pnpm" }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm type-check
+      - run: pnpm lint
+      - run: pnpm test
+```
+
+### 24.6 `release-seller.yml` — Seller Template Release
+
+Triggered by a `v*` tag. It creates/resets the `release` branch from the tagged commit and promotes the
+seller-facing AI artifacts:
+
+- Copies `.claude/seller/CLAUDE.md` → `.claude/CLAUDE.md` (seller-focused context replaces the dev one).
+- Copies every other `.claude/seller/*.md` → `.claude/skills/<name>.md`.
+- Force-pushes `release` (it is always regenerated, never hand-edited). `deploy.yml` then builds that
+  branch (also triggered by this workflow's `workflow_run` completion).
+
+See §23.4 for the current gap: `.claude/seller/` holds only `CLAUDE.md`, so `.claude/skills/` would be
+promoted empty until skill files are added there.
+
 ---
 
 ## 25. Testing Strategy
@@ -1999,27 +2303,46 @@ The project has a small, well-isolated set of pure functions and a clear build-t
 |---|---|---|
 | `vitest` | `^2.0.0` | Test runner; fast, ESM-native, compatible with TypeScript |
 | `@vitest/coverage-v8` | `^2.0.0` | Coverage reporting (optional) |
+| `jsdom` | `^25.0.1` | DOM environment for component tests |
+| `@testing-library/react` | `^16.3.2` | Render/query components in jsdom tests |
+| `@testing-library/dom` | `^10.4.1` | Peer of `@testing-library/react` |
 
-Add to `devDependencies`. Add to `package.json` scripts:
+All listed as `devDependencies`. `package.json` scripts:
 ```json
 "test":          "vitest run",
 "test:watch":    "vitest",
 "test:coverage": "vitest run --coverage"
 ```
 
+**`vitest.config.ts` facts:** default `environment: "node"`, the `@` alias maps to the repo root, and
+`esbuild: { jsx: "automatic" }` (tsconfig uses `"jsx": "preserve"`, so Vitest needs an explicit JSX
+runtime to compile `.tsx` tests). Component tests that need a DOM opt in per file with a
+`// @vitest-environment jsdom` doc-comment directive.
+
 ### 25.3 Test File Locations
 
-Tests co-locate with the module they test, using the `.test.ts` suffix:
+Tests co-locate with the module they test, using the `.test.ts` / `.test.tsx` suffix. The suite is
+currently **36 test files (~585 tests)**, all passing under `pnpm test`:
 
 ```
-lib/utils/pricing.test.ts         ← resolveItemPrice edge cases
-lib/utils/haversine.test.ts       ← haversineInMiles known city pairs
-lib/utils/date.test.ts            ← formatRelativeDate boundary conditions
-lib/utils/i18n.test.ts            ← getLocalizedField fallback behaviour
-lib/content/schema.test.ts        ← Zod schema parse + default merge
-lib/content/loader.test.ts        ← loader with fixture content/ folders
-scripts/sync-images.test.ts       ← manifest build / purge / checksum logic
+lib/utils/          pricing, haversine, date, i18n, shipping, slug, units,
+                    concurrency, jsonld, priceFilterStrategies   (10 files)
+lib/content/        schema.test.ts, loader.test.ts               (2 files)
+lib/images/         local.test.ts, stripMetadata.test.ts         (2 files)
+components/         JsonLd, badges, useFilters, useSearch, useDistancePricing,
+                    LocationPriceBar, PlatformButton, MakeOfferButton,
+                    LocalizedItemContent, useIncrementalReveal   (10 files)
+scripts/            update-site.test.ts, studioFields.test.ts    (2 files)
+scripts/lib/        imageSync, itemEdit, itemFields, itemTemplate, markSold,
+                    studioApi, studioGit, studioImages, studioSync  (9 files)
+studio/             csrfGuard.test.ts                            (1 file)
 ```
+
+> There is **no** `scripts/sync-images.test.ts` — the CDN pipeline is covered by
+> `scripts/lib/imageSync.test.ts`. Component tests (the `components/` files) run in jsdom via the
+> per-file `// @vitest-environment jsdom` directive. Seller Studio's coverage is backend-only
+> (`studioApi` / `studioGit` / `studioImages` / `studioSync` / `itemEdit` / `itemFields` / `csrfGuard` /
+> `studioFields`) — see §30.
 
 ### 25.4 Required Test Cases
 
@@ -2103,32 +2426,21 @@ Use a temporary `content/` fixture directory created in `beforeEach` / cleaned i
 
 ### 25.5 Running Tests in CI
 
-Add a `test` job to `.github/workflows/deploy.yml` that runs before `build`:
-
-```yaml
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 9 }
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test
-
-  build:
-    needs: test        # build only if tests pass
-    # ... rest unchanged
-```
+Tests gate code in **`ci.yml`** (§24.5), which runs `pnpm type-check`, `pnpm lint`, and `pnpm test` on
+push to `develop`/`release` and on pull requests. There is no separate `test` job inside `deploy.yml` —
+by the time a commit reaches the `release` branch it has already passed the CI quality gate, and
+`deploy.yml` only builds + deploys.
 
 ### 25.6 What is NOT unit-tested
 
+> Component rendering and the scripts **are** now unit-tested (see §25.3 inventory). What remains
+> outside the Vitest suite:
+
 | Area | Rationale |
 |---|---|
-| Component rendering | `pnpm build` + TypeScript compilation catches prop-type mismatches; Playwright/Cypress E2E is a future addition |
-| Geolocation hook | Requires browser environment; covered by manual verification in `pnpm dev` |
-| Image upload adapters | Requires live CDN credentials; covered by the deployment checklist (TECH_REQUIREMENTS.md §19) |
+| Full E2E / visual regression | jsdom component tests cover logic; real-browser flows and visuals (Playwright/Cypress) are a future addition |
+| Live browser Geolocation API | `useDistancePricing` logic is tested; the actual `navigator.geolocation` prompt needs a real browser (`pnpm dev`) |
+| Live CDN upload round-trip | `imageSync` logic (checksums, purge, failure isolation) is tested with stubs; a real R2/Blob upload needs credentials — see §19 |
 | Aceternity UI components | Third-party; not modified; visual regression is out of scope for v1 |
 | `workers/shipping-rate-proxy` | Independent subproject excluded from `pnpm test` scope (own `package.json`); covered by manual `wrangler dev` verification — see §29 and `workers/shipping-rate-proxy/README.md` |
 
@@ -2181,7 +2493,7 @@ See TECH_REQUIREMENTS.md §7 (Image Sync Script) and §27 (Image Upload Failure 
 | Failure | Detection | Recovery |
 |---|---|---|
 | Missing env vars (R2 or Blob) | Step 1 of upload mode: check all required vars; print clear error naming the missing var; `exit 1` before any uploads | Seller adds the missing var to `.env.local` and re-runs |
-| Network timeout during upload | Provider SDK throws; caught per-file | Log `[upload-images] WARN: failed to upload {key} — {error.message}; will retry next run`; skip that file; continue with remaining files; do NOT update manifest or checksum for the failed file → next run re-uploads it |
+| Network timeout during upload | Provider SDK throws; caught per-file | Log `[upload-images] WARN: failed to upload {key} — {error.message}`; skip that file; continue with remaining files; the manifest/checksums are written for successes, and the script exits `1` at the end (failed file is retried on the next run) |
 | Partial run (script killed mid-upload) | Checksums and manifest are written at the END of a successful run (step 8–9) | Manifest and checksums are not updated for incomplete runs; re-running re-uploads all files that were not in the last committed manifest state |
 | CDN returns non-2xx | Treat same as network timeout | Same retry-next-run behaviour |
 | Manifest write fails (disk full, permissions) | `fs.writeFile` throws after all uploads succeed | Log error; `exit 1`; the in-flight uploaded files are on CDN but not in manifest — re-running re-uploads them (harmless duplicate; CDN overwrites with same content) |
@@ -2235,12 +2547,15 @@ for (const [manifestKey, sourcePath] of imagesToUpload) {
 | Outcome | Exit code | Manifest written? |
 |---|---|---|
 | All uploads succeeded | `0` | Yes |
-| Some files failed (warnings only) | `0` | Yes (failed files keep previous CDN URL or are absent) |
+| Some files failed | `1` | **Yes — for the files that succeeded.** Failed files keep their previous CDN URL (or are absent). Re-run to retry the failures (§27.5). |
+| Advisory quality warnings only (no failed uploads) | `0` | Yes |
 | Env vars missing | `1` | No |
 | `content/items/` unreadable | `1` | No |
 | Manifest write failed | `1` | No (previous manifest intact) |
 
-> A non-zero warning count is reported in the summary line but does not cause a non-zero exit code. Sellers must inspect the summary output (`warnings=N`) after each upload.
+> `sync-images.ts runUpload()` calls `process.exit(1)` whenever `result.failures.length > 0`, even
+> though it writes the manifest/checksums for the successful files. Only advisory quality warnings
+> (the `warnings=N` count) leave the exit code at `0` — sellers must still inspect the summary.
 
 ### 27.5 Retry on Next Run
 
@@ -2248,73 +2563,45 @@ Because failed files are not added to `.image-cache/checksums.json`, the next `p
 
 ---
 
-## 28. SiteConfig Structural Validation
+## 28. Config Build Gate — `scripts/check-config.ts`
+
+> The original spec here described a Zod module at `lib/config/validate.ts` with a
+> `validateSiteConfig()` function called from `sync-images.ts`. **That module was never built** —
+> `lib/config/` contains only `types.ts` and nothing references `validateSiteConfig`. The actual,
+> shipped build-time guard is `scripts/check-config.ts`, documented below.
 
 ### 28.1 Rationale
 
-`content/config.ts` is a TypeScript file — TypeScript provides compile-time type checking. However, TypeScript cannot catch _values_ that are structurally invalid at the type level (e.g. `location.lat: 999` is a valid `number` but an invalid latitude). A runtime Zod validation pass at build time catches these before pages are generated.
+`content/config.ts` is TypeScript, so the compiler catches missing fields and wrong types. But it cannot
+catch a **valid URL that is still wrong**: `new URL("https://your-domain.com")` succeeds, so a seller who
+forgets to set `baseUrl` gets a clean build that silently ships placeholder canonical/OG/JSON-LD URLs — an
+SEO footgun with no error. `check-config.ts` fails the build loudly on exactly this class of mistake.
 
-### 28.2 Validation Module
+### 28.2 What it checks
 
-```ts
-// lib/config/validate.ts  (Node.js only — never imported in browser bundle)
-import { z } from "zod";
-import { siteConfig } from "@/content/config";
+`scripts/check-config.ts` runs two checks and exits `1` if either fails:
 
-const SiteConfigSchema = z.object({
-  name:    z.string().min(1, "siteConfig.name must not be empty"),
-  baseUrl: z.string().url("siteConfig.baseUrl must be a valid URL (https://...)"),
-  deploymentMode: z.enum(["static", "vercel"]),
-  imageStorage: z.object({
-    provider: z.enum(["cloudflare-r2", "vercel-blob", "local"]),
-  }),
-  location: z.object({
-    lat: z.number().min(-90).max(90, "siteConfig.location.lat must be -90 to 90"),
-    lng: z.number().min(-180).max(180, "siteConfig.location.lng must be -180 to 180"),
-    label: z.string().min(1, "siteConfig.location.label must not be empty"),
-  }),
-  currency: z.string().length(3, "siteConfig.currency must be a 3-letter ISO 4217 code"),
-  soldItemRetentionDays: z.number().int(),
-  contact: z.object({
-    reveal_behavior: z.enum(["click", "always"]),
-    platforms: z.array(z.object({ type: z.string() })).min(1,
-      "siteConfig.contact.platforms must have at least one entry"),
-  }),
-  i18n: z.object({
-    defaultLocale: z.string().min(2),
-    availableLocales: z.array(z.string().min(2)).min(1),
-    showLocaleSwitcher: z.boolean(),
-  }).refine((i) => i.availableLocales.includes(i.defaultLocale), {
-    message: "siteConfig.i18n.defaultLocale must be listed in siteConfig.i18n.availableLocales",
-  }),
-});
+1. **Placeholder `baseUrl`.** If `siteConfig.baseUrl` contains `PLACEHOLDER_DOMAIN`
+   (`"your-domain.com"`, from `lib/utils/templateStatus.ts`), fail with a message telling the seller to
+   set their real deployed domain.
+2. **Translation completeness.** For every locale in `siteConfig.i18n.availableLocales`, require a
+   `translations.{locale}` entry, and require each of the **73 `REQUIRED_KEYS`** to be present in that
+   entry or in the default locale's entry (fallback). A missing entry or missing key(s) fail the build,
+   naming the locale and the exact missing keys.
 
-export function validateSiteConfig(): void {
-  const result = SiteConfigSchema.safeParse(siteConfig);
-  if (!result.success) {
-    const messages = result.error.errors
-      .map((e) => `  • ${e.path.join(".")}: ${e.message}`)
-      .join("\n");
-    console.error(
-      `\n[config-validate] content/config.ts has invalid values:\n${messages}\n`
-    );
-    process.exit(1);
-  }
-  console.log("[config-validate] content/config.ts OK");
-}
+> The 73 `REQUIRED_KEYS` are a subset of the 87 `UIStrings` keys. The remaining ~14 (shipping §29.7,
+> price-filter, Newly Listed) are optional at build time and fall back at runtime — see §22.8.
+
+### 28.3 Integration point
+
+`check-config.ts` is the **first** step of `prebuild`:
+
+```json
+"prebuild": "tsx scripts/check-config.ts && tsx scripts/sync-images.ts --mode build-check && tsx scripts/build-search-index.ts"
 ```
 
-### 28.3 Integration Point
-
-Called at the top of `scripts/sync-images.ts` (before any file scanning) so an invalid config fails the build immediately with a human-readable error:
-
-```ts
-// scripts/sync-images.ts — first executable statement
-import { validateSiteConfig } from "@/lib/config/validate";
-validateSiteConfig();   // exits 1 with a clear message if config is invalid
-```
-
-Because `sync-images.ts` runs in the `prebuild` step (before `next build`), an invalid config stops the build before any pages are generated.
+Because `prebuild` runs before `next build`, an invalid config stops the build before any pages are
+generated. It is also listed as a distinct row in the §24.3 build-failure table.
 
 ### 28.4 What is NOT validated at runtime
 
@@ -2322,8 +2609,7 @@ TypeScript already enforces these at compile time (`pnpm type-check`):
 - Missing required fields (TypeScript non-optional types)
 - Wrong field types (e.g. `string` where `number` expected)
 - Invalid `ui.*` slot values (caught by `BackgroundOption` / `ItemGridOption` union types)
-
-Zod runtime validation fills in what TypeScript cannot: value-range checks and semantic constraints.
+- Value ranges such as `location.lat` bounds (not enforced at runtime in v1 — TypeScript only)
 
 ---
 
@@ -2448,6 +2734,89 @@ Independently deployed; excluded from the root `tsconfig.json` (`exclude`) and `
 ### 29.8 Deployment
 
 Seller-facing walkthrough: `workers/shipping-rate-proxy/README.md` and `.claude/commands/setup-shipping.md`. No changes to `pnpm build`, CI, or GitHub Pages deployment — the Worker is deployed separately via `wrangler deploy` from `workers/shipping-rate-proxy/`.
+
+---
+
+## 30. Seller Studio — Local Management GUI
+
+Seller Studio (`pnpm studio`) is a **local-only** browser dashboard for managing `content/` without
+hand-editing JSON: an item table, bulk status changes, an image pane, a schema-driven edit form, item
+creation, CDN sync, and git publish. It is a Vite SPA (`studio/`) served together with a tiny API
+(`scripts/lib/studioApi.ts`) by a single launcher.
+
+> Sellers interact with it only through the browser. It never asks a seller to edit files outside
+> `content/` — the publish path additionally writes `lib/generated/image-manifest.json` and runs git
+> over `content/` + the manifest (mirroring `pnpm push`).
+
+### 30.1 Launcher — `scripts/studio.ts`
+
+- `pnpm studio [--port N]`; default port **5174**, `--port` validated to an integer in 1024–65535
+  (`strictPort=false`). Binds **127.0.0.1 only** — the server writes files, holds CDN credentials, and
+  runs git, so it must never be reachable from the network.
+- Loads `.env.local` via `loadDotEnvLocal()` (`scripts/lib/loadEnv.ts`; existing env vars always win,
+  since `tsx` does not auto-load `.env.local`).
+- **Fails fast** with a clear error when `vite` is not installed or `studio/vite.config.ts` is missing
+  (telling the user to run `pnpm update-site`).
+- The CDN adapter (R2 / Vercel Blob / local, per `siteConfig.imageStorage.provider`) is constructed
+  **per sync run**, not at startup — missing CDN credentials surface as an SSE error event during sync,
+  not a startup failure.
+
+### 30.2 Frontend — `studio/` Vite SPA
+
+- Entry chain: `studio/index.html` → `src/main.tsx` → `src/App.tsx`; panes in `src/panes/`: `ItemList`,
+  `BulkToolbar`, `Drawer`, `EditForm`, `ImagePane`, `NewItemDialog`, `PublishPane`, `SyncBar`.
+- `src/api.ts` wraps every `/api/*` route; `streamSync()` is an async generator that parses the sync
+  **SSE stream over a `fetch` `ReadableStream`** (no `EventSource`, because the request is a POST).
+- `src/fields.ts` declares the `FIELD_GROUPS` driving `EditForm`; the paths must match the authority in
+  `scripts/lib/itemFields.ts`.
+- `studio/vite.config.ts` installs the `studioApiPlugin` middleware: every `/api/*` request goes through
+  `checkStudioCsrf` → a 32 MB body cap → `handleStudioRequest`. `App.tsx` keeps **no local item state**
+  — it re-fetches from the server after every write, so there is no client-side drift.
+
+### 30.3 API surface — `scripts/lib/studioApi.ts`
+
+| Method + route | Purpose |
+|---|---|
+| `GET /api/items` | List every item (+ image files, lowest-tier amount). Per-item load errors are isolated — one bad `item.json` cannot fail the whole response. |
+| `POST /api/items` | Create a new item (category picker + kebab-case name; server re-checks the shared slug allowlist + containment). Optional `applyDefaults` flag (default `true`); when `false`, the bare template is scaffolded without the two-tier defaults. |
+| `POST /api/items/bulk-status` | Mark sold/pending/available/draft over a selection, with per-item failure reporting. |
+| `GET /api/items/<cat>/<item>` | Read the editable fields of one item. |
+| `PATCH /api/items/<cat>/<item>` | Apply `FieldEdit[]` (path+value) via comment-preserving JSONC edits. |
+| `GET/PUT /api/defaults?scope=site\|<cat>` | Read / write the sparse `_defaults.json` for that scope (`site` → `content/items/_defaults.json`, otherwise the category's own). An empty PUT body deletes the file; PUT creates a missing category folder. Invalid files fail with a 400 naming the file and field. |
+| `GET .../images`, `GET .../images/<filename>` | List / serve a photo (containment-verified; encoded-`%2F` traversal blocked). |
+| `POST .../images`, `POST .../images/reorder`, `DELETE .../images/<filename>` | Upload (base64, magic-byte sniff), reorder, delete. |
+| `POST /api/sync-images` | Start a CDN sync; returns an **SSE** progress stream (`progress`/`done`/`error`). |
+| `GET /api/changes` | Git status (uncommitted changes) for the publish pane. |
+| `POST /api/publish` | `git add content + manifest`, commit, push. Refused (409) while a sync is running. |
+
+Route regexes match the raw percent-encoded path and decode each segment **after** matching (traversal-safe).
+
+### 30.4 Security model
+
+- **CSRF guard** (`studio/csrfGuard.ts`, unit-tested in `studio/csrfGuard.test.ts`): all non-`GET`/`HEAD`
+  methods require `Content-Type: application/json` (else `415`) and — when an `Origin` header is present —
+  it must equal the server's own origin (`http://Host`, else `403`). It **fails closed** by method, so a
+  future PUT/PATCH/DELETE route is protected automatically.
+- **Publish safety** (`scripts/lib/studioGit.ts`): `git add` names only the publishable paths
+  (`content/` and `lib/generated/image-manifest.json` — the same as `pnpm push`) and **never uses
+  `git add -A`**, so `.env.local` (with CDN credentials) can never ride along. `execFile` with argument
+  arrays only (no shell); commit message via stdin; detached HEAD / unborn-branch cases handled.
+- **`reserved_for` is never read, written, or sent** by any Studio path (Iron Rule 4).
+- Editable fields are enforced by `scripts/lib/itemFields.ts` — an independent Zod mirror (no
+  `.catch`/`.default`/`.preprocess`, so a `safeParse` failure is a hard rejection); drift tests assert
+  parity with `itemJsonSchema` at every nesting level.
+
+### 30.5 CDN sync (`scripts/lib/studioSync.ts`)
+
+A one-at-a-time mutex (held on `globalThis` so it survives Vite's double-bundling) ensures only one sync
+runs; the lock is released when the work settles, not when the client disconnects. Progress is delivered
+as SSE events; per-file failures are rendered in the UI; `resetManifestCache()` is called after sync so
+subsequent reads show fresh CDN URLs.
+
+### 30.6 Test coverage
+
+Studio coverage is **backend-only**: `studioApi`, `studioGit`, `studioImages`, `studioSync`, `itemEdit`,
+`itemFields`, `csrfGuard`, and `studioFields` tests (see §25.3). The SPA UI itself is not unit-tested.
 
 ---
 

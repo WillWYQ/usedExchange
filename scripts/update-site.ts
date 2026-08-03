@@ -30,6 +30,7 @@ const TEMPLATE_PATHS = [
   "README.md",
   "README_zh.md",
   "SETUP_GUIDE.md",
+  "SETUP_GUIDE_zh.md",
   "app",
   "components",
   "components.json",

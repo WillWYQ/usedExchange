@@ -152,17 +152,44 @@ export async function patchItem(id: string, edits: FieldEdit[]): Promise<ItemFie
   return (body?.fields as ItemFields | undefined) ?? {};
 }
 
-export async function createItem(category: string, name: string): Promise<string> {
+// Default parameter (not a required one): NewItemDialog only starts passing
+// the flag in Task 6, and the call sites must type-check at every step.
+export async function createItem(
+  category: string,
+  name: string,
+  applyDefaults: boolean = true,
+): Promise<string> {
   const res = await fetch("/api/items", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ category, name }),
+    body: JSON.stringify({ category, name, applyDefaults }),
   });
   const body = await readJsonBody(res);
   if (!res.ok) {
     throw new Error(errorMessage(body, `create failed with ${res.status} ${res.statusText}`));
   }
   return (body?.id as string | undefined) ?? `${category}/${name}`;
+}
+
+export async function fetchDefaults(scope: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/defaults?scope=${encodeURIComponent(scope)}`);
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `loading ${scope} defaults failed with ${res.status} ${res.statusText}`));
+  }
+  return body ?? {};
+}
+
+export async function saveDefaults(scope: string, defaults: Record<string, unknown>): Promise<void> {
+  const res = await fetch(`/api/defaults?scope=${encodeURIComponent(scope)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(defaults),
+  });
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `saving ${scope} defaults failed with ${res.status} ${res.statusText}`));
+  }
 }
 
 export type ChangedFile = { code: string; path: string };

@@ -2,15 +2,18 @@
 
 > ← [Back to README.md](../README.md) · 🇨🇳 Chinese version: [setup_instruction_zh.md](setup_instruction_zh.md)
 
+**Version:** 1.1  
+**Date:** 2026-08-02
+
 **Phase 4: Image Pipeline**
 
-This guide covers how to configure the image storage provider and use the image sync pipeline after completing Phase 4.
+This guide covers how to configure the image storage provider, use the image sync pipeline after completing Phase 4, and manage photos from the browser with Seller Studio.
 
 ---
 
 ## Overview
 
-Item photos are **not committed to git**. They are uploaded to a CDN once and then referenced by a committed manifest file (`lib/generated/image-manifest.json`). The build reads that manifest — no CDN credentials are needed in CI.
+Item photos are **not committed to git**. They are uploaded to a CDN once — from your local machine only — and then referenced by a committed manifest file (`lib/generated/image-manifest.json`). The build reads that manifest — no CDN credentials are needed in CI (the one CI-side variable is the non-secret `NEXT_PUBLIC_SITE_URL`; see "CI / GitHub Actions Variable" below).
 
 Three storage providers are available. Choose one in `content/config.ts`:
 
@@ -34,10 +37,12 @@ Three storage providers are available. Choose one in `content/config.ts`:
 
 ### Step 2 — Enable Public Access
 
-In the bucket settings, enable public access:
+Photos need a public URL. **A custom domain is the recommended — and currently supported — path:**
 
-- **Option A (Custom domain):** your bucket → **Settings** → **Custom Domains** → Add your domain (e.g. `images.your-domain.com`). Set a DNS CNAME pointing to the provided R2 hostname.
-- **Option B (r2.dev URL):** your bucket → **Settings** → **Public access** → Enable `r2.dev` subdomain. Copy the URL shown (e.g. `https://pub-xxxxxxxx.r2.dev`).
+- **Option A (Custom domain — recommended):** your bucket → **Settings** → **Custom Domains** → Add your domain (e.g. `images.your-domain.com`). Set a DNS CNAME pointing to the provided R2 hostname.
+- **Option B (r2.dev URL — legacy):** your bucket → **Settings** → **Public access** → Enable `r2.dev` subdomain. Copy the URL shown (e.g. `https://pub-xxxxxxxx.r2.dev`).
+
+> ⚠️ Cloudflare no longer offers managed `r2.dev` public URLs for newly created buckets — Option B only exists on older buckets. If you cannot find the "Enable r2.dev" toggle, use a custom domain (Option A).
 
 ### Step 3 — Configure CORS
 
@@ -54,6 +59,8 @@ your bucket → **Settings** → **CORS Policy** → Add:
 ```
 
 Replace `https://your-domain.com` with your actual site URL.
+
+> ℹ️ **This step is optional for this site.** Uploads run server-side from your machine via the S3 SDK, and photos are rendered with plain `<img>` tags — no code path requires browser↔bucket CORS. Add the policy only if you later fetch CDN images from JavaScript (e.g. canvas/WebGL).
 
 ### Step 4 — Find Account ID and Create API Token
 
@@ -172,13 +179,30 @@ pnpm push
 > the location where the photo was taken) from every new or changed photo
 > before it's uploaded — see "Photo Privacy" below.
 
+**Partial failures are safe.** If one photo fails to upload, the batch is not discarded: the manifest is still written for the successful files, and the script exits 1 at the end. Re-running `pnpm upload-images` retries only the failed or changed files (a sha256 checksum cache in `.image-cache/checksums.json` makes runs incremental). Upload mode also copies `content/contact/` → `public/contact/` alongside the CDN upload.
+
+> 🔐 **Git prerequisite:** `pnpm push` (and Studio's publish button) shells out to plain `git` — no script reads a GitHub token env var. Make sure `git push` to your GitHub repo already works from your machine (SSH key or a personal access token via the credential helper) before your first publish.
+
+### Browser Management: Seller Studio (Optional)
+
+```bash
+pnpm studio              # http://127.0.0.1:5174
+pnpm studio --port 5200  # custom port (1024–65535)
+```
+
+Seller Studio is a **local-only** browser dashboard (bound to `127.0.0.1`) for editing item metadata, managing photos (upload / delete / reorder), changing status in bulk, and syncing photos to the CDN — no command line required.
+
+- Its **Sync** button uses the exact same `.env.local` credentials documented in this guide (`CF_R2_*` or `BLOB_READ_WRITE_TOKEN`, depending on your provider).
+- Its **Publish** button mirrors `pnpm push`: it stages only `content/` and `lib/generated/image-manifest.json` (never `git add -A`), so `.env.local` can never be committed by accident.
+- Missing CDN credentials do not block startup — they surface as an error only when you trigger a sync.
+
 ### Local Development
 
 ```bash
 pnpm dev
 ```
 
-`pnpm dev` automatically runs `scripts/sync-images.ts --mode dev-sync` first, which copies photos from `content/items/` to `public/items/` — no CDN credentials needed during local development.
+`pnpm dev` automatically runs `scripts/sync-images.ts --mode dev-sync` first, which copies photos from `content/items/` to `public/items/` (and contact files from `content/contact/` to `public/contact/`) — no CDN credentials needed during local development.
 
 ### Production Build
 
@@ -187,6 +211,18 @@ pnpm build
 ```
 
 The `prebuild` step calls `scripts/sync-images.ts --mode build-check`. On CI (GitHub Actions), no photos are present (they're gitignored) but the committed manifest is used to resolve all image URLs. No CDN credentials are needed in CI.
+
+---
+
+## CI / GitHub Actions Variable
+
+CI needs **no CDN credentials** — the only CI-side variable is:
+
+| Variable | Value | Where to set |
+|---|---|---|
+| `NEXT_PUBLIC_SITE_URL` | Your production site URL (e.g. `https://your-domain.com`) | GitHub repo → **Settings → Variables → Actions → New repository variable** — a plain Variable, **not** a Secret |
+
+It is read by `next-sitemap.config.js` (via `scripts/postbuild.ts`) to build the sitemap; if unset, the placeholder `https://your-domain.com` is used. You can also set it in `.env.local` if you want correct sitemap URLs during local builds. Open Graph URLs do not depend on this variable — they derive from `baseUrl` in `content/config.ts` (via `metadataBase` in `app/layout.tsx`).
 
 ---
 
@@ -240,7 +276,8 @@ new or changed JPEG/PNG/WebP photo is automatically re-encoded via `sharp`
 
 This only affects the copy that gets uploaded to the CDN. Your original
 files in `content/items/` are never modified. The summary line after each
-upload reports how many photos were processed, e.g.:
+upload that actually uploads at least one photo reports how many were
+processed, e.g.:
 
 ```
 🔒 stripped EXIF/GPS metadata from 3/3 uploaded image(s)
@@ -255,4 +292,5 @@ upload reports how many photos were processed, e.g.:
 | `Missing CF_R2_*` | Env vars not set | Check `.env.local` values against Cloudflare Dashboard |
 | `Missing BLOB_READ_WRITE_TOKEN` | Token not set | Regenerate in Vercel Dashboard → Storage → Blob |
 | Images broken after deploy | Manifest not committed | Run `pnpm upload-images` and commit `lib/generated/image-manifest.json` |
+| `N file(s) failed to upload` at the end of a run | One photo failed; successful uploads were kept | Re-run `pnpm upload-images` — only failed/changed files are retried (incremental checksum cache) |
 | `@vercel/blob is not installed` | SDK missing | Run `pnpm add -D @vercel/blob` |

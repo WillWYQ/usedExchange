@@ -1,40 +1,42 @@
 # UsedExchange — Features Roadmap
 
-**Date:** 2026-06-01  
+**Version:** v1.1 · **Date:** 2026-08-02  
 **Scope:** Features beyond v1. Not committed — prioritised for planning discussions.
 
 ---
 
 ## ✅ Shipped in v1
 
-The following features were initially on the roadmap and have been moved into the **v1 scope** (specified in DESIGN.md / TECH_REQUIREMENTS.md). The project is currently in the **design phase** — "Shipped in v1" here means "specified for the v1 build," not yet implemented in code.
+v1 is **fully implemented and in production** — template version 1.4.2, Phases 0–18 complete (see IMPLEMENTATION_PLAN.md). The following features were initially on the roadmap and have been implemented in code as part of the v1 build (specified in DESIGN.md / TECH_REQUIREMENTS.md). "Shipped in v1" here means implemented and live.
 
 | Feature | Notes |
 |---|---|
-| Discord contact platform 🎓 | Full support: DM link or server invite |
-| Pre-filled contact messages 🎓👤 | WhatsApp, email, Venmo pre-filled with item name + price |
+| Discord contact platform 🎓 | DM (user profile) links only |
+| Pre-filled contact messages 🎓👤 | WhatsApp and email pre-filled with item name + price; Venmo pre-filled with item name |
 | Native share + copy link 🎓👤 | `navigator.share()` + clipboard fallback |
 | Sort options on category page 🎓👤 | Price (lo/hi), date listed, condition |
 | "Listed X days ago" freshness 🎓👤 | Derived from `listed_date` |
 | Condition guide tooltip 👤 | `?` icon explains each condition enum |
 | JSON-LD structured data (Product schema) 🎓👤 | Rich snippets + BreadcrumbList |
 | Quantity indicator 🎓👤 | "3 available" badge when `quantity > 1` |
-| Vercel Analytics + Speed Insights 🎓 | Free on Hobby; enabled via config |
 | Schema additions 🎓 | stripe_payment_link, pickup_windows, no_lowball, price_reduced, youtube_link, isbn, course, edition, semester_listed, name_zh, description_zh, venmo_payment_request, min_acceptable_offer |
 | Client-side full-text search 🎓👤 | fuse.js; build-time index; search bar in header |
 | Dark mode (auto + manual toggle) 🎓 | Defaults to OS preference (`prefers-color-scheme`); `ThemeToggle` in the header lets visitors override, persisted via `next-themes` |
-| Seller CLI tools 🎓👤 | `pnpm create-item`, `pnpm create-template`, `pnpm new`, `pnpm mark-sold` |
+| Seller CLI tools 🎓👤 | `pnpm create-item`, `pnpm create-template`, `pnpm new`, `pnpm mark-sold`; plus template-management: `pnpm update-site`, `pnpm migrate-config`, `pnpm push`, `pnpm bump` |
 | "Browse All" cross-category page 🎓👤 | `/all` route with full filter + sort |
 | "Make an Offer" flow 🎓👤 | Inline form + pre-filled contact message; `min_acceptable_offer` gate |
 | Recently viewed items 🎓👤 | `sessionStorage`-based strip on home + detail pages |
 | Photo quality warnings 🎓 | Advisory during `pnpm upload-images` |
 | Sitemap 🎓👤 | `next-sitemap`; runs in `postbuild` |
-| Sold items archive page 🎓👤 | `/sold` route; all sold items regardless of retention |
-| Twitter/X + Pinterest rich cards 🎓👤 | `twitter:card: "summary_large_image"` + `og:type: "product"` |
+| Sold items archive page 🎓👤 | `/sold` route; all sold items regardless of retention; the grid is capped at `siteConfig.soldArchiveDisplayLimit` (header shows the full count) |
+| Twitter/X + Pinterest rich cards 🎓👤 | `twitter:card: "summary_large_image"` + `product:price:amount` / `product:price:currency` meta tags (`og:type` stays `"website"`) |
 | Textbook-specific fields & category 🎓 | isbn, course, edition, semester_listed; Compare prices link |
 | Non-technical user setup guide 👤 | `SETUP_GUIDE.md` in plain English; only `content/` operations |
-| i18n — multi-language support 🎓👤 | Single-instance multi-locale (runtime LocaleSwitcher); `name_zh`/`description_zh` pattern; `defaultLocale` + `availableLocales` + `siteConfig.i18n.translations.{locale}` (67 UIStrings keys); `useT()` hook; `/translate-items` skill |
+| i18n — multi-language support 🎓👤 | Single-instance multi-locale (runtime LocaleSwitcher); `name_zh`/`description_zh` pattern; `defaultLocale` + `availableLocales` + `siteConfig.i18n.translations.{locale}` (87 UIStrings keys); `useT()` hook; `/translate-items` skill |
 | Venmo + Zelle payment (QR or link) 🎓👤 | Venmo: link-based or QR; Zelle: QR-only |
+| Measurement-unit toggle 🎓👤 | `siteConfig.measurementUnit` + per-locale `i18n.localeMeasurementUnits` overrides; `MeasurementUnitToggle` in `SiteHeader` converts item weight/dimension display between metric and imperial |
+| Price filter strategies 🎓 | Optional `ui.priceFilterStrategy` (`"none"` \| `"percentile"` \| `"logarithmic"` \| `"preset-buckets"` \| `"iqr"`) + `ui.priceFilterBuckets`, consumed by FilterBar/ItemGrid with a `?? "none"` runtime default (backward-compatible per the config-compat rule) |
+| Newly Listed page 🎓👤 | `/newly-listed` route (`NewlyListedClient`) showing recent listings with incremental reveal |
 
 ---
 
@@ -56,16 +58,15 @@ Features tagged 🎓 are primarily motivated by the CS student profile. Features
 ---
 
 ## Tier 1 — Quick Wins
-*Low effort, immediately actionable. Many can be added during Phase 13 (hardening) or Phase 10 (contact).*
+*Low effort, can start immediately. Many can be added during Phase 13 (hardening) or Phase 10 (contact).*
 
 ### 1.1 Discord Contact Platform 🎓 ✅ Shipped in v1
 **Effort:** XS · **Value:** ⭐⭐⭐
 
 Discord is the dominant communication platform for CS students — it's where campus communities, club servers, and class Discord channels live. It is already the most common place CS students would share or discover a listing.
 
-- Direct message link: `https://discord.com/users/{user-id}` (17–19 digits; typically 18)
-- Server invite link: `https://discord.gg/{invite-code}` (for sellers who post listings in a trade server)
-- Value field accepts either format; `constructUrl` auto-detects via `/^\d{17,19}$/` — all digits = user ID, otherwise = invite code
+- Direct message (user profile) link: `https://discord.com/users/{user-id}`
+- `PlatformButton` always constructs the user-profile URL — server invite (`discord.gg`) links are **not** supported
 
 **This is a v1 feature for the primary user** — Discord should ship in the initial contact platform set alongside email and Instagram.
 
@@ -76,7 +77,7 @@ Discord is the dominant communication platform for CS students — it's where ca
 
 When a visitor clicks a contact platform button, the outreach message is pre-filled with the item name and price — removing the friction of composing a message from scratch.
 
-- WhatsApp: `https://wa.me/{number}?text=Hi, I'm interested in your {item.name} priced at {price}. Is it still available?`
+- WhatsApp: `https://wa.me/{number}?text=Hi, I'm interested in your {item.name} ({price}). Is it still available?` — `{price}` is the resolved tier formatted with the currency symbol (e.g. `$250`)
 - Email: `mailto:{address}?subject=Inquiry: {item.name}&body=Hi, I'm interested in your {item.name}...`
 - Applies to any platform that supports deep-link pre-fill
 
@@ -141,7 +142,7 @@ Fields available from existing data: `name`, `description`, `image`, `offers.pri
 
 **Also add:** `BreadcrumbList` JSON-LD on category and item pages for breadcrumb rich snippets.
 
-**Implementation:** Two server-side utility functions called in `generateMetadata`. Zero new data required.
+**Implementation:** Server-side builders in `lib/utils/jsonld.ts` rendered in the page body via the `JsonLd` component (`components/common/JsonLd.tsx`). Zero new data required.
 
 ---
 
@@ -152,15 +153,15 @@ The `quantity` field exists in `item.json` but is never displayed. Show "3 avail
 
 ---
 
-### 1.9 Vercel Analytics + Speed Insights ✅ Shipped in v1
+### 1.9 Vercel Analytics + Speed Insights *(planned — not yet shipped)*
 **Effort:** XS · **Value:** ⭐⭐
 
-One script component in `app/layout.tsx`. Free on Vercel Hobby. Shows:
+One script component in `app/layout.tsx`. Would show:
 - Page views and most visited items
 - Traffic sources
 - Core Web Vitals per page
 
-No backend required. Privacy-friendly by default.
+**Status:** The `@vercel/analytics` and `@vercel/speed-insights` packages are already installed as dependencies but are not wired up — nothing in `app/` or `components/` imports or renders them. Note the site deploys to GitHub Pages; Vercel Analytics requires Vercel hosting, so enabling it means either migrating deployment or choosing an alternative analytics provider.
 
 ---
 
@@ -183,7 +184,7 @@ No service worker needed for v1 — manifest alone enables installation.
 These fields cost nothing to add to `item.json` schema during Phase 3 (Content Schema). Retrofitting them later requires updating all existing `item.json` files.
 
 ```jsonc
-"stripe_payment_link": "",    // Stripe Payment Link URL → "Buy Now (pay deposit)" button
+"stripe_payment_link": "",    // Stripe Payment Link URL → "Pay Deposit" button
 "pickup_windows": [],         // ["Weekday evenings", "Saturdays 10am–2pm"]
 "no_lowball": false,          // shows "Firm Price" badge alongside price
 "price_reduced": false,       // shows "Price Reduced" chip on card
@@ -196,7 +197,7 @@ These fields cost nothing to add to `item.json` schema during Phase 3 (Content S
 "semester_listed": ""         // e.g. "Spring 2026" — helps buyers know if textbook is current edition
 ```
 
-All optional, all gracefully defaulted to empty/false.
+All optional, all default to empty/false.
 
 ---
 
@@ -254,6 +255,10 @@ All Aceternity components are dark-mode aware. The seller's chosen background ef
 
 Scripts that run on the seller's machine to reduce manual `item.json` editing. CS students will use these as power tools; non-technical users depend on them to avoid ever opening a JSON file.
 
+**Shipped in v1 (template v1.4.2):** `pnpm create-item` / `pnpm new` (scaffold a 36-field `item.json`), `pnpm create-template` (commented `_template.json`), `pnpm mark-sold` (JSONC-surgical status + `sold_date` update), `pnpm upload-images` (CDN sync), `pnpm fb-export` (§3.4), `pnpm studio` (§3.8), plus template-management tools for downstream sites: `pnpm update-site` (pull a template release without touching `content/`), `pnpm migrate-config` (auto-inject new optional config fields), `pnpm push` (commit + push `content/` and `lib/generated/image-manifest.json`), and `pnpm bump` (interactive version bump + GitHub release).
+
+The scripts below remain **proposed future additions**:
+
 | Script | What it does | User |
 |---|---|---|
 | `pnpm mark-sold houseware/ikea-lamp` | Sets `status: "sold"` and `sold_date: today` — **shipped in v1** (required by SETUP_GUIDE.md) | 🎓 👤 |
@@ -274,14 +279,14 @@ These are Node.js scripts in `scripts/` — no UI, no backend, no framework.
 
 A `/all` route that displays all non-draft items across every category in one scrollable grid with the full filter + sort bar.
 
-**Implementation note (v0.8.1):** The page aggregates `loadItemsByCategory()` across all categories — the same data set as individual category pages. `loadAllItems()` is used only for the home recently-listed strip (available-only, count-limited). The /all page shows `available`, `reserved`/`pending` (with badges), and toggleable `sold` items.
+**Implementation note (v0.8.1):** The page uses the single-pass `loadBrowseAllPageData()` (`app/all/page.tsx`), which parses every item once and derives the visible cross-category list from it; the home recently-listed strip comes from `loadHomePageData()` (`app/page.tsx`). `loadAllItems()` is no longer called by any page. The /all page shows `available`, `reserved`/`pending` (with badges), and toggleable `sold` items.
 
 ---
 
-### 2.6 Stripe Payment Link Integration
+### 2.6 Stripe Payment Link Integration ✅ Implemented
 **Effort:** S (schema + UI only) · **Value:** ⭐⭐⭐
 
-Add `stripe_payment_link` to `item.json` (already proposed as a schema addition in Tier 1). Show a "Pay Deposit" or "Buy Now" button on the item detail page that opens the Stripe Payment Link.
+`stripe_payment_link` is part of the `item.json` schema (`lib/content/schema.ts`), and the item detail page renders a **"Pay Deposit"** button linking to `itemData.stripePaymentLink` (shown alongside a "Pay with Venmo" button when `venmo_payment_request` is set).
 
 No backend. Stripe handles the payment; seller fulfils locally. Removes the friction of buyers having to reach out just to pay.
 
@@ -337,7 +342,7 @@ Already in the Extensibility Register.
 ### 2.12 Sold Items Archive Page ✅ Shipped in v1
 **Effort:** S · **Value:** ⭐⭐
 
-A `/sold` route listing all items with `status: "sold"`, regardless of retention. Acts as a "gallery of past sales" — provides social proof and helps buyers gauge typical pricing. Items shown with "SOLD" badge and no price prominence.
+A `/sold` route listing all items with `status: "sold"`, regardless of retention. Acts as a "gallery of past sales" — provides social proof and helps buyers gauge typical pricing. Items shown with "SOLD" badge and no price prominence. The rendered grid is capped at `siteConfig.soldArchiveDisplayLimit`; the header still shows the full sold-item count.
 
 ---
 
@@ -345,7 +350,7 @@ A `/sold` route listing all items with `status: "sold"`, regardless of retention
 **Effort:** XS · **Value:** ⭐⭐
 
 - **Twitter card:** `twitter:card: "summary_large_image"` using item cover image → item previews look professional when shared on Twitter/X
-- **Pinterest rich pin:** `og:type: "product"` with price meta → shared items show price on Pinterest cards
+- **Pinterest rich pin:** `product:price:amount` + `product:price:currency` meta tags (with `og:type` staying `"website"`) → shared items show price on Pinterest cards
 
 Zero new data. Pure meta tag additions.
 
@@ -427,13 +432,15 @@ Builds on the PWA manifest (Tier 1.10).
 ### 3.4 Cross-Listing Export Templates — Facebook Marketplace ✅ Implemented
 **Effort:** M · **Value:** ⭐⭐
 
-`pnpm fb-export` interactively exports available items as a Facebook Marketplace bulk-upload CSV. Three-step guided UI:
+`pnpm fb-export` interactively exports available / pending / reserved items as a Facebook Marketplace bulk-upload CSV. Guided UI:
 
+0. **Export history** *(runs 2+ only)* — skip already-exported items, view previous runs, or export everything (see Smart Export History below)
 1. **Item selection** — all items, a single category, or a manually picked subset (comma list or `1-4` range notation)
-2. **Price tier** — lowest price (pickup), highest price (shipping), or any named tier label
-3. **Output** — writes `exports/facebook-marketplace.csv`; auto-batches into numbered files if > 50 items (FB's per-upload limit)
+2. **Price tier** — a 4-option menu: `[1]` lowest price across all tiers (default; recommended), `[2]` highest price across all tiers, `[3]` local pickup price (miles-limited tiers only), `[4]` shipping price (open-ended tiers only). Options 3 and 4 are shown only when such tiers exist in the selection; items with no matching tier fall back to lowest / highest.
 
-**Smart category mapping** (`scripts/lib/fbCategoryMap.ts`): 50+ keyword rules match item tags, name, brand, and model to FB's `"Top Level//Sub Level//Leaf Level"` category format. Covers GPU/CPU/RAM, textbooks, furniture, audio, phones, gaming, clothing, and more. Falls back to the category slug when no rule matches (FB will prompt the seller to choose manually).
+CSV writing and photo-folder copying then happen automatically (there is no interactive "Output" step): writes `exports/facebook-marketplace.csv` (numbered `facebook-marketplace-<N>.csv` files if > 50 items — FB's per-upload limit) and copies local photos to `exports/facebook-marketplace-photos/NNN_category-item/` (row-numbered) for manual upload. Before exporting, the CLI warns about items without CDN photos and suggests running `pnpm upload-images` first.
+
+**Smart category mapping** (`scripts/lib/fbCategoryMap.ts`): 40+ keyword rules (48 at present) match item tags, name, brand, and model to FB's `"Top Level//Sub Level//Leaf Level"` category format. Covers GPU/CPU/RAM, textbooks, furniture, audio, phones, gaming, clothing, and more. Falls back to the category slug when no rule matches (FB will prompt the seller to choose manually).
 
 **Field mapping:**
 
@@ -442,13 +449,14 @@ Builds on the PWA manifest (Tier 1.10).
 | `name` (+ brand/model prefix) | TITLE | Truncated to 150 chars; brand/model prepended only if not already in name |
 | lowest/highest `price.tiers[].amount` | PRICE | Rounded to nearest dollar; tier chosen interactively |
 | `condition` | CONDITION | `good→"Used - Good"`, `like-new→"Used - Like New"`, `new→"New"`, `fair/for-parts→"Used - Fair"` |
-| `description` + meta block | DESCRIPTION | Appends brand, model, color, age, original price, tags as `[key: value]` footer; truncated to 5000 chars |
+| `description` + meta block | DESCRIPTION | Appends brand, model, color, age, original price, tags, ISBN, edition as `[key: value]` footer; truncated to 5000 chars |
 | keyword rules | CATEGORY | Auto-detected from corpus |
+| CDN image URLs | PHOTO 1…PHOTO 10 | Up to 10 columns filled with CDN (`https://`) URLs; local `/items/` paths are skipped — items without CDN photos are flagged with a reminder to run `pnpm upload-images` |
 | `weight` (converted to lb) | SHIPPING WEIGHT | Only when a shipping tier (no `miles_max`) is present |
-| `price.shipping_payer === "seller"` | OFFER FREE SHIPPING | Yes/No |
+| has shipping tier AND `price.shipping_payer === "seller"` | OFFER FREE SHIPPING | Yes/No |
 | has open-ended tier | OFFER SHIPPING | Yes/No |
 
-**Smart Export History** (`scripts/lib/exportHistory.ts`): On the second run, Step 0 asks whether to skip items already exported in a previous session. History is keyed by `{categorySlug}/{itemSlug}` (stable filesystem identity), stored in `exports/.export-history.json` (gitignored). Each run appends an `ExportRun` entry recording the timestamp, price strategy, item count, CSV file paths, and per-item slug + name + price. This lets the seller confidently re-export only newly available items without duplicating existing FB listings.
+**Smart Export History** (`scripts/lib/exportHistory.ts`): On the second run, Step 0 asks whether to skip items already exported in a previous session. History is keyed by `{categorySlug}/{itemSlug}` (stable filesystem identity), stored in `exports/.export-history.json` (gitignored). Each run appends an `ExportRun` entry recording the timestamp, price strategy, item count, CSV file paths, and per-item slug + name + price. This lets the seller re-export only newly available items without duplicating existing FB listings.
 
 **Remaining platforms** (Craigslist, OfferUp, eBay) remain roadmap items for a future iteration.
 
@@ -479,14 +487,24 @@ Already in the Extensibility Register.
 
 ---
 
-### 3.8 Seller Dashboard (Local-Only) 👤 ✅ Implemented
+### 3.8 Seller Studio (`pnpm studio`) 👤 ✅ Implemented
 **Effort:** L · **Value:** ⭐⭐⭐
 
-**This is the primary accessibility unlock for the non-CS user segment.** A local-only web UI (runs on `localhost` only, never deployed) that lets the seller manage items visually: add/edit `item.json` fields, change status, trigger uploads — without editing JSON files directly.
+**This is the main accessibility feature for the non-CS user segment.** A local-only browser UI launched with `pnpm studio` (default port 5174, overridable with `--port <1024–65535>`) that lets the seller manage items visually — without editing JSON files directly. It ships to downstream sites via `pnpm update-site`, and all three implementation parts are complete: **Phase 18a** (item table + bulk status), **Phase 18b** (photos + CDN sync), **Phase 18c** (edit form + item creation + git publish).
 
-Built as a Next.js dev-mode-only route or a separate Electron/Tauri app. No backend server required; reads/writes `content/items/` directly from the local filesystem.
+**Architecture:** A Vite SPA in `studio/` started by `tsx scripts/studio.ts`, bound to **127.0.0.1 only** (never deployed). Unlike the original plan, it **does** have a backend: the `studioApiPlugin` middleware in `studio/vite.config.ts` routes all `/api/*` requests to the framework-agnostic handler in `scripts/lib/studioApi.ts` (Zod-validated, slug allowlist + path containment against `content/items/`). A CSRF guard (`studio/csrfGuard.ts`) requires `Content-Type: application/json` and a matching `Origin` on all non-GET/HEAD requests.
 
-Once this exists, the non-technical user's workflow becomes entirely GUI-driven: open the dashboard, fill in the form, click "Upload & Publish." No JSON, no terminal, no git commands visible to them.
+**Shipped features:**
+
+- **Item table** — every item with thumbnails, lowest-tier price and currency; per-item load errors isolated; full server re-read after every write
+- **Bulk status** — mark available / reserved / pending / sold / draft over a selection, with per-item failure reporting and an animated "sold" stamp
+- **Image pane** — drag-and-drop upload (magic-byte content sniffing: jpg/png/webp/gif), drag-to-reorder, delete
+- **CDN sync** — uploads new/changed photos to the configured CDN with Server-Sent-Events progress; a one-at-a-time mutex prevents concurrent runs; publishing is refused while a sync runs
+- **Edit form** — schema-driven grouped fields; sends changed fields only; comment-preserving JSONC writes so seller formatting and `// options:` comments survive (`reserved_for` is never read or written)
+- **Item-creation dialog** — category picker + kebab-case name, scaffolded from the 36-field template
+- **Git publish pane** — uncommitted-change count, commit-message input, and push. Stages **only** `content/` and `lib/generated/image-manifest.json` (never `git add -A`, so `.env.local` with CDN credentials can never ride along), mirroring `pnpm push`
+
+The non-technical user's workflow is entirely GUI-driven: `pnpm studio` (the one terminal command), then fill in forms, drag photos, click Sync and Publish. No JSON, no git commands visible to them.
 
 ---
 
@@ -521,6 +539,8 @@ For a personal garage sale site this is low priority; re-triggering a Vercel bui
 For items with a "Shipping" price tier: integrates Shippo/EasyPost APIs to calculate actual shipping cost based on buyer ZIP code, item dimensions, and weight, replacing the fixed "Shipping: $tier" amount with a live estimate.
 
 Implemented as a fully optional, opt-in feature (`siteConfig.shipping.enabled`), with a configurable shipping payer (seller or buyer, site-wide default + per-item override via `price.shipping_payer`). API keys are proxied through an independently-deployed Cloudflare Worker (`workers/shipping-rate-proxy/`) so they never reach the browser bundle. See [DESIGN.md §21](DESIGN.md) for the full design and `.claude/commands/setup-shipping.md` for the seller setup walkthrough.
+
+**Gating specifics:** the estimator renders only when `siteConfig.shipping` is enabled, the item has weight + dimensions, and the resolved price tier is the open-ended shipping tier. The Worker returns the cheapest rate (`{amount, currency, carrier, service, estimatedDays}`), converting units for the carrier API as needed (kg→lb/oz, cm→in).
 
 ---
 
@@ -567,6 +587,7 @@ Features shipped in v1 have been moved to the "Shipped in v1" section at the top
 | Pickup scheduling link (Calendly/Cal.com field) | 🎓👤 | v1.1 |
 | Tag filter page (`/tags/{tag}`) | 🎓👤 | v1.1 |
 | Distance unit toggle (mi ↔ km) | 🎓 | v1.1 |
+| Stripe payment link button ("Pay Deposit") | 🎓👤 | ✅ Implemented |
 | Facebook Marketplace export (`pnpm fb-export`) | 🎓 | ✅ Implemented |
 | Cross-listing export (Craigslist / OfferUp / eBay) | 🎓 | v2 |
 | Bundle deal multi-item contact | 🎓👤 | v2 |
@@ -574,8 +595,8 @@ Features shipped in v1 have been moved to the "Shipped in v1" section at the top
 | Item view counter (GoatCounter) | 🎓 | v2 |
 | Offline caching (PWA service worker) | 🎓👤 | v2 |
 | Price drop tracking (history log) | 🎓👤 | v2 |
-| Manual dark mode toggle | 🎓 | v2 |
-| **Seller dashboard (local-only GUI)** | 👤 | ✅ Implemented |
+| Vercel Analytics + Speed Insights | 🎓 | v2 (deps installed but unwired; needs Vercel hosting) |
+| **Seller Studio (`pnpm studio`)** | 👤 | ✅ Implemented |
 | Multi-seller support | 👤 | v3 / architecture redesign required |
 | Real-time inventory without rebuild | 👤 | v3 |
 | Buyer reservation system | 👤 | v3 |

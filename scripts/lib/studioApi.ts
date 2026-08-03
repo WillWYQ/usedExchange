@@ -22,6 +22,13 @@ import { loadAllItemsRaw } from "../../lib/content/loader";
 import { isValidSlug } from "../../lib/utils/slug";
 import { applyFieldEdits, readItemField, readItemForEdit, type FieldEdit } from "./itemEdit";
 import { buildItemTemplate, renderItemTemplateJsonc } from "./itemTemplate";
+import {
+  DEFAULTS_FILENAME,
+  loadMergedDefaults,
+  mergeDefaultsIntoTemplate,
+  readDefaultsFile,
+  validateDefaults,
+} from "./itemDefaults";
 // assertEditableValue, directly: handleItemPatch needs to validate a
 // COMPOSED tier object (built up from several leaf edits in the same batch)
 // against the exact schema a whole-tier write would have to satisfy, and
@@ -639,10 +646,87 @@ async function handleItemPatch(
 const createItemBodySchema = z.object({
   category: z.string().min(1),
   name: z.string().min(1),
+  applyDefaults: z.boolean().optional(),
 });
 
+// "site" maps to content/items/_defaults.json; any other scope is a category
+// slug mapping to content/items/<category>/_defaults.json. The slug allowlist
+// plus the containment assertion mirror resolveItemDir — same two layers, same
+// reason: browser input never reaches a path unchecked.
+function resolveDefaultsPath(projectRoot: string, scope: string): string {
+  const itemsRoot = path.join(projectRoot, "content", "items");
+  if (scope === "site") return path.join(itemsRoot, DEFAULTS_FILENAME);
+  if (!isValidSlug(scope)) {
+    throw new StudioError(
+      400,
+      `scope must be "site" or a kebab-case category slug: got "${scope}"`,
+    );
+  }
+  const dir = path.resolve(itemsRoot, scope);
+  const rel = path.relative(itemsRoot, dir);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new StudioError(400, "resolved path escapes content/items");
+  }
+  return path.join(dir, DEFAULTS_FILENAME);
+}
+
+function readScopeParam(req: StudioRequest): string {
+  const url = new URL(req.url, "http://studio.local");
+  const scope = url.searchParams.get("scope");
+  if (scope === null || scope === "") {
+    throw new StudioError(400, "the defaults routes need ?scope=site or ?scope=<category>");
+  }
+  return scope;
+}
+
+async function handleDefaultsGet(req: StudioRequest): Promise<StudioResponse> {
+  const filePath = resolveDefaultsPath(req.projectRoot, readScopeParam(req));
+  let defaults: Awaited<ReturnType<typeof readDefaultsFile>>;
+  try {
+    // One catch for both read and validate: a hand-broken file (syntax or
+    // field) must surface in the pane as a 400 naming the file and field,
+    // exactly as the create path reports it — a 500 would surface as an
+    // opaque error page instead. (fs errors like EACCES becoming 400 is the
+    // same trade-off the create path already makes.)
+    defaults = await readDefaultsFile(filePath);
+    validateDefaults(defaults);
+  } catch (err: unknown) {
+    throw new StudioError(
+      400,
+      err instanceof Error && err.message.startsWith("invalid defaults in")
+        ? err.message
+        : `invalid defaults in ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  return { status: 200, body: defaults };
+}
+
+async function handleDefaultsPut(req: StudioRequest): Promise<StudioResponse> {
+  const filePath = resolveDefaultsPath(req.projectRoot, readScopeParam(req));
+  const defaults = parseJsonBody(req.body, z.record(z.unknown()));
+  try {
+    validateDefaults(defaults);
+  } catch (err: unknown) {
+    throw new StudioError(400, err instanceof Error ? err.message : String(err));
+  }
+
+  if (Object.keys(defaults).length === 0) {
+    // An empty save deletes the file: no file means "no defaults", and an
+    // empty {} shell in content/ would only read as a forgotten cleanup.
+    await fsPromises.rm(filePath, { force: true });
+    return { status: 200, body: defaults };
+  }
+
+  // recursive also creates a category folder that does not exist yet — the
+  // same behaviour item create has, so a defaults-first workflow is not a
+  // dead end on a fresh site.
+  await fsPromises.mkdir(path.dirname(filePath), { recursive: true });
+  await fsPromises.writeFile(filePath, JSON.stringify(defaults, null, 2) + "\n", "utf-8");
+  return { status: 200, body: defaults };
+}
+
 async function handleItemCreate(req: StudioRequest): Promise<StudioResponse> {
-  const { category, name } = parseJsonBody(req.body, createItemBodySchema);
+  const { category, name, applyDefaults } = parseJsonBody(req.body, createItemBodySchema);
 
   // resolveItemDir runs the slug allowlist AND the containment assertion, so
   // this is the same two-layer check every other write path uses.
@@ -675,11 +759,27 @@ async function handleItemCreate(req: StudioRequest): Promise<StudioResponse> {
     siteConfig.defaultPriceTiers,
   );
 
+  // Defaults are opt-out rather than opt-in: the point of the feature is that
+  // a fresh listing starts pre-filled. A broken defaults file fails the create
+  // loudly (400 naming file and field) instead of silently building a bare
+  // template — the seller would otherwise wonder where their defaults went.
+  const filled =
+    applyDefaults === false
+      ? template
+      : mergeDefaultsIntoTemplate(
+          template,
+          await loadMergedDefaults(path.join(req.projectRoot, "content", "items"), category).catch(
+            (err: unknown) => {
+              throw new StudioError(400, err instanceof Error ? err.message : String(err));
+            },
+          ),
+        );
+
   // "wx" rather than a plain write: two create requests for the same slug can
   // interleave between the access() check above and here, and the loser must
   // not silently flatten the winner's file.
   try {
-    await fsPromises.writeFile(jsonPath, renderItemTemplateJsonc(template), { flag: "wx" });
+    await fsPromises.writeFile(jsonPath, renderItemTemplateJsonc(filled), { flag: "wx" });
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "EEXIST") {
       throw new StudioError(409, `${category}/${name} already exists`);
@@ -750,6 +850,12 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
       // rejects after the block has exited, so StudioError would escape the
       // catch below instead of becoming its 400/404 response.
       return await handleBulkStatus(req);
+    }
+
+    if (pathname === "/api/defaults") {
+      if (req.method === "GET") return await handleDefaultsGet(req);
+      if (req.method === "PUT") return await handleDefaultsPut(req);
+      return { status: 405, body: { error: "GET or PUT only" } };
     }
 
     // Matched against the raw, still-percent-encoded pathname on purpose: an

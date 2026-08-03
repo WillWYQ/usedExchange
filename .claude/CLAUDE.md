@@ -10,17 +10,22 @@
 **UsedExchange** is a Next.js 15 static site for listing second-hand items.
 Single seller, zero database, file-system-driven. Hosted on GitHub Pages + Cloudflare R2.
 
-**Status:** All phases (0–15) implemented and live.
+**Status:** All phases (0–18) implemented and live. Seller Studio (`pnpm studio`) is local-only by design: it binds to 127.0.0.1, enforces a CSRF guard, and its git publish stages only `content/` + `lib/generated/image-manifest.json` (never `git add -A`).
+
+**Template versioning:** `package.json` is at 1.4.2. Phase 17 shipped in v1.3.0; Phase 18 is merged on `develop` after v1.4.2 (no release tag contains it yet). Doc versions are tracked in the table below; the full script inventory lives in `docs/SCRIPTS.md`.
 
 ---
 
 ## ⚠️ IRON RULES — Check Before Every Edit
 
 ### 1. `content/` folder rule
-**Sellers never touch any file outside `content/`.** All code suggestions and AI outputs must write only to:
+**Sellers never touch any file outside `content/`.** All code suggestions and AI outputs must write only to files under `content/`:
 - `content/config.ts`
 - `content/items/*/item.json`
 - `content/items/*/_category.json`
+- `content/items/_template.json` / `content/items/*/_template.json` (scaffolded by `pnpm create-template`)
+- Item photo files inside `content/items/<category>/<item>/`
+- Contact QR images under `content/contact/`
 
 ### 2. Bilingual sync rule — ALWAYS apply edits to BOTH language versions
 Every documentation file has an English version and a Chinese (`_zh`) version:
@@ -34,13 +39,15 @@ Every documentation file has an English version and a Chinese (`_zh`) version:
 | `docs/CURRENT_FUNCTIONALITY.md` | `docs/CURRENT_FUNCTIONALITY_zh.md` |
 | `docs/ARCHITECTURE.md` | `docs/ARCHITECTURE_zh.md` |
 | `docs/setup_instruction.md` | `docs/setup_instruction_zh.md` |
+| `docs/SCRIPTS.md` | `docs/SCRIPTS_zh.md` |
+| `docs/UPDATE_GUIDE.md` | `docs/UPDATE_GUIDE_zh.md` |
 
 **Any correction, addition, or update to an English doc MUST be mirrored to its `_zh` counterpart in the same response. Never close a doc-editing task until both language versions are confirmed fixed.**
 
 > Background: In the 2026-06-03 consistency audit, three bugs were found in all five English docs but the Chinese versions were initially missed, requiring a second pass. This rule prevents that from recurring.
 
 ### 3. App code is live
-All phases are implemented. `app/`, `components/`, `lib/`, and `scripts/` all contain production code. Do not create new files in these directories unless the seller explicitly requests a new feature or Phase.
+All phases are implemented. `app/`, `components/`, `lib/`, `scripts/`, `studio/` (Seller Studio SPA + CSRF guard), and `workers/` (independently deployed Cloudflare Worker) all contain production code. Do not create new files in these directories unless the seller explicitly requests a new feature or Phase.
 
 ### 4. Never render `reserved_for`
 This field is private buyer info — must never appear on any rendered page.
@@ -61,9 +68,11 @@ Checklist for every new config field:
 1. Type definition: mark with `?` (e.g. `priceFilterStrategy?: PriceFilterStrategy`)
 2. Consumer code: use `?? "default"` when reading (e.g. `siteConfig.ui.priceFilterStrategy ?? "none"`)
 3. Upstream `content/config.ts`: set the value explicitly (as documentation)
-4. Add the field to `scripts/lib/configDefaults.ts` so `update-site --migrate-config` can auto-inject it into downstream configs
+4. Add the field to `scripts/lib/configDefaults.ts` so `pnpm update-site` (which auto-runs the config migration after checkout) and standalone `pnpm migrate-config` can auto-inject it into downstream configs
 
 > Background: In the v1.4.1 release, `priceFilterStrategy` was added as a required field in `UIConfig`. Downstream sites running `pnpm update-site` failed type-check because their `content/config.ts` lacked the field. This rule prevents that class of breakage.
+
+> The one historical exception, `soldArchiveDisplayLimit`, was fixed on 2026-08-02 with the seller's approval: it is now optional (`soldArchiveDisplayLimit?: number` in `lib/config/types.ts`), read with `?? 200` in `app/sold/page.tsx`, and registered in `scripts/lib/configDefaults.ts`, so `pnpm update-site` / `pnpm migrate-config` auto-inject it into older downstream configs.
 
 ---
 
@@ -71,13 +80,15 @@ Checklist for every new config field:
 
 | File | Version | Date |
 |---|---|---|
-| docs/DESIGN.md / docs/DESIGN_zh.md | v0.9.2 | 2026-06-09 |
-| docs/TECH_REQUIREMENTS.md / docs/TECH_REQUIREMENTS_zh.md | v0.9.2 | 2026-06-09 |
+| docs/DESIGN.md / docs/DESIGN_zh.md | v0.10.0 | 2026-08-02 |
+| docs/TECH_REQUIREMENTS.md / docs/TECH_REQUIREMENTS_zh.md | v0.10.0 | 2026-08-02 |
 | docs/IMPLEMENTATION_PLAN.md / docs/IMPLEMENTATION_PLAN_zh.md | **v1.7** | 2026-08-02 |
-| docs/FEATURES_ROADMAP.md / docs/FEATURES_ROADMAP_zh.md | — | 2026-08-02 |
-| docs/CURRENT_FUNCTIONALITY.md / docs/CURRENT_FUNCTIONALITY_zh.md | — | 2026-08-02 |
-| docs/ARCHITECTURE.md / docs/ARCHITECTURE_zh.md | v1.1 | 2026-06-09 |
-| docs/setup_instruction.md / docs/setup_instruction_zh.md | — | 2026-06-08 |
+| docs/FEATURES_ROADMAP.md / docs/FEATURES_ROADMAP_zh.md | v1.1 | 2026-08-02 |
+| docs/CURRENT_FUNCTIONALITY.md / docs/CURRENT_FUNCTIONALITY_zh.md | v1.1 | 2026-08-02 |
+| docs/ARCHITECTURE.md / docs/ARCHITECTURE_zh.md | v1.2 | 2026-08-02 |
+| docs/setup_instruction.md / docs/setup_instruction_zh.md | v1.1 | 2026-08-02 |
+| docs/SCRIPTS.md / docs/SCRIPTS_zh.md | v1.0 | 2026-08-02 |
+| docs/UPDATE_GUIDE.md / docs/UPDATE_GUIDE_zh.md | v1.1 | 2026-08-02 |
 
 ---
 
@@ -89,12 +100,17 @@ Checklist for every new config field:
 | Generate `item.json` from photos | `/update-items` (`.claude/commands/update-items.md`) |
 | Translate listings into another locale | `/translate-items` (`.claude/commands/translate-items.md`) |
 | Enable/configure shipping cost estimator | `/setup-shipping` (`.claude/commands/setup-shipping.md`) |
+| Manage listings in a browser | `pnpm studio [--port <n>]` (local only; see docs/CURRENT_FUNCTIONALITY.md) |
+| Publish content changes | `pnpm push` (stages `content/` + `lib/generated/image-manifest.json`, commits, pushes; Studio's git publish mirrors exactly these paths) |
 | Mark an item sold | `pnpm mark-sold <category>/<name>` |
-| Create a new item | `pnpm create-item <category>/<name>` |
-| Manage listings in a browser | `pnpm studio` (local only; see docs/CURRENT_FUNCTIONALITY.md) |
+| Create a new item | `pnpm create-item <category>/<name>` (alias: `pnpm new`) |
+| Scaffold a commented `_template.json` | `pnpm create-template [category]` |
 | Upload photos to CDN | `pnpm upload-images` |
-| Export listings to Facebook Marketplace | `pnpm fb-export` (interactive; outputs `exports/facebook-marketplace.csv`) |
-| Update site to a new template version | `pnpm update-site` (`docs/UPDATE_GUIDE.md`) |
+| Export listings to Facebook Marketplace | `pnpm fb-export` (interactive; outputs `exports/facebook-marketplace.csv` — numbered `-<N>` variants for 50+ item batches, plus `exports/facebook-marketplace-photos/` for manual photo upload) |
+| Update site to a new template version | `pnpm update-site [tag] [--list] [--skip-verify]` (`docs/UPDATE_GUIDE.md`; auto-runs the config migration) |
+| Splice missing config fields after an upgrade | `pnpm migrate-config` (also runs automatically during `pnpm update-site`) |
+| Install all 27 Aceternity components (one-time) | `pnpm setup-ui` |
+| Bump version + create GitHub release (maintainer) | `pnpm bump` (interactive; requires an authenticated `gh` CLI) |
 
 ---
 
@@ -102,7 +118,7 @@ Checklist for every new config field:
 
 | Question | Where to look |
 |---|---|
-| Full `item.json` schema (38 fields) | docs/DESIGN.md §5 |
+| Full `item.json` schema (36 schema fields; 37 incl. `reserved_for`) | docs/DESIGN.md §5 |
 | `content/config.ts` full template | docs/DESIGN.md §13 |
 | Image storage architecture | docs/DESIGN.md §3 |
 | Sold item retention formula | docs/DESIGN.md §8 |
@@ -110,10 +126,16 @@ Checklist for every new config field:
 | Distance-tiered pricing algorithm | docs/DESIGN.md §17 |
 | Component architecture + `"use client"` list | docs/DESIGN.md §12, docs/ARCHITECTURE.md |
 | UI slot options (27 Aceternity components) | docs/DESIGN.md §18 |
+| Shipping cost estimator (incl. `workers/shipping-rate-proxy` contract) | docs/DESIGN.md §21, docs/TECH_REQUIREMENTS.md §29 |
+| Seller Studio (local management GUI) | docs/DESIGN.md §22, docs/TECH_REQUIREMENTS.md §30, docs/CURRENT_FUNCTIONALITY.md |
 | i18n runtime (useT / getTranslations / UIStrings) | docs/DESIGN.md §12, docs/TECH_REQUIREMENTS.md §22.8 |
-| 16-phase build plan (Phases 0–15) | docs/IMPLEMENTATION_PLAN.md |
+| Environment variables (CF_R2_* / BLOB_READ_WRITE_TOKEN / NEXT_PUBLIC_SITE_URL) | docs/TECH_REQUIREMENTS.md §3 |
+| 19-phase build plan (Phases 0–18) | docs/IMPLEMENTATION_PLAN.md |
 | Deployment checklist (GitHub Pages + R2) | docs/TECH_REQUIREMENTS.md §19 |
 | AI skill file specs | docs/TECH_REQUIREMENTS.md §23 |
 | Testing strategy | docs/TECH_REQUIREMENTS.md §25 |
+| Facebook Marketplace export | docs/CURRENT_FUNCTIONALITY.md, `scripts/export-facebook.ts` |
+| Scripts & tooling reference (every npm script + CLI) | docs/SCRIPTS.md |
 | Code structure, data flow, module API | docs/ARCHITECTURE.md |
+| Updating to a new template version | docs/UPDATE_GUIDE.md |
 | CDN setup walkthrough | docs/setup_instruction.md |

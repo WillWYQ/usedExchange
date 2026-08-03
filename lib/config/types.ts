@@ -52,7 +52,9 @@ export type SiteConfig = {
     amount: number;
   }>;
   // Caps how many sold items render on /sold (0 = no cap). See content/config.ts.
-  soldArchiveDisplayLimit: number;
+  // Optional per Iron Rule 8: read with `?? 200` in app/sold/page.tsx, and
+  // migrate-config can splice it into older configs (scripts/lib/configDefaults.ts).
+  soldArchiveDisplayLimit?: number;
   // Default unit system: "metric" (cm/kg) | "imperial" (in/lb).
   // Sets the dimensions.unit/weight.unit defaults `pnpm create-item` writes
   // into new item.json files, and the fallback display unit for

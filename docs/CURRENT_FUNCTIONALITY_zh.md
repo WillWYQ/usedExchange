@@ -1,8 +1,8 @@
-# UsedExchange — 当前功能（v1）
+# UsedExchange — 当前功能（v1.1）
 
-**基于：** DESIGN.md v0.9.1 · TECH_REQUIREMENTS.md v0.9.1 · IMPLEMENTATION_PLAN.md v1.4  
-**日期：** 2026-06-03  
-**状态：** 已实现——本文档描述的是 v1 的线上功能。
+**基于：** DESIGN.md v0.10.0 · TECH_REQUIREMENTS.md v0.10.0 · IMPLEMENTATION_PLAN.md v1.7  
+**日期：** 2026-08-02  
+**状态：** 已实现——本文档描述全部线上功能：v1 核心 + Phase 16–18（运费估算、Facebook Marketplace 导出、卖家工作台）。
 
 ---
 
@@ -60,7 +60,7 @@ content/
 | `original_price` | 数字 | 卖家当初支付的价格 |
 | `status` | 枚举 | `available` / `pending` / `reserved` / `sold` / `draft` |
 | `listed_date` | 仅日期 YYYY-MM-DD | 上架日期；默认为构建日期 |
-| `sold_date` | 仅日期 YYYY-MM-DD | 售出日期；用于保留期计算 |
+| `sold_date` | 仅日期 YYYY-MM-DD | 售出日期；用于保留期计算。也接受完整 ISO 时间戳。 |
 | `reserved_for` | 字符串 | 买家姓名——**永不在页面上渲染** |
 | `preferred_payment` | 字符串[] | 如 `["Venmo", "Zelle", "Cash"]` |
 | `contact_note` | 字符串 | 物品专属联系说明 |
@@ -79,7 +79,7 @@ content/
 | `course` | 字符串 | 如 "CS101"——显示为徽章，可搜索 |
 | `edition` | 字符串 | 如 "第3版" |
 | `semester_listed` | 字符串 | 如 "Spring 2026" |
-| `name_zh` | 字符串 | 中文名称；访客选择 `zh` 语言时显示 |
+| `name_zh` | 字符串 | 中文名称；访客选择 `zh` 语言时显示（SSG 渲染 `defaultLocale`） |
 | `description_zh` | 字符串 | 中文描述（同上条件） |
 | `price` | 对象 | 距离分段定价（见定价部分） |
 
@@ -147,14 +147,14 @@ content/
 - 物品文件夹中完全没有图片
 
 ### 照片隐私——自动剥离 EXIF/GPS 元数据
-每张新增或变更的 JPEG/PNG/WebP 照片在 `pnpm upload-images` 上传到 CDN 之前，都会自动通过 `sharp`（`lib/images/stripMetadata.ts`）重新编码——移除全部 EXIF/IPTC/XMP 元数据（包括 GPS 位置），同时自动旋正方向以保证显示效果不变。GIF 原样透传。`content/items/` 中的原始文件不受影响；`pnpm dev` 与 `pnpm build`（dev-sync/build-check）也不受影响。
+每张新增或变更的 JPEG/PNG/WebP 照片在 `pnpm upload-images` 上传到 CDN 之前，都会自动通过 `sharp`（`lib/images/stripMetadata.ts`）重新编码——移除全部 EXIF/IPTC/XMP 元数据（包括 GPS 位置），同时自动旋正方向以保证显示效果不变。GIF 原样透传。`content/items/` 中的原始文件不受影响；`pnpm dev` 与 `pnpm build`（dev-sync/build-check）也不受影响。从卖家工作台同步照片到 CDN 时同样执行此剥离。
 
 ---
 
 ## 页面
 
 ### 全局——所有页面
-- **SiteHeader** — 站点名称/Logo + 全文搜索栏（当 `siteConfig.search.enabled` 时）
+- **SiteHeader** — 站点名称/Logo、导航链接（首页、浏览全部 `/all`、新上架 `/newly-listed`，店铺配置完成后还有"关于" `/about`）+ 全文搜索栏（当 `siteConfig.search.enabled` 时）
 - **SiteFooter** — 联系平台按钮、最后构建时间戳
 
 ### 首页（`/`）
@@ -162,6 +162,7 @@ content/
 - **分类网格** — 可见分类的卡片；每个分类的可用物品数量
 - **最近上架** — 最近 N 件 `available` 状态物品，显示定位解析价格；地理解析后静默更新价格；为空时隐藏该区块
 - **最近浏览** — 最近浏览的 5 件物品横向滚动条（sessionStorage）；为空时隐藏
+- **未配置状态：** 当 `baseUrl` 仍是占位符/演示域名时，`/` 显示项目介绍（`ProjectIntro`）而非商品目录——卖家完成配置后目录才会出现
 
 ### 分类页（`/[category]`）
 - 定位价格栏——检测到的距离 + "修改距离"覆盖
@@ -181,7 +182,7 @@ content/
 - **教材区块**（存在 `isbn`/`course` 时）— 课程徽章、比价链接、版本、学期
 - **YouTube 演示** — 设置 `youtube_link` 时显示"观看演示"按钮
 - **取货时段** — `pickup_windows` 非空时显示
-- **定价区块** — 解析档位 + 切换 + "出价"按钮 + Stripe"支付定金"按钮 + "通过 Venmo 支付"按钮
+- **定价区块** — 解析档位 + 切换 + "出价"按钮 + Stripe"支付定金"按钮 + "通过 Venmo 支付"按钮（设置 `venmo_payment_request` 时）
 - **元数据表** — 品牌、型号、尺寸、重量、原始来源/价格
 - **联系区块** — 平台按钮含预填消息、付款方式、联系说明
 - **标签** — 不可交互的标签片（可通过搜索找到）
@@ -190,10 +191,16 @@ content/
 - **已售状态** — 顶部"已售"横幅；联系 CTA 禁用；显示售出日期
 
 ### 浏览全部页（`/all`）
-所有分类的非草稿物品汇聚在一个可滚动网格中：默认显示 `available` 物品；`reserved` 和 `pending` 带状态徽章显示；`sold` 默认隐藏，状态切换后可见。完整筛选 + 排序栏，与分类页相同。
+所有分类的非草稿物品汇聚在一个可滚动网格中：默认显示 `available` 物品；`reserved` 和 `pending` 带状态徽章显示；`sold` 默认隐藏，状态切换后可见。完整筛选 + 排序栏，与分类页相同。（数据源：`loadBrowseAllPageData()`——单次遍历的加载器，可见性规则与任意分类页相同。）
 
 ### 已售物品档案（`/sold`）
-所有已售物品，不受保留期限制；按售出日期降序排列。证明交易历史。无价格或联系方式。
+所有已售物品，不受 `soldItemRetentionDays` 限制；按售出日期降序排列。证明交易历史。无价格或联系方式。网格上限为 `siteConfig.soldArchiveDisplayLimit` 条（`0` = 不限）。
+
+### 新上架页（`/newly-listed`）
+将活跃（非已售）物品分为三个标签页：**自上次访问以来**（通过浏览器 `localStorage` 跟踪；首次访问时所有当前在售物品都算新上架）、**今天**、**本周**。每个标签页显示对应数量；某个时段为空时显示"暂无新上架"提示而非空白页。由 SiteHeader 链接进入。
+
+### 关于页（`/about`）
+项目介绍（`ProjectIntro`）的固定页面，拥有独立的 SEO 元数据。卖家配置店铺之前，`/` 显示的就是这份介绍而非商品目录；配置完成后 `/` 变为目录，`/about` 让介绍仍可访问。只有店铺配置完成后，页头才会出现"关于"链接。
 
 ### 404 页面
 站点头部 + "页面未找到" + 返回首页链接。
@@ -235,7 +242,7 @@ content/
 
 ## AI 辅助内容生成
 
-三个 AI 辅助工作流以 **Claude Code 技能文件**形式提供，存放在 `.claude/skills/`。卖家使用已有的任何 AI 编程工具——Claude Code、Cursor、GitHub Copilot 或任何有能力的助手。**无需额外 API 密钥、环境变量或软件包。**
+四个 AI 辅助工作流以 **Claude Code 技能文件**形式提供，存放在 `.claude/commands/`。卖家使用已有的任何 AI 编程工具——Claude Code、Cursor、GitHub Copilot 或任何有能力的助手。**无需额外 API 密钥、环境变量或软件包。**
 
 ### 技能 1 — 物品 JSON 生成器（`/update-items`）
 
@@ -252,6 +259,15 @@ content/
 8. pnpm upload-images    ← 照常将照片上传到 CDN
 ```
 
+**支持的描述文件格式：** `.txt`、`.md`、`.yaml`、`.json`——放在物品文件夹中与照片并列的任何文本文件。
+
+**描述文件示例（`notes.txt`）：**
+```
+Bought from Best Buy 2023, used one semester.
+CS101 textbook, 3rd edition. Minor pen marks.
+Asking $30.
+```
+
 **触发条件：** 文件夹有照片但没有 `item.json`；`item.json` 存在且 `status: "draft"`；或描述文件比现有 `item.json` 更新。
 
 ### 技能 2 — 站点设置向导（`/setup`）
@@ -265,7 +281,7 @@ content/
 4. AI 写入 content/config.ts 和初始分类骨架
 ```
 
-AI 会询问 8 个方面：店铺名称、位置（从描述解析经纬度）、出售物品类型（创建 `_category.json` 骨架）、联系平台、定价风格、视觉偏好、语言/语区。检测卖家个性并自动生成匹配的标语。
+AI 按 8 个问题组提问：站点身份、部署（网址 + 托管方式）、图片存储提供商、位置（从描述解析经纬度）、联系平台、内容默认值（货币、最近上架数量、已售物品保留天数）、视觉偏好、语言/语区。检测卖家个性并自动生成匹配的标语。可针对单项需求重新运行（如"只更新联系信息""更换背景特效"）。
 
 ### 技能 3 — 物品翻译器（`/translate-items`）
 
@@ -273,18 +289,36 @@ AI 会询问 8 个方面：店铺名称、位置（从描述解析经纬度）�
 
 ```
 1. 将目标语区代码加入 siteConfig.i18n.availableLocales（如 ["en", "zh"]）
-2. 在 content/config.ts 中添加 translations.{locale} 块，翻译全部 71 个 UI 字符串键
+2. 在 content/config.ts 中添加 translations.{locale} 块，翻译全部 87 个 UI 字符串键
 3. 在项目目录中打开 Claude Code（或类似 AI 工具）
 4. 输入：/translate-items（或"将我的物品翻译成中文"）
 5. 审阅 AI 为每件物品显示的翻译建议
 6. 确认 → AI 将 name_{locale} / description_{locale} 写入每个 item.json
 ```
 
-注意：`/translate-items` 仅处理物品级别的 `name_{locale}` / `description_{locale}` 字段——UI 字符串（按钮、徽章、标题等）的翻译需要手动填写 `translations.{locale}` 块，或通过 `/setup` 重新配置。
+仅翻译 `name` → `name_{locale}` 和 `description` → `description_{locale}`；品牌、型号、标签、价格、日期以及所有 Markdown 语法均原样保留。已有非空翻译的物品会被跳过。只写入 `content/items/*/item.json`。
+
+> **注意：** `/translate-items` 仅处理物品级别的 `name_{locale}` / `description_{locale}` 字段——UI 字符串（按钮、徽章、标题等，共 87 个键）的翻译需要在 `content/config.ts` 中手动填写 `translations.{locale}` 块（或重新运行 `/setup`）后才能运行此技能。
+
+### 技能 4 — 运费配置向导（`/setup-shipping`）
+
+启用并配置**可选的**实时运费估算（见定价系统 → 运费估算）。可重复运行：再次运行时会列出当前 `shipping` 配置，并可修改承担方、发货地址、代理 URL——或关闭该功能。
+
+```
+1. 在项目目录中打开 Claude Code（或类似 AI 工具）
+2. 输入：/setup-shipping（或"启用运费估算"）
+3. 回答 AI 的问题（是否启用？承运服务商、默认承担方、发货邮编/国家）
+4. 如需部署 shipping-rate-proxy Cloudflare Worker（终端步骤由卖家自己在
+   workers/shipping-rate-proxy/ 中执行——技能只读取部署后的 Worker URL）
+5. AI 在 content/config.ts 中写入 shipping 配置块，必要时还会为特定
+   content/items/*/item.json 补充 weight/dimensions/shipping_payer
+```
+
+只写入 `content/`；卖家拒绝启用或保持关闭时不做任何更改。
 
 ### 无需 API 密钥
 
-所有三个技能都是 Markdown 指令文件，不是代码。AI 工具使用其内置能力和用户的现有订阅——无需 `ANTHROPIC_API_KEY`，无需额外软件包，无需新环境变量。三个技能只写入 `content/`。
+所有四个技能都是 Markdown 指令文件，不是代码。AI 工具使用其内置能力和用户的现有订阅——无需 `ANTHROPIC_API_KEY`，无需额外软件包，无需新环境变量。四个技能只写入 `content/`。
 
 ---
 
@@ -294,9 +328,9 @@ AI 会询问 8 个方面：店铺名称、位置（从描述解析经纬度）�
 
 - **对访客：** 配置了多个语区时，站点头部会出现语言切换器（`LocaleSwitcher`）。切换语言会立即更新物品名称、描述以及所有 UI 标签（按钮、徽章、标题）——无需刷新页面。所选语言保存在浏览器 `localStorage` 中，跨页面和跨访问持久有效。
 - **对卖家：** 添加新语言需要两步：
-  1. 将语区代码加入 `siteConfig.i18n.availableLocales`（如 `["en", "zh"]`），**并**在 `content/config.ts` 中添加包含全部 71 个 UI 字符串键（已翻译）的 `translations.{locale}` 块。该块缺失或不完整时构建将失败。
+  1. 将语区代码加入 `siteConfig.i18n.availableLocales`（如 `["en", "zh"]`），**并**在 `content/config.ts` 中添加包含全部 87 个 UI 字符串键（已翻译）的 `translations.{locale}` 块。该块缺失或不完整时构建将失败。
   2. 为每件物品填写 `name_zh` / `description_zh`——手动填写或使用 `/translate-items` AI 技能。
-- **优雅回退：** 没有翻译的物品显示默认语言——不会留空或报错。任何缺失的 UI 字符串键回退到内置英文默认值。
+- **回退：** 没有翻译的物品显示默认语言——不会留空或报错。任何缺失的 UI 字符串键回退到内置英文默认值。
 - **单次部署：** 所有语言在同一次构建中发布；没有独立的多语言站点。
 - **保留默认语言的内容：** 页面 `<title>`、社交分享（OG）标签和搜索引擎结构化数据以 `defaultLocale` 渲染——爬虫索引的是这个版本。页面内切换是阅读便利功能；多语言 URL 是未来增强。
 
@@ -306,40 +340,50 @@ AI 会询问 8 个方面：店铺名称、位置（从描述解析经纬度）�
 
 ## 全文搜索
 
-在编译时使用 `fuse.js` 构建。搜索范围：名称、描述、品牌、型号、标签、课程、ISBN、版本。通过 `siteConfig.search.enabled: true` 启用。搜索栏位于 `SiteHeader`，用户输入时实时显示结果。
+在编译时使用 `fuse.js` 构建。搜索范围：名称、描述、品牌、型号、标签、课程、ISBN、版本。通过 `siteConfig.search.enabled: true` 启用。搜索栏位于 `SiteHeader`，用户输入时实时显示结果。已售和草稿物品不进入索引；available、pending 和 reserved 物品可被搜索到。
 
 ---
 
 ## 卖家 CLI 工具
 
-脚本在卖家机器上运行。所有命令只写入 `content/`。
+脚本在卖家机器上运行。所有列表内容变更只写入 `content/`（外加生成的图片清单）；`upload-images` 还会写入清单和校验和缓存，`fb-export` 写入 `exports/`。
 
 | 命令 | 功能 |
 |---|---|
 | `pnpm upload-images` | 上传照片到 CDN，更新清单，打印备份提醒 |
 | `pnpm push` | 暂存 `content/` 和清单文件、提交（默认消息）并推送 |
 | `pnpm mark-sold <cat>/<name>` | 将 `status` 设为 `"sold"` 并记录 `sold_date`，无需手动编辑 JSON——原地修改 JSONC，保留所有 `// options: ...` 注释 |
-| `pnpm create-item <cat>/<name>` | 创建新物品文件夹 + 预填全部 38 个 schema 字段的 `item.json`（参见 DESIGN.md §5），以 JSONC 格式写入，并为 `condition`、`status`、`dimensions.unit`、`weight.unit` 附上列出所有可选值的 `// options: ...` 提示 |
+| `pnpm create-item <cat>/<name>` | 创建新物品文件夹 + 预填全部 36 个模板字段（完整物品 schema；私有字段 `reserved_for` 有意不生成）的 `item.json`（参见 DESIGN.md §5），以 JSONC 格式写入，并为 `condition`、`status`、`dimensions.unit`、`weight.unit` 附上列出所有可选值的 `// options: ...` 提示 |
 | `pnpm new <cat>/<name>` | `create-item` 的简写 |
 | `pnpm create-template [cat]` | 为某分类（或全局）创建 `_template.json`——与 `create-item` 相同的 JSONC + `// options: ...` 提示 |
-| `pnpm fb-export` | 交互式将在售物品导出为 Facebook Marketplace 批量上传 CSV。三步引导式提示：选择全部 / 按分类 / 单独物品（支持逗号列表和 `1-4` 区间）；选择价格档位（最低价/最高价/按标签）；超过 50 条自动分批（FB 上限）。输出至 `exports/`。智能分类映射根据物品标签、品牌和名称推断 FB 分类层级，无需手动配置。**导出历史：** 第二次运行时会出现步骤 0，提供跳过已导出物品的选项；历史记录保存于 `exports/.export-history.json`（已加入 gitignore）。 |
+| `pnpm fb-export` | 交互式将 `available` / `pending` / `reserved` 物品导出为 Facebook Marketplace 批量上传 CSV。引导式提示：选择全部 / 按分类 / 单独物品（支持逗号列表和 `1-4` 区间）；选择价格策略（最低价 / 最高价 / 本地自提档位 / 邮寄档位——后两项仅在存在匹配物品时出现）；超过 50 条自动分批（FB 上限），写入 `exports/facebook-marketplace.csv`（分批时为 `exports/facebook-marketplace-<N>.csv`）。强制 FB 限制：标题 ≤150 字符、描述 ≤5000 字符。智能分类映射根据物品标签、品牌和名称推断 FB 分类层级，无需手动配置。**导出历史：** 第二次运行时会出现步骤 0，提供跳过已导出物品的选项；历史记录保存于 `exports/.export-history.json`（已加入 gitignore）。**照片：** CSV 的 PHOTO 列保存 CDN `https://` 链接（每件物品最多 10 个——FB 上限；上传 CSV 时由 Facebook 自动抓取），因此请先运行 `pnpm upload-images`，否则这些列为空且脚本会发出警告。作为手动上传的备用方案（例如 CDN 链接变更时），本地照片还会复制到 `exports/facebook-marketplace-photos/NNN_category-item/`。 |
 
 ---
 
 ## 卖家工作台（Seller Studio）
 
-一个仅在本地运行的网页图形界面，用于在浏览器中管理在售物品——替代手动编辑 `item.json`。运行 `pnpm studio` 启动（用 `pnpm studio --port 3000` 更换端口），然后打开终端输出的网址。它完全运行在卖家自己的电脑上：不会进入构建产物、不会部署、站点访客永远无法访问。
+一个仅在本地运行的网页图形界面，用于在浏览器中管理在售物品——替代手动编辑 `item.json`。运行 `pnpm studio` 启动（用 `pnpm studio --port 3000` 更换端口；接受 1024–65535 之间的任意整数，默认 **5174**），然后打开终端输出的网址。它完全运行在卖家自己的电脑上：不会进入构建产物、不会部署、站点访客永远无法访问。若缺少 Vite 或工作台应用，启动器会立即报错并提示运行 `pnpm update-site`；它会自动加载 `.env.local`，CDN 凭据无需另行配置。
 
-一个页面，四种操作：
+一个页面，六种操作：
 
 | 操作 | 功能 |
 |---|---|
-| 照片 | 将文件拖到物品上上传照片、调整排序，并将变更推送到 CDN |
-| 批量改状态 | 一次性为多个物品修改 `status`（available / reserved / pending / sold / draft） |
-| 编辑表单 | 用分组表单编辑任意物品的字段；只写回你修改过的字段 |
-| 发布 | 暂存 `content/` 和图片清单，并创建 git 提交 |
+| 新建物品 | 添加新物品：选择分类并输入 kebab-case 名称——自动创建文件夹和完整的模板 `item.json`（与 `pnpm create-item` 相同的 36 字段模板） |
+| 默认值 | 管理全站级和分类级的默认字段值（`content/items/` 下的稀疏 `_defaults.json`）；新建商品时按模板叠加默认值，新建弹窗可勾选关闭 |
+| 照片 | 将文件拖到物品上上传照片（文件名自动规范化、按魔数嗅探类型）、拖拽排序、删除，并以实时进度将变更推送到 CDN |
+| 批量改状态 | 一次性为多个物品修改 `status`（available / reserved / pending / sold / draft），逐项报告失败；已处于目标状态的物品会被跳过并提示 |
+| 编辑表单 | 用由 schema 驱动的分组表单编辑任意物品的字段；只写回你修改过的字段，并保留 JSONC 注释 |
+| 发布 | 查看未提交变更、填写提交信息，将 `content/` 和图片清单一并提交并推送 |
 
-与 CLI 脚本一样，工作台只写入 `content/` 和图片清单（`lib/generated/image-manifest.json`）。它从不读取或写入 `reserved_for`——买家隐私信息完全不进入这个工具。
+**仅本地服务器 + CSRF 防护。** 工作台服务器只绑定 `127.0.0.1`——网络上的其他设备无法访问。所有写操作请求都有防护（默认拒绝）：必须携带 `Content-Type: application/json`（否则 HTTP 415），且存在 `Origin` 头时必须与服务器自身的 host 一致（否则 HTTP 403）。GET/HEAD 请求不受限制。
+
+**带实时进度的 CDN 同步。** "同步到 CDN"通过服务器推送事件（SSE）流式传输进度（progress / done / error），在同步栏实时显示；同一时间只允许一个同步运行，同步进行中拒绝发布。同步执行与 `pnpm upload-images` 相同的 EXIF/GPS 剥离，重写已提交的图片清单（`lib/generated/image-manifest.json`，保留在 git 中），并刷新内存中的清单缓存，使物品列表立即显示最新的 CDN 链接。缺少 CDN 凭据只会表现为流内错误，不影响启动。
+
+**严格的编辑表单校验。** 编辑表单由严格的字段语法驱动，与物品 schema 精确对应（无静默类型转换）：可选性和取值范围与磁盘上的 schema 一致，非法值会被拒绝而非悄悄改写。写入采用 JSONC 外科手术式编辑——卖家的注释（`// options: ...`）和格式在每次保存后都得以保留。
+
+**发布安全。** 发布面板显示未提交变更的数量（同时在工作台顶部栏显示）、变更文件列表和提交信息输入框（必填，≤500 字符）。发布时**仅**暂存 `content/` 和 `lib/generated/image-manifest.json`——与 `pnpm push` 暂存的内容完全一致，绝不使用 `git add -A`，因此 `.env.local`（含 CDN 凭据）绝不会被连带提交。它会拒绝带外暂存的文件、拒绝 detached HEAD 状态，并在提交时重新读取变更列表。
+
+与 CLI 脚本一样，工作台只写入 `content/` 和图片清单。它从不读取或写入 `reserved_for`——买家隐私信息完全不进入这个工具。
 
 ---
 
@@ -350,14 +394,14 @@ AI 会询问 8 个方面：店铺名称、位置（从描述解析经纬度）�
 | `available` | 是 | 卡片可见 | 是 | 是 | 否 | 是 | |
 | `reserved` | **否** | 卡片可见 | 是 + 徽章 | 是 + 徽章 | 否 | 是 | `reserved_for` 永不渲染 |
 | `pending` | **否** | 卡片可见 | 是 + 徽章 | 是 + 徽章 | 否 | 是 | |
-| `sold` | 否 | 卡片可见（保留期内） | 是 + 遮罩（切换） | 是（切换） | **始终** | 是（保留期内） | `soldItemRetentionDays` 后详情页不再生成 |
+| `sold` | 否 | 卡片可见（保留期内） | 是 + 遮罩（切换） | 是（切换） | **是** | 是（保留期内） | `soldItemRetentionDays` 后详情页不再生成；`/sold` 档案不受保留期限制展示所有已售物品，上限由 `soldArchiveDisplayLimit` 控制（0 = 不限） |
 | `draft` | 否 | 否 | 否 | 否 | 否 | 否 | 不生成路由 |
 
-**重要说明：** 首页最近上架区块使用 `loadAllItems()`，仅返回 `available` 状态。`reserved` 和 `pending` 物品**不**出现在该区块，但仍保持首页分类卡片可见。
+**重要说明：** 首页最近上架区块由 `loadHomePageData()` 派生，仅返回 `available` 物品（按上架日期降序，上限为 `recentlyListedCount`）。`reserved` 和 `pending` 物品**不**出现在该区块，但仍保持首页分类卡片可见。
 
 ---
 
-## UI 自定义——4 个可配置槽位
+## UI 自定义——4 个可配置槽位 + 价格筛选
 
 在 `content/config.ts` 中设置任意选项。所有 27 个 Aceternity 组件由开发者通过 `pnpm setup-ui` 一次性安装。卖家只需修改配置值——无需编辑代码。
 
@@ -366,12 +410,14 @@ AI 会询问 8 个方面：店铺名称、位置（从描述解析经纬度）�
 | 背景 | `ui.background` | `"none"` + 13 个 Aceternity 背景 |
 | 物品网格 | `ui.itemGrid` | `"simple"` + bento-grid、layout-grid、focus-cards |
 | 图库 | `ui.gallery` | `"simple"` + apple-cards-carousel、images-slider、carousel、parallax-scroll |
-| 物品卡片 | `ui.itemCard` | `"simple"` + 8 个 Aceternity 卡片效果 |
+| 物品卡片 | `ui.itemCard` | `"simple"` + 7 个 Aceternity 卡片效果 |
 | 价格筛选 | `ui.priceFilterStrategy` | `"none"`（预设）、percentile、logarithmic、preset-buckets、iqr |
 
 ---
 
 ## 站点配置（`content/config.ts`）
+
+标注**（可选）**的字段在 TypeScript 中为可选类型，并带有运行时默认值——缺少这些字段的旧 `content/config.ts` 在模板更新后仍可正常工作（也可用 `pnpm migrate-config` 自动注入）。
 
 | 区块 | 字段 |
 |---|---|
@@ -379,16 +425,17 @@ AI 会询问 8 个方面：店铺名称、位置（从描述解析经纬度）�
 | 部署 | `deploymentMode`、`baseUrl` |
 | 图片存储 | `imageStorage.provider` |
 | 卖家位置 | `location.lat`、`location.lng`、`location.label` |
-| 内容默认值 | `currency`、`recentlyListedCount`、`soldItemRetentionDays` |
+| 内容默认值 | `currency`、`recentlyListedCount`、`soldItemRetentionDays`、`soldArchiveDisplayLimit?`**（可选）**——限制 `/sold` 网格条数；`0` = 不限，默认 `200`、`defaultPriceTiers?`**（可选）**——`create-item` 使用的档位模板、`measurementUnit?`**（可选）**——`"metric"` / `"imperial"`，默认 `"metric"` |
+| 运费**（可选区块）** | `shipping.enabled`、`shipping.proxyUrl`、`shipping.defaultPayer`（`"seller"` / `"buyer"`）、`shipping.origin.zip`、`shipping.origin.country` |
 | 联系方式 | `contact.reveal_behavior`、`contact.platforms[]` |
 | Hero | `hero.cta_label`、`hero.cta_href` |
 | SEO | `meta.description`、`meta.twitterHandle` |
-| UI 槽位 | `ui.background`、`ui.itemGrid`、`ui.gallery`、`ui.itemCard`、`ui.priceFilterStrategy`、`ui.priceFilterBuckets` |
+| UI 槽位 | `ui.background`、`ui.itemGrid`、`ui.gallery`、`ui.itemCard`、`ui.priceFilterStrategy?`**（可选）**、`ui.priceFilterBuckets?`**（可选）** |
 | 深色模式 | 页头切换按钮（浅色/深色/跟随系统，由 `next-themes` 持久化） |
 | 分析 | `analytics.vercel`、`analytics.speedInsights` |
 | 搜索 | `search.enabled`、`search.placeholder` |
 | 站点地图 | `sitemap.enabled` |
-| 国际化 | `i18n.defaultLocale`、`i18n.availableLocales`、`i18n.showLocaleSwitcher`、`i18n.translations.{locale}.*`（71 个 UI 字符串键） |
+| 国际化 | `i18n.defaultLocale`、`i18n.availableLocales`、`i18n.showLocaleSwitcher`、`i18n.translations.{locale}.*`（共 87 个 UI 字符串键；任一已列语区缺少必需键时预构建失败，缺失键回退到默认语区）、`i18n.localeMeasurementUnits?`**（可选）**——按语区覆盖单位制 |
 
 ---
 
@@ -398,16 +445,21 @@ AI 会询问 8 个方面：店铺名称、位置（从描述解析经纬度）�
 照片 → CDN，更新清单，打印备份提醒，显示照片质量警告。
 
 **CI 构建 — GitHub Actions / Vercel**（`pnpm build`）：
-预构建：读取清单 + 构建搜索索引 → `next build` 生成所有页面 → 构建后生成站点地图。
+预构建：占位符 `baseUrl` 或不完整的语区翻译会导致构建失败；校验图片清单（云存储提供商）或复制照片（本地提供商）；构建搜索索引 → `next build` 生成所有页面 → 构建后生成 `sitemap.xml` + `robots.txt`（当 `sitemap.enabled` 时）。
 
 **本地开发**（`pnpm dev`）：
 照片本地复制 → 带热重载的开发服务器。
 
-### 开发者脚本（运行一次）
+### 开发者与维护者脚本
 
 | 脚本 | 用途 |
 |---|---|
-| `pnpm setup-ui` | 安装所有 27 个 Aceternity 组件 |
+| `pnpm setup-ui` | （运行一次）将所有 27 个 Aceternity 组件安装到 `components/ui/` |
+| `pnpm update-site [tag] [--list] [--skip-verify]` | 将上游模板的新版本拉入本仓库且不触碰 `content/`（默认最新 tag；`--list` 列出可用版本），随后自动迁移配置、校验（install + type-check + build）并提交 |
+| `pnpm migrate-config` | 模板升级后将新的可选配置字段以默认值拼入 `content/config.ts`——只做增量添加；绝不修改已有值 |
+| `pnpm bump` | （维护者）交互式版本升级 + GitHub 发布：更新 `package.json` 版本、等待 CI、打 tag 并通过 `gh` 创建发布 |
+
+开发者工具：`pnpm type-check`、`pnpm lint`（零警告）、`pnpm format`，以及 `pnpm test` / `pnpm test:watch` / `pnpm test:coverage`（Vitest）。`pnpm studio` 见上文专属章节。
 
 ---
 
@@ -459,7 +511,9 @@ AI 会询问 8 个方面：店铺名称、位置（从描述解析经纬度）�
 | 外部链接 | 所有链接均含 `rel="noopener noreferrer"` |
 | 联系信息 | 默认点击后显示 |
 | `X-Powered-By` 头 | 已抑制 |
-| 卖家 CLI 工具 | 所有脚本只写入 `content/` |
+| 卖家 CLI 工具 | 列表内容变更只写入 `content/`（外加生成的图片清单） |
+| 卖家工作台 | 仅绑定 `127.0.0.1`；写操作请求有 CSRF 防护；发布时只暂存 `content/` + 图片清单（绝不使用 `git add -A`，因此 `.env.local` 不可能被暂存）；从不触碰 `reserved_for` |
+| 图片清单 | `lib/generated/image-manifest.json` 提交到 git，CI 构建因此无需 CDN 凭据 |
 
 ---
 
@@ -476,7 +530,7 @@ AI 会询问 8 个方面：店铺名称、位置（从描述解析经纬度）�
 | 搜索 | fuse.js（客户端，构建时索引） |
 | 分析 | @vercel/analytics + @vercel/speed-insights |
 | 站点地图 | next-sitemap |
-| 动画 | framer-motion |
+| 动画 | motion（framer-motion） |
 | 图标 | @tabler/icons-react |
 | 包管理器 | pnpm |
 | 主要部署 | GitHub Pages（通过 GitHub Actions） |

@@ -2,15 +2,18 @@
 
 > ← [返回 README_zh.md](../README_zh.md) · 🇺🇸 English version: [setup_instruction.md](setup_instruction.md)
 
+**版本：** 1.1  
+**日期：** 2026-08-02
+
 **第 4 阶段：图像管道**
 
-本文档说明如何在完成第 4 阶段后配置图像存储提供商并使用图像同步管道。
+本文档说明如何在完成第 4 阶段后配置图像存储提供商、使用图像同步管道，并通过 Seller Studio 在浏览器中管理照片。
 
 ---
 
 ## 概述
 
-物品照片**不提交到 git**。照片在本地机器上一次性上传到 CDN，通过一个已提交的清单文件（`lib/generated/image-manifest.json`）引用。构建时读取该清单文件——CI 环境不需要任何 CDN 凭证。
+物品照片**不提交到 git**。照片在本地机器上一次性上传到 CDN，通过一个已提交的清单文件（`lib/generated/image-manifest.json`）引用。构建时读取该清单文件——CI 环境不需要任何 CDN 凭证（CI 端唯一需要的变量是非机密的 `NEXT_PUBLIC_SITE_URL`，见下文"CI / GitHub Actions 变量"）。
 
 在 `content/config.ts` 中选择三个存储提供商之一：
 
@@ -34,10 +37,12 @@
 
 ### 第 2 步 — 启用公共访问
 
-在存储桶设置中启用公共访问：
+照片需要可公开访问的 URL。**自定义域名是推荐且目前受支持的方式：**
 
-- **方案 A（自定义域名）：** 你的存储桶 → **Settings** → **Custom Domains** → 添加你的域名（如 `images.your-domain.com`），并在 DNS 中添加 CNAME 指向 R2 提供的主机名。
-- **方案 B（r2.dev URL）：** 你的存储桶 → **Settings** → **Public access** → 启用 `r2.dev` 子域名，复制显示的 URL（如 `https://pub-xxxxxxxx.r2.dev`）。
+- **方案 A（自定义域名——推荐）：** 你的存储桶 → **Settings** → **Custom Domains** → 添加你的域名（如 `images.your-domain.com`），并在 DNS 中添加 CNAME 指向 R2 提供的主机名。
+- **方案 B（r2.dev URL——旧版）：** 你的存储桶 → **Settings** → **Public access** → 启用 `r2.dev` 子域名，复制显示的 URL（如 `https://pub-xxxxxxxx.r2.dev`）。
+
+> ⚠️ Cloudflare 已不再为新建的存储桶提供托管的 `r2.dev` 公共 URL——方案 B 仅存在于较早创建的存储桶上。如果找不到 "Enable r2.dev" 开关，请使用自定义域名（方案 A）。
 
 ### 第 3 步 — 配置 CORS
 
@@ -54,6 +59,8 @@
 ```
 
 将 `https://your-domain.com` 替换为你的实际站点 URL。
+
+> ℹ️ **本步骤对本站点是可选的。** 上传通过 S3 SDK 在你的机器上以服务端方式完成，照片通过普通 `<img>` 标签渲染——没有任何代码路径需要浏览器↔存储桶的 CORS。仅当你以后需要从 JavaScript 中获取 CDN 图片（如 canvas/WebGL）时才需要添加该策略。
 
 ### 第 4 步 — 找到 Account ID 并创建 API Token
 
@@ -171,13 +178,30 @@ pnpm push
 > 🔒 `pnpm upload-images` 会在每张新增或变更的照片上传前，自动剥离其
 > EXIF/GPS 元数据（包括拍摄地点），详见下方"照片隐私"。
 
+**部分失败是安全的。** 如果某张照片上传失败，整批上传不会被丢弃：清单文件仍会为成功的文件写入，脚本在最后以退出码 1 结束。重新运行 `pnpm upload-images` 只会重试失败或变更的文件（`.image-cache/checksums.json` 中的 sha256 校验和缓存使运行增量化）。上传模式还会在 CDN 上传的同时将 `content/contact/` 复制到 `public/contact/`。
+
+> 🔐 **Git 前置条件：** `pnpm push`（以及 Studio 的发布按钮）调用的是原生 `git`——没有任何脚本读取 GitHub token 环境变量。在首次发布前，请确保你的机器上 `git push` 到 GitHub 仓库已经可用（SSH 密钥或通过凭证助手的个人访问令牌）。
+
+### 浏览器管理：Seller Studio（可选）
+
+```bash
+pnpm studio              # http://127.0.0.1:5174
+pnpm studio --port 5200  # 自定义端口（1024–65535）
+```
+
+Seller Studio 是一个**仅限本地**的浏览器管理面板（绑定 `127.0.0.1`），用于编辑物品元数据、管理照片（上传 / 删除 / 排序）、批量修改状态以及将照片同步到 CDN——无需命令行。
+
+- 它的 **Sync** 按钮使用本指南中配置的同一份 `.env.local` 凭证（`CF_R2_*` 或 `BLOB_READ_WRITE_TOKEN`，取决于你的提供商）。
+- 它的 **Publish** 按钮与 `pnpm push` 行为一致：只暂存 `content/` 和 `lib/generated/image-manifest.json`（从不使用 `git add -A`），因此 `.env.local` 绝不会被意外提交。
+- 缺少 CDN 凭证不会阻止启动——只有在触发同步时才会以错误形式提示。
+
 ### 本地开发
 
 ```bash
 pnpm dev
 ```
 
-`pnpm dev` 会自动先运行 `scripts/sync-images.ts --mode dev-sync`，将 `content/items/` 中的照片复制到 `public/items/`——本地开发时不需要 CDN 凭证。
+`pnpm dev` 会自动先运行 `scripts/sync-images.ts --mode dev-sync`，将 `content/items/` 中的照片复制到 `public/items/`（并将 `content/contact/` 中的联系文件复制到 `public/contact/`）——本地开发时不需要 CDN 凭证。
 
 ### 生产构建
 
@@ -186,6 +210,18 @@ pnpm build
 ```
 
 `prebuild` 步骤调用 `scripts/sync-images.ts --mode build-check`。在 CI（GitHub Actions）上，照片文件不存在（已被 gitignore），但会使用已提交的清单文件解析所有图片 URL。CI 不需要 CDN 凭证。
+
+---
+
+## CI / GitHub Actions 变量
+
+CI **不需要任何 CDN 凭证**——CI 端唯一需要的变量是：
+
+| 变量 | 值 | 设置位置 |
+|---|---|---|
+| `NEXT_PUBLIC_SITE_URL` | 你的生产站点 URL（如 `https://your-domain.com`） | GitHub 仓库 → **Settings → Variables → Actions → New repository variable**——普通 Variable，**不是** Secret |
+
+该变量由 `next-sitemap.config.js`（经 `scripts/postbuild.ts` 调用）读取，用于生成站点地图；未设置时使用占位符 `https://your-domain.com`。如果希望本地构建也生成正确的站点地图 URL，也可以将其加入 `.env.local`。Open Graph URL 不依赖该变量——它来自 `content/config.ts` 中的 `baseUrl`（经 `app/layout.tsx` 的 `metadataBase` 生效）。
 
 ---
 
@@ -208,7 +244,7 @@ pnpm build
 
 > ⚠️ **照片不在 git 中，云存储不是备份。**
 >
-> 每次成功运行 `pnpm upload-images` 后，脚本都会打印备份提醒。请确保将 `content/` 文件夹（尤其是照片）备份到外置硬盘或云存储服务（iCloud、Google Drive、Dropbox）。
+> 每次运行 `pnpm upload-images` 后，脚本都会打印备份提醒。请确保将 `content/` 文件夹（尤其是照片）备份到外置硬盘或云存储服务（iCloud、Google Drive、Dropbox）。
 
 ---
 
@@ -236,7 +272,7 @@ pnpm build
 - GIF 会原样上传（GIF 没有 EXIF 数据，重新编码会破坏动图）。
 
 此处理只影响上传到 CDN 的副本，`content/items/` 中的原始文件不会被修改。
-每次上传后的汇总行会报告处理了多少张照片，例如：
+每次有照片实际上传时，汇总行会报告处理了多少张照片，例如：
 
 ```
 🔒 stripped EXIF/GPS metadata from 3/3 uploaded image(s)
@@ -251,4 +287,5 @@ pnpm build
 | `Missing CF_R2_*` | 环境变量未设置 | 对照 Cloudflare 控制台检查 `.env.local` 的值 |
 | `Missing BLOB_READ_WRITE_TOKEN` | Token 未设置 | 在 Vercel 控制台 → Storage → Blob 重新生成 |
 | 部署后图片显示破损 | 清单文件未提交 | 运行 `pnpm upload-images` 并提交 `lib/generated/image-manifest.json` |
+| 运行结尾出现 `N file(s) failed to upload` | 某张照片上传失败，成功的上传已保留 | 重新运行 `pnpm upload-images`——仅重试失败/变更的文件（增量校验和缓存） |
 | `@vercel/blob is not installed` | SDK 缺失 | 运行 `pnpm add -D @vercel/blob` |

@@ -101,4 +101,4 @@ A single flat price (no distance tiers) is also valid:
 3. Run `pnpm upload-images` to push photos to the CDN.
 4. Commit and push to GitHub — the site rebuilds automatically.
 
-For a full walkthrough with no terminal commands, see **SETUP_GUIDE.md** in this folder.
+For a full walkthrough without writing any code, see **SETUP_GUIDE.md** at the repository root.

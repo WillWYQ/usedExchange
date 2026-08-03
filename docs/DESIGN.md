@@ -1,8 +1,8 @@
 # UsedExchange — Project Design Document
 
-**Version:** 0.9.1  
-**Date:** 2026-06-01  
-**Status:** Decisions Resolved — Ready for Implementation
+**Version:** 0.10.0  
+**Date:** 2026-08-02  
+**Status:** Decisions Resolved — Implementation Live (all phases 0–18 shipped)
 
 ---
 
@@ -10,7 +10,7 @@
 
 UsedExchange is a statically-generated personal web storefront for listing second-hand items for sale. Content is managed entirely through the local file system — no database, no CMS. The seller adds a folder per item, drops in photos and a `item.json` metadata file, then triggers a build; the site regenerates automatically.
 
-The UI is built on [Aceternity UI](https://ui.aceternity.com) (React + Tailwind CSS) for a polished browsing experience. The architecture is modularised so any part — deployment target, image strategy, contact platforms — can be swapped without restructuring the codebase.
+The UI is built on [Aceternity UI](https://ui.aceternity.com) (React + Tailwind CSS). The architecture is modularised so any part — deployment target, image strategy, contact platforms — can be swapped without restructuring the codebase.
 
 ### Target Users
 
@@ -44,7 +44,7 @@ A broader audience reachable once the project gains visibility (campus blog post
 **What this means for the design:**
 - The `content/` single-folder rule is the core accessibility feature — everything they touch is in one place, no code required
 - CLI tools (`pnpm mark-sold`, etc.) lower the barrier further — no JSON editing for common operations
-- A future local seller dashboard (FEATURES_ROADMAP.md Tier 3) is the ultimate accessibility unlock for this segment
+- The local-only **Seller Studio** (`pnpm studio`, see §22) is the accessibility unlock for this segment — a browser GUI over the same `content/` folder, no JSON editing required
 - Documentation and error messages must assume zero terminal knowledge
 
 ---
@@ -65,7 +65,7 @@ A broader audience reachable once the project gains visibility (campus blog post
 ### Non-Goals (v1)
 - Real-time inventory updates without a rebuild
 - Buyer-facing checkout or payment processing (Stripe payment *links* are supported as external links, not in-app checkout)
-- User authentication or seller dashboard UI
+- User authentication or buyer accounts (seller-facing management is provided by the local-only Seller Studio — see §22; it is a single-user local tool, not a hosted multi-user dashboard)
 - Server-side geolocation or IP-lookup — visitor distance is calculated entirely in the browser; no coordinates leave the device
 - Multi-seller or concurrent write support — this is a **single-seller design**. The manifest and config files are owned by one person. Running `pnpm upload-images` concurrently from two machines is undefined behavior; the last writer wins.
 
@@ -292,6 +292,8 @@ content/                            ← ★ THE ONLY FOLDER SELLERS NEED TO TOUC
 ## 5. JSON Schema — `item.json`
 
 Only `name` is required. Every other field is optional; the build applies safe defaults when absent.
+
+The schema (`lib/content/schema.ts`) defines **36 top-level fields**; counting the private `reserved_for` note (documented below but intentionally stripped by the Zod schema and never rendered) brings the total to **37 top-level entries**.
 
 `item.json` is **JSONC** (JSON with `//` comments and trailing commas allowed,
 parsed via `jsonc-parser`) — strictly a superset of JSON, so existing
@@ -628,12 +630,14 @@ Items past retention are excluded from all pages and `generateStaticParams` enti
 ```
 /                              Home — category overview + recently listed
 /all                           Browse All — all non-draft items, cross-category (sold toggleable), with filter + sort
-/sold                          Sold Archive — all sold items regardless of retention window
+/sold                          Sold Archive — sold items regardless of retention window; grid capped by soldArchiveDisplayLimit
+/about                         About — ProjectIntro overview (see §10.6)
+/newly-listed                  Newly Listed — since-last-visit grouping (see §10.7)
 /[category]                    Category page — item grid with filter, sort, search
 /[category]/[item]             Item detail — gallery, pricing, metadata, contact, share
 ```
 
-All routes are statically generated at build time.
+All routes are statically generated at build time. The `/sold` grid renders at most `siteConfig.soldArchiveDisplayLimit` of the most-recent sold items (`0` = no cap); older items remain in `content/` and still count toward the header total, but are not rendered. This cap is distinct from `soldItemRetentionDays` (see §8 and §15).
 
 `app/not-found.tsx` renders a 404 page with the site header, a "Page not found" message, and a link back to the home page. It is shown when a user navigates to any URL that was not generated at build time (e.g. a deleted item's former URL).
 
@@ -661,7 +665,13 @@ The site header appears on all pages and contains:
 - **Filter + sort bar** (client-side):
   - **Condition chips** — multi-select, all selected by default
   - **Sort select** — Price low→high · Price high→low · Date listed (newest) · Condition (new first); default = Date listed
-  - **Price range slider** — operates on location-resolved price; hidden when no items have tiers; resets when distance changes
+  - **Price range slider** — operates on location-resolved price; hidden when no items have tiers; resets when distance changes. Its outlier handling is governed by `ui.priceFilterStrategy` (see §13), which selects one of five strategies implemented in `lib/utils/priceFilterStrategies.ts`:
+    - `"none"` *(default)* — raw min/max of the resolved prices
+    - `"percentile"` — slider clamped to the P5–P95 range, ignoring extreme outliers
+    - `"logarithmic"` — non-linear slider scale for wide price spreads
+    - `"preset-buckets"` — quick-tap price-range buttons; boundaries from `ui.priceFilterBuckets` (e.g. `[50, 100, 300]` → "< $50", "$50–$100", "$100–$300", "$300+"). The "all prices" bucket label is `t.filterPriceBucketAll`.
+    - `"iqr"` — slider clamped via the interquartile range
+    When a strategy hides out-of-range items, the bar shows a `t.filterPriceIncludesOutliers` ("+ items outside range") hint.
   - **Status toggle** — sold items hidden by default
 - **"Browse All" link** — prominent link to `/all` page
 - **Item grid** — cards with location-resolved prices, sort and filter applied client-side
@@ -690,7 +700,8 @@ The site header appears on all pages and contains:
   - **"Pay with Venmo" button** — shown when `venmo_payment_request` is non-empty; opens the Venmo payment-request URL in a new tab (parallel to "Pay Deposit"). When empty, no button renders; the Venmo contact platform link remains available in the contact section.
   - **Initial SSG state** — static HTML shows highest tier (`resolveItemPrice` called server-side as pure function → passed as `initialResolvedTier` to `PricingSection`)
   - **Social media note** — crawlers always see highest tier price (intentional)
-- **Metadata table** — brand, model, age, dimensions, weight, colour, original source (linked), original price; null/empty fields hidden
+- **Metadata table** — brand, model, age, dimensions, weight, colour, original source (linked), original price; null/empty fields hidden. Dimensions/weight are converted for display to the visitor's resolved unit system (`lib/utils/units.ts`; see §13 `measurementUnit` / `localeMeasurementUnits`).
+- **Shipping estimator** — `ShippingEstimator` (client) shows a live carrier-rate estimate when `siteConfig.shipping` is enabled, the item has `weight` + `dimensions`, and the resolved tier is the open-ended shipping tier. See §21 for the full architecture (Cloudflare Worker proxy).
 - **Contact section** — platform buttons with pre-filled messages; `preferred_payment` list; `contact_note`
 - **Tags** — non-interactive chips (searchable via fuse.js search)
 - **Share button** — native share (`navigator.share()`) on mobile; copy-link fallback on desktop; shows "Copied!" toast
@@ -702,7 +713,7 @@ The site header appears on all pages and contains:
 - **Pinterest** — `product:price:amount` and `product:price:currency` meta tags (rich pin support)
 
 ### 10.4 Browse All Page (`/all`)
-- All non-draft items across all categories in one grid — `available` shown by default; `reserved`/`pending` shown with status badges; `sold` hidden by the status toggle (toggle on to reveal). Same visibility set as a category page (aggregates `loadItemsByCategory()` across all categories — see §15)
+- All non-draft items across all categories in one grid — `available` shown by default; `reserved`/`pending` shown with status badges; `sold` hidden by the status toggle (toggle on to reveal). Same visibility set as a category page (loaded via `loadBrowseAllPageData()` — see §15)
 - Full filter + sort bar (same as category page)
 - `LocationPriceBar` + distance-resolved pricing
 - No category filter (shows all); condition, sort, price, status filters apply
@@ -710,11 +721,21 @@ The site header appears on all pages and contains:
 
 ### 10.5 Sold Items Archive (`/sold`)
 - All `sold` items regardless of retention window (never filtered by date)
+- The rendered grid is capped at `siteConfig.soldArchiveDisplayLimit` of the most-recent sold items (`0` = no cap). Items beyond the cap stay in `content/` and count toward the header total but are not rendered. This display cap is separate from `soldItemRetentionDays` (which controls visibility site-wide — see §8/§15).
 - Items sorted by `sold_date` descending; items without `sold_date` sorted by `listed_date`
 - No pricing shown (sold); no contact section
 - Shows: cover image, name, condition badge, sold date, category
 - Social proof for buyers: "look what sold recently"
 - No filter bar (read-only archive)
+
+### 10.6 About Page (`/about`)
+- Renders the `ProjectIntro` component (`components/intro/ProjectIntro.tsx`, client) — a full overview of the project.
+- The same `ProjectIntro` is shown on the home page **instead of the catalog** when the site is detected as an unconfigured template/demo. `lib/utils/templateStatus.ts` gates this: while `baseUrl` is still the placeholder domain or the demo domain, the home page shows `ProjectIntro` so a fresh clone doesn't publish an empty-looking storefront. Once the seller sets a real `baseUrl`, the catalog renders. (`check-config` — see §14 — fails a production build while the placeholder domain remains.)
+
+### 10.7 Newly Listed Page (`/newly-listed`)
+- Server shell renders `NewlyListedClient` (`components/newly-listed/NewlyListedClient.tsx`, client), which groups available items relative to the visitor's last visit: **Since Last Visit**, **Today**, **This Week**.
+- The last-visit timestamp is stored in the browser (`localStorage`); on a **first visit** (no stored timestamp) the page shows a welcome state (`t.newlyListedFirstVisit`) rather than an empty "since last visit" group. Empty periods show `t.newlyListedNoneInPeriod`.
+- Data comes from `loadBrowseAllPageData()` (shared with `/all` — see §11); no coordinates leave the device and no visit data is sent to any server.
 
 ---
 
@@ -739,11 +760,21 @@ lib/content/loader.ts
   ├── loadCategories()              → Category[]       (used by all pages)
   ├── loadItemsByCategory(slug)     → Item[]           (used by category page)
   ├── loadItem(catSlug, itemSlug)   → Item | null      (used by item detail page)
-  ├── loadAllItems()                → Item[]           (used by home page "Recently Listed" strip ONLY;
-  │                                                     filters: status === "available" only, limited to
-  │                                                     siteConfig.recentlyListedCount. The /all page does
-  │                                                     NOT use this function — it aggregates
-  │                                                     loadItemsByCategory() across all categories.)
+  ├── loadHomePageData()            → { categories, recentItems }
+  │                                                     (used by the home page /page.tsx — parses each
+  │                                                     category once and returns both the category cards
+  │                                                     and the Recently Listed strip in a single pass)
+  ├── loadBrowseAllPageData()       → { items: Item[]; categories: Category[] }
+  │                                                     (used by /all and /newly-listed — aggregates all
+  │                                                     non-draft items across categories in one pass,
+  │                                                     avoiding a double parse)
+  ├── loadAllItemsRaw()             → Item[]           (all items of every status, uncapped — used by the
+  │                                                     Facebook export; do NOT use for page rendering)
+  ├── loadAllItems()                → Item[]           (available status only, capped at
+  │                                                     siteConfig.recentlyListedCount — retained for
+  │                                                     back-compat; page rendering prefers the
+  │                                                     loadHomePageData / loadBrowseAllPageData entry
+  │                                                     points above)
   └── loadSoldItems()               → Item[]           (used by /sold archive page; all sold, no date filter)
   │
   │   ┌─ build-time side module (not part of page-rendering data flow) ────────┐
@@ -804,7 +835,8 @@ components/
 │   ├── FreshnessLabel.tsx         ← client; "Listed 3 days ago" computed at view time (see §12 rules)
 │   ├── QuantityBadge.tsx          ← "3 available" when quantity > 1
 │   ├── TextbookBadge.tsx          ← "For CS101 · 3rd Edition" + Compare Prices link
-│   └── LocalizedItemContent.tsx   ← client; localised name <h1> + Markdown description; re-renders on locale switch
+│   ├── LocalizedItemContent.tsx   ← client; localised name <h1> + Markdown description; re-renders on locale switch
+│   └── ShippingEstimator.tsx      ← client; ZIP input + live carrier-rate estimate (see §21)
 │
 ├── contact/
 │   ├── ContactSection.tsx         ← reveal wrapper + platform list
@@ -813,8 +845,10 @@ components/
 │
 ├── pricing/
 │   ├── LocationPriceBar.tsx       ← client component; permission request + distance display + override
+│   ├── DistancePricingContext.tsx ← client; shared geo/distance context provider
 │   ├── useGeolocation.ts          ← hook: wraps navigator.geolocation, returns {lat, lng, status}
-│   └── useDistancePricing.ts      ← hook: (sellerCoords, visitorCoords | distanceMi) → resolvedTier
+│   ├── useDistancePricing.ts      ← hook: (sellerCoords, visitorCoords | distanceMi) → resolvedTier
+│   └── useShippingRate.ts         ← hook (client): POSTs to the shipping Worker, returns cheapest rate (see §21)
 │
 ├── filters/
 │   ├── FilterBar.tsx              ← client; condition chips, price slider, status toggle, sort select
@@ -828,25 +862,48 @@ components/
 │   └── ItemCardAdapter.tsx
 │
 ├── search/
-│   ├── SearchBar.tsx              ← client component; fuse.js input in SiteHeader
+│   ├── SearchBar.tsx              ← client; search UI in SiteHeader
+│   ├── SearchBarClient.tsx        ← client; fuse.js input (dynamically imported, ssr:false)
 │   └── useSearch.ts               ← hook: loads search-index.json, manages query + results
 │
 ├── i18n/
 │   ├── LocaleProvider.tsx         ← client; React context for active locale; reads/writes localStorage
 │   ├── LocaleSwitcher.tsx         ← client; locale toggle buttons in SiteHeader; hidden when availableLocales.length ≤ 1
-│   └── useLocale.ts               ← hook: reads active locale from LocaleProvider context
+│   ├── useLocale.ts               ← hook: reads active locale from LocaleProvider context
+│   └── useT.ts                    ← hook: returns the active locale's UIStrings dictionary (client components)
+│
+├── intro/
+│   ├── ProjectIntro.tsx           ← client; full project overview (About page + template/demo home page; see §10.6)
+│   ├── UISlotPlayground.tsx       ← client; live preview of the §18 UI slot options
+│   └── projectIntro.dictionary.ts ← intro copy
+│
+├── newly-listed/
+│   └── NewlyListedClient.tsx      ← client; since-last-visit grouping for /newly-listed (see §10.7)
+│
+├── theme/
+│   ├── ThemeProvider.tsx          ← client; dark/light theme context (persisted)
+│   └── ThemeToggle.tsx            ← client; theme switch in SiteHeader
+│
+├── units/
+│   ├── MeasurementUnitProvider.tsx← client; metric/imperial context resolved per locale (lib/utils/units.ts)
+│   ├── MeasurementUnitToggle.tsx  ← client; visitor-facing unit toggle
+│   └── useMeasurementUnit.ts      ← hook: reads the active unit system
 │
 └── common/
     ├── AdaptiveImage.tsx          ← next/image vs <img> switch by deploymentMode
     ├── ShareButton.tsx            ← client; navigator.share() + copy-link fallback
     ├── JsonLd.tsx                 ← server component; renders <script type="application/ld+json">
-    └── RecentlyViewed.tsx         ← client; sessionStorage-based recently-viewed strip
+    ├── RecentlyViewed.tsx         ← client; sessionStorage-based recently-viewed strip
+    └── useIncrementalReveal.ts    ← client hook; staggered reveal animation for grids
 ```
+
+> At `components/` root there are also six server-rendered `*-demo.tsx` showcase files (`grid-background-demo.tsx`, `apple-cards-carousel-demo.tsx`, `background-beams-demo.tsx`, `background-boxes-demo.tsx`, `infinite-moving-cards-demo.tsx`, `shooting-stars-and-stars-background-demo.tsx`) used by `UISlotPlayground`; `components/ui/` holds the installed Aceternity slot components (27 supported — see §18 — all client).
 
 ### Component Rules
 - `ui/` — Aceternity originals; extend by wrapping, never modifying in place
 - Prop types derived from `lib/content/types.ts`; no raw JSON objects passed to components
-- `"use client"` on: `RecentlyListedSection`, `ItemGrid`, `PricingSection`, `ItemGallery`, `FilterBar`, `SortSelect`, `ContactSection`, `PlatformButton`, `QRModal`, `LocationPriceBar`, `PricingTableToggle`, `PricingTable`, `MakeOfferButton`, `ConditionGuide`, `SearchBar`, `ShareButton`, `RecentlyViewed`, `FreshnessLabel`, `ItemCard`, `LocalizedItemContent`, `LocaleProvider`, `LocaleSwitcher`, `SiteHeader`, `MetadataTable`, `ConditionBadge`, `StatusBadge`
+- `"use client"` on: `RecentlyListedSection`, `ItemGrid`, `PricingSection`, `ItemGallery`, `FilterBar`, `SortSelect`, `ContactSection`, `PlatformButton`, `QRModal`, `LocationPriceBar`, `PricingTableToggle`, `PricingTable`, `MakeOfferButton`, `ConditionGuide`, `SearchBar`, `SearchBarClient`, `ShareButton`, `RecentlyViewed`, `FreshnessLabel`, `ItemCard`, `LocalizedItemContent`, `LocaleProvider`, `LocaleSwitcher`, `SiteHeader`, `MetadataTable`, `ConditionBadge`, `StatusBadge`, `ShippingEstimator`, `DistancePricingContext`, `useShippingRate`, `ProjectIntro`, `UISlotPlayground`, `NewlyListedClient`, `ThemeProvider`, `ThemeToggle`, `MeasurementUnitProvider`, `MeasurementUnitToggle`, and the `useIncrementalReveal` / `useT` / `useMeasurementUnit` / `useGeolocation` / `useDistancePricing` / `useFilters` / `useSearch` / `useLocale` hooks
+  - `lib/utils/pricing.ts` (`resolveItemPrice`) and `lib/utils/shipping.ts` deliberately have **no** `"use client"` so they stay importable by both server and client components (Iron Rule 6).
   - `PlatformButton` requires `"use client"` because it receives an `onClick` function prop (state setter from `ContactSection`) — function props are not serialisable across the server/client boundary.
   - `SearchBar` is loaded via `next/dynamic({ ssr: false })` to avoid hydration mismatch from fuse.js.
   - `ShareButton` uses `navigator.share()` and `navigator.clipboard` — browser-only APIs.
@@ -875,6 +932,8 @@ components/
 This file lives inside `content/` alongside the items and QR codes. It is the only TypeScript file sellers ever edit. App code imports it as `import { siteConfig } from "@/content/config"`.
 
 > ⚠️ **`content/config.ts` is imported by client components** and therefore becomes part of the browser bundle. All field values must be static, serialisable constants. Do not use Node.js APIs (`fs`, `path`, `process.env`, etc.) at the module level. Seller coordinates, contact handles, and site name are all intentionally public — they appear in page source.
+
+> 🔁 **Backward compatibility (template updates).** `content/config.ts` is seller-owned — `pnpm update-site` never overwrites it (see §22). Every config field added after the original core (`defaultPriceTiers?`, `measurementUnit?`, `shipping?`, `i18n.localeMeasurementUnits?`, `ui.priceFilterStrategy?`, `ui.priceFilterBuckets?`, `soldArchiveDisplayLimit?`) is **TypeScript-optional (`?`)** with a runtime `??` default at its consumption site, so a downstream site that pulls new template code but has not updated its config still type-checks and runs. `pnpm migrate-config` (run automatically by `update-site`) can splice these optional fields into an older config from `scripts/lib/configDefaults.ts`.
 
 ```ts
 import type { SiteConfig } from "@/lib/config/types";
@@ -916,7 +975,21 @@ export const siteConfig: SiteConfig = {
   currency: "USD",
   recentlyListedCount: 6,
   soldItemRetentionDays: 3,                   // 0 = keep forever; -1 = hide immediately
-  measurementUnit: "metric",                  // "metric" (cm/kg) | "imperial" (in/lb)
+  // REQUIRED — caps how many of the most-recent sold items the /sold grid renders
+  // (0 = render every sold item with no cap). Older items stay in content/ and
+  // count toward the header total but are not rendered. Distinct from
+  // soldItemRetentionDays (retention = visibility window; this = /sold display cap).
+  soldArchiveDisplayLimit: 200,
+
+  // OPTIONAL — default price tiers written into every new item.json by
+  // `pnpm create-item`. Tiers with miles_max are pickup; tiers without are shipping.
+  // When absent, a built-in 3-tier default (pickup ≤5mi / 6–15mi / Shipping) is used.
+  // defaultPriceTiers: [
+  //   { label: "Local pickup (≤ 15 mi)", miles_max: 15, amount: 0 },
+  //   { label: "Shipping (buyer pays)", amount: 0 },
+  // ],
+
+  measurementUnit: "metric",                  // "metric" (cm/kg) | "imperial" (in/lb) — optional
   // ^ Default unit for new item.json dimensions/weight (pnpm create-item) and
   //   the fallback display unit on item pages (lib/utils/units.ts converts
   //   each item's stored dimensions/weight to this unit system). Override per
@@ -998,12 +1071,19 @@ export const siteConfig: SiteConfig = {
   // Selected locale is persisted in localStorage; static HTML always shows defaultLocale.
   //
   // Two translation layers:
-  //   1. UI strings  — all 67 button/label/badge strings, defined here in translations.{locale}
+  //   1. UI strings  — the ~87 button/label/badge strings of UIStrings
+  //                    (lib/config/types.ts), defined here in translations.{locale}
   //   2. Item content — name_{locale} / description_{locale} in each item.json;
   //                     run /translate-items to batch-fill these
   //
-  // The build fails (check-config) if a locale is in availableLocales but its
-  // translations entry is missing or has fewer than all 67 required keys.
+  // The build fails (check-config, see §14) if a locale is in availableLocales but
+  // its translations entry is missing or lacks any of the 73 required keys (a core
+  // subset of UIStrings). The remaining keys (shipping*, newlyListed*,
+  // filterPriceBucketAll, filterPriceIncludesOutliers) are optional and fall back.
+  //
+  // Safety net: at runtime getTranslations() (server) and useT() (client) merge the
+  // active dictionary over EN_FALLBACK (lib/i18n/translations.ts) and the default
+  // locale, so a partial locale dictionary still renders instead of showing blanks.
   i18n: {
     defaultLocale: "en",              // locale rendered in SSG static HTML; ISO 639-1
     availableLocales: ["en"],         // add "zh", "es", etc. to enable LocaleSwitcher
@@ -1020,6 +1100,7 @@ export const siteConfig: SiteConfig = {
         // ── Section headings ──────────────────────────────────────────────
         recentlyListed: "Recently Listed",
         recentlyViewed: "Recently Viewed",
+        categoriesHeading: "Browse by Category",
         // ── Contact ───────────────────────────────────────────────────────
         contactSeller: "Contact Seller",
         itemSold: "Item sold",
@@ -1057,6 +1138,8 @@ export const siteConfig: SiteConfig = {
         // ── Filter / sort bar ──────────────────────────────────────────────
         filterShowSold: "Show sold",
         filterPrice: "Price",
+        filterPriceBucketAll: "All prices",
+        filterPriceIncludesOutliers: "+ items outside range",
         sortBy: "Sort by",
         sortNewestFirst: "Newest first",
         sortPriceLow: "Price: low → high",
@@ -1081,6 +1164,7 @@ export const siteConfig: SiteConfig = {
         enterManually: "Enter manually",
         distanceManualLabel: "(manual)",
         distanceUnit: "mi",
+        distanceInputLabel: "Distance in miles",
         apply: "Apply",
         pricesAtPickupRate: "Prices shown at pickup rate",
         enterDistance: "Enter distance",
@@ -1096,9 +1180,27 @@ export const siteConfig: SiteConfig = {
         obo: "OBO",
         hidePricingTiers: "Hide pricing tiers",
         viewAllPricingTiers: "View all pricing tiers",
+        // ── Shipping estimator (optional — see §21) ───────────────────────
+        shippingEstimateLabel: "Estimated shipping",
+        shippingZipPlaceholder: "ZIP code",
+        shippingCalculating: "Calculating shipping…",
+        shippingUnavailable: "Shipping estimate unavailable",
+        shippingIncludedBySeller: "Free shipping (included by seller)",
+        shippingEstimateSuffix: "shipping",
+        // ── Mobile nav drawer ─────────────────────────────────────────────
+        menuOpen: "Open menu",
+        menuClose: "Close menu",
+        // ── Newly Listed page (see §10.7) ─────────────────────────────────
+        newlyListed: "Newly Listed",
+        newlyListedSinceLastVisit: "Since Last Visit",
+        newlyListedToday: "Today",
+        newlyListedThisWeek: "This Week",
+        newlyListedFirstVisit: "Welcome! Everything here is new to you.",
+        newlyListedNoneInPeriod: "No new items in this period.",
       },
-      // To enable Chinese, uncomment and translate all 67 keys, add "zh" to availableLocales:
-      // zh: { home: "首頁", about: "關於", browseAll: "瀏覽全部", ... },
+      // To enable Chinese, uncomment and translate all ~87 keys (every UIStrings
+      // key; at minimum the 73 check-config requires), then add "zh" to availableLocales:
+      // zh: { home: "首页", about: "关于", browseAll: "浏览全部", ... },
     },
   },
 };
@@ -1149,6 +1251,14 @@ Then:
 pnpm build
   │
   ├── [prebuild]
+  │     ├── scripts/check-config.ts  ← fails the build (exit 1) when:
+  │     │     ├── siteConfig.baseUrl still contains the placeholder domain
+  │     │     │   (https://your-domain.com) — otherwise canonical/OG/JSON-LD URLs
+  │     │     │   would silently ship pointing at the placeholder (SEO footgun)
+  │     │     └── any locale in availableLocales is missing from i18n.translations
+  │     │         or lacks any of the 73 required UIStrings keys (with fallback to
+  │     │         the default locale's entry) — see §13
+  │     │
   │     ├── scripts/sync-images.ts  (build-check mode)
   │     │     ├── No image files in content/items/ (gitignored — not on CI runner)
   │     │     ├── content/contact/** present (git-tracked) → copies to public/contact/
@@ -1211,13 +1321,13 @@ pnpm dev
 | `sold` | No | Card visible (if not past retention) | Yes + overlay (hidden by toggle) | Yes (hidden by toggle) | **Always** | Yes (if not past retention) | Detail page excluded after `soldItemRetentionDays` |
 | `draft` | No | No | No | No | No | No | Never generates a route |
 
-**Notes on "Home — recently listed":** The recently listed strip uses `loadAllItems()`, which returns `available` status only and is limited to `siteConfig.recentlyListedCount` items. `reserved` and `pending` items do NOT appear in the strip.
+**Notes on "Home — recently listed":** The recently listed strip is served by `loadHomePageData()` (see §11), which returns `available` status only and is limited to `siteConfig.recentlyListedCount` items. `reserved` and `pending` items do NOT appear in the strip.
 
 **Notes on "Home — category card":** A category card is visible if the category has ≥ 1 item with status `available`, `reserved`, `pending`, or (`sold` AND within `soldItemRetentionDays`). Items that are `draft` or (`sold` AND past retention) never count toward card visibility. The displayed item count on the card shows `available` items only. Cover image uses the first `available` item's cover.
 
-**Notes on `/[category]` and `/all` pages:** Both pages load all non-draft, non-expired-sold items via `loadItemsByCategory()` (or aggregated calls for `/all`). Sold items are hidden by the status toggle by default but visible when toggled on.
+**Notes on `/[category]` and `/all` pages:** Both pages show all non-draft, non-expired-sold items — `/[category]` loads them via `loadItemsByCategory()`, while `/all` loads them via `loadBrowseAllPageData()` (single-pass aggregation). Sold items are hidden by the status toggle by default but visible when toggled on.
 
-**Notes on `/sold` archive:** Uses `loadSoldItems()`. Shows ALL `sold` items regardless of `soldItemRetentionDays`. No retention filter applies here.
+**Notes on `/sold` archive:** Uses `loadSoldItems()`. Shows `sold` items regardless of `soldItemRetentionDays` — no retention filter applies here. However, the **rendered grid is capped** at `siteConfig.soldArchiveDisplayLimit` of the most-recent sold items (`0` = no cap); items beyond the cap stay in `content/` and count toward the header total but are not rendered. Retention (visibility window) and this display cap are independent settings.
 
 ---
 
@@ -1250,13 +1360,18 @@ usedExchange/
 │   ── APP CODE (sellers never need to edit below this line) ──────────────────
 │
 ├── app/
-│   ├── layout.tsx                 ← BackgroundEffect, Analytics, SpeedInsights wrappers
+│   ├── layout.tsx                 ← composes client providers (LocaleProvider, ThemeProvider,
+│   │                                MeasurementUnitProvider) + BackgroundEffect, Analytics, SpeedInsights
 │   ├── globals.css                ← @import "tailwindcss"; @plugin "@tailwindcss/typography" (Tailwind v4)
-│   ├── page.tsx                   ← home
+│   ├── page.tsx                   ← home (catalog, or ProjectIntro on an unconfigured template — see §10.6)
 │   ├── all/
 │   │   └── page.tsx               ← Browse All cross-category page
 │   ├── sold/
-│   │   └── page.tsx               ← Sold Items Archive
+│   │   └── page.tsx               ← Sold Items Archive (grid capped by soldArchiveDisplayLimit)
+│   ├── about/
+│   │   └── page.tsx               ← About — ProjectIntro (see §10.6)
+│   ├── newly-listed/
+│   │   └── page.tsx               ← Newly Listed — server shell → NewlyListedClient (see §10.7)
 │   ├── [category]/
 │   │   ├── page.tsx
 │   │   └── [item]/
@@ -1264,6 +1379,13 @@ usedExchange/
 │   └── not-found.tsx
 │
 ├── components/                    ← see §12
+│
+├── studio/                        ← Seller Studio SPA (local-only; see §22). Vite app + API middleware;
+│                                    edits only content/ + lib/generated/image-manifest.json
+│
+├── workers/
+│   └── shipping-rate-proxy/       ← independently-deployed Cloudflare Worker (see §21); keeps the
+│                                    carrier API key server-side; own package.json + wrangler.toml
 │
 ├── lib/
 │   ├── content/
@@ -1277,9 +1399,16 @@ usedExchange/
 │   │   └── cloudflare-r2.ts       ← "cloudflare-r2" provider
 │   ├── utils/
 │   │   ├── haversine.ts           ← pure haversineInMiles()
-│   │   ├── pricing.ts             ← pure resolveItemPrice(); importable by server components
+│   │   ├── pricing.ts             ← pure resolveItemPrice(); NO "use client" — importable by server + client
+│   │   ├── shipping.ts            ← canEstimateShipping()/resolveShippingPayer(); NO "use client" (see §21)
+│   │   ├── priceFilterStrategies.ts ← the five ui.priceFilterStrategy implementations (see §10.2)
+│   │   ├── units.ts               ← localeMeasurementUnits ?? measurementUnit ?? "metric" (display conversion)
+│   │   ├── slug.ts                ← isValidSlug() shared by generateStaticParams + create/mark-sold scripts
+│   │   ├── templateStatus.ts      ← PLACEHOLDER_DOMAIN + demo-domain gate (ProjectIntro vs catalog; see §10.6)
 │   │   ├── date.ts                ← formatRelativeDate(isoString): "Listed 3 days ago"
 │   │   ├── jsonld.ts              ← buildProductJsonLd(item), buildBreadcrumbJsonLd(crumbs)
+│   │   ├── concurrency.ts         ← small promise-pool helper used by the loader
+│   │   ├── index.ts               ← cn() class-name helper
 │   │   └── i18n.ts                ← getLocalizedField(item, "name", locale): name_zh ?? name
 │   ├── search/
 │   │   └── index.ts               ← buildSearchIndex(): returns Fuse-compatible item index
@@ -1292,19 +1421,28 @@ usedExchange/
 │
 ├── .claude/                       ← Claude Code project configuration
 │   ├── CLAUDE.md                  ← loaded automatically by Claude Code; project context + content/ rule
-│   └── skills/                    ← AI skill files (see §20); work with Claude Code + other AI tools
-│       ├── update-items.md        ← Skill: generate item.json from photos + description file
-│       ├── setup-wizard.md        ← Skill: interactive site config setup wizard
-│       └── translate-items.md     ← Skill: batch-translate item fields into additional locales
+│   └── commands/                  ← AI skill files (see §20); work with Claude Code + other AI tools
+│       ├── setup.md               ← Skill: interactive site config setup wizard (/setup)
+│       ├── setup-shipping.md      ← Skill: guided shipping calculator setup (/setup-shipping, see §21)
+│       ├── translate-items.md     ← Skill: batch-translate item fields into additional locales
+│       └── update-items.md        ← Skill: generate item.json from photos + description file
 │
 ├── scripts/
-│   ├── sync-images.ts             ← image upload pipeline (3 modes)
+│   ├── sync-images.ts             ← image upload pipeline (3 modes: upload / dev-sync / build-check)
+│   ├── check-config.ts            ← prebuild gate: placeholder-domain + translation completeness (see §14)
 │   ├── build-search-index.ts      ← prebuild step: calls buildSearchIndex(), writes public/search-index.json
 │   ├── postbuild.ts               ← postbuild step: runs next-sitemap only when siteConfig.sitemap.enabled
 │   ├── setup-ui.sh                ← one-time developer setup: installs all Aceternity components
-│   ├── create-item.ts             ← pnpm create-item <category>/<name>
+│   ├── create-item.ts             ← pnpm create-item <category>/<name>  (alias: pnpm new)
 │   ├── mark-sold.ts               ← pnpm mark-sold <category>/<name>
-│   └── create-template.ts         ← pnpm create-template [category]
+│   ├── create-template.ts         ← pnpm create-template [category]
+│   ├── studio.ts                  ← pnpm studio — Seller Studio launcher (see §22)
+│   ├── export-facebook.ts         ← pnpm fb-export — Facebook Marketplace CSV export (see §22)
+│   ├── update-site.ts             ← pnpm update-site — pull a template release without touching content/ (see §22)
+│   ├── migrate-config.ts          ← pnpm migrate-config — splice optional config fields from configDefaults.ts
+│   ├── bump-version.ts            ← pnpm bump — interactive version bump + GitHub release
+│   └── lib/                       ← shared support modules (imageSync, itemEdit, itemFields, itemTemplate,
+│                                    markSold, configDefaults, studioApi/Git/Images/Sync, loadEnv, …) + their tests
 │
 ├── .github/
 │   └── workflows/
@@ -1314,12 +1452,15 @@ usedExchange/
 ├── SETUP_GUIDE.md                 ← non-technical user guide (content/ folder operations only)
 ├── postcss.config.mjs             ← Tailwind v4 PostCSS plugin (required); see TECH_REQUIREMENTS.md §22.2
 ├── tailwind.config.ts             ← optional in v4 — only if extending the theme; omit otherwise
+├── docs/                          ← documentation (this file lives here)
+│   ├── DESIGN.md / DESIGN_zh.md
+│   ├── TECH_REQUIREMENTS.md / TECH_REQUIREMENTS_zh.md
+│   ├── ARCHITECTURE.md / CURRENT_FUNCTIONALITY.md  ← see these for Studio + data-flow detail (§22)
+│   └── …
 ├── next.config.ts                 ← imports content/config.ts for deploymentMode
 ├── tsconfig.json
 ├── package.json
-├── README.md
-├── DESIGN.md
-└── TECH_REQUIREMENTS.md
+└── README.md
 ```
 
 ---
@@ -1673,7 +1814,7 @@ The site **never crashes at runtime** due to a UI configuration value.
 
 ## 19. Extensibility Register
 
-The following were previously listed as future features. Those now in v1 have been removed. Only genuinely future items remain.
+The following were previously listed as future features. Those now in v1 have been removed. Only future items remain.
 
 | Future feature | Designated extension point |
 |---|---|
@@ -1688,14 +1829,15 @@ The following were previously listed as future features. Those now in v1 have be
 | Add new UI slot | Add key to `UIConfig`; create new adapter in `components/ui-adapters/`; document in §18 |
 | Add new locale | Add locale to `siteConfig.i18n.availableLocales`; extend Zod schema + `Item` type with `name_{locale}` / `description_{locale}`; run `/translate-items` AI skill to batch-fill translations; `LocaleSwitcher` appears automatically when `availableLocales.length > 1` |
 | RSS feed | Generate `feed.xml` in postbuild by aggregating `loadItemsByCategory()` across all categories (do NOT use `loadAllItems()` — that function returns `available`-only items capped at `recentlyListedCount`); link in `<head>` |
-| Seller dashboard (local GUI) | Local-only Next.js dev-mode route or Electron app that reads/writes `content/`; key unlock for non-technical users |
 | Multi-seller support | Requires full architecture redesign; each seller gets a namespaced `content/` folder |
+
+> ✅ **Implemented since this register was written:** the local seller dashboard is now **Seller Studio** (`pnpm studio`, Phase 18) — see §22. The Facebook Marketplace export (`pnpm fb-export`, Phase 17) and the template-update workflow (`pnpm update-site` / `pnpm migrate-config`) are also live; see §22.
 
 ---
 
 ## 20. AI-Powered Content Generation — Skill-Based Approach
 
-Three AI-assisted workflows are provided as **Claude Code skills** (see `.claude/skills/`). The seller uses whatever AI coding tool they already have — Claude Code, Cursor, GitHub Copilot, or any capable assistant. **No additional API keys, environment variables, or package installation is required.** The seller just opens their AI tool in the project directory and invokes the skill.
+Four AI-assisted workflows are provided as **Claude Code skills** (see `.claude/commands/`). The seller uses whatever AI coding tool they already have — Claude Code, Cursor, GitHub Copilot, or any capable assistant. **No additional API keys, environment variables, or package installation is required.** The seller just opens their AI tool in the project directory and invokes the skill.
 
 ### Design Principle
 
@@ -1710,17 +1852,18 @@ This approach:
 
 ### Skill Files
 
-Three skill files ship with the project:
+Four skill files ship with the project:
 
 ```
 .claude/
-└── skills/
-    ├── update-items.md    ← Skill: generate item.json from photos + description
-    ├── setup-wizard.md    ← Skill: interactive site config setup
-    └── translate-items.md ← Skill: batch-translate item fields into additional locales
+└── commands/
+    ├── setup.md             ← Skill: interactive site config setup
+    ├── setup-shipping.md    ← Skill: guided shipping calculator setup (see §21)
+    ├── translate-items.md   ← Skill: batch-translate item fields into additional locales
+    └── update-items.md      ← Skill: generate item.json from photos + description
 ```
 
-These follow the standard Claude Code skill format and are invokable via `/update-items`, `/setup`, and `/translate-items` in Claude Code. Other AI tools can read them directly as prompt instructions.
+These follow the standard Claude Code skill format and are invokable via `/update-items`, `/setup`, `/setup-shipping`, and `/translate-items` in Claude Code. Other AI tools can read them directly as prompt instructions.
 
 ---
 
@@ -1942,7 +2085,7 @@ The translate skill writes ONLY to `content/items/*/item.json`. It reads `conten
 
 ### Skill File Format
 
-Each skill file is a Markdown document stored in `.claude/skills/`. It contains:
+Each skill file is a Markdown document stored in `.claude/commands/`. It contains:
 1. **Trigger description** — what the skill does (shown in Claude Code's skill list)
 2. **Context** — a summary of the project structure relevant to the task
 3. **Step-by-step instructions** — exactly what the AI should do
@@ -1956,17 +2099,18 @@ The skill files are human-readable. A seller who opens them in a text editor wil
 
 ```
 .claude/
-└── skills/
-    ├── update-items.md     ← describes how to generate item.json from photos
-    ├── setup-wizard.md     ← describes how to generate content/config.ts
-    └── translate-items.md  ← describes how to batch-translate item fields into other locales
+└── commands/
+    ├── setup.md            ← describes how to generate content/config.ts
+    ├── setup-shipping.md   ← describes how to enable + configure the shipping calculator (§21)
+    ├── translate-items.md  ← describes how to batch-translate item fields into other locales
+    └── update-items.md     ← describes how to generate item.json from photos
 ```
 
 ### Compatibility
 
 | AI Tool | How to use |
 |---|---|
-| **Claude Code** | `/update-items`, `/setup`, or `/translate-items` — skills are loaded automatically from `.claude/skills/` |
+| **Claude Code** | `/update-items`, `/setup`, `/setup-shipping`, or `/translate-items` — skills are loaded automatically from `.claude/commands/` |
 | **Cursor** | Open skill file → Cmd+L → paste into chat alongside photos |
 | **GitHub Copilot (chat)** | Open skill file → paste as context → attach photos |
 | **Claude.ai** | Paste skill file content + upload photos → ask AI to follow the instructions |
@@ -1974,7 +2118,7 @@ The skill files are human-readable. A seller who opens them in a text editor wil
 
 ### `content/` Rule — Maintained
 
-All three skills instruct the AI to write ONLY to `content/config.ts`, `content/items/*/item.json`, and `content/items/*/_category.json` (the translator touches only `item.json` locale fields). No app code is touched. The AI is explicitly instructed not to modify any files outside `content/`.
+All four skills instruct the AI to write ONLY to `content/config.ts`, `content/items/*/item.json`, and `content/items/*/_category.json` (the translator touches only `item.json` locale fields; `setup-shipping` writes only the `shipping` block of `content/config.ts` plus optional `weight`/`dimensions`/`shipping_payer` item fields — see §21). No app code is touched. The AI is explicitly instructed not to modify any files outside `content/`.
 
 ---
 
@@ -2096,4 +2240,47 @@ guided, conversational version of the same steps.
 Six new `UIStrings` keys (added to `currency`/pricing-table group):
 `shippingEstimateLabel`, `shippingZipPlaceholder`, `shippingCalculating`,
 `shippingUnavailable`, `shippingIncludedBySeller`, `shippingEstimateSuffix`.
+
+---
+
+## 22. Seller Studio, Export & Template Updates (pointer)
+
+> This spec predates these features; rather than rewrite it, this section points at the
+> authoritative detail. Full architecture and data-flow live in
+> [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) and the current feature list in
+> [`docs/CURRENT_FUNCTIONALITY.md`](CURRENT_FUNCTIONALITY.md). All three are production-shipped.
+
+### Seller Studio (`pnpm studio`, Phase 18)
+A **local-only** browser GUI for managing `content/` without editing JSON. Run `pnpm studio`
+(optionally `--port <n>`, default `5174`).
+- Binds to **127.0.0.1 only** — never exposed to the network.
+- Edits **only** `content/items/**` and `lib/generated/image-manifest.json`. It never reads,
+  writes, or renders the private `reserved_for` field (Iron Rules 1 & 4).
+- Item editing uses comment-preserving JSONC writes (`scripts/lib/itemEdit.ts`), so seller
+  formatting and `// options:` comments survive; the strict field grammar is enforced by
+  `scripts/lib/itemFields.ts`.
+- Its git **publish** stages only `content/` + `lib/generated/image-manifest.json` (mirroring
+  `pnpm push`) and **never** uses `git add -A`, so `.env.local` (CDN credentials) can never be
+  committed accidentally.
+- Item creation scaffolds from the same 36-field template as `pnpm create-item`; photo upload /
+  reorder / delete and CDN sync (SSE progress) are built in.
+- Item defaults live in sparse `_defaults.json` files — `content/items/_defaults.json`
+  site-wide, `content/items/<category>/_defaults.json` per category — managed in the Defaults
+  pane and merged over the scaffold on item creation: template ← site ← category, with
+  `name`/`listed_date`/`status` re-applied last. `pnpm create-item` applies the same merge
+  (`scripts/lib/itemDefaults.ts`); `reserved_for` and the per-item fields are rejected.
+
+### Facebook Marketplace export (`pnpm fb-export`, Phase 17)
+Interactive CLI that exports available/pending/reserved items to Facebook Marketplace bulk-upload
+CSVs (50-item batches, ≤150-char titles, ≤10 photo columns with CDN URLs). Supports skip-previous,
+category/manual selection, and a price-tier strategy (lowest / highest / pickup / shipping). Writes
+to `exports/` (gitignored), including `.export-history.json` for de-duplication.
+
+### Template update & config migration (`pnpm update-site`, `pnpm migrate-config`)
+`pnpm update-site [tag]` pulls a tagged upstream template release into the repo **without touching
+`content/`** (sellers' data is never overwritten), restores the committed `image-manifest.json`
+(Iron Rule 5), migrates `content/config.ts`, verifies, and commits. New config fields are added
+**TypeScript-optional with runtime `??` defaults** and registered in `scripts/lib/configDefaults.ts`
+so `migrate-config` can splice them into older configs — the backward-compat contract described in
+§13. See `docs/UPDATE_GUIDE.md`.
 
