@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { bulkStatus, fetchItems, type StudioItem } from "./api";
 import { Button } from "./components/Button";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { BulkToolbar } from "./panes/BulkToolbar";
 import { DefaultsPane } from "./panes/DefaultsPane";
 import { Drawer } from "./panes/Drawer";
@@ -96,18 +97,21 @@ export function App() {
           content/ · {items.length} items
           {changeCount !== null && changeCount > 0 && <> · {changeCount} uncommitted</>}
         </span>
-        <Button onClick={() => setShowDefaults(true)}>
-          Defaults
-        </Button>
-        <Button variant="primary" onClick={() => setShowNewItem(true)}>
-          New item
-        </Button>
-        <SyncBar
-          onFinished={() => {
-            void refresh();
-            bumpChanges();
-          }}
-        />
+        <div className="head-actions">
+          <ThemeToggle />
+          <SyncBar
+            onFinished={() => {
+              void refresh();
+              bumpChanges();
+            }}
+          />
+          <Button onClick={() => setShowDefaults(true)}>
+            Defaults
+          </Button>
+          <Button variant="primary" onClick={() => setShowNewItem(true)}>
+            New item
+          </Button>
+        </div>
       </header>
       {error !== null && (
         <p role="alert" className="alert-error page-error">
