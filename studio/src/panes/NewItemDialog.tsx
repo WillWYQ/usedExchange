@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createItem } from "../api";
+import { Button } from "../components/Button";
 
 // Mirrors lib/utils/slug.ts's SAFE_SLUG_RE — the server is the real gate
 // (resolveItemDir re-checks with the shared allowlist plus a containment
@@ -49,7 +50,7 @@ export function NewItemDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <h2>New item</h2>
-        {error !== null && <p role="alert">{error}</p>}
+        {error !== null && <p role="alert" className="alert-error">{error}</p>}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -101,12 +102,12 @@ export function NewItemDialog({
             </span>
           </label>
           <div className="dialog-actions">
-            <button type="submit" disabled={busy}>
+            <Button type="submit" variant="primary" disabled={busy}>
               {busy ? "Creating…" : "Create"}
-            </button>
-            <button type="button" onClick={onCancel}>
+            </Button>
+            <Button variant="ghost" onClick={onCancel}>
               Cancel
-            </button>
+            </Button>
           </div>
         </form>
       </div>

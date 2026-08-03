@@ -1,3 +1,5 @@
+import { Button } from "../components/Button";
+
 // Actions keep the same name from button to result: "Mark sold" produces rows
 // that read "sold". One job per control.
 const ACTIONS: Array<{ label: string; status: string }> = [
@@ -24,18 +26,13 @@ export function BulkToolbar({
     <div className="bulk-toolbar" role="region" aria-label="Bulk actions">
       <span className="count">{count} selected</span>
       {ACTIONS.map((action) => (
-        <button
-          key={action.status}
-          type="button"
-          disabled={busy}
-          onClick={() => onApply(action.status)}
-        >
+        <Button key={action.status} disabled={busy} onClick={() => onApply(action.status)}>
           {action.label}
-        </button>
+        </Button>
       ))}
-      <button type="button" onClick={onClear} disabled={busy}>
+      <Button variant="ghost" onClick={onClear} disabled={busy}>
         Clear selection
-      </button>
+      </Button>
     </div>
   );
 }

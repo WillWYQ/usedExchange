@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { StudioItem } from "../api";
+import { Button } from "../components/Button";
 import { EditForm } from "./EditForm";
 import { ImagePane } from "./ImagePane";
 
@@ -18,9 +19,9 @@ export function Drawer({
     <aside className="drawer" aria-label={`${item.name} — item editor`}>
       <header className="drawer-head">
         <h2>{item.name}</h2>
-        <button type="button" onClick={onClose}>
+        <Button variant="ghost" onClick={onClose}>
           Close
-        </button>
+        </Button>
       </header>
 
       <div className="drawer-tabs" role="tablist">

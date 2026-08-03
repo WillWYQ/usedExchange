@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { bulkStatus, fetchItems, type StudioItem } from "./api";
+import { Button } from "./components/Button";
 import { BulkToolbar } from "./panes/BulkToolbar";
 import { DefaultsPane } from "./panes/DefaultsPane";
 import { Drawer } from "./panes/Drawer";
@@ -95,12 +96,12 @@ export function App() {
           content/ · {items.length} items
           {changeCount !== null && changeCount > 0 && <> · {changeCount} uncommitted</>}
         </span>
-        <button type="button" onClick={() => setShowDefaults(true)}>
+        <Button onClick={() => setShowDefaults(true)}>
           Defaults
-        </button>
-        <button type="button" onClick={() => setShowNewItem(true)}>
+        </Button>
+        <Button variant="primary" onClick={() => setShowNewItem(true)}>
           New item
-        </button>
+        </Button>
         <SyncBar
           onFinished={() => {
             void refresh();
@@ -108,7 +109,11 @@ export function App() {
           }}
         />
       </header>
-      {error !== null && <p role="alert">{error}</p>}
+      {error !== null && (
+        <p role="alert" className="alert-error page-error">
+          {error}
+        </p>
+      )}
       {error === null && items.length === 0 && (
         <p>No items yet. Run `pnpm create-item &lt;category&gt;/&lt;name&gt;` to add the first one.</p>
       )}

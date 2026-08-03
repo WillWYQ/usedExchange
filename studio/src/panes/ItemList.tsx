@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import type { StudioItem } from "../api";
+import { StatusBadge } from "../components/StatusBadge";
 
 function formatPrice(item: StudioItem): string {
   if (item.lowestTierAmount === null) return "—";
@@ -16,11 +18,26 @@ function formatPrice(item: StudioItem): string {
 }
 
 function StatusCell({ status, pressed }: { status: string; pressed: boolean }) {
-  if (status === "sold") {
-    return <span className={pressed ? "stamp stamp-press" : "stamp"}>sold</span>;
+  // A just-stamped row plays the SOLD stamp once, then settles into the
+  // regular sold badge. 900ms lets the 260ms press animation land and hold
+  // for a beat. With reduced motion the animation is off but the settle
+  // still happens.
+  const [settled, setSettled] = useState(!pressed);
+
+  useEffect(() => {
+    if (!pressed) {
+      setSettled(true);
+      return;
+    }
+    setSettled(false);
+    const timer = window.setTimeout(() => setSettled(true), 900);
+    return () => window.clearTimeout(timer);
+  }, [pressed]);
+
+  if (status === "sold" && !settled) {
+    return <span className="stamp stamp-press">sold</span>;
   }
-  if (status === "pending") return <span className="status-pending">pending</span>;
-  return <span>{status}</span>;
+  return <StatusBadge status={status} />;
 }
 
 export function ItemList({
@@ -63,7 +80,15 @@ export function ItemList({
       </thead>
       <tbody>
         {items.map((item) => (
-          <tr key={item.id} className={failedIds.has(item.id) ? "failed" : undefined}>
+          <tr
+            key={item.id}
+            className={[
+              failedIds.has(item.id) ? "failed" : "",
+              selectedIds.has(item.id) ? "selected" : "",
+            ]
+              .filter((c) => c !== "")
+              .join(" ") || undefined}
+          >
             <td>
               <input
                 type="checkbox"

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchItemFields, patchItem, type FieldEdit, type ItemFields } from "../api";
+import { Button } from "../components/Button";
 import {
   FIELD_GROUPS,
   pathKey,
@@ -209,18 +210,18 @@ function TierEditor({
                 }}
               />
             </label>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
               onClick={() => setRows((prev) => prev.filter((_, i) => i !== index))}
             >
               Remove
-            </button>
+            </Button>
           </li>
         ))}
       </ol>
-      <button type="button" onClick={() => setRows((prev) => [...prev, blank()])}>
+      <Button variant="ghost" onClick={() => setRows((prev) => [...prev, blank()])}>
         Add tier
-      </button>
+      </Button>
     </fieldset>
   );
 }
@@ -294,7 +295,7 @@ export function EditForm({ id, onSaved }: { id: string; onSaved: () => void }) {
   }
 
   if (loaded === null) {
-    return error !== null ? <p role="alert">{error}</p> : <p>Loading…</p>;
+    return error !== null ? <p role="alert" className="alert-error">{error}</p> : <p>Loading…</p>;
   }
 
   const tiersRaw = readAtPath(loaded, ["price", "tiers"]);
@@ -308,7 +309,7 @@ export function EditForm({ id, onSaved }: { id: string; onSaved: () => void }) {
         void save();
       }}
     >
-      {error !== null && <p role="alert">{error}</p>}
+      {error !== null && <p role="alert" className="alert-error">{error}</p>}
       {saved && <p className="form-saved">Saved.</p>}
 
       {FIELD_GROUPS.map((group) => (
@@ -329,9 +330,9 @@ export function EditForm({ id, onSaved }: { id: string; onSaved: () => void }) {
         registerEdits={(collect) => setTierCollector(() => collect)}
       />
 
-      <button type="submit" disabled={busy}>
+      <Button type="submit" variant="primary" disabled={busy}>
         {busy ? "Saving…" : "Save changes"}
-      </button>
+      </Button>
       {tiersDirty && <span className="field-hint"> Unsaved tier changes.</span>}
     </form>
   );

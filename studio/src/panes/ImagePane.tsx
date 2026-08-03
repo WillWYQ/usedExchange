@@ -7,6 +7,7 @@ import {
   type ImageEntry,
   type StudioItem,
 } from "../api";
+import { Button } from "../components/Button";
 
 export function ImagePane({
   item,
@@ -92,7 +93,7 @@ export function ImagePane({
 
   return (
     <div className="pane" aria-label={`Photos for ${item.name}`}>
-      {error !== null && <p role="alert">{error}</p>}
+      {error !== null && <p role="alert" className="alert-error">{error}</p>}
 
       <div
         className={dragOver ? "dropzone over" : "dropzone"}
@@ -160,8 +161,8 @@ export function ImagePane({
                 hyphens to manage it here.
               </p>
             )}
-            <button
-              type="button"
+            <Button
+              variant="ghost"
               disabled={busy || !entry.editable}
               title={entry.editable ? undefined : "Rename this file before studio can remove it"}
               onClick={() =>
@@ -171,7 +172,7 @@ export function ImagePane({
               }
             >
               Remove
-            </button>
+            </Button>
           </li>
         ))}
       </ol>
