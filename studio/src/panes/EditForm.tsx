@@ -6,47 +6,8 @@ import {
   readAtPath,
   WHOLE_OBJECT_GROUPS,
   WHOLE_OBJECT_SEEDS,
-  type FieldDescriptor,
 } from "../fields";
-
-/** The on-disk value rendered as the string an input holds. */
-function toInput(value: unknown, kind: FieldDescriptor["kind"]): string {
-  if (value === undefined || value === null) return "";
-  if (kind === "stringList") return Array.isArray(value) ? value.join("\n") : String(value);
-  if (kind === "boolean") return value === true ? "true" : "false";
-  return String(value);
-}
-
-/**
- * The input string turned back into the JSON value the API will receive.
- * Returns { error } rather than throwing so one bad field reports itself
- * without discarding the seller's other edits.
- */
-function fromInput(
-  raw: string,
-  kind: FieldDescriptor["kind"],
-): { value: unknown } | { error: string } {
-  const trimmed = raw.trim();
-  switch (kind) {
-    case "boolean":
-      return { value: raw === "true" };
-    case "stringList":
-      return { value: raw.split("\n").map((l) => l.trim()).filter((l) => l !== "") };
-    case "number":
-    case "integer": {
-      // Empty means "not set", which item.json spells as null.
-      if (trimmed === "") return { value: null };
-      const n = Number(trimmed);
-      if (!Number.isFinite(n)) return { error: "must be a number" };
-      if (kind === "integer" && !Number.isInteger(n)) return { error: "must be a whole number" };
-      return { value: n };
-    }
-    case "date":
-      return { value: trimmed === "" ? null : trimmed };
-    default:
-      return { value: raw };
-  }
-}
+import { FieldInput, fromInput, toInput } from "./FieldInput";
 
 type Tier = {
   label: string;
@@ -357,52 +318,7 @@ export function EditForm({ id, onSaved }: { id: string; onSaved: () => void }) {
             const key = pathKey(field.path);
             const value = draft[key] ?? "";
             const set = (next: string) => setDraft((prev) => ({ ...prev, [key]: next }));
-            return (
-              <label key={key} className="field">
-                <span className="field-label">{field.label}</span>
-                {field.kind === "textarea" ? (
-                  <textarea rows={3} value={value} onChange={(e) => set(e.target.value)} />
-                ) : field.kind === "boolean" ? (
-                  <input
-                    type="checkbox"
-                    checked={value === "true"}
-                    onChange={(e) => set(e.target.checked ? "true" : "false")}
-                  />
-                ) : field.kind === "select" ? (
-                  <select
-                    value={value}
-                    className={
-                      value !== "" && field.options !== undefined && !field.options.includes(value)
-                        ? "field-offlist"
-                        : undefined
-                    }
-                    onChange={(e) => set(e.target.value)}
-                  >
-                    <option value="">—</option>
-                    {field.options?.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                    {value !== "" && field.options !== undefined && !field.options.includes(value) && (
-                      <option value={value}>{value}</option>
-                    )}
-                  </select>
-                ) : field.kind === "stringList" ? (
-                  <textarea rows={2} value={value} onChange={(e) => set(e.target.value)} />
-                ) : (
-                  <input
-                    type={field.kind === "date" ? "date" : "text"}
-                    inputMode={
-                      field.kind === "number" || field.kind === "integer" ? "decimal" : undefined
-                    }
-                    value={value}
-                    onChange={(e) => set(e.target.value)}
-                  />
-                )}
-                {field.hint !== undefined && <span className="field-hint">{field.hint}</span>}
-              </label>
-            );
+            return <FieldInput key={key} field={field} value={value} onChange={set} />;
           })}
         </fieldset>
       ))}
