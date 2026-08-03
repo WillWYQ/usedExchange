@@ -681,13 +681,22 @@ function readScopeParam(req: StudioRequest): string {
 
 async function handleDefaultsGet(req: StudioRequest): Promise<StudioResponse> {
   const filePath = resolveDefaultsPath(req.projectRoot, readScopeParam(req));
-  const defaults = await readDefaultsFile(filePath);
-  // Validate on read too: a hand-broken file surfaces in the pane with the
-  // field named, instead of loading garbage the seller then saves back.
+  let defaults: Awaited<ReturnType<typeof readDefaultsFile>>;
   try {
+    // One catch for both read and validate: a hand-broken file (syntax or
+    // field) must surface in the pane as a 400 naming the file and field,
+    // exactly as the create path reports it — a 500 would surface as an
+    // opaque error page instead. (fs errors like EACCES becoming 400 is the
+    // same trade-off the create path already makes.)
+    defaults = await readDefaultsFile(filePath);
     validateDefaults(defaults);
   } catch (err: unknown) {
-    throw new StudioError(400, `invalid defaults in ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
+    throw new StudioError(
+      400,
+      err instanceof Error && err.message.startsWith("invalid defaults in")
+        ? err.message
+        : `invalid defaults in ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
   return { status: 200, body: defaults };
 }
