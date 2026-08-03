@@ -2,6 +2,8 @@
 
 > Developer reference. For the full design specification see [DESIGN.md](DESIGN.md); for the build plan see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md); for non-technical seller operations see [../SETUP_GUIDE.md](../SETUP_GUIDE.md).
 >
+> **Version:** v1.2 · **Date:** 2026-08-02
+>
 > 🇨🇳 Chinese version: [ARCHITECTURE_zh.md](ARCHITECTURE_zh.md)
 
 ---
@@ -10,12 +12,13 @@
 
 ```
 usedExchange/
-├── app/                              ← Next.js App Router pages + root layout
-│   ├── layout.tsx                    ← Root layout: ThemeProvider > LocaleProvider > BackgroundEffect > SiteHeader/Footer
+├── app/                              ← Next.js App Router pages + root layout (100% Server Components)
+│   ├── layout.tsx                    ← Root layout: ThemeProvider > LocaleProvider > MeasurementUnitProvider > BackgroundEffect > SiteHeader/Footer
 │   ├── globals.css                   ← Tailwind v4 directives + CSS custom properties
 │   ├── page.tsx                      ← Home page (/)
 │   ├── about/page.tsx                ← Project intro: shown at "/" pre-setup, permanent home afterwards
 │   ├── all/page.tsx                  ← Browse All (/all)
+│   ├── newly-listed/page.tsx         ← Newly Listed (/newly-listed) — server shell → NewlyListedClient
 │   ├── sold/page.tsx                 ← Sold Archive (/sold)
 │   ├── not-found.tsx                 ← Global 404 page
 │   ├── [category]/page.tsx           ← Category listing page (/[category])
@@ -31,11 +34,13 @@ usedExchange/
 │   ├── intro/                        ← ProjectIntro + UISlotPlayground + projectIntro.dictionary (6-locale copy)
 │   ├── item/                         ← All item-rendering components (see §Item Components)
 │   ├── layout/                       ← Breadcrumb, SiteHeader, SiteFooter
+│   ├── newly-listed/                 ← NewlyListedClient (client component for /newly-listed)
 │   ├── pricing/                      ← DistancePricingContext, LocationPriceBar, useDistancePricing, useGeolocation, useShippingRate
 │   ├── search/                       ← SearchBar, SearchBarClient, useSearch
 │   ├── theme/                        ← ThemeProvider, ThemeToggle
-│   ├── ui/                           ← Aceternity UI library (27 components; installed once by `pnpm setup-ui`)
+│   ├── ui/                           ← Aceternity UI library: 27 supported slot components, ~30 files (installed once by `pnpm setup-ui`)
 │   ├── ui-adapters/                  ← BackgroundEffect, GalleryAdapter, ItemCardAdapter, ItemGridAdapter
+│   ├── units/                        ← MeasurementUnitProvider, MeasurementUnitToggle, useMeasurementUnit
 │   └── *-demo.tsx                    ← Unused Aceternity demo scaffolds (not imported; safe to remove)
 │
 ├── content/                          ← ⚠️ THE ONLY FOLDER SELLERS EVER TOUCH
@@ -46,7 +51,7 @@ usedExchange/
 │           └── <item>/
 │               ├── item.json         ← Required: item metadata (all fields in DESIGN.md §5)
 │               ├── cover.jpg         ← Pinned thumbnail (optional naming convention)
-│               └── *.jpg/png/webp    ← Additional gallery images (gitignored)
+│               └── *.jpg/jpeg/png/webp/gif ← Additional gallery images (gitignored)
 │
 ├── lib/
 │   ├── config/types.ts               ← SiteConfig TypeScript type definition
@@ -55,18 +60,19 @@ usedExchange/
 │   │   ├── schema.ts                 ← Zod schemas for item.json and _category.json
 │   │   └── types.ts                  ← TypeScript types: Item, Category, Price, PriceTier, etc.
 │   ├── generated/
-│   │   └── image-manifest.json       ← CDN URL map (committed; written by pnpm upload-images)
+│   │   └── image-manifest.json       ← CDN URL map (committed; written by pnpm upload-images and Seller Studio's CDN sync)
 │   ├── images/
 │   │   ├── adapter.ts                ← ImageStorageAdapter interface
 │   │   ├── cloudflare-r2.ts          ← CloudflareR2Adapter
 │   │   ├── local.ts                  ← LocalAdapter + copyIfChanged helper
 │   │   ├── normalizeR2Url.ts         ← Strips trailing slash from R2 public URL
+│   │   ├── stripMetadata.ts          ← stripImageMetadata(): sharp EXIF/GPS removal before upload
 │   │   └── vercel-blob.ts            ← VercelBlobAdapter
 │   ├── i18n/
-│   │   ├── translations.ts           ← EN_FALLBACK: UIStrings — built-in English defaults for all 71 keys
+│   │   ├── translations.ts           ← EN_FALLBACK: UIStrings — built-in English defaults for all 87 keys
 │   │   └── getTranslations.ts        ← getTranslations(): UIStrings — server-side resolution (always defaultLocale)
 │   ├── search/index.ts               ← buildSearchIndex(): SearchIndexEntry[]
-│   ├── ui/types.ts                   ← UIConfig type (background, itemGrid, gallery, itemCard slots)
+│   ├── ui/types.ts                   ← UIConfig type (background, itemGrid, gallery, itemCard slots) + PriceFilterStrategy
 │   └── utils/
 │       ├── concurrency.ts            ← mapWithConcurrency<T,R>(items, limit, fn)
 │       ├── date.ts                   ← formatRelativeDate(), formatAbsoluteDate()
@@ -74,19 +80,37 @@ usedExchange/
 │       ├── i18n.ts                   ← getLocalizedField(item, field, locale)
 │       ├── index.ts                  ← Re-exports cn() (clsx + tailwind-merge)
 │       ├── jsonld.ts                 ← buildProductJsonLd(), buildBreadcrumbJsonLd()
+│       ├── priceFilterStrategies.ts  ← computePriceBounds(), computePriceBuckets() — price-bucket strategies
 │       ├── pricing.ts                ← resolveItemPrice(price, resolved) — NO "use client"
 │       ├── shipping.ts               ← isShippingTier(), resolveShippingPayer(), canEstimateShipping() — NO "use client"
 │       ├── slug.ts                   ← isValidSlug() — kebab-case validation
-│       └── templateStatus.ts         ← isTemplateConfigured() — detects unconfigured template
+│       ├── templateStatus.ts         ← isTemplateConfigured() — detects unconfigured template
+│       └── units.ts                  ← resolveMeasurementUnit(), formatDimensions(), formatWeight() — NO "use client"
 │
-├── scripts/                          ← pnpm run scripts (tsx, Node.js, no browser APIs)
+├── scripts/                          ← pnpm run scripts (mostly tsx, Node.js, no browser APIs)
 │   ├── build-search-index.ts         ← Prebuild: writes public/search-index.json
-│   ├── check-config.ts               ← Prebuild: fails build if baseUrl is still placeholder
+│   ├── bump-version.ts               ← pnpm bump — interactive version bump + GitHub release
+│   ├── check-config.ts               ← Prebuild: fails build if baseUrl is still placeholder or a locale's translations are incomplete
 │   ├── create-item.ts                ← pnpm create-item / pnpm new
 │   ├── create-template.ts            ← pnpm create-template
+│   ├── export-facebook.ts            ← pnpm fb-export — interactive Facebook Marketplace CSV export
 │   ├── mark-sold.ts                  ← pnpm mark-sold
+│   ├── migrate-config.ts             ← pnpm migrate-config — splices missing optional config fields
 │   ├── postbuild.ts                  ← Postbuild: next-sitemap
-│   └── sync-images.ts                ← pnpm upload-images / dev-sync / build-check
+│   ├── setup-ui.sh                   ← pnpm setup-ui — bash installer for all Aceternity components
+│   ├── studio.ts                     ← pnpm studio — Seller Studio launcher (Vite bound to 127.0.0.1)
+│   ├── sync-images.ts                ← pnpm upload-images / dev-sync / build-check
+│   ├── update-site.ts                ← pnpm update-site — pulls a tagged template release
+│   └── lib/                          ← Shared support modules (see §scripts/lib); tests colocated as *.test.ts
+│
+├── studio/                           ← Seller Studio Vite SPA (pnpm studio; served only on 127.0.0.1)
+│   ├── index.html, vite.config.ts    ← Vite entry + studioApiPlugin middleware (CSRF → 32 MB cap → /api/*)
+│   ├── csrfGuard.ts                  ← checkStudioCsrf — CSRF/Origin guard for the /api/* middleware
+│   └── src/                          ← React app: App.tsx, api.ts, fields.ts, panes/ (ItemList, EditForm, ImagePane, PublishPane, SyncBar, …)
+│
+├── hooks/                            ← Shared React hooks: use-outside-click.tsx (useOutsideClick)
+│
+├── exports/                          ← fb-export output (gitignored): CSV(s), facebook-marketplace-photos/, .export-history.json
 │
 ├── public/
 │   ├── items/                        ← Local images (gitignored; populated at dev/build time)
@@ -94,9 +118,9 @@ usedExchange/
 │   └── search-index.json             ← Fuse.js index (gitignored; built in prebuild)
 │
 ├── .github/workflows/
-│   ├── ci.yml                        ← Type-check + lint + test on push
+│   ├── ci.yml                        ← Type-check + lint + test (push / PR / manual)
 │   ├── deploy.yml                    ← Build + deploy to GitHub Pages from release branch
-│   └── release-seller.yml            ← Automated release branch management
+│   └── release-seller.yml            ← Release branch management (v* tags / manual)
 │
 ├── workers/                           ← Independently deployed Cloudflare Workers (own tsconfig/eslint scope)
 │   └── shipping-rate-proxy/          ← Optional: shipping rate proxy (see DESIGN.md §21)
@@ -104,10 +128,9 @@ usedExchange/
 │       ├── wrangler.toml             ← Worker config (vars + secrets — see workers/shipping-rate-proxy/README.md)
 │       └── README.md                 ← Deploy walkthrough + API contract
 │
-├── content/config.ts                 ← (see above — seller configuration)
 ├── next.config.ts                    ← Static export flag, image domains
 ├── tsconfig.json                     ← strict + noUncheckedIndexedAccess + @/* path alias
-├── vitest.config.ts                  ← Vitest (jsdom environment, path aliases)
+├── vitest.config.ts                  ← Vitest (node environment, esbuild JSX automatic, @ path alias)
 ├── .env.example                      ← Environment variable documentation
 └── next-sitemap.config.js            ← next-sitemap configuration
 ```
@@ -134,12 +157,22 @@ content/items/**/item.json
     ├──► loadCategories() +
     │    loadItemsByCategory() ──► app/[category]/page.tsx
     ├──► loadItem()            ──► app/[category]/[item]/page.tsx
-    ├──► loadBrowseAllPageData()──► app/all/page.tsx
+    ├──► loadBrowseAllPageData()──► app/all/page.tsx + app/newly-listed/page.tsx
     └──► loadSoldItems()       ──► app/sold/page.tsx
     │
     ▼  next build
     All pages rendered to static HTML → out/
     No server, no database, no runtime credentials required
+```
+
+### Search Index (Build Time → Client Runtime)
+
+```
+prebuild: scripts/build-search-index.ts
+    └─► public/search-index.json (gitignored)
+            │
+            ▼  Browser
+SearchBarClient fetches /search-index.json → Fuse.js fuzzy matching
 ```
 
 ### Client Runtime (Browser)
@@ -194,6 +227,21 @@ content/items/<category>/<item>/*.jpg
     CI reads this manifest — no CDN credentials needed in CI
 ```
 
+### Seller Studio (Local Only)
+
+```
+pnpm studio (scripts/studio.ts)
+    └─► Vite dev server bound to 127.0.0.1:5174 — serves the studio/ SPA + /api/*
+            │
+            ├─► GET/PATCH /api/items/…   Surgical JSONC edits to content/items/**/item.json
+            │                            (comments + reserved_for untouched)
+            ├─► POST /api/sync-images    SSE progress stream → imageSync.syncImagesToCdn
+            │                            writes lib/generated/image-manifest.json → resets manifest cache
+            └─► POST /api/publish        git add content + image-manifest.json → commit → push
+            │
+            ▼  App.tsx keeps no client-side item state — every write triggers a full re-fetch
+```
+
 ---
 
 ## lib/ Module Reference
@@ -210,8 +258,9 @@ All page components must call these functions. Never read `content/items/` direc
 | `loadItem(categorySlug, itemSlug)` | `Item \| null` | `app/[category]/[item]/page.tsx` |
 | `loadBrowseAllPageData()` | `{ items: Item[], categories: Category[] }` | `app/all/page.tsx` |
 | `loadSoldItems()` | `Item[]` | `app/sold/page.tsx` |
+| `loadAllItems()` | `Item[]` | Home-page "recently listed" strip — available items only, sorted by `listedDate` desc, capped at `recentlyListedCount` |
 | `loadAllItemsRaw()` | `Item[]` | scripts and `buildSearchIndex()` only — no visibility filter |
-| `resetManifestCache()` | `void` | tests only |
+| `resetManifestCache()` | `void` | tests; also called by Studio after a CDN sync so fresh CDN URLs are served |
 
 **Performance invariant:** The image manifest (`lib/generated/image-manifest.json`) is read once per process via a module-level Promise cache. Functions that need both categories and items (`loadHomePageData`, `loadBrowseAllPageData`) parse every item exactly once — do not compose `loadCategories()` + `loadItemsByCategory()` in the same render pass, as that would parse every item twice.
 
@@ -249,7 +298,7 @@ formatDimensions(dimensions: Dimensions, targetSystem: "metric" | "imperial"): s
 formatWeight(weight: Weight, targetSystem: "metric" | "imperial"): string
 ```
 
-- `resolveMeasurementUnit()` — `siteConfig.i18n.localeMeasurementUnits?.[locale] ?? siteConfig.measurementUnit`.
+- `resolveMeasurementUnit()` — `siteConfig.i18n.localeMeasurementUnits?.[locale] ?? siteConfig.measurementUnit ?? "metric"`.
 - `formatDimensions`/`formatWeight` — convert an item's stored `dimensions`/`weight` (whatever unit the seller entered) to the resolved unit system, rounding to 2 decimals. Used by `MetadataTable` (`components/item/MetadataTable.tsx`) with `unitSystem = resolveMeasurementUnit(useLocale().locale, siteConfig)`.
 
 **No `"use client"`** — same invariant as `pricing.ts`/`shipping.ts`, importable from both server and client components.
@@ -267,6 +316,17 @@ canEstimateShipping(shipping, weight, dimensions, resolvedTier): boolean
 - `canEstimateShipping()` — gates the `ShippingEstimator` UI: requires `shipping.enabled`, both `weight` and `dimensions` present on the item, and the resolved tier to be the shipping tier.
 
 **Same invariant as `pricing.ts`: no `"use client"`** — kept pure so it can be unit-tested and reused from both the server-rendered item page and the `ShippingEstimator` client component. See DESIGN.md §21 for the full feature design.
+
+### `lib/utils/priceFilterStrategies.ts` — Price Filter Buckets
+
+```ts
+computePriceBounds(amounts: number[], config: PriceFilterConfig): PriceBoundsResult | null
+computePriceBuckets(amounts: number[], currency: string, customBoundaries?: number[]): PriceBucket[]
+```
+
+Implements the five `PriceFilterStrategy` values from `lib/ui/types.ts`: `"none"`, `"percentile"`, `"logarithmic"`, `"preset-buckets"`, `"iqr"`. Consumed by `useFilters`, `FilterBar`, and `ItemGrid` when `siteConfig.ui.priceFilterStrategy` is set. Both config fields (`ui.priceFilterStrategy?`, `ui.priceFilterBuckets?`) are TypeScript-optional with a runtime default of `"none"` at every consumption site (see Key Invariants — config backward compatibility), so sites on older templates keep type-checking after `pnpm update-site`.
+
+**No `"use client"`** — pure functions, same invariant as `pricing.ts`.
 
 ### `lib/images/` — Storage Adapter Pattern
 
@@ -334,13 +394,15 @@ Returns `true` once the seller has replaced `baseUrl` with a real domain (i.e. i
   <body>
     <ThemeProvider>          ← next-themes, class-based, defaultTheme="system"; ThemeToggle persists choice
       <LocaleProvider>       ← locale state in localStorage; exposes useLocale()
-        <BackgroundEffect>   ← reads siteConfig.ui.background, renders Aceternity background
-          <SiteHeader />     ← logo, search bar (when enabled), locale switcher
-          <main>
-            {children}       ← page content
-          </main>
-          <SiteFooter />     ← contact platforms, build timestamp
-        </BackgroundEffect>
+        <MeasurementUnitProvider>  ← measurement-unit state in localStorage; exposes useMeasurementUnit()
+          <BackgroundEffect>   ← reads siteConfig.ui.background, renders Aceternity background
+            <SiteHeader />     ← logo, search bar (when enabled), locale switcher
+            <main>
+              {children}       ← page content
+            </main>
+            <SiteFooter />     ← contact platforms, build timestamp
+          </BackgroundEffect>
+        </MeasurementUnitProvider>
       </LocaleProvider>
     </ThemeProvider>
   </body>
@@ -355,18 +417,21 @@ Server Components render static HTML during `next build`. The client boundary is
 - All pricing: `DistancePricingContext`, `LocationPriceBar`, `useDistancePricing`, `useGeolocation`
 - Shipping estimate (optional, see §21 of DESIGN.md): `useShippingRate`, `ShippingEstimator`
 - All i18n runtime: `LocaleProvider`, `LocaleSwitcher`, `useLocale`, `useT`
+- Measurement units: `MeasurementUnitProvider`, `MeasurementUnitToggle`, `useMeasurementUnit`
 - All filtering: `FilterBar`, `SortSelect`, `useFilters`
-- Search: `SearchBarClient`, `useSearch`
-- `RecentlyViewed`, `ShareButton`, `MakeOfferButton`, `QRModal`
-- `ThemeProvider`, `ThemeToggle`
-- UI-string consumers: `SiteHeader`, `MetadataTable`, `ConditionBadge`, `StatusBadge`, `ConditionGuide`, `PricingTable`, `PricingTableToggle`, `FreshnessLabel`, `RecentlyListedSection`, `ContactSection`
-- Item detail UI: `ItemGallery`, `LocalizedItemContent`
+- Search: `SearchBar`, `SearchBarClient`, `useSearch`
+- Item rendering: `ItemCard`, `ItemGrid` (it is itself a client wrapper around `ItemCardAdapter` + filter/sort controls), `ItemGallery`, `LocalizedItemContent`, `PricingSection`, `PricingTable`, `PricingTableToggle`, `MetadataTable`, `ConditionBadge`, `ConditionGuide`, `StatusBadge`, `FreshnessLabel`, `MakeOfferButton`
+- Contact + sharing: `ContactSection`, `PlatformButton`, `QRModal`, `ShareButton`
+- Home / newly listed: `RecentlyListedSection`, `RecentlyViewed`, `NewlyListedClient`
+- Intro / playground: `ProjectIntro`, `UISlotPlayground`
+- Layout chrome + theme: `SiteHeader`, `ThemeProvider`, `ThemeToggle`
+- Helpers: `useIncrementalReveal`
+- All four `components/ui-adapters/*`: `BackgroundEffect`, `GalleryAdapter`, `ItemCardAdapter`, `ItemGridAdapter`
 - All `components/ui/*` (Aceternity) components
 
 **Server Components** (no `"use client"`):
 - All `app/*/page.tsx` files (use `getTranslations()` for any UI strings needed server-side)
 - `CategoryGrid`, `CategoryCard`
-- `ItemGrid`, `ItemCard`
 - `Breadcrumb`, `SiteFooter`
 - `QuantityBadge`, `TextbookBadge`
 - `JsonLd`, `AdaptiveImage`
@@ -379,15 +444,15 @@ Four adapters read `siteConfig.ui.*` at render time and forward to the appropria
 |---|---|---|---|
 | `BackgroundEffect` | `ui.background` | `"none"` | 13 Aceternity backgrounds |
 | `GalleryAdapter` | `ui.gallery` | `"simple"` | apple-cards-carousel, images-slider, carousel, parallax-scroll |
-| `ItemCardAdapter` | `ui.itemCard` | `"simple"` | 8 Aceternity card effects |
+| `ItemCardAdapter` | `ui.itemCard` | `"simple"` | card-hover-effect, card-spotlight, 3d-card, evervault-card, wobble-card, direction-aware-hover, glare-card |
 | `ItemGridAdapter` | `ui.itemGrid` | `"simple"` | bento-grid, layout-grid, focus-cards |
 
 ### Item Components (`components/item/`)
 
 | Component | Type | Purpose |
 |---|---|---|
-| `ItemCard` | Server | Summary card on grids — name, cover image, price, status badge |
-| `ItemGrid` | Server | Wraps `ItemCardAdapter` + client filter/sort controls |
+| `ItemCard` | Client | Summary card on grids — name, cover image, price, status badge |
+| `ItemGrid` | Client | Client wrapper around `ItemCardAdapter` + filter/sort controls (incl. price-bucket filtering) |
 | `ItemGallery` | Client | Base gallery implementation |
 | `LocalizedItemContent` | Client | Renders `nameZh`/`descriptionZh` when locale is `zh` |
 | `PricingSection` | Client | Resolved tier display + "View all tiers" toggle |
@@ -406,23 +471,54 @@ Four adapters read `siteConfig.ui.*` at render time and forward to the appropria
 
 ## Scripts Reference
 
-All scripts are invoked via `tsx` (TypeScript execution, no compilation step).
+Most scripts run via `tsx` (TypeScript execution, no compilation step). Exceptions: `setup-ui` is a bash script (`scripts/setup-ui.sh`), `push` is inline git, and `build`/`lint`/`format`/`test*` invoke Next.js / ESLint / Prettier / Vitest directly. The complete reference — flags, prompts, touched files, env vars — lives in [SCRIPTS.md](SCRIPTS.md).
 
-| Command | Script | What it does |
-|---|---|---|
-| `pnpm dev` | `sync-images.ts --mode dev-sync` + `next dev` | Copies photos to `public/items/`; starts dev server |
-| `pnpm build` | `prebuild` + `next build` + `postbuild` | Full production build |
-| `pnpm upload-images` | `sync-images.ts --mode upload` | SHA-256 incremental upload to CDN; writes manifest |
-| `pnpm new <cat>/<item>` | `create-item.ts` | Creates item folder + draft `item.json`; validates slug |
-| `pnpm create-item <cat>/<item>` | Same as above | Alias for `pnpm new` |
-| `pnpm mark-sold <cat>/<item>` | `mark-sold.ts` | Sets `status: "sold"` + `sold_date: today` |
-| `pnpm create-template [cat]` | `create-template.ts` | Creates `_template.json` scaffold for a category |
-| `pnpm push` | inline git commands | `git add content/ image-manifest.json && git commit && git push` |
-| `pnpm type-check` | `tsc --noEmit` | TypeScript type validation (no emit) |
-| `pnpm lint` | `eslint . --max-warnings 0` | ESLint (zero warnings allowed) |
-| `pnpm test` | `vitest run` | Full test suite (once) |
-| `pnpm test:watch` | `vitest` | Test suite in watch mode |
-| `pnpm test:coverage` | `vitest run --coverage` | Test coverage report |
+| Command | What it does |
+|---|---|
+| `pnpm dev` | `sync-images.ts --mode dev-sync` then `next dev --turbo` — copies photos to `public/items/`; starts the dev server (Turbopack) |
+| `pnpm build` | `prebuild` + `next build` + `postbuild` — full production build |
+| `pnpm prebuild` | `check-config.ts` → `sync-images.ts --mode build-check` → `build-search-index.ts` (runs automatically before `build`) |
+| `pnpm postbuild` | `postbuild.ts` — next-sitemap generates sitemap.xml + robots.txt (runs automatically after `build`) |
+| `pnpm studio [--port <n>]` | `studio.ts` — starts Seller Studio on 127.0.0.1 (port 1024–65535, default 5174); see §Seller Studio |
+| `pnpm upload-images` | `sync-images.ts --mode upload` — SHA-256 incremental upload to CDN; strips EXIF/GPS; writes the committed manifest |
+| `pnpm create-item <cat>/<item>` | `create-item.ts` — creates the item folder + draft `item.json` from the 36-field template; validates the slug; opens `$EDITOR` if set |
+| `pnpm new <cat>/<item>` | Alias for `pnpm create-item` |
+| `pnpm create-template [cat]` | `create-template.ts` — creates a fully-commented `_template.json` scaffold |
+| `pnpm mark-sold <cat>/<item>` | `mark-sold.ts` — sets `status: "sold"` + `sold_date: today` via surgical JSONC edits |
+| `pnpm fb-export` | `export-facebook.ts` — interactive Facebook Marketplace CSV export (50-item batches, photo copy, run-history dedupe into `exports/`) |
+| `pnpm push` | `git add content lib/generated/image-manifest.json && git commit -m 'chore: update listings' && git push` — Seller Studio's publish mirrors exactly these two paths |
+| `pnpm setup-ui` | `bash scripts/setup-ui.sh` — one-time install of all 27 Aceternity components into `components/ui/` (template maintenance) |
+| `pnpm update-site [tag] [--list]` | `update-site.ts` — pulls a tagged template release without touching `content/`; restores `lib/generated/image-manifest.json` from HEAD; ships `studio/`; migrates config (template maintenance; see [UPDATE_GUIDE.md](UPDATE_GUIDE.md)) |
+| `pnpm migrate-config` | `migrate-config.ts` — additively splices missing optional config fields from `scripts/lib/configDefaults.ts` (template maintenance) |
+| `pnpm bump` | `bump-version.ts` — interactive version bump, tag, and `gh release` (template maintenance; requires an authenticated `gh` CLI) |
+| `pnpm type-check` | `tsc --noEmit` — TypeScript type validation (no emit) |
+| `pnpm lint` | `eslint . --max-warnings 0` — ESLint (zero warnings allowed) |
+| `pnpm format` | `prettier --write .` — Prettier over the whole repo (template maintenance) |
+| `pnpm test` | `vitest run` — full test suite (once) |
+| `pnpm test:watch` | `vitest` — test suite in watch mode |
+| `pnpm test:coverage` | `vitest run --coverage` — test coverage report |
+
+`workers/shipping-rate-proxy/` is a separate package with its own scripts: `pnpm dev` (wrangler dev), `pnpm deploy` (wrangler deploy), `pnpm type-check` — see [workers/shipping-rate-proxy/README.md](../workers/shipping-rate-proxy/README.md).
+
+### `scripts/lib/` — Shared Support Modules
+
+Not standalone runnables — imported by the CLIs above. 9 of the 13 modules have a colocated `*.test.ts` run by `pnpm test` (scripts tests include `scripts/update-site.test.ts` and `scripts/studioFields.test.ts`; the repo-wide suite is ~36 test files / 585 tests).
+
+| Module | Purpose |
+|---|---|
+| `loadEnv.ts` | `loadDotEnvLocal()` — parses `.env.local` into `process.env` (existing env wins); used by `sync-images.ts` and `studio.ts` since tsx does not auto-load it |
+| `imageSync.ts` | Pure CDN pipeline: SHA-256 checksums, `UPLOAD_CONCURRENCY = 8`, per-file failure isolation, EXIF stripping, progress callbacks; drives both `pnpm upload-images` and Studio's sync |
+| `itemTemplate.ts` | 36-field `item.json` scaffold with `// options:` comments; shared by `create-item`, `create-template`, and Studio item creation (`reserved_for` excluded) |
+| `itemEdit.ts` | Surgical JSONC edits via `jsonc-parser` — comments, formatting, and `reserved_for` survive every write |
+| `itemFields.ts` | Strict Zod allowlist of browser-writable field paths; `resolveFieldSchema(path)` is the single authority; `reserved_for` denied |
+| `markSold.ts` | `applyMarkSold(text, today)` — status → sold + `sold_date`; null when already sold |
+| `fbCategoryMap.ts` | Ordered regex → `Top//Sub//Leaf` Facebook category rules used by `fb-export` |
+| `exportHistory.ts` | Reads/appends `exports/.export-history.json` (gitignored) backing fb-export's skip-already-exported step |
+| `configDefaults.ts` | Declarative registry (key / afterKey / lines) of injectable optional config fields, consumed by `pnpm migrate-config`; `pnpm update-site` runs the migration automatically |
+| `studioApi.ts` | Framework-agnostic Studio HTTP handler: Zod validation, slug allowlist + resolved-path containment under `content/items/` |
+| `studioGit.ts` | `readChanges`/`publishChanges` restricted to `content` + `lib/generated/image-manifest.json`; `execFile` argument arrays only (no shell); never `git add -A` |
+| `studioImages.ts` | Photo upload/delete/reorder filesystem ops: filename allowlist, magic-byte sniffing, `IMAGE_EXTENSIONS` = jpg\|jpeg\|png\|webp\|gif |
+| `studioSync.ts` | Single-run CDN sync wrapper (mutex on `globalThis`) delivering SSE progress events |
 
 ### Build Pipeline Detail
 
@@ -430,9 +526,11 @@ All scripts are invoked via `tsx` (TypeScript execution, no compilation step).
 pnpm build
   ├── prebuild (runs before next build)
   │     ├── tsx scripts/check-config.ts
-  │     │       Fails with exit code 1 if siteConfig.baseUrl still contains
-  │     │       "your-domain.com" — prevents accidental production deploys
-  │     │       of an unconfigured template.
+  │     │       Fails with exit code 1 if (a) siteConfig.baseUrl still contains
+  │     │       "your-domain.com" — prevents accidental production deploys of an
+  │     │       unconfigured template — or (b) any availableLocales locale is
+  │     │       missing from i18n.translations or lacks required UIStrings keys
+  │     │       (default-locale values may fill the gaps).
   │     ├── tsx scripts/sync-images.ts --mode build-check
   │     │       Cloud providers: verifies lib/generated/image-manifest.json exists.
   │     │       Local provider: copies photos from content/items/ → public/items/.
@@ -454,6 +552,52 @@ pnpm build
 
 ---
 
+## Seller Studio
+
+Seller Studio is a local-only browser GUI for managing `content/` — started with `pnpm studio`, with the SPA and API served by a single Vite dev server bound to `127.0.0.1` (never the network). It is shipped to downstream sites by `pnpm update-site` (the `studio/` directory is part of the template paths).
+
+### Launcher (`scripts/studio.ts`)
+
+- Binds `127.0.0.1` only; default port `5174`, overridable with `--port <n>` (validated 1024–65535; `strictPort: false`, so a busy port falls through to the next free one).
+- Fails fast with an actionable message when `vite` is not installed (pointing at `pnpm install`) or `studio/vite.config.ts` is missing (pointing at `pnpm update-site`).
+- Loads `.env.local` via `scripts/lib/loadEnv.ts` and prints the resolved URL.
+- The CDN image adapter (R2 / Vercel Blob / local, per `siteConfig.imageStorage.provider`) is built per sync run, not at startup — missing CDN credentials surface as an SSE `error` event in the UI, not a launch failure.
+
+### Frontend (`studio/`)
+
+A small Vite + React SPA (`index.html` → `src/main.tsx` → `src/App.tsx`). Panes in `src/panes/`: `ItemList`, `BulkToolbar`, `Drawer`, `EditForm`, `ImagePane`, `NewItemDialog`, `PublishPane`, `SyncBar`. `App.tsx` keeps **no client-side item state** — every mutation is followed by a full server re-fetch, so there is no drift. `src/fields.ts` declares the edit-form field groups (their paths must match `scripts/lib/itemFields.ts`, the server-side authority).
+
+### API surface (`/api/*`)
+
+The `studioApiPlugin` middleware in `studio/vite.config.ts` runs every request through `checkStudioCsrf` → a 32 MB body cap → `handleStudioRequest` (`scripts/lib/studioApi.ts`), which returns JSON, a file stream, or an SSE stream:
+
+| Route | Purpose |
+|---|---|
+| `GET /api/items` | List every item with its photos and lowest-tier price (per-item errors isolated) |
+| `POST /api/items` | Create an item (category + kebab-case slug → 36-field template) |
+| `POST /api/items/bulk-status` | Mark a selection sold/pending/available/draft with per-item failure reporting |
+| `GET /api/items/<cat>/<item>` | Read the editable fields of one item |
+| `PATCH /api/items/<cat>/<item>` | Apply `FieldEdit[]` — surgical JSONC writes, comments preserved |
+| `GET …/images`, `GET …/images/<file>` | List photos / serve one photo (containment-checked, `no-store`) |
+| `POST …/images` | Upload (base64, magic-byte sniffing, sanitised filename) |
+| `POST …/images/reorder`, `DELETE …/images/<file>` | Reorder / delete photos |
+| `POST /api/sync-images` | CDN sync as a server-sent-event stream (`progress` / `done` / `error`) |
+| `GET /api/changes` | Git status of publishable paths |
+| `POST /api/publish` | Stage `content` + the manifest, commit, push — `409` while a sync is running |
+
+The SSE stream is consumed with a plain `fetch` + `ReadableStream` (POST is required, so `EventSource` cannot be used). After a successful sync the loader's manifest cache is reset (`resetManifestCache()`) so subsequent reads see the fresh CDN URLs.
+
+### Security model
+
+- **CSRF guard** (`studio/csrfGuard.ts`): every non-GET/HEAD request must carry `Content-Type: application/json` (else `415`) and, when an `Origin` header is present, it must equal the server's own origin (else `403`). The check applies by method, so future PUT/PATCH/DELETE routes fail closed automatically; GET/HEAD are exempt.
+- **Body cap**: request bodies over 32 MB are rejected before parsing.
+- **Path safety**: route regexes match the raw percent-encoded path and decode each segment only after the match; the slug allowlist plus resolved-path containment keep every read/write inside `content/items/`.
+- **Publish safety**: `studioGit.ts` stages only `content` and `lib/generated/image-manifest.json` (mirroring `pnpm push`), never `git add -A` — so `.env.local` with CDN credentials cannot ride along; it refuses out-of-band staged files and commits touching anything unpublishable, and uses `execFile` argument arrays (no shell).
+- **Single-run sync**: a mutex on `globalThis` (shared across the tsx and Vite-bundled module copies) guarantees one sync at a time; the lock is released when the work settles, not when the client disconnects.
+- `reserved_for` is never read, written, or sent by any Studio code path.
+
+---
+
 ## CI/CD Pipeline
 
 ### Branch Model
@@ -472,9 +616,9 @@ gh-pages   ← live site (GitHub Pages managed branch)
 
 | File | Trigger | Steps |
 |---|---|---|
-| `ci.yml` | Push to `develop` or `release`; any PR | `pnpm type-check` → `pnpm lint` → `pnpm test` |
-| `deploy.yml` | Push to `release`; completion of `release-seller.yml` | `pnpm build` → `actions/upload-pages-artifact` → `actions/deploy-pages` |
-| `release-seller.yml` | Seller-initiated (workflow_dispatch) | Automated release branch management |
+| `ci.yml` | Push to `develop` or `release`; any PR; manual dispatch | `pnpm type-check` → `pnpm lint` → `pnpm test` |
+| `deploy.yml` | Push to `release`; completion of "Release Seller Template" (`workflow_run`); manual dispatch | `pnpm build` → `actions/upload-pages-artifact` → `actions/deploy-pages` |
+| `release-seller.yml` | Push of a `v*` tag; manual dispatch (workflow_dispatch) | Automated release branch management |
 
 **CI does not need CDN credentials.** The committed `lib/generated/image-manifest.json` is read at build time — all image URLs are pre-resolved and baked into the static HTML.
 
@@ -489,8 +633,10 @@ These are enforced by code and must never be violated:
 | `reserved_for` never rendered | Zod `strip` mode in `schema.ts`; field absent from `Item` type |
 | `lib/utils/pricing.ts` has no `"use client"` | Required for server + client import paths to coexist |
 | `lib/generated/image-manifest.json` stays in git | Not in `.gitignore`; CI build depends on it |
-| Item + category slugs are kebab-case only | `isValidSlug()` in `create-item.ts`, `mark-sold.ts`, `generateStaticParams` |
-| Sellers write only to `content/` | AI skill files + all scripts enforce this boundary |
+| Item + category slugs are kebab-case only | `isValidSlug()` in `lib/utils/slug.ts`, used by `create-item.ts`, `mark-sold.ts`, `generateStaticParams` |
+| Sellers write only to `content/` | AI skill files + all scripts enforce this boundary (Seller Studio additionally writes `lib/generated/image-manifest.json` and runs git over `content/` + the manifest) |
+| New config fields are backward-compatible | Post-core fields (`shipping?`, `measurementUnit?`, `localeMeasurementUnits?`, `defaultPriceTiers?`, `ui.priceFilterStrategy?`, `ui.priceFilterBuckets?`) are TypeScript-optional with runtime `??` defaults; `scripts/lib/configDefaults.ts` + `pnpm migrate-config` (run automatically by `pnpm update-site`) splice them into older configs |
+| Studio binds `127.0.0.1` only and never uses `git add -A` | Host binding in `scripts/studio.ts`; `PUBLISHABLE_PATHS` in `scripts/lib/studioGit.ts` protects `.env.local` |
 | Draft items have no static route | Loader visibility filter excludes `status: "draft"` from `generateStaticParams` |
 | `soldItemRetentionDays: -1` hides immediately | Explicit `< 0` guard in `isSoldItemVisible()` |
 | Sold items without `sold_date` stay visible | Conservative default: no date → no expiry basis |
@@ -502,7 +648,7 @@ These are enforced by code and must never be violated:
 
 ## Environment Variables
 
-Only needed on the seller's local machine when running `pnpm upload-images`. CI needs none of these.
+Only needed on the seller's local machine when running `pnpm upload-images` or a Seller Studio CDN sync (`POST /api/sync-images`). `.env.local` is parsed by `scripts/lib/loadEnv.ts` (existing environment values always win), since tsx does not auto-load it. CI needs none of these.
 
 | Variable | Provider | Required when |
 |---|---|---|
@@ -513,6 +659,10 @@ Only needed on the seller's local machine when running `pnpm upload-images`. CI 
 | `CF_R2_PUBLIC_URL` | Cloudflare R2 | same |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob | `imageStorage.provider === "vercel-blob"` |
 | `NEXT_PUBLIC_SITE_URL` | CI / build | Optional; used for sitemap + OG tag base URL (set as GitHub Actions Variable) |
+| `EDITOR` | any | Optional; `create-item.ts` opens the new `item.json` in this editor (`spawnSync`, no shell interpolation) |
+| `GH_TOKEN` (or prior `gh auth login`) | GitHub | `pnpm bump` shells out to `gh` for CI status and release creation |
+
+The shipping-rate-proxy Worker keeps its own variables and secrets (`SHIPPO_API_KEY`, `EASYPOST_API_KEY`, `SHIPPING_PROVIDER`, `ALLOWED_ORIGIN`, `ORIGIN_ZIP`, `ORIGIN_COUNTRY`) inside `workers/shipping-rate-proxy/` — see [workers/shipping-rate-proxy/README.md](../workers/shipping-rate-proxy/README.md). They never live in the root `.env.local`.
 
 See [`.env.example`](../.env.example) for setup instructions and [setup_instruction.md](setup_instruction.md) for the full CDN configuration walkthrough.
 
@@ -522,7 +672,7 @@ See [`.env.example`](../.env.example) for setup instructions and [setup_instruct
 
 | Topic | Document |
 |---|---|
-| Full `item.json` schema (38 fields) | [DESIGN.md §5](DESIGN.md) |
+| Full `item.json` schema (36 top-level fields; 37 counting the stripped `reserved_for` note) | [DESIGN.md §5](DESIGN.md) |
 | `content/config.ts` full template | [DESIGN.md §13](DESIGN.md) |
 | Distance-tiered pricing algorithm | [DESIGN.md §17](DESIGN.md) |
 | Component architecture + `"use client"` list | [DESIGN.md §12](DESIGN.md) |
@@ -534,4 +684,7 @@ See [`.env.example`](../.env.example) for setup instructions and [setup_instruct
 | Testing strategy | [TECH_REQUIREMENTS.md §25](TECH_REQUIREMENTS.md) |
 | CDN setup walkthrough | [setup_instruction.md](setup_instruction.md) |
 | Seller operations guide | [../SETUP_GUIDE.md](../SETUP_GUIDE.md) |
-| 16-phase build plan (Phases 0–15) | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) |
+| Complete scripts & tooling reference | [SCRIPTS.md](SCRIPTS.md) |
+| Template updates (`pnpm update-site`) | [UPDATE_GUIDE.md](UPDATE_GUIDE.md) |
+| Seller Studio + Facebook export (feature docs) | [CURRENT_FUNCTIONALITY.md](CURRENT_FUNCTIONALITY.md) |
+| Build plan (Phases 0–18) | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) |

@@ -2,9 +2,10 @@
 //   - scripts/create-item.ts     (pnpm create-item <category>/<name>)
 //   - scripts/create-template.ts (pnpm create-template [category])
 //
-// Field set mirrors docs/DESIGN.md §5 (38 fields). `reserved_for` is
-// intentionally excluded — see .claude/CLAUDE.md Iron Rule 4 (private
-// buyer info, never rendered, never written by tooling).
+// Field set mirrors docs/DESIGN.md §5 (36 top-level fields; 37 counting
+// reserved_for). `reserved_for` is intentionally excluded here — see
+// .claude/CLAUDE.md Iron Rule 4 (private buyer info, never rendered,
+// never written by tooling).
 
 export type MeasurementUnit = "metric" | "imperial";
 

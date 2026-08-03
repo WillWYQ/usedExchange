@@ -2,7 +2,7 @@
 
 **Version:** 1.7  
 **Date:** 2026-08-02  
-**Based on:** DESIGN.md v0.9.2 · TECH_REQUIREMENTS.md v0.9.2  
+**Based on:** DESIGN.md v0.10.0 · TECH_REQUIREMENTS.md v0.10.0  
 **Assumption:** Single developer; primary target = GitHub Pages + Cloudflare R2
 
 ---
@@ -30,7 +30,7 @@
 | 16 | Shipping Calculator Integration (Optional) | 2 | 7, 12 |
 | 17 | Facebook Marketplace Smart Export | 1 | 3 |
 | 18 | Seller Studio | 4 | 4, 15 |
-| **Total** | | **~26 days** | |
+| **Total** | | **~30.5 days** | |
 
 **Critical path:** 0 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 11 → 13 → 14  
 **Parallelisable:** Phase 1 ∥ Phase 2; Phase 4 ∥ Phase 3; Phase 10 ∥ Phase 7; Phase 12 (i18n) ∥ Phases 10, 11, 13; Phase 15 ∥ Phases 5–14
@@ -130,7 +130,7 @@
 - [x] Implement `loadItem()` — returns `null` if missing, never throws
 - [x] Implement `loadAllItems()` — `available` status ONLY; sorted by `listedDate` desc; capped at `siteConfig.recentlyListedCount`. **Home page recently-listed strip only.** Do NOT use for the /all page (see Phase 8b).
 - [x] Implement `loadSoldItems()` — returns ALL sold items regardless of `soldItemRetentionDays`; sorted by `soldDate` desc (falls back to `listedDate`); used by `/sold` archive page (TECH_REQUIREMENTS.md §8)
-- [x] Write `lib/search/index.ts` — `buildSearchIndex()`: reads all available items, returns `SearchIndexEntry[]` with fields: `name`, `description`, `brand`, `model`, `tags`, `course`, `isbn`, `edition`. The function only returns the array; the caller (`scripts/build-search-index.ts`, run in `prebuild`) writes the result to `public/search-index.json` (NOT `lib/generated/`) so SearchBar can fetch it via HTTP (TECH_REQUIREMENTS.md §22.1 and §7)
+- [x] Write `lib/search/index.ts` — `buildSearchIndex()`: reads all non-draft, non-sold items (available/pending/reserved), returns `SearchIndexEntry[]` with fields: `categorySlug`, `itemSlug`, `name`, `description`, `brand`, `model`, `tags`, `course`, `isbn`, `edition`, `coverImage`. The function only returns the array; the caller (`scripts/build-search-index.ts`, run in `prebuild`) writes the result to `public/search-index.json` (NOT `lib/generated/`) so SearchBar can fetch it via HTTP (TECH_REQUIREMENTS.md §22.1 and §7)
 - [x] Image URL resolution: `manifest[key] ?? "/items/{key}"` fallback (DESIGN.md §11)
 - [x] Image sorting: `filenames.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))` — explicit sort, never rely on `readdir` order (DESIGN.md §4)
 - [x] Verify `reserved_for` field is never included in returned `Item` type
@@ -143,7 +143,7 @@
 - [x] Write `scripts/mark-sold.ts` — reads `content/items/<cat>/<name>/item.json`, sets `status: "sold"` and `sold_date: today (ISO 8601)`, writes file in place; exits 1 with a clear error if the item path does not exist (TECH_REQUIREMENTS.md §22.3)
 - [x] Write `scripts/create-item.ts` — creates `content/items/<category>/<name>/` folder and `item.json` from template; opens in `$EDITOR` if set; validates category exists (TECH_REQUIREMENTS.md §22.3)
 - [x] Write `scripts/create-template.ts` — creates `content/items/<category>/_template.json` or global `content/items/_template.json` without an argument (TECH_REQUIREMENTS.md §22.3)
-- [x] Extract `scripts/lib/itemTemplate.ts` (`buildItemTemplate()`) as the single source of truth for the scaffold, used by both `create-item.ts` and `create-template.ts` — covers all 38 fields from DESIGN.md §5 (except `reserved_for`), with `dimensions`/`weight` written as empty placeholder structures (`{ length: null, width: null, height: null, unit: "cm" }` / `{ value: null, unit: "kg" }`) that coerce to `null` via the existing Zod `.catch(null)` logic if left unfilled
+- [x] Extract `scripts/lib/itemTemplate.ts` (`buildItemTemplate()`) as the single source of truth for the scaffold, used by both `create-item.ts` and `create-template.ts` — covers all 36 scaffoldable fields from DESIGN.md §5 (`reserved_for` excluded), with `dimensions`/`weight` written as empty placeholder structures (`{ length: null, width: null, height: null, unit: "cm" }` / `{ value: null, unit: "kg" }`) that coerce to `null` via the existing Zod `.catch(null)` logic if left unfilled
 - [x] Verify loader returns correct data for sample items
 - [x] **(Added 2026-06-14)** `buildItemTemplate(name, listedDate, measurementUnit)` — `dimensions.unit`/`weight.unit` placeholders now default from `siteConfig.measurementUnit` ("metric" → cm/kg, "imperial" → in/lb) instead of being hardcoded
 - [x] **(Added 2026-06-14)** `scripts/lib/itemTemplate.ts` — `renderItemTemplateJsonc()` writes the template as JSONC with `// options: ...` comments listing every valid value for `condition`, `status`, `dimensions.unit`, and `weight.unit`; `create-item.ts`/`create-template.ts` write this output
@@ -262,7 +262,7 @@ DESIGN.md §3, §14 · TECH_REQUIREMENTS.md §7
 
 #### 7d — PricingSection & FilterBar
 - [x] `components/item/PricingSection.tsx` (client) — owns geo+distance state for item detail; renders `LocationPriceBar` above `PricingTable`; accepts `initialResolvedTier` for SSG initial render
-- [x] `components/filters/SortSelect.tsx` (client) — sort dropdown: Price low→high · Price high→low · Date listed (newest) · Condition (new first); child of `FilterBar`; separate component so it can hold its own dropdown state. **Must be created before `FilterBar`** (FilterBar renders SortSelect as a child).
+- [x] `components/filters/SortSelect.tsx` (client) — sort dropdown: Date listed (newest) · Price low→high · Price high→low · Condition (best first); child of `FilterBar`; separate component so it can hold its own dropdown state. **Must be created before `FilterBar`** (FilterBar renders SortSelect as a child).
 - [x] `components/filters/useFilters.ts` — condition chips, price range slider (`[min, max]` on resolved prices), status toggle; slider hidden when no items have tiers; slider resets on distance change
 - [x] `components/filters/FilterBar.tsx` (client) — renders useFilters controls (including `SortSelect`); receives `resolvedDistanceMi` prop; passes `Infinity` from parent when source = fallback
 
@@ -297,8 +297,8 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 - [x] Verify: filter bar condition chips, price slider, sort, status toggle all work
 
 #### 8c — Sold Items Archive (`/sold`)
-- [x] `app/sold/page.tsx` — server component; calls `loadSoldItems()`; renders a simple item grid (no filter bar, no pricing, no contact); sorted by `soldDate` desc; shows cover image, name, condition badge, sold date, category chip (DESIGN.md §10.5)
-- [x] Verify all sold items appear regardless of `soldItemRetentionDays`
+- [x] `app/sold/page.tsx` — server component; calls `loadSoldItems()`; renders a simple item grid (no filter bar, no pricing, no contact); sorted by `soldDate` desc; the grid renders at most `siteConfig.soldArchiveDisplayLimit` items (header shows the total sold count); shows cover image, name, condition badge, sold date, category chip (DESIGN.md §10.5)
+- [x] Verify: `loadSoldItems()` returns all sold items regardless of `soldItemRetentionDays`; the `/sold` grid is capped at `siteConfig.soldArchiveDisplayLimit` items, with the header count reflecting the total
 - [x] Verify no pricing shown; no contact section
 
 ### Acceptance Criteria
@@ -307,7 +307,7 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 - Sold items show "SOLD" overlay but are present in grid (until retention expires)
 - `draft` items never render
 - `/all` page shows `reserved`/`pending` with badges; `loadAllItems()` is NOT used for this page
-- `/sold` archive shows every sold item; no retention filter applied
+- `/sold` archive: `loadSoldItems()` applies no retention filter; the grid renders at most `soldArchiveDisplayLimit` items and the header shows the total count
 
 ---
 
@@ -384,7 +384,7 @@ DESIGN.md §17 · TECH_REQUIREMENTS.md §20
 - [x] `components/ui-adapters/BackgroundEffect.tsx` — all 13 background options pre-imported, full `COMPONENTS` map, `⚠️ DO NOT EDIT` header
 - [x] `components/ui-adapters/ItemGridAdapter.tsx` — all 3 grid options + `"simple"` fallback, render prop interface, data normalisation per TECH_REQUIREMENTS.md §21
 - [x] `components/ui-adapters/GalleryAdapter.tsx` — all 4 gallery options + `"simple"` fallback, data normalisation
-- [x] `components/ui-adapters/ItemCardAdapter.tsx` — all 8 card options + `"simple"` fallback, children pass-through, data normalisation (direction-aware-hover note)
+- [x] `components/ui-adapters/ItemCardAdapter.tsx` — all 7 card options + `"simple"` fallback, children pass-through, data normalisation (direction-aware-hover note)
 - [x] Wire `BackgroundEffect` into `app/layout.tsx`
 - [x] Wire `ItemGridAdapter` into `components/item/ItemGrid.tsx` (replaces raw grid div)
 - [x] Wire `GalleryAdapter` into item detail page (replaces `ItemGallery` directly)
@@ -444,7 +444,7 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 
 #### Full-Text Search
 - [x] Write `scripts/build-search-index.ts` — imports `buildSearchIndex()` from `lib/search/index.ts`, writes the result to `public/search-index.json`, logs entry count, exits 1 on error. (fuse.js and its types are already installed in Phase 0; fuse.js v7 ships its own TypeScript types, no `@types/fuse.js` needed)
-- [x] Update `prebuild` script in `package.json` to chain: `tsx scripts/sync-images.ts --mode build-check && tsx scripts/build-search-index.ts` (see TECH_REQUIREMENTS.md §7 for the full scripts block)
+- [x] Update `prebuild` script in `package.json` to chain: `tsx scripts/check-config.ts && tsx scripts/sync-images.ts --mode build-check && tsx scripts/build-search-index.ts` (the `check-config` gate — added later — fails the build on a placeholder `baseUrl` or incomplete `UIStrings` translations; see TECH_REQUIREMENTS.md §7 for the full scripts block)
 - [x] Verify: `pnpm build` generates `public/search-index.json` before `next build` renders any page (index built once in prebuild, not per-page)
 - [x] Write `components/search/SearchBar.tsx` (client) — loaded via `next/dynamic({ ssr: false })`; on mount fetches `/search-index.json`; graceful 404 handling (empty index, no crash — see TECH_REQUIREMENTS.md §22.1); debounce 150 ms; shows results inline with cover image, name, category, price badge; clicking navigates to detail page
 - [x] Write `components/search/useSearch.ts` — loads index on mount, manages query + results state
@@ -455,7 +455,7 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 #### SEO
 - [x] Verify every route has `<title>` and `<meta name="description">` populated
 - [x] Verify OG tags on all 3 route types (home, category, item)
-- [x] Verify `sitemap.xml` + `robots.txt` are generated when `siteConfig.sitemap.enabled` (v1 feature, on by default; config-toggleable per TECH_REQUIREMENTS.md §22.7)
+- [x] Verify `sitemap.xml` + `robots.txt` are generated when `siteConfig.sitemap.enabled` (v1 feature, on by default; config-toggleable per TECH_REQUIREMENTS.md §22.7; `scripts/postbuild.ts` runs `next-sitemap` after the build and prints a skip notice when disabled)
 
 #### Accessibility
 - [ ] All images have non-empty `alt` text — audit with axe or browser DevTools
@@ -533,7 +533,7 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 
 **No API keys, no new dependencies, no custom scripts.** The deliverable is Markdown instruction files and a CI workflow.
 
-**Architecture:** Skills are split by audience. Developer context lives in `.claude/` (develop branch). Seller-facing skills live in `.claude/seller/` (source) and are automatically promoted to `.claude/skills/` on the `release` branch when a version tag is pushed. Sellers fork/clone the `release` branch.
+**Architecture:** Skills are split by audience. Developer context lives in `.claude/` (develop branch). Seller-facing skills live in `.claude/commands/` — Claude Code's slash-command convention (`/setup`, `/update-items`, `/translate-items`, plus `/setup-shipping` from Phase 16) — and ship identically on both the `develop` and `release` branches. `.claude/seller/` holds only the seller-focused `CLAUDE.md`. Sellers fork/clone the `release` branch.
 
 **Can be developed in parallel with Phases 5–14.**
 
@@ -549,7 +549,7 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 - [x] Test: open Claude Code in project directory; confirm AI has correct project context without further explanation
 
 #### 15b — `update-items.md` Skill
-- [x] Create `.claude/seller/update-items.md` (promoted to `.claude/skills/update-items.md` on `release` branch via CI)
+- [x] Create `.claude/commands/update-items.md` (slash command `/update-items`; ships on both the `develop` and `release` branches)
 - [x] Include: trigger description, vision instructions for photo analysis, description file format support (`.txt`, `.md`, `.yaml`, `.json` in priority order), field extraction table (with confidence levels), merge rules (description overrides vision), output spec (`status: "draft"`, `reserved_for` never set), confirmation flow (confirm / edit / skip / accept-all), scope instructions (natural language targets)
 - [x] Include full `item.json` schema from DESIGN.md §5 as a reference block
 - [ ] Test with Claude Code: create a test item folder with 2 photos + notes.txt → invoke skill → verify generated JSON validates against Zod schema
@@ -557,8 +557,8 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 - [ ] Test with no description file (photos only)
 - [ ] Test with partial `info.yaml` (description file with some fields set)
 
-#### 15c — `setup-wizard.md` Skill
-- [x] Create `.claude/seller/setup-wizard.md` (promoted to `.claude/skills/setup-wizard.md` on `release` branch via CI)
+#### 15c — `setup.md` Skill
+- [x] Create `.claude/commands/setup.md` (slash command `/setup`; ships on both the `develop` and `release` branches)
 - [x] Include: all 8 question groups, location resolution instructions (AI uses knowledge to suggest lat/lng, shows for confirmation), category scaffold instructions, idempotency instructions (read existing config before asking), partial re-run support ("just update my contact info")
 - [x] Include full `content/config.ts` template from DESIGN.md §13 as the output reference
 - [x] Include validation rules for all fields before writing
@@ -567,7 +567,7 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 - [ ] Test partial re-run: "just update my contact info"
 
 #### 15d — `translate-items.md` Skill
-- [x] Create `.claude/seller/translate-items.md` (promoted to `.claude/skills/translate-items.md` on `release` branch via CI)
+- [x] Create `.claude/commands/translate-items.md` (slash command `/translate-items`; ships on both the `develop` and `release` branches)
 - [x] Include: trigger, locale detection from `siteConfig.i18n.availableLocales` (dynamic — not hardcoded to any specific locale), fields to translate (`name`→`name_{locale}`, `description`→`description_{locale}`), fields preserved verbatim (brand, model, color, tags, course, isbn, edition, prices, dates, status, URLs), Markdown preservation with examples, per-item confirmation flow (confirm / edit / skip / accept-all / re-translate), natural-language scope, status filter (translate all statuses incl. draft/sold), output rules (write only locale fields; preserve everything else)
 - [x] Include Zod-schema precondition: skill verifies `name_{locale}`/`description_{locale}` exist in `lib/content/schema.ts`; if absent, prints the exact Zod + `Item` type snippet to add and stops
 - [x] Include per-locale translation quality guidance (zh: Simplified default; es: neutral Latin American; fr/ja/ko notes)
@@ -576,7 +576,7 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 
 #### 15e — Validation & Documentation
 - [x] Create `SETUP_GUIDE.md` at the project root — plain-English seller guide. Covers: (1) adding a new item with photos + AI, (2) marking an item sold, (3) creating from template, (4) changing prices, (5) uploading new photos, (6) what to back up, (7) who to contact if something breaks. Includes `pnpm type-check` step after AI writes files.
-- [x] Create `.github/workflows/release-seller.yml` — CI workflow triggered on `v*` tags; resets `release` branch to the tagged commit; replaces `.claude/CLAUDE.md` with `.claude/seller/CLAUDE.md`; copies `.claude/seller/*.md` to `.claude/skills/`; force-pushes `release`. `workflow_dispatch` supported for manual runs.
+- [x] Create `.github/workflows/release-seller.yml` — CI workflow triggered on `v*` tags; resets `release` branch to the tagged commit; replaces `.claude/CLAUDE.md` with `.claude/seller/CLAUDE.md`; force-pushes `release`. Seller skills travel via `.claude/commands/` unchanged on both branches (the workflow's `.claude/skills/` copy step is a no-op — `.claude/seller/` contains only `CLAUDE.md`). `workflow_dispatch` supported for manual runs.
 - [ ] Test all three skills in at least one non-Claude AI tool (Cursor or GitHub Copilot) to verify compatibility
 - [ ] Confirm `content/` rule: AI never modifies any file outside `content/`
 
@@ -584,7 +584,7 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 - `/update-items` in Claude Code → generates valid `item.json`; Zod schema validates it
 - `/setup` in Claude Code → `content/config.ts` generated; `pnpm type-check` passes
 - `/translate-items` in Claude Code → writes `name_{locale}`/`description_{locale}` only; other fields untouched; existing translations not overwritten; locale detected from `siteConfig.i18n.availableLocales` (not hardcoded)
-- CI: pushing a `v*` tag generates a `release` branch with seller skills in `.claude/skills/`
+- CI: pushing a `v*` tag regenerates a `release` branch whose `.claude/CLAUDE.md` is the seller-focused one; seller skills ship via `.claude/commands/` on both branches
 - No new npm dependencies added
 - No API keys required
 - No files written outside `content/`
@@ -623,7 +623,7 @@ DESIGN.md §10.3, §12, §13 · TECH_REQUIREMENTS.md §22.8
 - [x] `.gitignore` updated: `.dev.vars`, `.wrangler/` ignored; `.dev.vars.example` kept
 
 #### 16d — Verification & Documentation
-- [x] `pnpm type-check`, `pnpm lint`, `pnpm test` all pass (220 tests across 20 files)
+- [x] `pnpm type-check`, `pnpm lint`, `pnpm test` all pass (216 tests across 21 files at the Phase 16 snapshot)
 - [x] `pnpm exec tsx scripts/check-config.ts` passes (feature commented out by default — template still valid)
 - [x] DESIGN.md / DESIGN_zh.md §21 — full feature design (config, per-item override, eligibility, display-by-payer, privacy, deployment)
 - [x] ARCHITECTURE.md / ARCHITECTURE_zh.md — module reference, data flow diagram, component tables, key invariants, directory structure
@@ -657,8 +657,9 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md (lib/ Module Refe
 - [x] `scripts/lib/fbCategoryMap.ts` — 50+ regex rules mapping item corpus (name + tags + brand + model + categorySlug) to FB `"Top//Sub//Leaf"` category string; slug fallback map for unmatched categories
 
 #### 17b — Export Script
-- [x] `scripts/export-facebook.ts` — interactive 3-step CLI (Step 0: history filter shown on 2nd+ run; Step 1: all/category/multi-select with comma and range notation `1-4`; Step 2: price tier: lowest/highest/by label)
-- [x] FB CSV field mapping: `name`→TITLE (150 chars), `price`→PRICE, `condition`→CONDITION, `description`→DESCRIPTION (5000 chars), category→CATEGORY, weight→SHIPPING WEIGHT, shipping flags→OFFER FREE SHIPPING / OFFER SHIPPING
+- [x] `scripts/export-facebook.ts` — interactive 3-step CLI (Step 0: history filter shown on 2nd+ run; Step 1: all/category/multi-select with comma and range notation `1-4`; Step 2: price tier: lowest / highest / pickup (miles-limited tiers) / shipping (open-ended tiers))
+- [x] FB CSV field mapping: `name`→TITLE (150 chars), `price`→PRICE, `condition`→CONDITION, `description`→DESCRIPTION (5000 chars), category→CATEGORY, weight→SHIPPING WEIGHT (pounds; converted from the item's stored unit), shipping flags→OFFER FREE SHIPPING / OFFER SHIPPING
+- [x] PHOTO columns: up to 10 per row, filled with CDN URLs from the image manifest; items without CDN photos trigger a warning to run `pnpm upload-images` first, and their local photos are copied to `exports/facebook-marketplace-photos/` for manual upload (post-v1.3.0 enhancement)
 - [x] Auto-batches into numbered files when > 50 items (FB per-upload limit)
 - [x] Appends `ExportRun` to export history after each successful write
 
@@ -669,7 +670,7 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md (lib/ Module Refe
 
 #### 17d — Wiring & Documentation
 - [x] `package.json` `"fb-export"` script; version bumped to `1.3.0`
-- [x] `.gitignore` updated: `exports/*.csv` and `exports/.export-history.json` excluded
+- [x] `.gitignore` updated: `exports/` ignored wholesale; `exports/.gitkeep` stays tracked so the directory exists
 - [x] `.claude/CLAUDE.md` — added `pnpm fb-export` row to Common Seller Tasks table
 - [x] `docs/CURRENT_FUNCTIONALITY.md` / `_zh` — fb-export + export history documented in Seller CLI Tools table
 - [x] `docs/FEATURES_ROADMAP.md` / `_zh` — §3.4 updated with export history description
@@ -690,27 +691,29 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md (lib/ Module Refe
 
 **Goal:** `pnpm studio` starts a local-only web GUI (never part of the build output, never deployed) for managing listings in a browser: photo upload/reorder/CDN push, bulk status changes, a schema-driven edit form, item creation, and one-click publish — without the seller editing `item.json` by hand.
 
-**Version:** v1.7
+**Version:** unreleased — merged on `develop` after v1.4.2 (no release tag contains it yet)
 
 ### Tasks
 
 #### 18a — Item table & bulk status (Part 1)
 - [x] `studio/vite.config.ts` + `studio/index.html` + `studio/src/main.tsx` — Vite dev app; `studio/` is unreachable from `next build`
-- [x] `scripts/studio.ts` — `pnpm studio` launcher: serves the app and the API on a single local port; clear "not installed" error when the studio directory is missing
-- [x] `studio/src/App.tsx` + `ItemList.tsx` + `Drawer.tsx` + `BulkToolbar.tsx` — item table, per-item drawer, bulk status changes (available / reserved / pending / sold / draft)
+- [x] `scripts/studio.ts` — `pnpm studio` launcher: serves the app and the API on a single local port, bound to 127.0.0.1 only; `--port` validated 1024–65535 (default 5174); auto-loads `.env.local`; the CDN image adapter is constructed per sync run, so missing credentials surface as a sync error, not a startup failure; clear "run `pnpm update-site`" error when `studio/vite.config.ts` is missing
+- [x] `studio/src/App.tsx` + `studio/src/panes/{ItemList,Drawer,BulkToolbar}.tsx` — item table, per-item drawer, bulk status changes (available / reserved / pending / sold / draft)
+- [x] `studio/csrfGuard.ts` + middleware wiring in `studio/vite.config.ts` — CSRF guard for the API: all non-GET/HEAD methods require `Content-Type: application/json` (→ 415) and, when an `Origin` header is present, it must equal the server's own origin (→ 403); fails closed for every unsafe method so future PUT/PATCH/DELETE routes are covered automatically; unit-tested in `studio/csrfGuard.test.ts`
 - [x] `GET /api/items` returns every item with its image files; `reserved_for` is never read, written, or sent to the client
 
 #### 18b — Photos & CDN sync (Part 2A)
 - [x] `scripts/lib/studioImages.ts` — list an item's image files; serve image files; upload, reorder, delete through the API
 - [x] `scripts/lib/studioSync.ts` — image-sync runner with a sync mutex (one sync at a time) and server-sent-event progress streaming
-- [x] `ImagePane.tsx` + `SyncBar.tsx` — drag-and-drop upload, drag-to-reorder, CDN push with live progress; state resyncs after a failed mutation
+- [x] `studio/src/panes/{ImagePane,SyncBar}.tsx` — drag-and-drop upload, drag-to-reorder, CDN push with live progress; state resyncs after a failed mutation
 
 #### 18c — Edit form, item creation & publish (Part 2B)
 - [x] `scripts/lib/itemEdit.ts` + `itemFields.ts` — strict field grammar for `item.json` edits; every write validated against the schema; `reserved_for` denied
 - [x] `scripts/lib/studioApi.ts` — `GET`/`PATCH /api/items/:cat/:name` (changed fields only), `POST /api/items` (create from template)
-- [x] `scripts/lib/studioGit.ts` — `publishChanges()`: re-reads the change list before committing; refuses to publish while an image sync is running
-- [x] `EditForm.tsx` + `NewItemDialog.tsx` + `PublishPane.tsx` — grouped edit form, item creation dialog, publish pane with the uncommitted-change count most prominent in the header
-- [x] Test coverage in `scripts/lib/studioApi.test.ts` / `studioImages.test.ts` / `studioSync.test.ts` / `studioGit.test.ts` / `itemEdit.test.ts` / `itemFields.test.ts` (backend only — no React tests)
+- [x] `scripts/lib/studioGit.ts` — `publishChanges()`: re-reads the change list before committing; refuses to publish while an image sync is running; stages only the publishable paths (`content/` + `lib/generated/image-manifest.json`, never `git add -A`, so `.env.local` can't ride along)
+- [x] `studio/src/fields.ts` + `studio/src/api.ts` — declarative `FIELD_GROUPS` driving the EditForm (paths must match the `scripts/lib/itemFields.ts` authority) and fetch wrappers for all `/api/*` routes, including the SSE `streamSync` parser built on fetch/ReadableStream (no EventSource — POST required)
+- [x] `studio/src/panes/{EditForm,NewItemDialog,PublishPane}.tsx` — grouped edit form, item creation dialog, publish pane with the uncommitted-change count most prominent in the header
+- [x] Test coverage in `scripts/lib/studioApi.test.ts` / `studioImages.test.ts` / `studioSync.test.ts` / `studioGit.test.ts` / `itemEdit.test.ts` / `itemFields.test.ts`, plus `scripts/studioFields.test.ts` (EditForm↔itemFields drift) and `studio/csrfGuard.test.ts` (backend only — no React tests)
 
 #### 18d — Distribution & documentation
 - [x] `studio` added to `TEMPLATE_PATHS` in `scripts/update-site.ts` so `pnpm update-site` delivers it to downstream sites
@@ -757,7 +760,7 @@ A phase is **done** when:
 5. Changes are committed to git with Conventional Commit message
 
 The project is **ready for v1 launch** when:
-1. All 15 phases are done (Phase 15 may ship slightly after Phases 0–14 if the AI skill files are delayed)
+1. All 16 core phases (0–15) are done (Phase 15 may ship slightly after Phases 0–14 if the AI skill files are delayed)
 2. AI skill `/setup` generates a valid `content/config.ts` — `pnpm type-check` passes (Phase 15)
 3. At least one complete real listing (generated via AI skill `/update-items`) exists
 4. Site is live and passing Lighthouse ≥ 80/90

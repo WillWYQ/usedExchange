@@ -2,6 +2,8 @@
 
 > 本文档为开发者参考文档。完整设计规范见 [DESIGN_zh.md](DESIGN_zh.md)；构建计划见 [IMPLEMENTATION_PLAN_zh.md](IMPLEMENTATION_PLAN_zh.md)；非技术卖家操作指南见 [../SETUP_GUIDE.md](../SETUP_GUIDE.md)。
 >
+> **版本：** v1.2 · **日期：** 2026-08-02
+>
 > 🇺🇸 English version: [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ---
@@ -10,12 +12,13 @@
 
 ```
 usedExchange/
-├── app/                              ← Next.js App Router 页面 + 根布局
-│   ├── layout.tsx                    ← 根布局：ThemeProvider > LocaleProvider > BackgroundEffect > SiteHeader/Footer
+├── app/                              ← Next.js App Router 页面 + 根布局（100% 服务端组件）
+│   ├── layout.tsx                    ← 根布局：ThemeProvider > LocaleProvider > MeasurementUnitProvider > BackgroundEffect > SiteHeader/Footer
 │   ├── globals.css                   ← Tailwind v4 指令 + CSS 自定义属性
 │   ├── page.tsx                      ← 首页 (/)
 │   ├── about/page.tsx                ← 项目介绍页：配置前显示于 "/"，配置后作为永久入口
 │   ├── all/page.tsx                  ← 全部浏览 (/all)
+│   ├── newly-listed/page.tsx         ← 最新上架 (/newly-listed)——服务端外壳 → NewlyListedClient
 │   ├── sold/page.tsx                 ← 已售档案 (/sold)
 │   ├── not-found.tsx                 ← 全局 404 页面
 │   ├── [category]/page.tsx           ← 分类列表页 (/[category])
@@ -31,11 +34,13 @@ usedExchange/
 │   ├── intro/                        ← ProjectIntro + UISlotPlayground + projectIntro.dictionary（6 语言文案）
 │   ├── item/                         ← 所有物品渲染组件（见下方物品组件说明）
 │   ├── layout/                       ← Breadcrumb, SiteHeader, SiteFooter
+│   ├── newly-listed/                 ← NewlyListedClient（/newly-listed 的客户端组件）
 │   ├── pricing/                      ← DistancePricingContext, LocationPriceBar, useDistancePricing, useGeolocation, useShippingRate
 │   ├── search/                       ← SearchBar, SearchBarClient, useSearch
 │   ├── theme/                        ← ThemeProvider, ThemeToggle
-│   ├── ui/                           ← Aceternity UI 库（27 个组件，由 `pnpm setup-ui` 一次性安装）
+│   ├── ui/                           ← Aceternity UI 库：27 个受支持的插槽组件，约 30 个文件（由 `pnpm setup-ui` 一次性安装）
 │   ├── ui-adapters/                  ← BackgroundEffect, GalleryAdapter, ItemCardAdapter, ItemGridAdapter
+│   ├── units/                        ← MeasurementUnitProvider, MeasurementUnitToggle, useMeasurementUnit
 │   └── *-demo.tsx                    ← 未使用的 Aceternity 演示脚手架（无引用，可安全删除）
 │
 ├── content/                          ← ⚠️ 卖家唯一需要操作的文件夹
@@ -44,9 +49,9 @@ usedExchange/
 │       └── <分类>/
 │           ├── _category.json        ← 可选：display_name、icon、sort_order、description
 │           └── <物品>/
-│               ├── item.json         ← 必需：物品元数据（全部字段见 DESIGN.md §5）
+│               ├── item.json         ← 必需：物品元数据（全部字段见 DESIGN_zh.md §5）
 │               ├── cover.jpg         ← 固定缩略图（可选命名约定）
-│               └── *.jpg/png/webp    ← 附加图片（已加入 .gitignore）
+│               └── *.jpg/jpeg/png/webp/gif ← 附加图片（已加入 .gitignore）
 │
 ├── lib/
 │   ├── config/types.ts               ← SiteConfig TypeScript 类型定义
@@ -55,18 +60,19 @@ usedExchange/
 │   │   ├── schema.ts                 ← item.json 和 _category.json 的 Zod Schema
 │   │   └── types.ts                  ← TypeScript 类型：Item、Category、Price、PriceTier 等
 │   ├── generated/
-│   │   └── image-manifest.json       ← CDN URL 映射表（已提交到 git，由 pnpm upload-images 写入）
+│   │   └── image-manifest.json       ← CDN URL 映射表（已提交到 git，由 pnpm upload-images 与 Seller Studio 的 CDN 同步写入）
 │   ├── images/
 │   │   ├── adapter.ts                ← ImageStorageAdapter 接口
 │   │   ├── cloudflare-r2.ts          ← CloudflareR2Adapter
 │   │   ├── local.ts                  ← LocalAdapter + copyIfChanged 辅助函数
 │   │   ├── normalizeR2Url.ts         ← 去除 R2 公开 URL 末尾斜杠
+│   │   ├── stripMetadata.ts          ← stripImageMetadata()：上传前用 sharp 去除 EXIF/GPS
 │   │   └── vercel-blob.ts            ← VercelBlobAdapter
 │   ├── i18n/
-│   │   ├── translations.ts           ← EN_FALLBACK: UIStrings——所有 71 个键的内置英文默认值
+│   │   ├── translations.ts           ← EN_FALLBACK: UIStrings——所有 87 个键的内置英文默认值
 │   │   └── getTranslations.ts        ← getTranslations(): UIStrings——服务端解析（始终返回 defaultLocale）
 │   ├── search/index.ts               ← buildSearchIndex(): SearchIndexEntry[]
-│   ├── ui/types.ts                   ← UIConfig 类型（background、itemGrid、gallery、itemCard 插槽）
+│   ├── ui/types.ts                   ← UIConfig 类型（background、itemGrid、gallery、itemCard 插槽）+ PriceFilterStrategy
 │   └── utils/
 │       ├── concurrency.ts            ← mapWithConcurrency<T,R>(items, limit, fn)
 │       ├── date.ts                   ← formatRelativeDate(), formatAbsoluteDate()
@@ -74,19 +80,37 @@ usedExchange/
 │       ├── i18n.ts                   ← getLocalizedField(item, field, locale)
 │       ├── index.ts                  ← 重导出 cn()（clsx + tailwind-merge）
 │       ├── jsonld.ts                 ← buildProductJsonLd(), buildBreadcrumbJsonLd()
+│       ├── priceFilterStrategies.ts  ← computePriceBounds()、computePriceBuckets()——价格分桶策略
 │       ├── pricing.ts                ← resolveItemPrice(price, resolved)——禁止 "use client"
 │       ├── shipping.ts               ← isShippingTier()、resolveShippingPayer()、canEstimateShipping()——禁止 "use client"
 │       ├── slug.ts                   ← isValidSlug()——kebab-case 验证
-│       └── templateStatus.ts         ← isTemplateConfigured()——检测未配置的模板
+│       ├── templateStatus.ts         ← isTemplateConfigured()——检测未配置的模板
+│       └── units.ts                  ← resolveMeasurementUnit()、formatDimensions()、formatWeight()——禁止 "use client"
 │
-├── scripts/                          ← pnpm run 脚本（tsx，Node.js，不使用浏览器 API）
+├── scripts/                          ← pnpm run 脚本（大多经 tsx 运行，Node.js，不使用浏览器 API）
 │   ├── build-search-index.ts         ← 构建前：写入 public/search-index.json
-│   ├── check-config.ts               ← 构建前：若 baseUrl 仍为占位符则中断构建
+│   ├── bump-version.ts               ← pnpm bump——交互式版本号升级 + GitHub 发布
+│   ├── check-config.ts               ← 构建前：若 baseUrl 仍为占位符或某语言的翻译不完整则中断构建
 │   ├── create-item.ts                ← pnpm create-item / pnpm new
 │   ├── create-template.ts            ← pnpm create-template
+│   ├── export-facebook.ts            ← pnpm fb-export——交互式 Facebook Marketplace CSV 导出
 │   ├── mark-sold.ts                  ← pnpm mark-sold
+│   ├── migrate-config.ts             ← pnpm migrate-config——拼接缺失的可选配置字段
 │   ├── postbuild.ts                  ← 构建后：next-sitemap
-│   └── sync-images.ts                ← pnpm upload-images / dev-sync / build-check
+│   ├── setup-ui.sh                   ← pnpm setup-ui——安装所有 Aceternity 组件的 bash 脚本
+│   ├── studio.ts                     ← pnpm studio——Seller Studio 启动器（Vite 绑定 127.0.0.1）
+│   ├── sync-images.ts                ← pnpm upload-images / dev-sync / build-check
+│   ├── update-site.ts                ← pnpm update-site——拉取已打标签的模板发布版本
+│   └── lib/                          ← 共享支持模块（见 §scripts/lib）；测试以 *.test.ts 形式共置
+│
+├── studio/                           ← Seller Studio Vite SPA（pnpm studio；仅服务于 127.0.0.1）
+│   ├── index.html, vite.config.ts    ← Vite 入口 + studioApiPlugin 中间件（CSRF → 32 MB 上限 → /api/*）
+│   ├── csrfGuard.ts                  ← checkStudioCsrf——/api/* 中间件的 CSRF/Origin 防护
+│   └── src/                          ← React 应用：App.tsx、api.ts、fields.ts、panes/（ItemList、EditForm、ImagePane、PublishPane、SyncBar 等）
+│
+├── hooks/                            ← 共享 React Hook：use-outside-click.tsx（useOutsideClick）
+│
+├── exports/                          ← fb-export 输出（.gitignore）：CSV 文件、facebook-marketplace-photos/、.export-history.json
 │
 ├── public/
 │   ├── items/                        ← 本地图片（.gitignore；开发/构建时自动生成）
@@ -94,9 +118,9 @@ usedExchange/
 │   └── search-index.json             ← Fuse.js 索引（.gitignore；构建前步骤生成）
 │
 ├── .github/workflows/
-│   ├── ci.yml                        ← 提交时类型检查 + lint + 测试
+│   ├── ci.yml                        ← 类型检查 + lint + 测试（push / PR / 手动）
 │   ├── deploy.yml                    ← 从 release 分支构建并部署到 GitHub Pages
-│   └── release-seller.yml            ← 自动化发布分支管理
+│   └── release-seller.yml            ← 发布分支管理（v* 标签 / 手动触发）
 │
 ├── workers/                           ← 独立部署的 Cloudflare Workers（拥有自己的 tsconfig/eslint 范围）
 │   └── shipping-rate-proxy/          ← 可选：运费计算代理（见 DESIGN_zh.md §21）
@@ -106,7 +130,7 @@ usedExchange/
 │
 ├── next.config.ts                    ← 静态导出配置、图片域名
 ├── tsconfig.json                     ← strict + noUncheckedIndexedAccess + @/* 路径别名
-├── vitest.config.ts                  ← Vitest（jsdom 环境，路径别名）
+├── vitest.config.ts                  ← Vitest（node 环境，esbuild JSX automatic，@ 路径别名）
 ├── .env.example                      ← 环境变量文档
 └── next-sitemap.config.js            ← next-sitemap 配置
 ```
@@ -133,12 +157,22 @@ content/items/**/item.json
     ├──► loadCategories() +
     │    loadItemsByCategory()  ──► app/[category]/page.tsx
     ├──► loadItem()             ──► app/[category]/[item]/page.tsx
-    ├──► loadBrowseAllPageData()──► app/all/page.tsx
+    ├──► loadBrowseAllPageData()──► app/all/page.tsx + app/newly-listed/page.tsx
     └──► loadSoldItems()        ──► app/sold/page.tsx
     │
     ▼  next build
     所有页面渲染为静态 HTML → out/
     无需服务器、数据库或运行时凭证
+```
+
+### 搜索索引（构建时 → 客户端运行时）
+
+```
+构建前：scripts/build-search-index.ts
+    └─► public/search-index.json（.gitignore）
+            │
+            ▼  浏览器
+SearchBarClient 请求 /search-index.json → Fuse.js 模糊匹配
 ```
 
 ### 客户端运行时（浏览器）
@@ -193,6 +227,21 @@ content/items/<分类>/<物品>/*.jpg
     CI 读取此清单——CI 环境无需 CDN 凭证
 ```
 
+### Seller Studio（仅本机）
+
+```
+pnpm studio (scripts/studio.ts)
+    └─► Vite 开发服务器绑定 127.0.0.1:5174——同时服务 studio/ SPA 与 /api/*
+            │
+            ├─► GET/PATCH /api/items/…   对 content/items/**/item.json 的外科式 JSONC 编辑
+            │                            （注释与 reserved_for 不受影响）
+            ├─► POST /api/sync-images    SSE 进度流 → imageSync.syncImagesToCdn
+            │                            写入 lib/generated/image-manifest.json → 重置清单缓存
+            └─► POST /api/publish        git add content + image-manifest.json → 提交 → 推送
+            │
+            ▼  App.tsx 不保存任何客户端物品状态——每次写入后完整重新拉取
+```
+
 ---
 
 ## lib/ 模块参考
@@ -209,8 +258,9 @@ content/items/<分类>/<物品>/*.jpg
 | `loadItem(categorySlug, itemSlug)` | `Item \| null` | `app/[category]/[item]/page.tsx` |
 | `loadBrowseAllPageData()` | `{ items: Item[], categories: Category[] }` | `app/all/page.tsx` |
 | `loadSoldItems()` | `Item[]` | `app/sold/page.tsx` |
+| `loadAllItems()` | `Item[]` | 首页"最新上架"条带——仅 available 物品，按 `listedDate` 降序，上限为 `recentlyListedCount` |
 | `loadAllItemsRaw()` | `Item[]` | 仅供脚本和 `buildSearchIndex()` 使用——不应用可见性过滤 |
-| `resetManifestCache()` | `void` | 仅供测试使用 |
+| `resetManifestCache()` | `void` | 测试使用；Studio 在 CDN 同步后也会调用，以便返回最新的 CDN URL |
 
 **性能不变性：** 图片清单（`lib/generated/image-manifest.json`）通过模块级 Promise 缓存在每个进程中只读取一次。同时需要分类和物品数据的函数（`loadHomePageData`、`loadBrowseAllPageData`）仅解析一次所有物品——不要在同一渲染流程中组合 `loadCategories()` + `loadItemsByCategory()`，否则会重复解析所有物品。
 
@@ -248,7 +298,7 @@ formatDimensions(dimensions: Dimensions, targetSystem: "metric" | "imperial"): s
 formatWeight(weight: Weight, targetSystem: "metric" | "imperial"): string
 ```
 
-- `resolveMeasurementUnit()`——`siteConfig.i18n.localeMeasurementUnits?.[locale] ?? siteConfig.measurementUnit`。
+- `resolveMeasurementUnit()`——`siteConfig.i18n.localeMeasurementUnits?.[locale] ?? siteConfig.measurementUnit ?? "metric"`。
 - `formatDimensions`/`formatWeight`——将物品存储的 `dimensions`/`weight`（卖家填写时的单位）换算为解析出的单位制，四舍五入到 2 位小数。由 `MetadataTable`（`components/item/MetadataTable.tsx`）使用，`unitSystem = resolveMeasurementUnit(useLocale().locale, siteConfig)`。
 
 **无 `"use client"`**——与 `pricing.ts`/`shipping.ts` 同样的不变性，可在服务端和客户端组件中导入。
@@ -266,6 +316,17 @@ canEstimateShipping(shipping, weight, dimensions, resolvedTier): boolean
 - `canEstimateShipping()`——决定 `ShippingEstimator` 是否渲染：要求 `shipping.enabled` 为真、物品同时具有 `weight` 和 `dimensions`，且解析后的档位为运费档位。
 
 **与 `pricing.ts` 相同的不变性：禁止 `"use client"`**——保持纯函数以便单元测试，并同时供服务端渲染的物品页和客户端 `ShippingEstimator` 组件复用。完整功能设计见 DESIGN_zh.md §21。
+
+### `lib/utils/priceFilterStrategies.ts` — 价格过滤分桶
+
+```ts
+computePriceBounds(amounts: number[], config: PriceFilterConfig): PriceBoundsResult | null
+computePriceBuckets(amounts: number[], currency: string, customBoundaries?: number[]): PriceBucket[]
+```
+
+实现 `lib/ui/types.ts` 中 `PriceFilterStrategy` 的五个取值：`"none"`、`"percentile"`、`"logarithmic"`、`"preset-buckets"`、`"iqr"`。当设置了 `siteConfig.ui.priceFilterStrategy` 时由 `useFilters`、`FilterBar`、`ItemGrid` 消费。两个配置字段（`ui.priceFilterStrategy?`、`ui.priceFilterBuckets?`）均为 TypeScript 可选，且每个消费处都有 `"none"` 的运行时默认值（见关键不变性——配置向后兼容），因此旧站点在 `pnpm update-site` 后依然能通过类型检查。
+
+**无 `"use client"`**——纯函数，与 `pricing.ts` 同样的不变性。
 
 ### `lib/images/` — 存储适配器模式
 
@@ -333,13 +394,15 @@ isTemplateConfigured(): boolean
   <body>
     <ThemeProvider>          ← next-themes，class 方式，defaultTheme="system"；ThemeToggle 持久化用户选择
       <LocaleProvider>       ← 语言状态存储于 localStorage；暴露 useLocale()
-        <BackgroundEffect>   ← 读取 siteConfig.ui.background，渲染 Aceternity 背景
-          <SiteHeader />     ← Logo、搜索栏（启用时）、语言切换器
-          <main>
-            {children}       ← 页面内容
-          </main>
-          <SiteFooter />     ← 联系平台、构建时间戳
-        </BackgroundEffect>
+        <MeasurementUnitProvider>  ← 计量单位状态存储于 localStorage；暴露 useMeasurementUnit()
+          <BackgroundEffect>   ← 读取 siteConfig.ui.background，渲染 Aceternity 背景
+            <SiteHeader />     ← Logo、搜索栏（启用时）、语言切换器
+            <main>
+              {children}       ← 页面内容
+            </main>
+            <SiteFooter />     ← 联系平台、构建时间戳
+          </BackgroundEffect>
+        </MeasurementUnitProvider>
       </LocaleProvider>
     </ThemeProvider>
   </body>
@@ -354,18 +417,21 @@ isTemplateConfigured(): boolean
 - 所有定价组件：`DistancePricingContext`、`LocationPriceBar`、`useDistancePricing`、`useGeolocation`
 - 运费估算（可选，见 DESIGN_zh.md §21）：`useShippingRate`、`ShippingEstimator`
 - 所有 i18n 运行时：`LocaleProvider`、`LocaleSwitcher`、`useLocale`、`useT`
+- 计量单位：`MeasurementUnitProvider`、`MeasurementUnitToggle`、`useMeasurementUnit`
 - 所有过滤器：`FilterBar`、`SortSelect`、`useFilters`
-- 搜索：`SearchBarClient`、`useSearch`
-- `RecentlyViewed`、`ShareButton`、`MakeOfferButton`、`QRModal`
-- `ThemeProvider`、`ThemeToggle`
-- UI 字符串消费者：`SiteHeader`、`MetadataTable`、`ConditionBadge`、`StatusBadge`、`ConditionGuide`、`PricingTable`、`PricingTableToggle`、`FreshnessLabel`、`RecentlyListedSection`、`ContactSection`
-- 物品详情 UI：`ItemGallery`、`LocalizedItemContent`
+- 搜索：`SearchBar`、`SearchBarClient`、`useSearch`
+- 物品渲染：`ItemCard`、`ItemGrid`（本身即为 `ItemCardAdapter` + 过滤/排序控件的客户端包装）、`ItemGallery`、`LocalizedItemContent`、`PricingSection`、`PricingTable`、`PricingTableToggle`、`MetadataTable`、`ConditionBadge`、`ConditionGuide`、`StatusBadge`、`FreshnessLabel`、`MakeOfferButton`
+- 联系 + 分享：`ContactSection`、`PlatformButton`、`QRModal`、`ShareButton`
+- 首页 / 最新上架：`RecentlyListedSection`、`RecentlyViewed`、`NewlyListedClient`
+- 项目介绍 / 试玩场：`ProjectIntro`、`UISlotPlayground`
+- 布局外壳 + 主题：`SiteHeader`、`ThemeProvider`、`ThemeToggle`
+- 辅助 Hook：`useIncrementalReveal`
+- 全部四个 `components/ui-adapters/*`：`BackgroundEffect`、`GalleryAdapter`、`ItemCardAdapter`、`ItemGridAdapter`
 - 所有 `components/ui/*`（Aceternity）组件
 
 **服务端组件**（不含 `"use client"`）：
 - 所有 `app/*/page.tsx` 文件（需要 UI 字符串时使用 `getTranslations()`）
 - `CategoryGrid`、`CategoryCard`
-- `ItemGrid`、`ItemCard`
 - `Breadcrumb`、`SiteFooter`
 - `QuantityBadge`、`TextbookBadge`
 - `JsonLd`、`AdaptiveImage`
@@ -378,15 +444,15 @@ isTemplateConfigured(): boolean
 |---|---|---|---|
 | `BackgroundEffect` | `ui.background` | `"none"` | 13 个 Aceternity 背景 |
 | `GalleryAdapter` | `ui.gallery` | `"simple"` | apple-cards-carousel、images-slider、carousel、parallax-scroll |
-| `ItemCardAdapter` | `ui.itemCard` | `"simple"` | 8 个 Aceternity 卡片效果 |
+| `ItemCardAdapter` | `ui.itemCard` | `"simple"` | card-hover-effect、card-spotlight、3d-card、evervault-card、wobble-card、direction-aware-hover、glare-card |
 | `ItemGridAdapter` | `ui.itemGrid` | `"simple"` | bento-grid、layout-grid、focus-cards |
 
 ### 物品组件（`components/item/`）
 
 | 组件 | 类型 | 用途 |
 |---|---|---|
-| `ItemCard` | 服务端 | 网格摘要卡片——名称、封面图、价格、状态徽章 |
-| `ItemGrid` | 服务端 | 包装 `ItemCardAdapter` + 客户端过滤/排序控件 |
+| `ItemCard` | 客户端 | 网格摘要卡片——名称、封面图、价格、状态徽章 |
+| `ItemGrid` | 客户端 | `ItemCardAdapter` + 过滤/排序控件的客户端包装（含价格分桶过滤） |
 | `ItemGallery` | 客户端 | 基础图片轮播实现 |
 | `LocalizedItemContent` | 客户端 | 语言为 `zh` 时渲染 `nameZh`/`descriptionZh` |
 | `PricingSection` | 客户端 | 已解析档位显示 + "查看所有档位"切换 |
@@ -405,23 +471,54 @@ isTemplateConfigured(): boolean
 
 ## 脚本参考
 
-所有脚本通过 `tsx` 调用（TypeScript 直接执行，无需编译）。
+大多数脚本通过 `tsx` 运行（TypeScript 直接执行，无需编译）。例外：`setup-ui` 是 bash 脚本（`scripts/setup-ui.sh`），`push` 是内联 git 命令，`build`/`lint`/`format`/`test*` 直接调用 Next.js / ESLint / Prettier / Vitest。完整参考（参数、交互提示、涉及文件、环境变量）见 [SCRIPTS_zh.md](SCRIPTS_zh.md)。
 
-| 命令 | 脚本 | 功能 |
-|---|---|---|
-| `pnpm dev` | `sync-images.ts --mode dev-sync` + `next dev` | 将图片复制到 `public/items/`；启动开发服务器 |
-| `pnpm build` | `prebuild` + `next build` + `postbuild` | 完整生产构建 |
-| `pnpm upload-images` | `sync-images.ts --mode upload` | SHA-256 增量上传到 CDN；写入清单 |
-| `pnpm new <分类>/<物品>` | `create-item.ts` | 创建物品目录 + 草稿 `item.json`；验证 slug |
-| `pnpm create-item <分类>/<物品>` | 同上 | `pnpm new` 的别名 |
-| `pnpm mark-sold <分类>/<物品>` | `mark-sold.ts` | 设置 `status: "sold"` + `sold_date: 今天` |
-| `pnpm create-template [分类]` | `create-template.ts` | 为分类创建 `_template.json` 脚手架 |
-| `pnpm push` | 内联 git 命令 | `git add content/ image-manifest.json && git commit && git push` |
-| `pnpm type-check` | `tsc --noEmit` | TypeScript 类型验证（不生成文件） |
-| `pnpm lint` | `eslint . --max-warnings 0` | ESLint（零警告） |
-| `pnpm test` | `vitest run` | 完整测试套件（单次运行） |
-| `pnpm test:watch` | `vitest` | 测试套件监听模式 |
-| `pnpm test:coverage` | `vitest run --coverage` | 测试覆盖率报告 |
+| 命令 | 功能 |
+|---|---|
+| `pnpm dev` | 先运行 `sync-images.ts --mode dev-sync`，再 `next dev --turbo`——将图片复制到 `public/items/`；启动开发服务器（Turbopack） |
+| `pnpm build` | `prebuild` + `next build` + `postbuild`——完整生产构建 |
+| `pnpm prebuild` | `check-config.ts` → `sync-images.ts --mode build-check` → `build-search-index.ts`（`build` 前自动运行） |
+| `pnpm postbuild` | `postbuild.ts`——next-sitemap 生成 sitemap.xml + robots.txt（`build` 后自动运行） |
+| `pnpm studio [--port <n>]` | `studio.ts`——在 127.0.0.1 上启动 Seller Studio（端口 1024–65535，默认 5174）；见 §Seller Studio |
+| `pnpm upload-images` | `sync-images.ts --mode upload`——SHA-256 增量上传到 CDN；去除 EXIF/GPS；写入已提交的清单 |
+| `pnpm create-item <分类>/<物品>` | `create-item.ts`——按 36 字段模板创建物品目录 + 草稿 `item.json`；验证 slug；若设置了 `$EDITOR` 则打开编辑器 |
+| `pnpm new <分类>/<物品>` | `pnpm create-item` 的别名 |
+| `pnpm create-template [分类]` | `create-template.ts`——创建带完整注释的 `_template.json` 脚手架 |
+| `pnpm mark-sold <分类>/<物品>` | `mark-sold.ts`——通过外科式 JSONC 编辑设置 `status: "sold"` + `sold_date: 今天` |
+| `pnpm fb-export` | `export-facebook.ts`——交互式 Facebook Marketplace CSV 导出（50 条一批、照片复制、运行历史去重，输出到 `exports/`） |
+| `pnpm push` | `git add content lib/generated/image-manifest.json && git commit -m 'chore: update listings' && git push`——Seller Studio 的发布流程严格镜像这两个路径 |
+| `pnpm setup-ui` | `bash scripts/setup-ui.sh`——一次性将全部 27 个 Aceternity 组件安装到 `components/ui/`（模板维护） |
+| `pnpm update-site [tag] [--list]` | `update-site.ts`——拉取已打标签的模板发布版本，不触碰 `content/`；从 HEAD 恢复 `lib/generated/image-manifest.json`；分发 `studio/`；迁移配置（模板维护；见 [UPDATE_GUIDE_zh.md](UPDATE_GUIDE_zh.md)） |
+| `pnpm migrate-config` | `migrate-config.ts`——以纯增量方式从 `scripts/lib/configDefaults.ts` 拼接缺失的可选配置字段（模板维护） |
+| `pnpm bump` | `bump-version.ts`——交互式版本号升级、打标签并创建 `gh release`（模板维护；需已登录的 `gh` CLI） |
+| `pnpm type-check` | `tsc --noEmit`——TypeScript 类型验证（不生成文件） |
+| `pnpm lint` | `eslint . --max-warnings 0`——ESLint（零警告） |
+| `pnpm format` | `prettier --write .`——Prettier 格式化整个仓库（模板维护） |
+| `pnpm test` | `vitest run`——完整测试套件（单次运行） |
+| `pnpm test:watch` | `vitest`——测试套件监听模式 |
+| `pnpm test:coverage` | `vitest run --coverage`——测试覆盖率报告 |
+
+`workers/shipping-rate-proxy/` 是独立包，拥有自己的脚本：`pnpm dev`（wrangler dev）、`pnpm deploy`（wrangler deploy）、`pnpm type-check`——见 [workers/shipping-rate-proxy/README.md](../workers/shipping-rate-proxy/README.md)。
+
+### `scripts/lib/` — 共享支持模块
+
+非独立可执行文件——由上述 CLI 导入。13 个模块中的 9 个有共置的 `*.test.ts`，由 `pnpm test` 运行（scripts 测试还包括 `scripts/update-site.test.ts` 和 `scripts/studioFields.test.ts`；全仓库测试套件约 36 个测试文件 / 585 个测试）。
+
+| 模块 | 用途 |
+|---|---|
+| `loadEnv.ts` | `loadDotEnvLocal()`——将 `.env.local` 解析进 `process.env`（已存在的环境变量优先）；tsx 不会自动加载，故 `sync-images.ts` 和 `studio.ts` 共用此函数 |
+| `imageSync.ts` | 纯 CDN 流水线：SHA-256 校验和、`UPLOAD_CONCURRENCY = 8`、单文件失败隔离、EXIF 剥离、进度回调；同时驱动 `pnpm upload-images` 和 Studio 同步 |
+| `itemTemplate.ts` | 带 `// options:` 注释的 36 字段 `item.json` 脚手架；由 `create-item`、`create-template` 和 Studio 新建物品共用（不含 `reserved_for`） |
+| `itemEdit.ts` | 基于 `jsonc-parser` 的外科式 JSONC 编辑——注释、格式与 `reserved_for` 在每次写入后均得以保留 |
+| `itemFields.ts` | 浏览器可写字段路径的严格 Zod 白名单；`resolveFieldSchema(path)` 是唯一权威；`reserved_for` 被拒绝 |
+| `markSold.ts` | `applyMarkSold(text, today)`——status → sold + `sold_date`；已售则返回 null |
+| `fbCategoryMap.ts` | 有序正则 → `Top//Sub//Leaf` Facebook 类目规则，供 `fb-export` 使用 |
+| `exportHistory.ts` | 读取/追加 `exports/.export-history.json`（.gitignore），支撑 fb-export 的跳过已导出步骤 |
+| `configDefaults.ts` | 可注入可选配置字段的声明式注册表（key / afterKey / lines），供 `pnpm migrate-config` 消费；`pnpm update-site` 会自动运行配置迁移 |
+| `studioApi.ts` | 与框架无关的 Studio HTTP 处理器：Zod 校验、slug 白名单 + 解析后路径必须位于 `content/items/` 内 |
+| `studioGit.ts` | `readChanges`/`publishChanges` 仅限 `content` + `lib/generated/image-manifest.json`；仅使用 `execFile` 参数数组（无 shell）；绝不使用 `git add -A` |
+| `studioImages.ts` | 照片上传/删除/重排序的文件系统操作：文件名白名单、魔数嗅探、`IMAGE_EXTENSIONS` = jpg\|jpeg\|png\|webp\|gif |
+| `studioSync.ts` | 单次运行的 CDN 同步包装器（互斥锁位于 `globalThis`），以 SSE 进度事件推送状态 |
 
 ### 构建流程详情
 
@@ -429,8 +526,10 @@ isTemplateConfigured(): boolean
 pnpm build
   ├── prebuild（next build 之前运行）
   │     ├── tsx scripts/check-config.ts
-  │     │       若 siteConfig.baseUrl 仍包含 "your-domain.com" 则以退出码 1 中断
-  │     │       防止意外将未配置的模板部署到生产环境
+  │     │       以下任一情况以退出码 1 中断：(a) siteConfig.baseUrl 仍包含
+  │     │       "your-domain.com"——防止意外将未配置的模板部署到生产环境；
+  │     │       或 (b) availableLocales 中的某语言在 i18n.translations 中缺失，
+  │     │       或缺少必需的 UIStrings 键（可用默认语言的值补齐）
   │     ├── tsx scripts/sync-images.ts --mode build-check
   │     │       云端提供商：验证 lib/generated/image-manifest.json 存在。
   │     │       本地提供商：将图片从 content/items/ 复制到 public/items/。
@@ -448,6 +547,52 @@ pnpm build
         tsx scripts/postbuild.ts
               运行 next-sitemap，在 out/ 中生成 sitemap.xml + robots.txt。
 ```
+
+---
+
+## Seller Studio
+
+Seller Studio 是用于管理 `content/` 的仅本机浏览器 GUI——以 `pnpm studio` 启动，SPA 与 API 由同一个绑定 `127.0.0.1` 的 Vite 开发服务器提供（绝不监听网络）。它随 `pnpm update-site` 分发到下游站点（`studio/` 目录属于模板路径之一）。
+
+### 启动器（`scripts/studio.ts`）
+
+- 仅绑定 `127.0.0.1`；默认端口 `5174`，可用 `--port <n>` 覆盖（校验范围 1024–65535；`strictPort: false`，端口被占用时自动顺延到下一个空闲端口）。
+- 当 `vite` 未安装（提示指向 `pnpm install`）或 `studio/vite.config.ts` 缺失（提示指向 `pnpm update-site`）时快速失败，并给出可操作的提示。
+- 通过 `scripts/lib/loadEnv.ts` 加载 `.env.local` 并打印解析后的 URL。
+- CDN 图片适配器（依据 `siteConfig.imageStorage.provider` 选择 R2 / Vercel Blob / 本地）在每次同步运行时才构建，而非启动时——缺失的 CDN 凭证会在 UI 中以 SSE `error` 事件呈现，而非导致启动失败。
+
+### 前端（`studio/`）
+
+一个小型 Vite + React SPA（`index.html` → `src/main.tsx` → `src/App.tsx`）。面板位于 `src/panes/`：`ItemList`、`BulkToolbar`、`Drawer`、`EditForm`、`ImagePane`、`NewItemDialog`、`PublishPane`、`SyncBar`。`App.tsx` **不保存任何客户端物品状态**——每次变更后都完整重新拉取服务端数据，因此不存在状态漂移。`src/fields.ts` 声明编辑表单的字段分组（其路径必须与服务端权威 `scripts/lib/itemFields.ts` 一致）。
+
+### API 接口（`/api/*`）
+
+`studio/vite.config.ts` 中的 `studioApiPlugin` 中间件将每个请求依次经过 `checkStudioCsrf` → 32 MB 请求体上限 → `handleStudioRequest`（`scripts/lib/studioApi.ts`），返回 JSON、文件流或 SSE 流：
+
+| 路由 | 用途 |
+|---|---|
+| `GET /api/items` | 列出全部物品及其照片和最低档位价格（单个物品出错互相隔离） |
+| `POST /api/items` | 新建物品（分类 + kebab-case 名称 → 36 字段模板） |
+| `POST /api/items/bulk-status` | 批量将所选物品标记为 sold/pending/available/draft，逐项报告失败 |
+| `GET /api/items/<分类>/<物品>` | 读取单个物品的可编辑字段 |
+| `PATCH /api/items/<分类>/<物品>` | 应用 `FieldEdit[]`——外科式 JSONC 写入，注释保留 |
+| `GET …/images`、`GET …/images/<文件>` | 列出照片 / 提供单张照片（经包含性校验，`no-store`） |
+| `POST …/images` | 上传（base64、魔数嗅探、文件名净化） |
+| `POST …/images/reorder`、`DELETE …/images/<文件>` | 重排序 / 删除照片 |
+| `POST /api/sync-images` | CDN 同步，以服务端推送事件流返回（`progress` / `done` / `error`） |
+| `GET /api/changes` | 可发布路径的 git 状态 |
+| `POST /api/publish` | 暂存 `content` + 清单、提交、推送——同步进行中返回 `409` |
+
+SSE 流以普通 `fetch` + `ReadableStream` 消费（必须使用 POST，因此无法使用 `EventSource`）。同步成功后重置加载器的清单缓存（`resetManifestCache()`），使后续读取能看到最新的 CDN URL。
+
+### 安全模型
+
+- **CSRF 防护**（`studio/csrfGuard.ts`）：所有非 GET/HEAD 请求必须携带 `Content-Type: application/json`（否则 `415`），且当存在 `Origin` 头时必须与服务器自身来源一致（否则 `403`）。该检查按方法生效，因此未来的 PUT/PATCH/DELETE 路由自动采用失败即拒绝策略；GET/HEAD 豁免。
+- **请求体上限**：超过 32 MB 的请求体在解析前即被拒绝。
+- **路径安全**：路由正则匹配原始的百分号编码路径，仅在匹配成功后逐段解码；slug 白名单加解析后路径包含性校验，确保所有读写都在 `content/items/` 之内。
+- **发布安全**：`studioGit.ts` 仅暂存 `content` 和 `lib/generated/image-manifest.json`（镜像 `pnpm push`），绝不使用 `git add -A`——因此含 CDN 凭证的 `.env.local` 不会被误提交；它拒绝带外暂存的文件和触碰任何不可发布内容的提交，且仅使用 `execFile` 参数数组（无 shell）。
+- **单次运行同步**：位于 `globalThis` 上的互斥锁（在 tsx 与 Vite 打包的模块副本之间共享）保证同一时刻只有一次同步；锁在任务结束时释放，而非在客户端断开时释放。
+- `reserved_for` 绝不被任何 Studio 代码路径读取、写入或发送。
 
 ---
 
@@ -469,9 +614,9 @@ gh-pages   ← 线上站点（GitHub Pages 管理分支）
 
 | 文件 | 触发条件 | 步骤 |
 |---|---|---|
-| `ci.yml` | 推送到 `develop` 或 `release`；任意 PR | `pnpm type-check` → `pnpm lint` → `pnpm test` |
-| `deploy.yml` | 推送到 `release`；`release-seller.yml` 完成后 | `pnpm build` → `actions/upload-pages-artifact` → `actions/deploy-pages` |
-| `release-seller.yml` | 卖家发起（workflow_dispatch） | 自动化发布分支管理 |
+| `ci.yml` | 推送到 `develop` 或 `release`；任意 PR；手动触发 | `pnpm type-check` → `pnpm lint` → `pnpm test` |
+| `deploy.yml` | 推送到 `release`；"Release Seller Template" 完成后（`workflow_run`）；手动触发 | `pnpm build` → `actions/upload-pages-artifact` → `actions/deploy-pages` |
+| `release-seller.yml` | 推送 `v*` 标签；手动触发（workflow_dispatch） | 自动化发布分支管理 |
 
 **CI 不需要 CDN 凭证。** 已提交的 `lib/generated/image-manifest.json` 在构建时被读取——所有图片 URL 在静态 HTML 中预先解析完毕。
 
@@ -486,8 +631,10 @@ gh-pages   ← 线上站点（GitHub Pages 管理分支）
 | `reserved_for` 永不渲染 | `schema.ts` 的 Zod `strip` 模式；`Item` 类型中不含此字段 |
 | `lib/utils/pricing.ts` 无 `"use client"` | 服务端和客户端均需导入此文件 |
 | `lib/generated/image-manifest.json` 保留在 git 中 | 未加入 `.gitignore`；CI 构建依赖此文件 |
-| 物品和分类 slug 为 kebab-case | `create-item.ts`、`mark-sold.ts`、`generateStaticParams` 中的 `isValidSlug()` |
-| 卖家仅向 `content/` 写入 | AI 技能文件和所有脚本均遵守此边界 |
+| 物品和分类 slug 为 kebab-case | `lib/utils/slug.ts` 中的 `isValidSlug()`，由 `create-item.ts`、`mark-sold.ts`、`generateStaticParams` 使用 |
+| 卖家仅向 `content/` 写入 | AI 技能文件和所有脚本均遵守此边界（Seller Studio 额外写入 `lib/generated/image-manifest.json`，并对 `content/` + 清单执行 git 操作） |
+| 新增配置字段向后兼容 | 核心之后的字段（`shipping?`、`measurementUnit?`、`localeMeasurementUnits?`、`defaultPriceTiers?`、`ui.priceFilterStrategy?`、`ui.priceFilterBuckets?`）均为 TypeScript 可选，并有运行时 `??` 默认值；`scripts/lib/configDefaults.ts` + `pnpm migrate-config`（由 `pnpm update-site` 自动运行）将其拼接进旧配置 |
+| Studio 仅绑定 `127.0.0.1` 且绝不使用 `git add -A` | `scripts/studio.ts` 的 host 绑定；`scripts/lib/studioGit.ts` 的 `PUBLISHABLE_PATHS` 保护 `.env.local` |
 | 草稿物品无静态路由 | 加载器可见性过滤器从 `generateStaticParams` 中排除 `status: "draft"` |
 | `soldItemRetentionDays: -1` 立即隐藏 | `isSoldItemVisible()` 中的显式 `< 0` 判断 |
 | 无 `sold_date` 的已售物品保持可见 | 保守默认：无日期 → 无到期依据 |
@@ -499,7 +646,7 @@ gh-pages   ← 线上站点（GitHub Pages 管理分支）
 
 ## 环境变量
 
-仅在卖家本机运行 `pnpm upload-images` 时需要。CI 无需任何此类变量。
+仅在卖家本机运行 `pnpm upload-images` 或 Seller Studio 的 CDN 同步（`POST /api/sync-images`）时需要。`.env.local` 由 `scripts/lib/loadEnv.ts` 解析（已存在的环境变量始终优先），因为 tsx 不会自动加载它。CI 无需任何此类变量。
 
 | 变量 | 提供商 | 需要条件 |
 |---|---|---|
@@ -510,8 +657,12 @@ gh-pages   ← 线上站点（GitHub Pages 管理分支）
 | `CF_R2_PUBLIC_URL` | Cloudflare R2 | 同上 |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob | `imageStorage.provider === "vercel-blob"` |
 | `NEXT_PUBLIC_SITE_URL` | CI / 构建 | 可选；用于 Sitemap + OG 标签的基础 URL（设为 GitHub Actions Variable） |
+| `EDITOR` | 任意 | 可选；`create-item.ts` 用此编辑器打开新建的 `item.json`（`spawnSync`，无 shell 插值） |
+| `GH_TOKEN`（或事先 `gh auth login`） | GitHub | `pnpm bump` 调用 `gh` 查询 CI 状态并创建发布 |
 
-详见 [`.env.example`](../.env.example) 和 [setup_instruction_zh.md](setup_instruction_zh.md)。
+shipping-rate-proxy Worker 的变量与密钥（`SHIPPO_API_KEY`、`EASYPOST_API_KEY`、`SHIPPING_PROVIDER`、`ALLOWED_ORIGIN`、`ORIGIN_ZIP`、`ORIGIN_COUNTRY`）均保存在 `workers/shipping-rate-proxy/` 内——见 [workers/shipping-rate-proxy/README.md](../workers/shipping-rate-proxy/README.md)。它们绝不存放在根目录的 `.env.local` 中。
+
+配置步骤见 [`.env.example`](../.env.example)，完整 CDN 配置说明见 [setup_instruction_zh.md](setup_instruction_zh.md)。
 
 ---
 
@@ -519,15 +670,19 @@ gh-pages   ← 线上站点（GitHub Pages 管理分支）
 
 | 主题 | 文档 |
 |---|---|
-| `item.json` 完整 Schema（38 个字段） | [DESIGN_zh.md §5](DESIGN_zh.md) |
+| `item.json` 完整 Schema（36 个顶层字段；计入被剥离的 `reserved_for` 备注则为 37 个） | [DESIGN_zh.md §5](DESIGN_zh.md) |
 | `content/config.ts` 完整模板 | [DESIGN_zh.md §13](DESIGN_zh.md) |
 | 距离分级定价算法 | [DESIGN_zh.md §17](DESIGN_zh.md) |
 | 组件架构 + `"use client"` 清单 | [DESIGN_zh.md §12](DESIGN_zh.md) |
 | UI 插槽选项（27 个 Aceternity 组件） | [DESIGN_zh.md §18](DESIGN_zh.md) |
+| i18n 运行时 | [DESIGN_zh.md §12](DESIGN_zh.md)、[TECH_REQUIREMENTS_zh.md §22.8](TECH_REQUIREMENTS_zh.md) |
 | 已售物品留存公式 | [DESIGN_zh.md §8](DESIGN_zh.md) |
 | 运费计算器集成（可选） | [DESIGN_zh.md §21](DESIGN_zh.md)、[workers/shipping-rate-proxy/README.md](../workers/shipping-rate-proxy/README.md) |
 | 部署清单 | [TECH_REQUIREMENTS_zh.md §19](TECH_REQUIREMENTS_zh.md) |
 | 测试策略 | [TECH_REQUIREMENTS_zh.md §25](TECH_REQUIREMENTS_zh.md) |
 | CDN 配置说明 | [setup_instruction_zh.md](setup_instruction_zh.md) |
 | 卖家操作指南 | [../SETUP_GUIDE.md](../SETUP_GUIDE.md) |
-| 构建计划（第 0–15 阶段） | [IMPLEMENTATION_PLAN_zh.md](IMPLEMENTATION_PLAN_zh.md) |
+| 脚本与工具完整参考 | [SCRIPTS_zh.md](SCRIPTS_zh.md) |
+| 模板更新（`pnpm update-site`） | [UPDATE_GUIDE_zh.md](UPDATE_GUIDE_zh.md) |
+| Seller Studio + Facebook 导出（功能文档） | [CURRENT_FUNCTIONALITY_zh.md](CURRENT_FUNCTIONALITY_zh.md) |
+| 构建计划（第 0–18 阶段） | [IMPLEMENTATION_PLAN_zh.md](IMPLEMENTATION_PLAN_zh.md) |

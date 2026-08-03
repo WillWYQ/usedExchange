@@ -1,8 +1,8 @@
-# UsedExchange — Current Functionality (v1)
+# UsedExchange — Current Functionality (v1.1)
 
-**Based on:** DESIGN.md v0.9.1 · TECH_REQUIREMENTS.md v0.9.1 · IMPLEMENTATION_PLAN.md v1.4  
-**Date:** 2026-06-03  
-**Status:** Implemented — this document describes the live v1 functionality.
+**Based on:** DESIGN.md v0.10.0 · TECH_REQUIREMENTS.md v0.10.0 · IMPLEMENTATION_PLAN.md v1.7  
+**Date:** 2026-08-02  
+**Status:** Implemented — this document describes all live functionality: core v1 plus Phases 16–18 (shipping estimator, Facebook Marketplace export, Seller Studio).
 
 ---
 
@@ -147,14 +147,14 @@ During `pnpm upload-images`, advisory warnings are printed (never block) for:
 - Item folders with no images at all
 
 ### Photo Privacy — EXIF/GPS Stripping
-Every new or changed JPEG/PNG/WebP photo is automatically re-encoded via `sharp` (`lib/images/stripMetadata.ts`) before `pnpm upload-images` sends it to the CDN — this removes all EXIF/IPTC/XMP metadata, including GPS location, while auto-rotating the image so it still displays right-side-up. GIFs pass through unchanged. Original files in `content/items/` are untouched; `pnpm dev` and `pnpm build` (dev-sync/build-check) are unaffected.
+Every new or changed JPEG/PNG/WebP photo is automatically re-encoded via `sharp` (`lib/images/stripMetadata.ts`) before `pnpm upload-images` sends it to the CDN — this removes all EXIF/IPTC/XMP metadata, including GPS location, while auto-rotating the image so it still displays right-side-up. GIFs pass through unchanged. Original files in `content/items/` are untouched; `pnpm dev` and `pnpm build` (dev-sync/build-check) are unaffected. The same stripping also runs when photos are synced to the CDN from Seller Studio.
 
 ---
 
 ## Pages
 
 ### Global — All Pages
-- **SiteHeader** — site name/logo + full-text search bar (when `siteConfig.search.enabled`)
+- **SiteHeader** — site name/logo, navigation links (Home, Browse All `/all`, Newly Listed `/newly-listed`, and About `/about` once the store is configured) + full-text search bar (when `siteConfig.search.enabled`)
 - **SiteFooter** — contact platform buttons, last-build timestamp
 
 ### Home Page (`/`)
@@ -162,6 +162,7 @@ Every new or changed JPEG/PNG/WebP photo is automatically re-encoded via `sharp`
 - **Category grid** — cards for visible categories; count of available items each
 - **Recently Listed** — last N `available` items with location-resolved prices; prices update silently as geo resolves; section hidden if empty
 - **Recently Viewed** — horizontal strip of last 5 viewed items (sessionStorage); hidden if empty
+- **Unconfigured state:** while `baseUrl` is still the placeholder/demo domain, `/` renders the project introduction (`ProjectIntro`) instead of the catalog — the catalog appears once the seller completes setup
 
 ### Category Page (`/[category]`)
 - Location price bar — detected distance + "Change distance" override
@@ -190,10 +191,16 @@ Every new or changed JPEG/PNG/WebP photo is automatically re-encoded via `sharp`
 - **If sold** — "SOLD" banner; contact CTA disabled; sold date shown
 
 ### Browse All Page (`/all`)
-All non-draft items across all categories in one scrollable grid: `available` items shown by default; `reserved` and `pending` items shown with status badges; `sold` items hidden by default but visible when the status toggle is turned on. Full filter + sort bar, identical to category pages. (Data source: `loadItemsByCategory()` aggregated across all categories — same visibility rules as any category page.)
+All non-draft items across all categories in one scrollable grid: `available` items shown by default; `reserved` and `pending` items shown with status badges; `sold` items hidden by default but visible when the status toggle is turned on. Full filter + sort bar, identical to category pages. (Data source: `loadBrowseAllPageData()` — a single-pass loader applying the same visibility rules as any category page.)
 
 ### Sold Items Archive (`/sold`)
-All sold items regardless of retention; sorted by sold date descending. Social proof. No pricing or contact.
+All sold items regardless of `soldItemRetentionDays`; sorted by sold date descending. Social proof. No pricing or contact. The grid is capped at `siteConfig.soldArchiveDisplayLimit` items (`0` = unlimited).
+
+### Newly Listed Page (`/newly-listed`)
+Active (non-sold) items grouped into three tabs: **since your last visit** (tracked in the browser via `localStorage`; on a first visit every currently listed item counts), **today**, and **this week**. Each tab label carries its item count; an empty period shows a "nothing new" message instead of a blank page. Linked from the SiteHeader.
+
+### About Page (`/about`)
+Permanent home for the project introduction (`ProjectIntro`) with its own SEO metadata. Before the seller configures the store, `/` shows this same introduction instead of the catalog; once configured, `/` becomes the catalog and `/about` keeps the introduction reachable. The About link appears in the header only once the store is configured.
 
 ### 404 Page
 Site header + "Page not found" + link home.
@@ -235,7 +242,7 @@ Site header + "Page not found" + link home.
 
 ## AI-Powered Content Generation
 
-Three AI-assisted workflows ship as **Claude Code skill files** in `.claude/skills/`. The seller uses any AI coding tool they already have — Claude Code, Cursor, GitHub Copilot, or any capable assistant. **No additional API keys, environment variables, or packages are required.**
+Four AI-assisted workflows ship as **Claude Code skill files** in `.claude/commands/`. The seller uses any AI coding tool they already have — Claude Code, Cursor, GitHub Copilot, or any capable assistant. **No additional API keys, environment variables, or packages are required.**
 
 ### Skill 1 — Item JSON Generator (`/update-items`)
 
@@ -274,7 +281,7 @@ Run **once** during initial project setup.
 4. AI writes content/config.ts and the initial category scaffold
 ```
 
-The AI asks about 8 areas: store name, location (lat/lng resolved from a place description), item types being sold (creates `_category.json` scaffold), contact platforms, pricing style, visual preferences, and language/locale. Detects seller personality and writes a matching tagline. Can be re-run with targeted requests ("update just my contact info", "change my background effect").
+The AI asks about 8 question groups: site identity, deployment (URL + hosting), image storage provider, location (lat/lng resolved from a place description), contact platforms, content defaults (currency, recently-listed count, sold-item retention), visual preferences, and language/locale. Detects seller personality and writes a matching tagline. Can be re-run with targeted requests ("update just my contact info", "change my background effect").
 
 ### Skill 3 — Item Translator (`/translate-items`)
 
@@ -282,7 +289,7 @@ Batch-translates item listings into additional locales. After adding a locale, i
 
 ```
 1. Add the locale code to siteConfig.i18n.availableLocales  (e.g. ["en", "zh"])
-2. Add a translations.{locale} block to content/config.ts with all 71 UI string keys translated
+2. Add a translations.{locale} block to content/config.ts with all 87 UI string keys translated
 3. Open Claude Code (or similar AI tool) in the project directory
 4. Type: /translate-items   (or "translate my items into zh")
 5. Review the proposed translations shown per item
@@ -291,11 +298,27 @@ Batch-translates item listings into additional locales. After adding a locale, i
 
 Translates `name` → `name_{locale}` and `description` → `description_{locale}` only; preserves brand, model, tags, prices, dates, and all Markdown syntax verbatim. Skips items that already have a non-empty translation. Writes only to `content/items/*/item.json`.
 
-> **Note:** `/translate-items` handles item-level translations only. The `translations.{locale}` UI strings block (buttons, badges, headers — 71 keys) must be filled in manually in `content/config.ts` before running this skill.
+> **Note:** `/translate-items` handles item-level translations only. The `translations.{locale}` UI strings block (buttons, badges, headers — 87 keys) must be filled in manually in `content/config.ts` (or by re-running `/setup`) before running this skill.
+
+### Skill 4 — Shipping Setup Wizard (`/setup-shipping`)
+
+Enables and configures the **optional** live shipping-rate estimator (see Pricing → Shipping Cost Estimation). Idempotent: re-running it summarises the current `shipping` settings and offers to change the payer, ship-from address, or proxy URL — or to disable the feature.
+
+```
+1. Open Claude Code (or similar AI tool) in the project directory
+2. Type: /setup-shipping   (or "enable the shipping calculator")
+3. Answer the AI's questions (enable?, carrier provider, default payer, ship-from ZIP/country)
+4. Deploy the shipping-rate-proxy Cloudflare Worker if needed (terminal steps the seller runs
+   themselves in workers/shipping-rate-proxy/ — the skill reads back the Worker URL only)
+5. AI writes the shipping block in content/config.ts and, if needed, weight/dimensions/
+   shipping_payer additions to specific content/items/*/item.json files
+```
+
+Writes only to `content/`; nothing changes if the seller declines or the feature stays disabled.
 
 ### No API Key Required
 
-All three skills are Markdown instruction files, not code. The AI tool uses its own built-in capabilities and the user's existing subscription — no `ANTHROPIC_API_KEY`, no extra packages, no new environment variables. All three skills write only to `content/`.
+All four skills are Markdown instruction files, not code. The AI tool uses its own built-in capabilities and the user's existing subscription — no `ANTHROPIC_API_KEY`, no extra packages, no new environment variables. All four skills write only to `content/`.
 
 ---
 
@@ -305,7 +328,7 @@ Visitors can read listings in more than one language and switch on the fly.
 
 - **For visitors:** a language toggle (`LocaleSwitcher`) appears in the site header whenever more than one locale is configured. Switching language instantly updates item names, descriptions, and all UI labels (buttons, badges, headers) — no page reload. The choice is remembered in the browser (`localStorage`) across pages and visits.
 - **For sellers:** two steps to add a language:
-  1. Add the locale code to `siteConfig.i18n.availableLocales` (e.g. `["en", "zh"]`) **and** add a `translations.{locale}` block in `content/config.ts` with all 71 UI string keys translated. The build fails if this block is missing or incomplete.
+  1. Add the locale code to `siteConfig.i18n.availableLocales` (e.g. `["en", "zh"]`) **and** add a `translations.{locale}` block in `content/config.ts` with all 87 UI string keys translated. The build fails if this block is missing or incomplete.
   2. Fill in `name_zh` / `description_zh` on each item — by hand or with the `/translate-items` AI skill.
 - **Graceful fallback:** any item without a translation shows the default language — never a blank or an error. Any missing UI string key falls back to the built-in English default.
 - **Single deployment:** all languages ship in one build; there are no separate per-language sites.
@@ -317,40 +340,49 @@ When only one locale is configured, the switcher is hidden and the site behaves 
 
 ## Full-Text Search
 
-Built at compile time using `fuse.js`. Searches across: name, description, brand, model, tags, course, ISBN, edition. Enabled via `siteConfig.search.enabled: true`. Search bar lives in `SiteHeader` and shows inline results as the user types.
+Built at compile time using `fuse.js`. Searches across: name, description, brand, model, tags, course, ISBN, edition. Enabled via `siteConfig.search.enabled: true`. Search bar lives in `SiteHeader` and shows inline results as the user types. Sold and draft items are excluded from the index; available, pending, and reserved items are searchable.
 
 ---
 
 ## Seller CLI Tools
 
-Scripts run on the seller's machine. All write only to `content/`.
+Scripts run on the seller's machine. All listing changes write only to `content/` (plus the generated image manifest); `upload-images` additionally writes the manifest and checksum cache, and `fb-export` writes into `exports/`.
 
 | Command | What it does |
 |---|---|
 | `pnpm upload-images` | Upload photos to CDN, update manifest, print backup reminder |
 | `pnpm push` | Stage `content/` + manifest, commit with default message, and push |
 | `pnpm mark-sold <cat>/<name>` | Set `status: "sold"` and `sold_date: today` without editing JSON — edits the JSONC in place, preserving any `// options: ...` comments |
-| `pnpm create-item <cat>/<name>` | Create new item folder + `item.json` pre-filled with all 38 schema fields (DESIGN.md §5), written as JSONC with `// options: ...` hints listing every valid value for `condition`, `status`, `dimensions.unit`, and `weight.unit` |
+| `pnpm create-item <cat>/<name>` | Create new item folder + `item.json` pre-filled with all 36 template fields (the full item schema, see DESIGN.md §5; the private `reserved_for` field is intentionally never scaffolded), written as JSONC with `// options: ...` hints listing every valid value for `condition`, `status`, `dimensions.unit`, and `weight.unit` |
 | `pnpm new <cat>/<name>` | Shorthand for `create-item` |
 | `pnpm create-template [cat]` | Create a `_template.json` for a category (or global) — same JSONC + `// options: ...` hints as `create-item` |
-| `pnpm fb-export` | Interactively export available items to a Facebook Marketplace bulk-upload CSV. Three-step guided prompt: select all / by category / individual items (supports comma lists and ranges like `1-4`); choose price tier (lowest/highest/by label); auto-batches into 50-item files (FB's limit). Outputs to `exports/`. Smart category mapping infers FB's category hierarchy from item tags, brand, and name — no manual setup needed. **Export history:** on the second run a Step 0 appears offering to skip items already exported in previous runs; history persisted in `exports/.export-history.json` (gitignored). **Photo folder:** copies all local photos into `exports/facebook-marketplace-photos/` mirroring the content layout, with CSV PHOTO columns pointing to each photo's relative path — ready for drag-and-upload. |
+| `pnpm fb-export` | Interactively export `available` / `pending` / `reserved` items to a Facebook Marketplace bulk-upload CSV. Guided prompt: select all / by category / individual items (supports comma lists and ranges like `1-4`); choose price strategy (lowest / highest / local-pickup tiers / shipping tiers — tier options appear only when matching items exist); auto-batches into 50-item files (FB's limit), written to `exports/facebook-marketplace.csv` (or `exports/facebook-marketplace-<N>.csv` when batched). Enforces FB limits: ≤150-char titles, ≤5000-char descriptions. Smart category mapping infers FB's category hierarchy from item tags, brand, and name — no manual setup needed. **Export history:** on the second run a Step 0 appears offering to skip items already exported in previous runs; history persisted in `exports/.export-history.json` (gitignored). **Photos:** the CSV PHOTO columns hold CDN `https://` URLs (up to 10 per item — FB's limit; Facebook fetches them when the CSV is uploaded), so run `pnpm upload-images` first or those columns are empty and the script warns you. As a manual-upload fallback (e.g. in case CDN URLs change), local photos are also copied to `exports/facebook-marketplace-photos/NNN_category-item/`. |
 
 ---
 
 ## Seller Studio
 
-A local-only web GUI for managing listings in a browser — an alternative to editing `item.json` by hand. Start it with `pnpm studio` (use `pnpm studio --port 3000` to change the port), then open the printed URL. It runs entirely on the seller's machine: it is never part of the build output, never deployed, and never reachable by site visitors.
+A local-only web GUI for managing listings in a browser — an alternative to editing `item.json` by hand. Start it with `pnpm studio` (use `pnpm studio --port 3000` to change the port; any integer from 1024–65535 is accepted, default **5174**), then open the printed URL. It runs entirely on the seller's machine: it is never part of the build output, never deployed, and never reachable by site visitors. The launcher fails fast with a clear "run `pnpm update-site`" message if Vite or the Studio app is missing, and it loads `.env.local` so CDN credentials are picked up automatically.
 
-Four operations, all from one page:
+Five operations, all from one page:
 
 | Operation | What it does |
 |---|---|
-| Photos | Upload photos by dragging files onto an item, reorder them, and push changes to the CDN |
-| Bulk status | Change `status` (available / reserved / pending / sold / draft) for many items at once |
-| Edit form | Edit any item's fields with a grouped form; only the fields you changed are written back |
-| Publish | Stage `content/` plus the image manifest and create the git commit |
+| Create | Add a brand-new item: pick a category and type a kebab-case name — the folder and a full template `item.json` are scaffolded (same 36-field template as `pnpm create-item`) |
+| Photos | Upload photos by dragging files onto an item (filenames sanitised, type sniffed from magic bytes), reorder them by dragging, delete them, and push changes to the CDN with live progress |
+| Bulk status | Change `status` (available / reserved / pending / sold / draft) for many items at once, with per-item failure reporting; items already at the target status are skipped and reported |
+| Edit form | Edit any item's fields with a grouped, schema-driven form; only the fields you changed are written back, preserving JSONC comments |
+| Publish | Review uncommitted changes, write a commit message, and commit + push `content/` plus the image manifest |
 
-Like the CLI scripts, Studio writes only to `content/` and the image manifest (`lib/generated/image-manifest.json`). It never reads or writes `reserved_for` — private buyer info stays out of the tool entirely.
+**Local-only server + CSRF protection.** The Studio server binds to `127.0.0.1` only — it is unreachable from the network. Every mutating request is guarded (fails closed): it must carry `Content-Type: application/json` (else HTTP 415) and, when an `Origin` header is present, the origin must equal the server's own host (else HTTP 403). GET/HEAD requests are exempt.
+
+**CDN sync with live progress.** "Sync to CDN" streams progress over server-sent events (progress / done / error), rendered live in the sync bar; only one sync can run at a time, and publish is refused while a sync is in flight. Sync runs the same EXIF/GPS stripping as `pnpm upload-images`, rewrites the committed image manifest (`lib/generated/image-manifest.json`, which stays in git), and refreshes the in-memory manifest cache so the item list immediately shows fresh CDN URLs. Missing CDN credentials surface as a stream error, not a startup failure.
+
+**Strict edit-form validation.** The edit form is driven by a strict field grammar that mirrors the item schema exactly (no silent coercion): optionality and allowed values match the on-disk schema, so an invalid value is a rejection rather than a quiet rewrite. Writes are surgical JSONC edits — seller comments (`// options: ...`) and formatting survive every save.
+
+**Publish safety.** The publish pane shows the uncommitted-change count (also surfaced in the Studio header), the changed-file list, and a commit-message input (required, ≤ 500 characters). Publishing stages **only** `content/` and `lib/generated/image-manifest.json` — exactly what `pnpm push` stages, never `git add -A`, so `.env.local` (with CDN credentials) can never ride along. It refuses out-of-band staged files, refuses detached HEAD, and re-reads the change list at commit time.
+
+Like the CLI scripts, Studio writes only to `content/` and the image manifest. It never reads or writes `reserved_for` — private buyer info stays out of the tool entirely.
 
 ---
 
@@ -361,14 +393,14 @@ Like the CLI scripts, Studio writes only to `content/` and the image manifest (`
 | `available` | Yes | Card visible | Yes | Yes | No | Yes | |
 | `reserved` | **No** | Card visible | Yes + badge | Yes + badge | No | Yes | `reserved_for` never rendered |
 | `pending` | **No** | Card visible | Yes + badge | Yes + badge | No | Yes | |
-| `sold` | No | Card visible (if in retention) | Yes + overlay (toggle) | Yes (toggle) | **Always** | Yes (if in retention) | Detail page excluded after `soldItemRetentionDays`; `/sold` archive always shows all |
+| `sold` | No | Card visible (if in retention) | Yes + overlay (toggle) | Yes (toggle) | **Yes** | Yes (if in retention) | Detail page excluded after `soldItemRetentionDays`; `/sold` archive shows all sold items regardless of retention, capped by `soldArchiveDisplayLimit` (0 = unlimited) |
 | `draft` | No | No | No | No | No | No | No route generated |
 
-**Key clarification:** The home-page recently listed strip uses `loadAllItems()` which returns `available` status only. `reserved` and `pending` items do NOT appear in the strip, but they DO keep the category card visible on the home page.
+**Key clarification:** The home-page recently listed strip is derived by `loadHomePageData()`, which returns `available` items only (sorted by listed date descending, capped at `recentlyListedCount`). `reserved` and `pending` items do NOT appear in the strip, but they DO keep the category card visible on the home page.
 
 ---
 
-## UI Customisation — 4 Configurable Slots
+## UI Customisation — 4 Configurable Slots + Price Filter
 
 Set any option in `content/config.ts`. All 27 Aceternity components are pre-installed by the developer once (`pnpm setup-ui`). Sellers just change the config value — no code editing.
 
@@ -377,12 +409,14 @@ Set any option in `content/config.ts`. All 27 Aceternity components are pre-inst
 | Background | `ui.background` | `"none"` + 13 Aceternity backgrounds |
 | Item Grid | `ui.itemGrid` | `"simple"` + bento-grid, layout-grid, focus-cards |
 | Gallery | `ui.gallery` | `"simple"` + apple-cards-carousel, images-slider, carousel, parallax-scroll |
-| Item Card | `ui.itemCard` | `"simple"` + 8 Aceternity card effects |
+| Item Card | `ui.itemCard` | `"simple"` + 7 Aceternity card effects |
 | Price Filter | `ui.priceFilterStrategy` | `"none"` (default), percentile, logarithmic, preset-buckets, iqr |
 
 ---
 
 ## Site Configuration (`content/config.ts`)
+
+Fields marked **(optional)** are TypeScript-optional with runtime defaults — older `content/config.ts` files that lack them keep working after a template update (they can also be auto-injected with `pnpm migrate-config`).
 
 | Section | Fields |
 |---|---|
@@ -390,16 +424,17 @@ Set any option in `content/config.ts`. All 27 Aceternity components are pre-inst
 | Deployment | `deploymentMode`, `baseUrl` |
 | Image storage | `imageStorage.provider` |
 | Seller location | `location.lat`, `location.lng`, `location.label` |
-| Content defaults | `currency`, `recentlyListedCount`, `soldItemRetentionDays` |
+| Content defaults | `currency`, `recentlyListedCount`, `soldItemRetentionDays`, `soldArchiveDisplayLimit?` **(optional)** — caps the `/sold` grid; `0` = unlimited, default `200`, `defaultPriceTiers?` **(optional)** — tier template used by `create-item`, `measurementUnit?` **(optional)** — `"metric"` / `"imperial"`, default `"metric"` |
+| Shipping **(optional section)** | `shipping.enabled`, `shipping.proxyUrl`, `shipping.defaultPayer` (`"seller"` / `"buyer"`), `shipping.origin.zip`, `shipping.origin.country` |
 | Contact | `contact.reveal_behavior`, `contact.platforms[]` |
 | Hero | `hero.cta_label`, `hero.cta_href` |
 | SEO | `meta.description`, `meta.twitterHandle` |
-| UI slots | `ui.background`, `ui.itemGrid`, `ui.gallery`, `ui.itemCard`, `ui.priceFilterStrategy`, `ui.priceFilterBuckets` |
+| UI slots | `ui.background`, `ui.itemGrid`, `ui.gallery`, `ui.itemCard`, `ui.priceFilterStrategy?` **(optional)**, `ui.priceFilterBuckets?` **(optional)** |
 | Dark mode | Header toggle (light/dark/system, persisted via `next-themes`) |
 | Analytics | `analytics.vercel`, `analytics.speedInsights` |
 | Search | `search.enabled`, `search.placeholder` |
 | Sitemap | `sitemap.enabled` |
-| i18n | `i18n.defaultLocale`, `i18n.availableLocales`, `i18n.showLocaleSwitcher`, `i18n.translations.{locale}.*` (71 UI string keys) |
+| i18n | `i18n.defaultLocale`, `i18n.availableLocales`, `i18n.showLocaleSwitcher`, `i18n.translations.{locale}.*` (87 UI string keys total; the prebuild check fails if any listed locale lacks the required keys, with the default locale as fallback), `i18n.localeMeasurementUnits?` **(optional)** — per-locale unit overrides |
 
 ---
 
@@ -409,16 +444,21 @@ Set any option in `content/config.ts`. All 27 Aceternity components are pre-inst
 Photos → CDN, manifest updated, backup reminder printed, photo quality warnings shown.
 
 **CI build — GitHub Actions / Vercel** (`pnpm build`):
-Prebuild: reads manifest + builds search index → `next build` generates all pages → postbuild generates sitemap.
+Prebuild: fails on a placeholder `baseUrl` or incomplete locale translations, verifies the image manifest (cloud providers) or copies photos (local provider), and builds the search index → `next build` generates all pages → postbuild generates `sitemap.xml` + `robots.txt` (when `sitemap.enabled`).
 
 **Local dev** (`pnpm dev`):
 Photos copied locally → dev server with hot reload.
 
-### Developer Scripts (run once)
+### Developer & Maintainer Scripts
 
 | Script | Purpose |
 |---|---|
-| `pnpm setup-ui` | Install all 27 Aceternity components |
+| `pnpm setup-ui` | (Run once) Install all 27 Aceternity components into `components/ui/` |
+| `pnpm update-site [tag] [--list] [--skip-verify]` | Pull a new upstream template release into this repo without touching `content/` (latest tag by default; `--list` prints available versions), then auto-migrate the config, verify (install + type-check + build), and commit |
+| `pnpm migrate-config` | Splice new optional config fields into `content/config.ts` with defaults after a template upgrade — additive only; existing values are never modified |
+| `pnpm bump` | (Maintainers) Interactive version bump + GitHub release: bumps `package.json`, waits for CI, tags, and creates the release via `gh` |
+
+Developer tooling: `pnpm type-check`, `pnpm lint` (zero-warning), `pnpm format`, and `pnpm test` / `pnpm test:watch` / `pnpm test:coverage` (Vitest). `pnpm studio` is documented in its own section above.
 
 ---
 
@@ -470,7 +510,9 @@ Both enabled via `siteConfig.analytics.*`. Both are no-ops outside Vercel.
 | External links | `rel="noopener noreferrer"` on all |
 | Contact info | Click-to-reveal by default |
 | `X-Powered-By` header | Suppressed |
-| Seller CLI tools | All scripts write only to `content/` |
+| Seller CLI tools | Listing changes write only to `content/` (plus the generated image manifest) |
+| Seller Studio | Binds to `127.0.0.1` only; CSRF-guarded mutating requests; publishes only `content/` + the image manifest (never `git add -A`, so `.env.local` can never be staged); never touches `reserved_for` |
+| Image manifest | `lib/generated/image-manifest.json` is committed to git so CI builds need no CDN credentials |
 
 ---
 
@@ -487,7 +529,7 @@ Both enabled via `siteConfig.analytics.*`. Both are no-ops outside Vercel.
 | Search | fuse.js (client-side, build-time index) |
 | Analytics | @vercel/analytics + @vercel/speed-insights |
 | Sitemap | next-sitemap |
-| Animations | framer-motion |
+| Animations | motion (framer-motion) |
 | Icons | @tabler/icons-react |
 | Package manager | pnpm |
 | Primary host | GitHub Pages (via GitHub Actions) |

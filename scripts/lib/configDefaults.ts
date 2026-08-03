@@ -19,6 +19,19 @@ export type ConfigDefault = {
 
 export const CONFIG_DEFAULTS: ConfigDefault[] = [
   {
+    key: "soldArchiveDisplayLimit",
+    afterKey: "soldItemRetentionDays:",
+    lines: [
+      "  // /sold renders every sold item ever (it's a permanent, ever-growing static",
+      "  // page in a fully-exported site — there's no pagination at request time).",
+      "  // Cap how many of the most-recent sold items are rendered so the exported",
+      "  // HTML and build time don't grow unbounded over years of use. Older items",
+      "  // remain in content/ (and count toward the header total) — only the grid",
+      "  // is capped. Set to 0 to render every item with no cap.",
+      "  soldArchiveDisplayLimit: 200,",
+    ],
+  },
+  {
     key: "priceFilterStrategy",
     afterKey: "itemCard:",
     lines: [
