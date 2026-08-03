@@ -568,6 +568,8 @@ Seller Studio 是用于管理 `content/` 的仅本机浏览器 GUI——以 `pnp
 
 一个小型 Vite + React SPA（`index.html` → `src/main.tsx` → `src/App.tsx`）。面板位于 `src/panes/`：`ItemList`、`BulkToolbar`、`Drawer`、`EditForm`、`ImagePane`、`NewItemDialog`、`PublishPane`、`SyncBar`。`App.tsx` **不保存任何客户端物品状态**——每次变更后都完整重新拉取服务端数据，因此不存在状态漂移。`src/fields.ts` 声明编辑表单的字段分组（其路径必须与服务端权威 `scripts/lib/itemFields.ts` 一致）。
 
+- `studio/src/components/` — 共享展示组件：`Button`、`StatusBadge`、`ThemeToggle`，以及焦点管理 hook `useDialogBehavior`
+
 ### API 接口（`/api/*`）
 
 `studio/vite.config.ts` 中的 `studioApiPlugin` 中间件将每个请求依次经过 `checkStudioCsrf` → 32 MB 请求体上限 → `handleStudioRequest`（`scripts/lib/studioApi.ts`），返回 JSON、文件流或 SSE 流：

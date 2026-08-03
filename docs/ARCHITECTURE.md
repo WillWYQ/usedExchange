@@ -570,6 +570,8 @@ Seller Studio is a local-only browser GUI for managing `content/` — started wi
 
 A small Vite + React SPA (`index.html` → `src/main.tsx` → `src/App.tsx`). Panes in `src/panes/`: `ItemList`, `BulkToolbar`, `Drawer`, `EditForm`, `ImagePane`, `NewItemDialog`, `PublishPane`, `SyncBar`. `App.tsx` keeps **no client-side item state** — every mutation is followed by a full server re-fetch, so there is no drift. `src/fields.ts` declares the edit-form field groups (their paths must match `scripts/lib/itemFields.ts`, the server-side authority).
 
+- `studio/src/components/` — shared presentational components: `Button`, `StatusBadge`, `ThemeToggle`, and the `useDialogBehavior` focus-management hook
+
 ### API surface (`/api/*`)
 
 The `studioApiPlugin` middleware in `studio/vite.config.ts` runs every request through `checkStudioCsrf` → a 32 MB body cap → `handleStudioRequest` (`scripts/lib/studioApi.ts`), which returns JSON, a file stream, or an SSE stream:
