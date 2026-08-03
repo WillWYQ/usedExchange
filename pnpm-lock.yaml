@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@fontsource/ibm-plex-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@react-three/fiber':
         specifier: ^9.6.1
         version: 9.6.1(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.184.0)
@@ -72,12 +75,6 @@ importers:
       '@eslint/eslintrc':
         specifier: ^3.0.0
         version: 3.3.6(supports-color@7.2.0)
-      '@fontsource/archivo-narrow':
-        specifier: ^5.3.0
-        version: 5.3.0
-      '@fontsource/courier-prime':
-        specifier: ^5.3.0
-        version: 5.3.0
       '@fontsource/ibm-plex-sans':
         specifier: ^5.3.0
         version: 5.3.0
@@ -648,11 +645,8 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@fontsource/archivo-narrow@5.3.0':
-    resolution: {integrity: sha512-fK2Y7PdIP23+t5Dp7gh9n94zxTCdHD6M955aJ8QzR6RvW+5WgmryKySEvaCUAeSLXzA113hyW0BwEHHxHADX7Q==}
-
-  '@fontsource/courier-prime@5.3.0':
-    resolution: {integrity: sha512-KIi1k4VG1Wv+/CGpb1AUpLkUuOAQA6zmvthqxOZGN0AV8BEgQgbK7qAtquv14zsBJAY1bb5BHIEbWVFLgENh0w==}
+  '@fontsource/ibm-plex-mono@5.3.0':
+    resolution: {integrity: sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==}
 
   '@fontsource/ibm-plex-sans@5.3.0':
     resolution: {integrity: sha512-CbE4CbbEEZJX860XyUiRpsksXIQR8Rp2XDva2VO53NJox9tVNtusrysd2x5YkUEY3ErQ66W1IiiQL8/wihhw5w==}
@@ -4527,9 +4521,7 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
-  '@fontsource/archivo-narrow@5.3.0': {}
-
-  '@fontsource/courier-prime@5.3.0': {}
+  '@fontsource/ibm-plex-mono@5.3.0': {}
 
   '@fontsource/ibm-plex-sans@5.3.0': {}
 

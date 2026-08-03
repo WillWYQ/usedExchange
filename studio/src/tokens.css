@@ -1,30 +1,77 @@
-/* Spec §14.2–14.3. Fonts are bundled from @fontsource packages so studio works
-   with no network. Palette is the carbon-copy consignment form: cool grey-blue
-   paper, cool pen ink, and stamp red reserved exclusively for `sold`. */
+/* Studio design language v2: modern tool chrome over the storefront brand
+   palette. Light tokens come straight from app/globals.css; dark keeps the
+   site's bg/ink/accent and adds studio-specific surfaces. Every rule below
+   consumes semantic tokens — no raw hex outside the two blocks at the top. */
 
-@import "@fontsource/courier-prime/400.css";
-@import "@fontsource/courier-prime/700.css";
 @import "@fontsource/ibm-plex-sans/400.css";
 @import "@fontsource/ibm-plex-sans/500.css";
-@import "@fontsource/archivo-narrow/600.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
 
 :root {
-  --carbon-pale: #e4ebef;
-  --carbon-rule: #c2cfd6;
-  --ink: #1b2a35;
-  --ink-soft: #5c6e7a;
-  --stamp: #b3241e;
-  --pending: #8a6a12;
-  --error: #5b4b8c; /* mimeograph violet — failed-write marker only; keeps --stamp red exclusive to `sold` */
+  --bg: #f8f4ec;
+  --surface: #ffffff;
+  --surface-2: #f3ede1;
+  --border: #e6ddcf;
+  --ink: #231f20;
+  --ink-soft: #6f675e;
+  --accent: #002af9;
+  --on-accent: #ffffff;
+  --accent-soft: #d5a198;
+  --danger: #b3241e;
+  --backdrop: rgb(35 31 32 / 0.4);
+  --shadow-sm: 0 1px 2px rgb(35 31 32 / 0.06), 0 1px 3px rgb(35 31 32 / 0.08);
+  --shadow-lg: 0 12px 32px rgb(35 31 32 / 0.18), 0 2px 8px rgb(35 31 32 / 0.1);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-pill: 999px;
 
-  --font-data: "Courier Prime", ui-monospace, monospace;
+  --status-available-bg: #e3f0e4;
+  --status-available-fg: #1a7f37;
+  --status-pending-bg: #f5edd6;
+  --status-pending-fg: #8a6a12;
+  --status-reserved-bg: #e2ecf7;
+  --status-reserved-fg: #0969da;
+  --status-sold-bg: #f7e3e2;
+  --status-sold-fg: #b3241e;
+  --status-draft-bg: #eceae6;
+  --status-draft-fg: #6f675e;
+
   --font-ui: "IBM Plex Sans", system-ui, sans-serif;
-  --font-head: "Archivo Narrow", var(--font-ui);
-
+  --font-data: "IBM Plex Mono", ui-monospace, monospace;
   --step-0: 0.875rem;
   --step-1: 1rem;
   --step-2: 1.25rem;
   --gap: 0.75rem;
+  --gap-lg: 1.25rem;
+  --speed: 140ms;
+}
+
+[data-theme="dark"] {
+  --bg: #231f20;
+  --surface: #2e2a2b;
+  --surface-2: #383234;
+  --border: #4a4340;
+  --ink: #f8f4ec;
+  --ink-soft: #a89e94;
+  --accent: #a8bbd6;
+  --on-accent: #1a1d21;
+  --accent-soft: #5d4a44;
+  --danger: #e06c66;
+  --backdrop: rgb(0 0 0 / 0.55);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.5);
+
+  --status-available-bg: #24402c;
+  --status-available-fg: #7ed49a;
+  --status-pending-bg: #423a1e;
+  --status-pending-fg: #d9b95c;
+  --status-reserved-bg: #1f3a52;
+  --status-reserved-fg: #7ab8f0;
+  --status-sold-bg: #4c2624;
+  --status-sold-fg: #e06c66;
+  --status-draft-bg: #383234;
+  --status-draft-fg: #a89e94;
 }
 
 * {
@@ -33,33 +80,191 @@
 
 body {
   margin: 0;
-  background: var(--carbon-pale);
+  background: var(--bg);
   color: var(--ink);
   font-family: var(--font-ui);
   font-size: var(--step-0);
 }
 
 :focus-visible {
-  outline: 2px solid var(--ink);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────
+   Three variants cover every button in studio. Task 2 routes all buttons
+   through the shared Button component, which emits these classes. */
+
+.btn {
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  font-weight: 500;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--speed) ease,
+    color var(--speed) ease,
+    border-color var(--speed) ease;
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 85%, black);
+}
+
+.btn-secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--ink);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+/* ── Status badges ──────────────────────────────────────────────────────
+   Pill badges, one bg/fg pair per status from the token blocks. Text is
+   always present, so status never rides on colour alone. */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.6rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badge-available {
+  background: var(--status-available-bg);
+  color: var(--status-available-fg);
+}
+
+.badge-pending {
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+}
+
+.badge-reserved {
+  background: var(--status-reserved-bg);
+  color: var(--status-reserved-fg);
+}
+
+.badge-sold {
+  background: var(--status-sold-bg);
+  color: var(--status-sold-fg);
+}
+
+.badge-draft {
+  background: var(--status-draft-bg);
+  color: var(--status-draft-fg);
+}
+
+/* Transitional: ItemList still emits these until Task 2 swaps in
+   StatusBadge. Kept so the interim commit looks intentional. */
+.status-sold {
+  color: var(--status-sold-fg);
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.status-pending {
+  color: var(--status-pending-fg);
+}
+
+/* ── Alerts and states ──────────────────────────────────────────────────
+   Every role="alert" message gets .alert-error too (Task 2 wires the
+   class): danger-coloured text on a faint danger wash. */
+
+.alert-error {
+  margin: 0;
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  color: var(--danger);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  white-space: pre-line;
+}
+
+/* The app-level error banner sits between header and table, inset like
+   the table itself. */
+.page-error {
+  margin: 0.75rem 1rem 0;
+}
+
+.empty-state {
+  padding: 4rem 1rem;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.empty-state p {
+  margin: 0 0 0.25rem;
+}
+
+.skeleton {
+  height: 2.75rem;
+  margin-bottom: var(--gap);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
 
 .studio-head {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: var(--gap);
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--carbon-rule);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
 
 .studio-head h1 {
   margin: 0;
-  font-family: var(--font-head);
+  font-family: var(--font-ui);
   font-size: var(--step-2);
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .studio-head .counts {
@@ -67,52 +272,76 @@ body {
   color: var(--ink-soft);
 }
 
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem;
+}
+
+/* ── Item table ─────────────────────────────────────────────────────── */
+
 .item-table {
   width: 100%;
   border-collapse: collapse;
 }
 
 .item-table th {
-  font-family: var(--font-head);
+  font-size: 0.75rem;
   font-weight: 600;
-  font-size: var(--step-0);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  text-align: left;
   color: var(--ink-soft);
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--carbon-rule);
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .item-table td {
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--carbon-rule);
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .item-table td.data {
   font-family: var(--font-data);
 }
 
-.status-sold {
-  color: var(--stamp);
-  font-family: var(--font-head);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.item-table tbody tr {
+  transition: background-color var(--speed) ease;
 }
 
-.status-pending {
-  color: var(--pending);
+.item-table tbody tr:hover {
+  background: var(--surface);
 }
 
-/* Narrow screens: the table collapses to stacked cards. */
-/* Narrow screens: each row becomes a consignment-slip card. The row has six
-   cells, so a two-column grid would stack them into three rows of unlabelled
-   pairs — with the column headers hidden, nothing says which value is which.
-   Each cell is placed explicitly instead:
+.item-table tbody tr.selected {
+  background: color-mix(in srgb, var(--accent-soft) 26%, var(--bg));
+}
 
-       [x] IKEA desk lamp                    $15.00
-           houseware      available           4 img
-*/
+tr.failed td {
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+
+.name-button {
+  padding: 0;
+  font: inherit;
+  font-weight: 500;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.name-button:hover {
+  color: var(--accent);
+}
+
+/* Narrow screens: each row becomes a card (structure unchanged from v1,
+   re-skinned with tokens). */
 @media (max-width: 40rem) {
   .item-table thead {
     display: none;
@@ -125,7 +354,7 @@ body {
     row-gap: 0.15rem;
     align-items: baseline;
     padding: 0.625rem 0.75rem;
-    border-bottom: 1px solid var(--carbon-rule);
+    border-bottom: 1px solid var(--border);
   }
 
   .item-table td {
@@ -133,14 +362,12 @@ body {
     padding: 0;
   }
 
-  /* The checkbox spans both lines, pinned to the first. */
   .item-table td:nth-child(1) {
     grid-column: 1;
     grid-row: 1 / 3;
     align-self: start;
   }
 
-  /* First line: the name, with the price closing it. */
   .item-table td:nth-child(2) {
     grid-column: 2 / 4;
     grid-row: 1;
@@ -153,7 +380,6 @@ body {
     text-align: right;
   }
 
-  /* Second line: the meta strip — category, status, image count. */
   .item-table td:nth-child(3) {
     grid-column: 2;
     grid-row: 2;
@@ -175,31 +401,30 @@ body {
     color: var(--ink-soft);
   }
 
-  /* The column header is gone, so the bare count needs its own unit. */
   .item-table td:nth-child(6)::after {
     content: " img";
   }
 
-  /* One failure bar down the card, not one per cell. */
   .item-table tr.failed td {
     box-shadow: none;
   }
 
   .item-table tr.failed {
-    box-shadow: inset 3px 0 0 var(--error);
+    box-shadow: inset 3px 0 0 var(--danger);
   }
 }
 
-/* §14.5 — the SOLD rubber stamp is the one bold element in studio. It presses
-   onto rows the seller just marked sold, then the row settles. Everything around
-   it stays quiet: no decorative radii, no gradients, no stacked shadows. */
+/* ── The SOLD stamp ─────────────────────────────────────────────────────
+   Kept as the one moment of theatre: pressed once when a row is marked
+   sold (Task 2 settles it into a badge afterwards). Colour rides the
+   sold status tokens so both themes read as stamp red. */
 
 .stamp {
   display: inline-block;
   padding: 0.05em 0.35em;
-  border: 2px solid var(--stamp);
-  color: var(--stamp);
-  font-family: var(--font-head);
+  border: 2px solid var(--status-sold-fg);
+  color: var(--status-sold-fg);
+  font-family: var(--font-ui);
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -227,11 +452,7 @@ body {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .stamp-press {
-    animation: none;
-  }
-}
+/* ── Bulk toolbar ───────────────────────────────────────────────────── */
 
 .bulk-toolbar {
   position: sticky;
@@ -240,8 +461,9 @@ body {
   align-items: center;
   gap: var(--gap);
   padding: 0.625rem 1rem;
-  background: var(--carbon-pale);
-  border-top: 1px solid var(--carbon-rule);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 12px rgb(35 31 32 / 0.06);
 }
 
 .bulk-toolbar .count {
@@ -249,27 +471,7 @@ body {
   color: var(--ink-soft);
 }
 
-.bulk-toolbar button {
-  font-family: var(--font-ui);
-  font-size: var(--step-0);
-  padding: 0.3rem 0.7rem;
-  color: var(--ink);
-  background: transparent;
-  border: 1px solid var(--ink);
-  cursor: pointer;
-}
-
-.bulk-toolbar button:hover {
-  color: var(--carbon-pale);
-  background: var(--ink);
-}
-
-tr.failed td {
-  box-shadow: inset 3px 0 0 var(--error);
-}
-
-/* The image drawer. Quiet by construction — the SOLD stamp stays the only bold
-   element on the page (spec §14.5), so nothing here competes with it. */
+/* ── Drawer ─────────────────────────────────────────────────────────── */
 
 .drawer {
   position: fixed;
@@ -279,8 +481,8 @@ tr.failed td {
   width: min(30rem, 100vw);
   overflow-y: auto;
   padding: 1rem;
-  background: var(--carbon-pale);
-  border-left: 1px solid var(--carbon-rule);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
 }
 
 .drawer-head {
@@ -293,20 +495,52 @@ tr.failed td {
 
 .drawer-head h2 {
   margin: 0;
-  font-family: var(--font-head);
+  font-family: var(--font-ui);
   font-size: var(--step-2);
   font-weight: 600;
 }
+
+.drawer-tabs {
+  display: flex;
+  gap: var(--gap);
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 0.3rem 0.25rem;
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  font-weight: 500;
+  color: var(--ink-soft);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab-active {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Image pane ─────────────────────────────────────────────────────── */
 
 .dropzone {
   padding: 1.25rem;
   margin-bottom: 1rem;
   text-align: center;
-  border: 1px dashed var(--carbon-rule);
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
 }
 
 .dropzone.over {
-  border-color: var(--ink);
+  border-color: var(--accent);
   border-style: solid;
 }
 
@@ -336,7 +570,10 @@ tr.failed td {
   flex-direction: column;
   gap: 0.25rem;
   padding: 0.5rem;
-  border: 1px solid var(--carbon-rule);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   cursor: grab;
 }
 
@@ -344,7 +581,8 @@ tr.failed td {
   width: 100%;
   aspect-ratio: 1;
   object-fit: cover;
-  background: var(--carbon-rule);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
 }
 
 .thumb-name {
@@ -354,10 +592,6 @@ tr.failed td {
   overflow-wrap: anywhere;
 }
 
-/* A file the seller placed by hand with a name outside studio's allowlist —
-   the site still ships it, studio just can't rename or delete it here. Not
-   an error: --stamp red stays reserved for `sold` (spec §14.5), so this uses
-   the same quiet --ink-soft as the rest of the read-only chrome. */
 .thumb-readonly {
   cursor: default;
   border-style: dashed;
@@ -370,11 +604,12 @@ tr.failed td {
   justify-content: center;
   width: 100%;
   aspect-ratio: 1;
-  background: var(--carbon-rule);
+  background: var(--surface-2);
   color: var(--ink-soft);
   font-family: var(--font-data);
   font-size: 0.75rem;
   text-align: center;
+  border-radius: var(--radius-sm);
 }
 
 .thumb-note {
@@ -383,6 +618,8 @@ tr.failed td {
   font-size: 0.7rem;
   line-height: 1.3;
 }
+
+/* ── Sync bar ───────────────────────────────────────────────────────── */
 
 .sync-bar {
   display: flex;
@@ -394,74 +631,16 @@ tr.failed td {
 .sync-status {
   font-family: var(--font-data);
   color: var(--ink-soft);
-  /* A partial-failure report lists each failed photo on its own line (see
-     SyncBar's "done" handler) — without this it would collapse into the
-     same run-on line the credentials error used to. */
   white-space: pre-line;
 }
 
-/* The R2-credentials error is the single most likely error message a seller
-   will ever see: a multi-line bulleted list of what to check. Without
-   white-space: pre-line it collapses into one run-on line inside the flex
-   row above; flex-basis: 100% pushes it onto its own line instead of
-   fighting the button for width. */
+/* Layout half of the sync error; colours come from .alert-error. */
 .sync-error {
   display: block;
   flex: 1 0 100%;
-  white-space: pre-line;
-  color: var(--error);
 }
 
-.name-button {
-  padding: 0;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  background: none;
-  border: 0;
-  border-bottom: 1px solid var(--carbon-rule);
-  cursor: pointer;
-}
-
-.name-button:hover {
-  border-bottom-color: var(--ink);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .dropzone,
-  .thumb {
-    transition: none;
-  }
-}
-
-/* Drawer tabs — the active one is underlined in --ink; no pill, no radius,
-   nothing that would compete with the SOLD stamp (spec §14.5). */
-
-.drawer-tabs {
-  display: flex;
-  gap: var(--gap);
-  margin-bottom: 1rem;
-  border-bottom: 1px solid var(--carbon-rule);
-}
-
-.tab {
-  padding: 0.3rem 0;
-  font-family: var(--font-ui);
-  font-size: var(--step-0);
-  color: var(--ink-soft);
-  background: none;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-}
-
-.tab-active {
-  color: var(--ink);
-  border-bottom-color: var(--ink);
-}
-
-/* The edit form. Carbon-copy register: a legend per group, labels above
-   inputs, one rule under each input. No boxes, no pills. */
+/* ── Edit form ──────────────────────────────────────────────────────── */
 
 .edit-form fieldset {
   margin: 0 0 1.25rem;
@@ -472,10 +651,9 @@ tr.failed td {
 .edit-form legend {
   padding: 0;
   margin-bottom: 0.5rem;
-  font-family: var(--font-head);
   font-weight: 600;
-  font-size: var(--step-0);
-  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ink-soft);
 }
@@ -483,32 +661,46 @@ tr.failed td {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.2rem;
   margin-bottom: 0.75rem;
 }
 
 .field-label {
   font-size: var(--step-0);
+  font-weight: 500;
   color: var(--ink);
 }
 
 .field input[type="text"],
 .field textarea,
-.field select {
+.field select,
+.publish-controls input[type="text"],
+.tier-cell input {
   width: 100%;
-  padding: 0.25rem 0;
+  padding: 0.45rem 0.6rem;
   font-family: var(--font-ui);
   font-size: var(--step-0);
   color: var(--ink);
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--carbon-rule);
-  border-radius: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition:
+    border-color var(--speed) ease,
+    box-shadow var(--speed) ease;
+}
+
+.field input[type="text"]:focus,
+.field textarea:focus,
+.field select:focus,
+.publish-controls input[type="text"]:focus,
+.tier-cell input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .field textarea {
   resize: vertical;
-  font-family: var(--font-data);
 }
 
 .field input[type="checkbox"] {
@@ -520,20 +712,17 @@ tr.failed td {
   color: var(--ink-soft);
 }
 
-/* An on-disk value the schema wouldn't produce (e.g. a hand-typed
-   "liquidated" status): the form shows it raw rather than snapping to a
-   legal option, and the violet underline — --error, the failed-write marker
-   — flags that the value came from outside the schema. */
+/* An on-disk value the schema wouldn't produce: shown raw, flagged with
+   the danger border instead of v1's violet. */
 .field-offlist {
-  border-bottom-color: var(--error) !important;
+  border-color: var(--danger) !important;
 }
 
 .form-saved {
   color: var(--ink-soft);
 }
 
-/* The tier editor: one ruled row per tier, numbers in --font-data like the
-   rest of studio's tabular data. */
+/* ── Tier editor ────────────────────────────────────────────────────── */
 
 .tier-list {
   margin: 0 0 0.5rem;
@@ -547,7 +736,7 @@ tr.failed td {
   gap: var(--gap);
   align-items: end;
   padding: 0.4rem 0;
-  border-bottom: 1px solid var(--carbon-rule);
+  border-bottom: 1px solid var(--border);
 }
 
 .tier-cell {
@@ -556,30 +745,7 @@ tr.failed td {
   gap: 0.15rem;
 }
 
-.tier-cell input {
-  width: 100%;
-  padding: 0.25rem 0;
-  font-family: var(--font-data);
-  font-size: var(--step-0);
-  color: var(--ink);
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--carbon-rule);
-  border-radius: 0;
-}
-
-.tier-row button {
-  font-family: var(--font-ui);
-  font-size: var(--step-0);
-  padding: 0.2rem 0.5rem;
-  color: var(--ink);
-  background: transparent;
-  border: 1px solid var(--ink);
-  cursor: pointer;
-}
-
-/* The new-item dialog: a quiet sheet over the table, same paper, one rule
-   above and below — no drop shadow, no radius. */
+/* ── Dialogs ────────────────────────────────────────────────────────── */
 
 .dialog-backdrop {
   position: fixed;
@@ -587,67 +753,47 @@ tr.failed td {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 15vh;
-  background: rgb(27 42 53 / 0.25);
+  padding-top: 12vh;
+  background: var(--backdrop);
 }
 
 .dialog {
   width: min(26rem, calc(100vw - 2rem));
-  padding: 1rem;
-  background: var(--carbon-pale);
-  border-top: 1px solid var(--carbon-rule);
-  border-bottom: 1px solid var(--carbon-rule);
+  padding: 1.25rem;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
 }
 
 .dialog h2 {
   margin: 0 0 0.75rem;
-  font-family: var(--font-head);
+  font-family: var(--font-ui);
   font-size: var(--step-2);
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .dialog-actions {
   display: flex;
+  justify-content: flex-end;
   gap: var(--gap);
-  margin-top: 0.75rem;
+  margin-top: 1rem;
 }
 
-.dialog-actions button,
-.studio-head button {
-  font-family: var(--font-ui);
-  font-size: var(--step-0);
-  padding: 0.3rem 0.7rem;
-  color: var(--ink);
-  background: transparent;
-  border: 1px solid var(--ink);
-  cursor: pointer;
-}
-
-.dialog-actions button:hover,
-.studio-head button:hover {
-  color: var(--carbon-pale);
-  background: var(--ink);
-}
-
-/* The publish pane. Editing without pushing is studio's one true failure
-   mode (spec §14.4), so the uncommitted list is plain tabular data in
-   --font-data and the count lives in the header — no panel chrome, no accent
-   colour, nothing that competes with the SOLD stamp. */
+/* ── Publish pane ───────────────────────────────────────────────────── */
 
 .publish-pane {
   margin: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--carbon-rule);
+  padding: 1rem;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .publish-pane h2 {
   margin: 0 0 0.5rem;
-  font-family: var(--font-head);
-  font-size: var(--step-0);
+  font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ink-soft);
 }
@@ -676,55 +822,19 @@ tr.failed td {
 .publish-controls {
   display: flex;
   gap: var(--gap);
-  align-items: baseline;
+  align-items: center;
 }
 
 .publish-controls input[type="text"] {
   flex: 1;
-  padding: 0.25rem 0;
-  font-family: var(--font-data);
-  font-size: var(--step-0);
-  color: var(--ink);
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--carbon-rule);
-  border-radius: 0;
 }
 
-.publish-controls button {
-  font-family: var(--font-ui);
-  font-size: var(--step-0);
-  padding: 0.3rem 0.7rem;
-  color: var(--ink);
-  background: transparent;
-  border: 1px solid var(--ink);
-  cursor: pointer;
-}
-
-.publish-controls button:hover {
-  color: var(--carbon-pale);
-  background: var(--ink);
-}
-
-.publish-controls button:disabled {
-  cursor: default;
-  color: var(--ink-soft);
-  border-color: var(--carbon-rule);
-  background: transparent;
-}
-
-/* Same treatment as .sync-error: the push-failure message is multi-line and
-   its second line ("Your work is saved…") is the part the seller must not
-   miss, so it keeps its line breaks. */
+/* Layout half of the publish error; colours come from .alert-error. */
 .publish-error {
   white-space: pre-line;
-  color: var(--error);
 }
 
-/* The defaults pane reuses the new-item dialog's sheet, wider and scrollable:
-   it can list every defaultable field. Rows pair an enable switch with the
-   shared FieldInput; disabled rows dim rather than disappear, so sellers can
-   see what a switch will bring back. */
+/* ── Defaults pane ──────────────────────────────────────────────────── */
 
 .defaults-dialog {
   width: min(46rem, calc(100vw - 2rem));
@@ -755,4 +865,17 @@ tr.failed td {
 
 .defaults-inherited {
   opacity: 0.7;
+}
+
+/* ── Motion preferences ─────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .stamp-press,
+  .skeleton {
+    animation: none;
+  }
+
+  * {
+    transition: none !important;
+  }
 }
