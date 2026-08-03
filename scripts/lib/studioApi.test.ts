@@ -1255,6 +1255,162 @@ describe("POST /api/items", () => {
     });
     expect(res.status).toBe(405);
   });
+
+  it("applies merged site and category defaults on create", async () => {
+    const root = await emptyProject();
+    await fs.writeFile(
+      path.join(root, "content", "items", "_defaults.json"),
+      JSON.stringify({ contact_note: "site note", no_lowball: true, price: { currency: "EUR" } }),
+      "utf-8",
+    );
+    await fs.mkdir(path.join(root, "content", "items", "electronics"), { recursive: true });
+    await fs.writeFile(
+      path.join(root, "content", "items", "electronics", "_defaults.json"),
+      JSON.stringify({ contact_note: "cat note", price: { negotiable: true } }),
+      "utf-8",
+    );
+
+    const res = await create(root, { category: "electronics", name: "desk-lamp" });
+    expect(res.status).toBe(201);
+
+    const text = await fs.readFile(
+      path.join(root, "content", "items", "electronics", "desk-lamp", "item.json"),
+      "utf-8",
+    );
+    expect(text).toContain('"contact_note": "cat note"'); // category wins
+    expect(text).toContain('"no_lowball": true'); // site layer survives
+    expect(text).toContain('"currency": "EUR"'); // deep-merged price leaf
+    expect(text).toContain('"negotiable": true'); // deep-merged price leaf
+    expect(text).toContain('"name": "Desk Lamp"'); // per-item fields stay fresh
+    expect(text).toContain('"status": "draft"');
+  });
+
+  it("skips defaults when applyDefaults is false", async () => {
+    const root = await emptyProject();
+    await fs.writeFile(
+      path.join(root, "content", "items", "_defaults.json"),
+      JSON.stringify({ contact_note: "site note" }),
+      "utf-8",
+    );
+    const res = await create(root, {
+      category: "electronics",
+      name: "desk-lamp",
+      applyDefaults: false,
+    });
+    expect(res.status).toBe(201);
+    const text = await fs.readFile(
+      path.join(root, "content", "items", "electronics", "desk-lamp", "item.json"),
+      "utf-8",
+    );
+    expect(text).toContain('"contact_note": ""');
+  });
+
+  it("400s when a defaults file is invalid, naming the file", async () => {
+    const root = await emptyProject();
+    await fs.writeFile(
+      path.join(root, "content", "items", "_defaults.json"),
+      "{not json",
+      "utf-8",
+    );
+    const res = await create(root, { category: "electronics", name: "desk-lamp" });
+    expect(res.status).toBe(400);
+    expect((asJson(res).body as { error: string }).error).toContain("_defaults.json");
+  });
+});
+
+describe("defaults routes", () => {
+  let tempProjects: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+
+  async function emptyProject(): Promise<string> {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-defaults-"));
+    await fs.mkdir(path.join(root, "content", "items"), { recursive: true });
+    tempProjects.push(root);
+    return root;
+  }
+
+  function req(root: string, method: string, url: string, body?: unknown) {
+    return handleStudioRequest({
+      method,
+      url,
+      body: body === undefined ? Buffer.alloc(0) : Buffer.from(JSON.stringify(body)),
+      projectRoot: root,
+    });
+  }
+
+  it("GET returns {} when no defaults file exists", async () => {
+    const root = await emptyProject();
+    const res = await req(root, "GET", "/api/defaults?scope=site");
+    expect(res.status).toBe(200);
+    expect(asJson(res).body).toEqual({});
+  });
+
+  it("PUT then GET round-trips site defaults", async () => {
+    const root = await emptyProject();
+    const put = await req(root, "PUT", "/api/defaults?scope=site", { contact_note: "WeChat: xxx" });
+    expect(put.status).toBe(200);
+    expect(
+      await fs.readFile(path.join(root, "content", "items", "_defaults.json"), "utf-8"),
+    ).toContain('"contact_note": "WeChat: xxx"');
+    const get = await req(root, "GET", "/api/defaults?scope=site");
+    expect(asJson(get).body).toEqual({ contact_note: "WeChat: xxx" });
+  });
+
+  it("PUT to a category scope creates the folder and file", async () => {
+    const root = await emptyProject();
+    const put = await req(root, "PUT", "/api/defaults?scope=electronics", { no_lowball: true });
+    expect(put.status).toBe(200);
+    expect(
+      await fs.readFile(
+        path.join(root, "content", "items", "electronics", "_defaults.json"),
+        "utf-8",
+      ),
+    ).toContain('"no_lowball": true');
+  });
+
+  it("PUT with an empty object deletes the existing file", async () => {
+    const root = await emptyProject();
+    const filePath = path.join(root, "content", "items", "_defaults.json");
+    await fs.writeFile(filePath, '{"no_lowball": true}', "utf-8");
+    const put = await req(root, "PUT", "/api/defaults?scope=site", {});
+    expect(put.status).toBe(200);
+    await expect(fs.stat(filePath)).rejects.toThrow();
+  });
+
+  it("400s a PUT of reserved_for, a per-item field, or a bad value", async () => {
+    const root = await emptyProject();
+    expect((await req(root, "PUT", "/api/defaults?scope=site", { reserved_for: "x" })).status).toBe(400);
+    expect((await req(root, "PUT", "/api/defaults?scope=site", { name: "x" })).status).toBe(400);
+    expect((await req(root, "PUT", "/api/defaults?scope=site", { no_lowball: "yes" })).status).toBe(400);
+  });
+
+  it("400s a missing or malformed scope", async () => {
+    const root = await emptyProject();
+    expect((await req(root, "GET", "/api/defaults")).status).toBe(400);
+    expect((await req(root, "GET", "/api/defaults?scope=Electronics")).status).toBe(400);
+    expect((await req(root, "GET", "/api/defaults?scope=..")).status).toBe(400);
+  });
+
+  it("400s GET when the file on disk is invalid, naming the field", async () => {
+    const root = await emptyProject();
+    await fs.writeFile(
+      path.join(root, "content", "items", "_defaults.json"),
+      JSON.stringify({ name: "X" }),
+      "utf-8",
+    );
+    const res = await req(root, "GET", "/api/defaults?scope=site");
+    expect(res.status).toBe(400);
+    expect((asJson(res).body as { error: string }).error).toContain('"name"');
+  });
+
+  it("405s POST /api/defaults", async () => {
+    const root = await emptyProject();
+    expect((await req(root, "POST", "/api/defaults?scope=site", {})).status).toBe(405);
+  });
 });
 
 describe("publish routes", () => {
