@@ -2052,6 +2052,11 @@ shipping?: {
   一致），**绝不**使用 `git add -A`，因此 `.env.local`（CDN 凭证）绝不会被误提交。
 - 物品创建使用与 `pnpm create-item` 相同的 36 字段模板；内置照片上传/排序/删除与
   CDN 同步（SSE 进度）。
+- 商品默认值存放在稀疏的 `_defaults.json` 文件中：全站级为 `content/items/_defaults.json`，
+  分类级为 `content/items/<category>/_defaults.json`，在 Defaults 面板中管理，建 item 时按
+  "模板 ← 全站 ← 分类" 叠加，最后强制重新写入 `name`/`listed_date`/`status`。
+  `pnpm create-item` 走同一套合并逻辑（`scripts/lib/itemDefaults.ts`）；
+  `reserved_for` 和逐 item 字段会被拒绝写入。
 
 ### Facebook Marketplace 导出（`pnpm fb-export`，第 17 阶段）
 交互式 CLI，将 available/pending/reserved 物品导出为 Facebook Marketplace 批量上传 CSV

@@ -731,6 +731,21 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md (lib/ Module Refe
 
 ---
 
+## Phase 19 — Seller Studio Item Defaults ✅
+
+- [x] `scripts/lib/itemDefaults.ts`: parse/validate/merge for two-tier sparse `_defaults.json`
+      (site + category); `reserved_for` and per-item fields rejected; merged over
+      `buildItemTemplate()` with `name`/`listed_date`/`status` re-applied last
+- [x] Studio API: `GET/PUT /api/defaults?scope=…` (empty save deletes the file; PUT creates
+      missing category folders); `POST /api/items` gains `applyDefaults` (default true)
+- [x] `pnpm create-item` applies the same merge
+- [x] Studio UI: Defaults pane (scope tabs, per-field enable switches, Price/Platform pinned,
+      site-inheritance hints), FieldInput extraction from EditForm, Apply-defaults toggle in the
+      new-item dialog
+- [x] Docs sync (DESIGN, CURRENT_FUNCTIONALITY, ARCHITECTURE, SCRIPTS, this plan) — both languages
+
+---
+
 ## Risk Register
 
 | Risk | Likelihood | Impact | Mitigation |

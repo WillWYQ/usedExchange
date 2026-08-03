@@ -502,13 +502,14 @@ Most scripts run via `tsx` (TypeScript execution, no compilation step). Exceptio
 
 ### `scripts/lib/` — Shared Support Modules
 
-Not standalone runnables — imported by the CLIs above. 9 of the 13 modules have a colocated `*.test.ts` run by `pnpm test` (scripts tests include `scripts/update-site.test.ts` and `scripts/studioFields.test.ts`; the repo-wide suite is ~36 test files / 585 tests).
+Not standalone runnables — imported by the CLIs above. 10 of the 14 modules have a colocated `*.test.ts` run by `pnpm test` (scripts tests include `scripts/update-site.test.ts` and `scripts/studioFields.test.ts`; the repo-wide suite is ~36 test files / 585 tests).
 
 | Module | Purpose |
 |---|---|
 | `loadEnv.ts` | `loadDotEnvLocal()` — parses `.env.local` into `process.env` (existing env wins); used by `sync-images.ts` and `studio.ts` since tsx does not auto-load it |
 | `imageSync.ts` | Pure CDN pipeline: SHA-256 checksums, `UPLOAD_CONCURRENCY = 8`, per-file failure isolation, EXIF stripping, progress callbacks; drives both `pnpm upload-images` and Studio's sync |
 | `itemTemplate.ts` | 36-field `item.json` scaffold with `// options:` comments; shared by `create-item`, `create-template`, and Studio item creation (`reserved_for` excluded) |
+| `itemDefaults.ts` | Two-tier sparse `_defaults.json`: parse/validate/merge (`loadMergedDefaults`, `mergeDefaultsIntoTemplate`); shared by the studio defaults routes and `create-item`; `reserved_for` and per-item fields rejected |
 | `itemEdit.ts` | Surgical JSONC edits via `jsonc-parser` — comments, formatting, and `reserved_for` survive every write |
 | `itemFields.ts` | Strict Zod allowlist of browser-writable field paths; `resolveFieldSchema(path)` is the single authority; `reserved_for` denied |
 | `markSold.ts` | `applyMarkSold(text, today)` — status → sold + `sold_date`; null when already sold |

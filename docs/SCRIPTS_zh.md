@@ -27,7 +27,7 @@
 | 脚本 | 实际执行 | 用途 |
 |---|---|---|
 | `pnpm upload-images` | `tsx scripts/sync-images.ts --mode upload` | 将新增/变更的照片上传至 CDN，去除 EXIF/GPS 信息，写入已提交的图片清单 |
-| `pnpm create-item <category>/<name>` | `tsx scripts/create-item.ts` | 生成含 36 个字段的草稿 `item.json` |
+| `pnpm create-item <category>/<name>` | `tsx scripts/create-item.ts` | 先应用全站/分类 `_defaults.json`，再生成 36 字段的草稿 `item.json` |
 | `pnpm new <category>/<name>` | `tsx scripts/create-item.ts` | `create-item` 的完全别名 |
 | `pnpm create-template [category]` | `tsx scripts/create-template.ts` | 写入带完整注释的 `_template.json`，供卖家复制使用 |
 | `pnpm mark-sold <category>/<item>` | `tsx scripts/mark-sold.ts` | 设置 `status="sold"` + `sold_date=today`，并保留 JSONC 注释 |
@@ -92,6 +92,8 @@
 - **命令：** `pnpm create-item <category>/<name>`（别名：`pnpm new`）。
 - **参数：** 恰好一个位置参数 `<category>/<name>`；两部分均须为非空 kebab-case，且在**任何文件系统访问之前**由 `isValidSlug` 校验（防路径穿越，与 `generateStaticParams` 共用同一校验）。分类文件夹必须已存在；物品文件夹必须不存在。
 - **用途：** 依据 36 字段草稿模板写入 `content/items/<category>/<name>/item.json`（`status: "draft"`、当天日期、站点的度量单位与默认价格分级）。若设置了 `$EDITOR`，则以 `spawnSync` 参数数组方式打开新文件（无 shell 插值）。
+- 写文件前通过 `scripts/lib/itemDefaults.ts` 应用两级默认值（`content/items/_defaults.json`
+  加该分类自己的）；默认值文件损坏时报错中止，并指出文件和字段。
 - **环境变量：** `EDITOR`（可选）。
 - **触碰的文件：** 读取 `content/config.ts`（`measurementUnit`、`defaultPriceTiers`）；写入新的 `item.json`。
 

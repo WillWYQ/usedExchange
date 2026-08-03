@@ -364,11 +364,12 @@ Scripts run on the seller's machine. All listing changes write only to `content/
 
 A local-only web GUI for managing listings in a browser — an alternative to editing `item.json` by hand. Start it with `pnpm studio` (use `pnpm studio --port 3000` to change the port; any integer from 1024–65535 is accepted, default **5174**), then open the printed URL. It runs entirely on the seller's machine: it is never part of the build output, never deployed, and never reachable by site visitors. The launcher fails fast with a clear "run `pnpm update-site`" message if Vite or the Studio app is missing, and it loads `.env.local` so CDN credentials are picked up automatically.
 
-Five operations, all from one page:
+Six operations, all from one page:
 
 | Operation | What it does |
 |---|---|
 | Create | Add a new item: pick a category and type a kebab-case name — the folder and a full template `item.json` are scaffolded (same 36-field template as `pnpm create-item`) |
+| Defaults | Manage site-wide and per-category default field values (sparse `_defaults.json` under `content/items/`); new items merge them over the template, with an opt-out checkbox in the new-item dialog |
 | Photos | Upload photos by dragging files onto an item (filenames sanitised, type sniffed from magic bytes), reorder them by dragging, delete them, and push changes to the CDN with live progress |
 | Bulk status | Change `status` (available / reserved / pending / sold / draft) for many items at once, with per-item failure reporting; items already at the target status are skipped and reported |
 | Edit form | Edit any item's fields with a grouped, schema-driven form; only the fields you changed are written back, preserving JSONC comments |

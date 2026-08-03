@@ -731,6 +731,20 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md（lib/ 模块参�
 
 ---
 
+## Phase 19 — Seller Studio 商品默认值 ✅
+
+- [x] `scripts/lib/itemDefaults.ts`：两级稀疏 `_defaults.json`（全站 + 分类）的解析/校验/合并；
+      拒绝 `reserved_for` 与逐 item 字段；在 `buildItemTemplate()` 之上合并，
+      最后重新写入 `name`/`listed_date`/`status`
+- [x] Studio API：`GET/PUT /api/defaults?scope=…`（保存为空即删除文件；PUT 自动创建缺失的分类目录）；
+      `POST /api/items` 新增 `applyDefaults`（默认 true）
+- [x] `pnpm create-item` 应用同一套合并
+- [x] Studio 界面：Defaults 面板（作用域切换、逐字段启用开关、Price/Platform 置顶、全站继承提示）、
+      从 EditForm 抽出 FieldInput、新建弹窗的"应用默认值"开关
+- [x] 文档同步（DESIGN、CURRENT_FUNCTIONALITY、ARCHITECTURE、SCRIPTS、本计划），中英双语
+
+---
+
 ## 风险登记册
 
 | 风险 | 可能性 | 影响 | 缓解措施 |

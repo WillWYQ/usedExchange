@@ -2264,6 +2264,11 @@ A **local-only** browser GUI for managing `content/` without editing JSON. Run `
   committed accidentally.
 - Item creation scaffolds from the same 36-field template as `pnpm create-item`; photo upload /
   reorder / delete and CDN sync (SSE progress) are built in.
+- Item defaults live in sparse `_defaults.json` files — `content/items/_defaults.json`
+  site-wide, `content/items/<category>/_defaults.json` per category — managed in the Defaults
+  pane and merged over the scaffold on item creation: template ← site ← category, with
+  `name`/`listed_date`/`status` re-applied last. `pnpm create-item` applies the same merge
+  (`scripts/lib/itemDefaults.ts`); `reserved_for` and the per-item fields are rejected.
 
 ### Facebook Marketplace export (`pnpm fb-export`, Phase 17)
 Interactive CLI that exports available/pending/reserved items to Facebook Marketplace bulk-upload

@@ -502,13 +502,14 @@ isTemplateConfigured(): boolean
 
 ### `scripts/lib/` — 共享支持模块
 
-非独立可执行文件——由上述 CLI 导入。13 个模块中的 9 个有共置的 `*.test.ts`，由 `pnpm test` 运行（scripts 测试还包括 `scripts/update-site.test.ts` 和 `scripts/studioFields.test.ts`；全仓库测试套件约 36 个测试文件 / 585 个测试）。
+非独立可执行文件——由上述 CLI 导入。14 个模块中的 10 个有共置的 `*.test.ts`，由 `pnpm test` 运行（scripts 测试还包括 `scripts/update-site.test.ts` 和 `scripts/studioFields.test.ts`；全仓库测试套件约 36 个测试文件 / 585 个测试）。
 
 | 模块 | 用途 |
 |---|---|
 | `loadEnv.ts` | `loadDotEnvLocal()`——将 `.env.local` 解析进 `process.env`（已存在的环境变量优先）；tsx 不会自动加载，故 `sync-images.ts` 和 `studio.ts` 共用此函数 |
 | `imageSync.ts` | 纯 CDN 流水线：SHA-256 校验和、`UPLOAD_CONCURRENCY = 8`、单文件失败隔离、EXIF 剥离、进度回调；同时驱动 `pnpm upload-images` 和 Studio 同步 |
 | `itemTemplate.ts` | 带 `// options:` 注释的 36 字段 `item.json` 脚手架；由 `create-item`、`create-template` 和 Studio 新建物品共用（不含 `reserved_for`） |
+| `itemDefaults.ts` | 两级稀疏 `_defaults.json`：解析/校验/合并（`loadMergedDefaults`、`mergeDefaultsIntoTemplate`）；studio 默认值路由与 `create-item` 共用；拒绝 `reserved_for` 和逐 item 字段 |
 | `itemEdit.ts` | 基于 `jsonc-parser` 的外科式 JSONC 编辑——注释、格式与 `reserved_for` 在每次写入后均得以保留 |
 | `itemFields.ts` | 浏览器可写字段路径的严格 Zod 白名单；`resolveFieldSchema(path)` 是唯一权威；`reserved_for` 被拒绝 |
 | `markSold.ts` | `applyMarkSold(text, today)`——status → sold + `sold_date`；已售则返回 null |

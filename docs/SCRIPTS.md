@@ -27,7 +27,7 @@
 | Script | Runs | Purpose |
 |---|---|---|
 | `pnpm upload-images` | `tsx scripts/sync-images.ts --mode upload` | Upload new/changed photos to the CDN, strip EXIF/GPS, write the committed image manifest |
-| `pnpm create-item <category>/<name>` | `tsx scripts/create-item.ts` | Scaffold a 36-field draft `item.json` |
+| `pnpm create-item <category>/<name>` | `tsx scripts/create-item.ts` | Scaffold a 36-field draft `item.json`, applying site/category `_defaults.json` first |
 | `pnpm new <category>/<name>` | `tsx scripts/create-item.ts` | Exact alias of `create-item` |
 | `pnpm create-template [category]` | `tsx scripts/create-template.ts` | Write a fully-commented `_template.json` sellers can copy |
 | `pnpm mark-sold <category>/<item>` | `tsx scripts/mark-sold.ts` | Set `status="sold"` + `sold_date=today`, preserving JSONC comments |
@@ -92,6 +92,9 @@
 - **Command:** `pnpm create-item <category>/<name>` (alias: `pnpm new`).
 - **Args:** exactly one positional `<category>/<name>`; both parts must be non-empty kebab-case, validated by `isValidSlug` **before any filesystem access** (path-traversal guard, shared with `generateStaticParams`). The category folder must already exist; the item folder must not.
 - **Purpose:** writes `content/items/<category>/<name>/item.json` from the 36-field draft template (`status: "draft"`, today's date, the site's measurement unit and default price tiers). Opens the new file in `$EDITOR` if set (`spawnSync` with an argument array — no shell interpolation).
+- Applies the two-tier defaults (`content/items/_defaults.json` + the category's own) via
+  `scripts/lib/itemDefaults.ts` before writing; a broken defaults file aborts with the file and
+  field named.
 - **Env vars:** `EDITOR` (optional).
 - **Touches:** reads `content/config.ts` (`measurementUnit`, `defaultPriceTiers`); writes the new `item.json`.
 
