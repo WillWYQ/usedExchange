@@ -19,6 +19,7 @@ export function NewItemDialog({
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [applyDefaults, setApplyDefaults] = useState(true);
 
   async function create() {
     const cat = category.trim();
@@ -30,7 +31,7 @@ export function NewItemDialog({
     setBusy(true);
     setError(null);
     try {
-      onCreated(await createItem(cat, slug));
+      onCreated(await createItem(cat, slug, applyDefaults));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
       setBusy(false);
@@ -83,6 +84,20 @@ export function NewItemDialog({
             <span className="field-hint">
               Lowercase letters, digits, hyphens. Created as a draft — invisible on the site until
               published.
+            </span>
+          </label>
+          <label className="field">
+            <span className="field-label">
+              <input
+                type="checkbox"
+                checked={applyDefaults}
+                onChange={(e) => setApplyDefaults(e.target.checked)}
+              />{" "}
+              Apply defaults
+            </span>
+            <span className="field-hint">
+              Uses your site and category defaults (manage them under Defaults). Switch off for
+              a blank template.
             </span>
           </label>
           <div className="dialog-actions">
