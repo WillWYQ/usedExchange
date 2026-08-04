@@ -867,3 +867,96 @@ tr.failed td {
     transition: none !important;
   }
 }
+
+/* ── Filter bar ─────────────────────────────────────────────────────────
+   Sits between the header and the table. The status tabs reuse the drawer's
+   underline .tab vocabulary rather than introducing a second tab style; the
+   controls row is a plain flex line so the search box takes the slack. */
+
+.filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding: var(--gap) 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.filter-tabs {
+  display: flex;
+  gap: var(--gap-lg);
+  overflow-x: auto;
+}
+
+.tab-count {
+  margin-left: 0.25rem;
+  font-family: var(--font-data);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.filter-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+}
+
+.filter-search {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.6rem;
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition:
+    border-color var(--speed) ease,
+    box-shadow var(--speed) ease;
+}
+
+.filter-search:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.filter-field {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.filter-label {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.filter-field select {
+  padding: 0.4rem 0.5rem;
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.filter-count {
+  font-family: var(--font-data);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+/* Narrow screens: the controls stack under the tabs, same breakpoint the
+   item table uses to fold into cards. */
+@media (max-width: 40rem) {
+  .filter-controls {
+    flex-wrap: wrap;
+  }
+
+  .filter-search {
+    flex: 1 0 100%;
+  }
+}
