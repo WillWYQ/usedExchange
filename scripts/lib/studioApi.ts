@@ -91,6 +91,10 @@ export type StudioItem = {
   currency: string;
   lowestTierAmount: number | null;
   imageCount: number;
+  /** Seller-authored tags, used by studio's client-side search. */
+  tags: string[];
+  /** YYYY-MM-DD, or null when the item never had a listed_date. Sorting only. */
+  listedDate: string | null;
 };
 
 export class StudioError extends Error {
@@ -163,6 +167,10 @@ export async function listStudioItems(projectRoot: string): Promise<StudioItem[]
         currency: item.price.currency,
         lowestTierAmount: amounts.length > 0 ? Math.min(...amounts) : null,
         imageCount,
+        // Defensive: the loader's schema defaults tags to [], but a hand-edited
+        // file that parsed oddly must not hand the client a non-array to iterate.
+        tags: Array.isArray(item.tags) ? item.tags : [],
+        listedDate: typeof item.listedDate === "string" ? item.listedDate : null,
       } satisfies StudioItem;
     }),
   );

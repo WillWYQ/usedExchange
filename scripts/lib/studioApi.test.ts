@@ -64,6 +64,24 @@ describe("handleStudioRequest", () => {
     expect(Array.isArray(body.items)).toBe(true);
   });
 
+  it("includes tags and listedDate on every item", async () => {
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/items",
+      body: Buffer.alloc(0),
+      projectRoot: PROJECT_ROOT,
+    });
+    expect(res.status).toBe(200);
+    const body = asJson(res).body as { items: Array<Record<string, unknown>> };
+    expect(body.items.length).toBeGreaterThan(0);
+    for (const item of body.items) {
+      expect(Array.isArray(item.tags)).toBe(true);
+      // listedDate is a YYYY-MM-DD string or null — never undefined, so the
+      // client can sort on it without a presence check.
+      expect(item.listedDate === null || typeof item.listedDate === "string").toBe(true);
+    }
+  });
+
   it("404s an unknown route", async () => {
     const res = await handleStudioRequest({
       method: "GET",
