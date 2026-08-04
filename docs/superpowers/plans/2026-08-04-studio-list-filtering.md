@@ -417,7 +417,7 @@ Create `studio/src/filtering.ts`:
 // with this file. Everything here is pure: App owns the state, this module
 // owns the rules, and the table renders whatever comes back.
 
-import Fuse from "fuse.js";
+import Fuse, { type IFuseOptions } from "fuse.js";
 import type { StudioItem } from "./api";
 
 export type StatusFilter =
@@ -455,7 +455,9 @@ export const DEFAULT_FILTERS: Filters = {
 // Weighted so a name hit outranks a category or tag hit for the same score;
 // 0.35 is loose enough to survive a transposed letter and tight enough that
 // an unrelated item does not surface.
-const FUSE_OPTIONS = {
+// Annotated rather than `as const`: fuse.js types `keys` as a mutable
+// FuseOptionKey<T>[], which a readonly literal does not satisfy.
+const FUSE_OPTIONS: IFuseOptions<StudioItem> = {
   keys: [
     { name: "name", weight: 0.6 },
     { name: "categorySlug", weight: 0.2 },
@@ -463,7 +465,7 @@ const FUSE_OPTIONS = {
   ],
   threshold: 0.35,
   ignoreLocation: true,
-} as const;
+};
 
 function matchesStatus(item: StudioItem, status: StatusFilter): boolean {
   if (status === "all") return true;
