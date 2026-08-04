@@ -59,17 +59,12 @@ export function FilterBar({
           value={filters.query}
           aria-label="Search items by name, category, or tag"
           placeholder="Search name, category, tags"
-          onChange={(e) => {
-            const query = e.target.value;
-            // "Best match" only means something while a query is running, so
-            // typing switches to it and clearing the box switches away — but
-            // only when the seller had not picked a sort of their own, which
-            // must survive the search that follows it.
-            let sort: SortKey = filters.sort;
-            if (query.trim() !== "" && filters.sort === "relevance") sort = "relevance";
-            if (query.trim() === "" && filters.sort === "relevance") sort = "date-desc";
-            onChange({ ...filters, query, sort });
-          }}
+          // Typing never rewrites the sort. "relevance" is the automatic
+          // setting — it means "best match" while a query runs and "the order
+          // the loader gave us" when none does — so a search already gets
+          // ranked results without touching this field, and a seller who
+          // picked a real sort keeps it across every later search.
+          onChange={(e) => onChange({ ...filters, query: e.target.value })}
         />
 
         <label className="filter-field">
@@ -93,7 +88,11 @@ export function FilterBar({
             value={filters.sort}
             onChange={(e) => onChange({ ...filters, sort: e.target.value as SortKey })}
           >
-            {searching && <option value="relevance">Best match</option>}
+            {/* Always rendered so `value="relevance"` always has a matching
+                option — it is the default sort. Only the label changes: with a
+                query it ranks by match quality, without one it is the order
+                the item list arrived in. */}
+            <option value="relevance">{searching ? "Best match" : "Default order"}</option>
             {SORTS.map((s) => (
               <option key={s.key} value={s.key}>
                 {s.label}
