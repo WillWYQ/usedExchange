@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { StudioItem } from "../../scripts/lib/studioApi";
-import { applyFilters, countByStatus, DEFAULT_FILTERS, type Filters } from "./filtering";
+import {
+  applyFilters,
+  applyFiltersWithExemptions,
+  countByStatus,
+  DEFAULT_FILTERS,
+  type Filters,
+} from "./filtering";
 
 function item(over: Partial<StudioItem> & { id: string }): StudioItem {
   return {
@@ -243,5 +249,40 @@ describe("countByStatus", () => {
     expect(counts.all).toBe(0);
     expect(counts.active).toBe(0);
     expect(counts.sold).toBe(0);
+  });
+});
+
+describe("applyFiltersWithExemptions", () => {
+  const items = [
+    item({ id: "b", name: "banana", status: "sold", lowestTierAmount: 30 }),
+    item({ id: "a", name: "apple", lowestTierAmount: 10 }),
+    item({ id: "c", name: "cherry", lowestTierAmount: 20 }),
+  ];
+
+  it("returns the plain filtered list when nothing is exempt", () => {
+    expect(
+      ids(applyFiltersWithExemptions(items, filters({ sort: "price-asc" }), new Set())),
+    ).toEqual(["a", "c"]);
+  });
+
+  it("keeps a chosen sort when an exempt row is re-inserted", () => {
+    // "b" is sold, so the active filter drops it; exempting it must put it back
+    // in PRICE order (30 is dearest, so last), not at the raw list's position.
+    expect(
+      ids(applyFiltersWithExemptions(items, filters({ sort: "price-asc" }), new Set(["b"]))),
+    ).toEqual(["a", "c", "b"]);
+  });
+
+  it("does not duplicate a row that the filters already keep", () => {
+    const result = ids(
+      applyFiltersWithExemptions(items, filters({ sort: "price-asc" }), new Set(["a"])),
+    );
+    expect(result).toEqual(["a", "c"]);
+  });
+
+  it("appends exempt rows under relevance, preserving the incoming order", () => {
+    expect(
+      ids(applyFiltersWithExemptions(items, filters({ sort: "relevance" }), new Set(["b"]))),
+    ).toEqual(["a", "c", "b"]);
   });
 });

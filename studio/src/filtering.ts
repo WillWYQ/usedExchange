@@ -122,6 +122,33 @@ export function applyFilters(items: StudioItem[], filters: Filters): StudioItem[
   return sortItems(result, filters.sort);
 }
 
+/**
+ * The filtered list plus any exempt rows that the filters would have removed.
+ *
+ * Exempt rows are ones the seller just acted on: they stay on screen until the
+ * next filter change so the SOLD stamp is not swept away by the very filter it
+ * triggered. They are merged into the filtered list and the whole result is
+ * re-sorted, so a chosen sort survives a bulk action — rebuilding from the raw
+ * item list would silently drop it.
+ */
+export function applyFiltersWithExemptions(
+  items: StudioItem[],
+  filters: Filters,
+  exemptIds: ReadonlySet<string>,
+): StudioItem[] {
+  const filtered = applyFilters(items, filters);
+  if (exemptIds.size === 0) return filtered;
+
+  const shown = new Set(filtered.map((i) => i.id));
+  const extras = items.filter((i) => exemptIds.has(i.id) && !shown.has(i.id));
+  if (extras.length === 0) return filtered;
+
+  // Re-sorted as one list so the extras land in their sorted position rather
+  // than at the end. Under "relevance" there is no comparator to apply, so the
+  // extras are appended and the search ranking of the rest is preserved.
+  return sortItems([...filtered, ...extras], filters.sort);
+}
+
 const COUNTED_STATUSES: StatusFilter[] = [
   "active",
   "all",

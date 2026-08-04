@@ -26,12 +26,18 @@ export function FilterBar({
   categories,
   resultCount,
   onChange,
+  busy,
 }: {
   filters: Filters;
   counts: Record<StatusFilter, number>;
   categories: string[];
   resultCount: number;
   onChange: (next: Filters) => void;
+  // While a bulk action is in flight, a filter change would be cleared by
+  // changeFilters and then resurrected by the request's post-await writes
+  // (setSelectedIds/setExemptIds), letting a later action reach rows the
+  // seller can no longer see. Disabling input here is the simple guard.
+  busy?: boolean;
 }) {
   const searching = filters.query.trim() !== "";
 
@@ -45,6 +51,7 @@ export function FilterBar({
             role="tab"
             aria-selected={filters.status === tab.key}
             className={filters.status === tab.key ? "tab tab-active" : "tab"}
+            disabled={busy}
             onClick={() => onChange({ ...filters, status: tab.key })}
           >
             {tab.label} <span className="tab-count">{counts[tab.key]}</span>
@@ -59,6 +66,7 @@ export function FilterBar({
           value={filters.query}
           aria-label="Search items by name, category, or tag"
           placeholder="Search name, category, tags"
+          disabled={busy}
           // Typing never rewrites the sort. "relevance" is the automatic
           // setting — it means "best match" while a query runs and "the order
           // the loader gave us" when none does — so a search already gets
@@ -71,6 +79,7 @@ export function FilterBar({
           <span className="filter-label">Category</span>
           <select
             value={filters.category}
+            disabled={busy}
             onChange={(e) => onChange({ ...filters, category: e.target.value })}
           >
             <option value="all">All categories</option>
@@ -86,6 +95,7 @@ export function FilterBar({
           <span className="filter-label">Sort</span>
           <select
             value={filters.sort}
+            disabled={busy}
             onChange={(e) => onChange({ ...filters, sort: e.target.value as SortKey })}
           >
             {/* Always rendered so `value="relevance"` always has a matching

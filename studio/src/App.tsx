@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { bulkStatus, fetchItems, type StudioItem } from "./api";
-import { applyFilters, countByStatus, DEFAULT_FILTERS, type Filters } from "./filtering";
+import {
+  applyFiltersWithExemptions,
+  countByStatus,
+  DEFAULT_FILTERS,
+  type Filters,
+} from "./filtering";
 import { Button } from "./components/Button";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { BulkToolbar } from "./panes/BulkToolbar";
@@ -53,14 +58,10 @@ export function App() {
     [items],
   );
 
-  const visibleItems = useMemo(() => {
-    const filtered = applyFilters(items, filters);
-    if (exemptIds.size === 0) return filtered;
-    // Re-insert exempt rows in their original list position so a just-stamped
-    // row does not jump to the end of the table.
-    const shown = new Set(filtered.map((i) => i.id));
-    return items.filter((i) => shown.has(i.id) || exemptIds.has(i.id));
-  }, [items, filters, exemptIds]);
+  const visibleItems = useMemo(
+    () => applyFiltersWithExemptions(items, filters, exemptIds),
+    [items, filters, exemptIds],
+  );
 
   const toggle = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -174,6 +175,7 @@ export function App() {
           categories={categories}
           resultCount={visibleItems.length}
           onChange={changeFilters}
+          busy={busy}
         />
       )}
       {items.length > 0 && visibleItems.length === 0 && (
