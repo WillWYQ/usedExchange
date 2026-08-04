@@ -84,9 +84,8 @@ Aceternity 组件通过其 CLI 单独安装。以下包大多数组件需要：
 | `@testing-library/dom` | `^10.4.1` | `@testing-library/react` 的 peer |
 | `@eslint/eslintrc` | `^3.0.0` | `FlatCompat` 桥接，使旧版 `next/core-web-vitals` 配置可用于 ESLint 9 flat config（`eslint.config.mjs`） |
 | `@types/three` | `^0.184.1` | `three` 的类型 |
-| `@fontsource/archivo-narrow` | `^5.3.0` | 自托管字体 |
-| `@fontsource/courier-prime` | `^5.3.0` | 自托管字体 |
 | `@fontsource/ibm-plex-sans` | `^5.3.0` | 自托管字体 |
+| `@fontsource/ibm-plex-mono` | `^5.3.0` | 自托管字体 |
 
 ### 2.4 图片存储提供商依赖
 

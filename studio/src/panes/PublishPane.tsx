@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchChanges, publish, type Changes } from "../api";
+import { Button } from "../components/Button";
 
 const DEFAULT_MESSAGE = "chore: update listings";
 
@@ -83,7 +84,7 @@ export function PublishPane({
         </p>
       )}
       {loadError !== null && (
-        <p className="publish-error" role="alert">
+        <p className="publish-error alert-error" role="alert">
           {loadError}
         </p>
       )}
@@ -117,8 +118,8 @@ export function PublishPane({
           aria-label="Commit message"
           onChange={(e) => setMessage(e.target.value)}
         />
-        <button
-          type="button"
+        <Button
+          variant="primary"
           disabled={
             busy ||
             message.trim() === "" ||
@@ -127,13 +128,13 @@ export function PublishPane({
           onClick={() => void submit()}
         >
           {busy ? "Publishing…" : "Publish"}
-        </button>
+        </Button>
       </div>
       {published !== null && <p className="publish-done">{published}</p>}
       {publishError !== null && (
         // pre-line: the push-failure message is multi-line and its second line
         // ("Your work is saved…") is the part that matters.
-        <p className="publish-error" role="alert">
+        <p className="publish-error alert-error" role="alert">
           {publishError}
         </p>
       )}

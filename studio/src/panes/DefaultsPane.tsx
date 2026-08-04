@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchDefaults, saveDefaults } from "../api";
+import { Button } from "../components/Button";
+import { useDialogBehavior } from "../components/useDialogBehavior";
 import { FIELD_GROUPS, pathKey, readAtPath, type FieldGroup } from "../fields";
 import { FieldInput, fromInput, toInput } from "./FieldInput";
 
@@ -78,6 +80,8 @@ export function DefaultsPane({
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const dialogRef = useDialogBehavior(onClose);
+
   const load = useCallback(async (nextScope: string) => {
     setLoaded(false);
     setError(null);
@@ -146,6 +150,7 @@ export function DefaultsPane({
   return (
     <div className="dialog-backdrop" role="presentation" onClick={onClose}>
       <div
+        ref={dialogRef}
         className="dialog defaults-dialog"
         role="dialog"
         aria-modal="true"
@@ -157,7 +162,7 @@ export function DefaultsPane({
           New items start with these values. Category defaults override site-wide ones; name,
           status and dates always start fresh.
         </p>
-        {error !== null && <p role="alert">{error}</p>}
+        {error !== null && <p role="alert" className="alert-error">{error}</p>}
         {saved && <p className="form-saved">Saved.</p>}
 
         <div className="defaults-scopes" role="tablist" aria-label="Defaults scope">
@@ -236,12 +241,12 @@ export function DefaultsPane({
               );
             })}
             <div className="dialog-actions">
-              <button type="submit" disabled={busy}>
+              <Button type="submit" variant="primary" disabled={busy}>
                 {busy ? "Saving…" : "Save defaults"}
-              </button>
-              <button type="button" onClick={onClose}>
+              </Button>
+              <Button variant="ghost" onClick={onClose}>
                 Close
-              </button>
+              </Button>
             </div>
           </form>
         )}

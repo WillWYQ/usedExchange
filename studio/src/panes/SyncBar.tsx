@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { streamSync } from "../api";
+import { Button } from "../components/Button";
 
 export function SyncBar({ onFinished }: { onFinished: () => void }) {
   const [status, setStatus] = useState<string | null>(null);
@@ -48,12 +49,12 @@ export function SyncBar({ onFinished }: { onFinished: () => void }) {
 
   return (
     <div className="sync-bar">
-      <button type="button" disabled={running} onClick={() => void push()}>
+      <Button disabled={running} onClick={() => void push()}>
         {running ? "Pushing to CDN…" : "Push photos to CDN"}
-      </button>
+      </Button>
       {status !== null && <span className="sync-status">{status}</span>}
       {error !== null && (
-        <span className="sync-error" role="alert">
+        <span className="sync-error alert-error" role="alert">
           {error}
         </span>
       )}

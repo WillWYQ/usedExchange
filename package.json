@@ -50,8 +50,7 @@
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.600.0",
     "@eslint/eslintrc": "^3.0.0",
-    "@fontsource/archivo-narrow": "^5.3.0",
-    "@fontsource/courier-prime": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/ibm-plex-sans": "^5.3.0",
     "@tailwindcss/postcss": "^4.0.0",
     "@tailwindcss/typography": "^0.5.13",

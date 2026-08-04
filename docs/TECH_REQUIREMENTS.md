@@ -84,9 +84,8 @@ Aceternity components are installed individually via their CLI. The following pa
 | `@testing-library/dom` | `^10.4.1` | Peer of `@testing-library/react` |
 | `@eslint/eslintrc` | `^3.0.0` | `FlatCompat` bridge so legacy `next/core-web-vitals` config works with ESLint 9 flat config (`eslint.config.mjs`) |
 | `@types/three` | `^0.184.1` | Types for `three` |
-| `@fontsource/archivo-narrow` | `^5.3.0` | Self-hosted font |
-| `@fontsource/courier-prime` | `^5.3.0` | Self-hosted font |
 | `@fontsource/ibm-plex-sans` | `^5.3.0` | Self-hosted font |
+| `@fontsource/ibm-plex-mono` | `^5.3.0` | Self-hosted font |
 
 ### 2.4 Image Storage Provider Dependencies
 

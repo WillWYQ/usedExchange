@@ -106,7 +106,7 @@ usedExchange/
 ├── studio/                           ← Seller Studio Vite SPA（pnpm studio；仅服务于 127.0.0.1）
 │   ├── index.html, vite.config.ts    ← Vite 入口 + studioApiPlugin 中间件（CSRF → 32 MB 上限 → /api/*）
 │   ├── csrfGuard.ts                  ← checkStudioCsrf——/api/* 中间件的 CSRF/Origin 防护
-│   └── src/                          ← React 应用：App.tsx、api.ts、fields.ts、panes/（ItemList、EditForm、ImagePane、PublishPane、SyncBar 等）
+│   └── src/                          ← React 应用：App.tsx、api.ts、fields.ts、components/（Button、StatusBadge、ThemeToggle、useDialogBehavior）、panes/（ItemList、EditForm、ImagePane、PublishPane、SyncBar 等）
 │
 ├── hooks/                            ← 共享 React Hook：use-outside-click.tsx（useOutsideClick）
 │
@@ -567,6 +567,8 @@ Seller Studio 是用于管理 `content/` 的仅本机浏览器 GUI——以 `pnp
 ### 前端（`studio/`）
 
 一个小型 Vite + React SPA（`index.html` → `src/main.tsx` → `src/App.tsx`）。面板位于 `src/panes/`：`ItemList`、`BulkToolbar`、`Drawer`、`EditForm`、`ImagePane`、`NewItemDialog`、`PublishPane`、`SyncBar`。`App.tsx` **不保存任何客户端物品状态**——每次变更后都完整重新拉取服务端数据，因此不存在状态漂移。`src/fields.ts` 声明编辑表单的字段分组（其路径必须与服务端权威 `scripts/lib/itemFields.ts` 一致）。
+
+- `studio/src/components/` — 共享展示组件：`Button`、`StatusBadge`、`ThemeToggle`，以及焦点管理 hook `useDialogBehavior`
 
 ### API 接口（`/api/*`）
 
