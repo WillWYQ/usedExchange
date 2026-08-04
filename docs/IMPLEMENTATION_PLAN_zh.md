@@ -745,6 +745,31 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md（lib/ 模块参�
 
 ---
 
+## Phase 20 — Seller Studio 界面视觉翻新 ✅
+
+- [x] `studio/src/tokens.css` 的双主题 token 体系：浅色取自店面调色板（`app/globals.css`），配套深色，全部使用语义 token
+- [x] `<html>` 上的 `data-theme`，localStorage 持久化并回退到系统偏好，在 React 挂载前应用（`studio/src/theme.ts`）
+- [x] 字体：通过 `@fontsource` 打包 IBM Plex Sans 与 IBM Plex Mono（移除 Courier Prime 与 Archivo Narrow）
+- [x] `studio/src/components/` 中的共享组件：`Button`、`StatusBadge`、`ThemeToggle`，以及焦点管理 hook `useDialogBehavior`
+- [x] 五种状态的徽章；SOLD 印章盖一次后落定为徽章
+- [x] 对话框焦点管理（初始聚焦、Tab 圈闭、Esc、焦点归还）、空状态样式、加载骨架屏
+- [x] 两套主题下所有文字组合的 WCAG AA 对比度均已验证
+- [x] 文档同步（TECH_REQUIREMENTS、CURRENT_FUNCTIONALITY、ARCHITECTURE），中英双语
+
+---
+
+## Phase 21 — Seller Studio 列表搜索与筛选 ✅
+
+- [x] `listStudioItems` 补充 `tags` 与 `listedDate`（只读新增，不新增 API 参数）
+- [x] `studio/src/filtering.ts`：状态 → 分类 → 模糊搜索（fuse.js，名称/分类/标签）→ 排序的流水线，价格与日期排序中空值恒沉底；页签计数用 `countByStatus`
+- [x] `studio/src/panes/FilterBar.tsx`：带计数的状态页签（Active 隐藏已售出）、搜索框、分类下拉、排序下拉、实时结果计数
+- [x] 筛选状态由 `App` 持有；全选与批量操作只作用于可见行；切换筛选即清空选择；刚改过状态的行保留到下次切换筛选
+- [x] 筛选无结果的空状态与"完全没有商品"的空状态区分，并提供清除筛选按钮
+- [x] 筛选流水线的单元测试（`studio/src/filtering.test.ts`）—— studio 前端逻辑的首批测试
+- [x] 文档同步（CURRENT_FUNCTIONALITY、ARCHITECTURE、本计划），中英双语
+
+---
+
 ## 风险登记册
 
 | 风险 | 可能性 | 影响 | 缓解措施 |
