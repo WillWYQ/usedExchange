@@ -93,7 +93,13 @@ export type StudioItem = {
   imageCount: number;
   /** Seller-authored tags, used by studio's client-side search. */
   tags: string[];
-  /** YYYY-MM-DD, or null when the item never had a listed_date. Sorting only. */
+  /**
+   * YYYY-MM-DD for sorting. In practice always a string: the content loader
+   * fills a missing `listed_date` with the build date before studio sees the
+   * item (lib/content/loader.ts), so "no date" never reaches the client. The
+   * type stays nullable because the client's date sort shares its comparator
+   * with the price sort, where null is genuinely reachable.
+   */
   listedDate: string | null;
 };
 

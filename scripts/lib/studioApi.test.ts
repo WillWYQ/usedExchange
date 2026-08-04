@@ -76,9 +76,13 @@ describe("handleStudioRequest", () => {
     expect(body.items.length).toBeGreaterThan(0);
     for (const item of body.items) {
       expect(Array.isArray(item.tags)).toBe(true);
-      // listedDate is a YYYY-MM-DD string or null — never undefined, so the
-      // client can sort on it without a presence check.
-      expect(item.listedDate === null || typeof item.listedDate === "string").toBe(true);
+      // The loader fills a missing listed_date with the build date, so every
+      // item that reaches studio carries a real YYYY-MM-DD string. Asserting
+      // the string (not "string or null") is what pins that contract: if the
+      // loader ever stops filling it, this test fails instead of silently
+      // handing the client an unsortable value.
+      expect(typeof item.listedDate).toBe("string");
+      expect(item.listedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     }
   });
 
