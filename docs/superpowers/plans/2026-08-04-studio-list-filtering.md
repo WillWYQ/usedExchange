@@ -55,9 +55,13 @@ Add to `scripts/lib/studioApi.test.ts`, inside `describe("listStudioItems resili
     expect(body.items.length).toBeGreaterThan(0);
     for (const item of body.items) {
       expect(Array.isArray(item.tags)).toBe(true);
-      // listedDate is a YYYY-MM-DD string or null — never undefined, so the
-      // client can sort on it without a presence check.
-      expect(item.listedDate === null || typeof item.listedDate === "string").toBe(true);
+      // The loader fills a missing listed_date with the build date, so every
+      // item that reaches studio carries a real YYYY-MM-DD string. Asserting
+      // the string (not "string or null") is what pins that contract: if the
+      // loader ever stops filling it, this test fails instead of silently
+      // handing the client an unsortable value.
+      expect(typeof item.listedDate).toBe("string");
+      expect(item.listedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     }
   });
 ```
@@ -83,7 +87,13 @@ export type StudioItem = {
   imageCount: number;
   /** Seller-authored tags, used by studio's client-side search. */
   tags: string[];
-  /** YYYY-MM-DD, or null when the item never had a listed_date. Sorting only. */
+  /**
+   * YYYY-MM-DD for sorting. In practice always a string: the content loader
+   * fills a missing `listed_date` with the build date before studio sees the
+   * item (lib/content/loader.ts), so "no date" never reaches the client. The
+   * type stays nullable because the client's date sort shares its comparator
+   * with the price sort, where null is genuinely reachable.
+   */
   listedDate: string | null;
 };
 ```
