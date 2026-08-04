@@ -913,8 +913,14 @@ Inside `apply(status)`, immediately after the existing `setJustStampedIds(…)` 
 
 ```tsx
       // Every row that actually changed keeps its place in the table until the
-      // next filter change, whatever the new status is.
-      setExemptIds(new Set(ids.filter((id) => !failed.has(id))));
+      // next filter change, whatever the new status is. Accumulated, not
+      // replaced: two bulk actions in a row without an intervening filter
+      // change must not make the first batch's rows disappear.
+      setExemptIds((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) if (!failed.has(id)) next.add(id);
+        return next;
+      });
 ```
 
 - [ ] **Step 6: Render the FilterBar and the filtered table**
