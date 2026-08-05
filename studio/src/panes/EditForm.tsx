@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchItemFields, patchItem, type FieldEdit, type ItemFields } from "../api";
 import { Button } from "../components/Button";
 import {
@@ -67,6 +67,11 @@ function TierEditor({
         : { path: ["price", "tiers"], value: rows },
     );
   }, [rows, baseline, onDirty, registerEdits]);
+  // Both props must be referentially stable or this effect re-runs on every
+  // parent render. EditForm keeps the collector in a ref for exactly that
+  // reason — storing it in state made each registration re-render the parent,
+  // which handed down a new registerEdits, which re-ran this effect: React
+  // logged "Maximum update depth exceeded" every time the drawer opened.
 
   const setRow = (index: number, next: Tier) =>
     setRows((prev) => prev.map((row, i) => (i === index ? next : row)));
@@ -170,7 +175,12 @@ export function EditForm({
   const [busy, setBusy] = useState(false);
   const [tiersDirty, setTiersDirty] = useState(false);
   const [tierResetToken, setTierResetToken] = useState(0);
-  const [tierCollector, setTierCollector] = useState<() => FieldEdit | null>(() => () => null);
+  // A ref, not state: writing it must not re-render, or registering the
+  // collector loops against TierEditor's effect (see the note there).
+  const tierCollector = useRef<() => FieldEdit | null>(() => null);
+  const registerTierEdits = useCallback((collect: () => FieldEdit | null) => {
+    tierCollector.current = collect;
+  }, []);
   // Groups a failed save named. Collapsed groups open for these — an error
   // pointing at a field the seller cannot see is not an error message.
   const [forcedOpen, setForcedOpen] = useState<ReadonlySet<GroupId>>(new Set());
@@ -234,7 +244,7 @@ export function EditForm({
 
     const { edits, problems } = buildEdits(loaded, draft);
 
-    const tiersEdit = tierCollector();
+    const tiersEdit = tierCollector.current();
     if (tiersEdit !== null) edits.push(tiersEdit);
 
     if (problems.length > 0) {
@@ -292,7 +302,7 @@ export function EditForm({
       loadedTiers={tiers}
       resetToken={tierResetToken}
       onDirty={setTiersDirty}
-      registerEdits={(collect) => setTierCollector(() => collect)}
+      registerEdits={registerTierEdits}
     />
   );
 
@@ -311,10 +321,10 @@ export function EditForm({
       // The amounts belong beside the currency they are in, not at the far
       // end of the form: the tier editor is spliced in right after Currency.
       return key === "price.currency" ? (
-        <div key={key} className="price-head">
+        <Fragment key={key}>
           {input}
           {tierEditor}
-        </div>
+        </Fragment>
       ) : (
         input
       );

@@ -710,6 +710,117 @@ tr.failed td {
   color: var(--ink-soft);
 }
 
+/* "Nothing changed." — a statement of fact, not a failure, so it gets the
+   quiet treatment rather than .alert-error's red. */
+.form-notice {
+  color: var(--ink-soft);
+}
+
+/* Collapsed field groups. <details> carries its own keyboard handling and
+   aria-expanded; only the marker and the typography need styling, and the
+   typography is the legend's so both kinds of group header read alike. */
+.edit-form details {
+  margin: 0 0 1.25rem;
+}
+
+.edit-form summary {
+  display: flex;
+  align-items: baseline;
+  padding: 0.35rem 0;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  cursor: pointer;
+  list-style: none;
+}
+
+.edit-form summary::-webkit-details-marker {
+  display: none;
+}
+
+.edit-form summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 0.4rem;
+  transition: transform var(--speed) ease;
+}
+
+.edit-form details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.edit-form summary:hover {
+  color: var(--ink);
+}
+
+.edit-form summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Rides on a legend or a summary, both of which are uppercase and tracked
+   out — the badge is neither. */
+.group-badge {
+  margin-left: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink-soft);
+}
+
+.group-badge-dirty {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* The unsaved marker on a field label and on the drawer's Details tab.
+   Paired with visually-hidden text everywhere it appears — colour and shape
+   alone never carry the meaning. */
+.field-dot {
+  margin-left: 0.35rem;
+  font-size: 0.6rem;
+  color: var(--accent);
+}
+
+/* The drawer is the scroll container, so this pins to the drawer's bottom
+   edge: saving no longer means scrolling past every collapsed group first.
+   The background is load-bearing — without it the form scrolls visibly
+   underneath the buttons. */
+.form-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: 0.75rem 0;
+  margin-top: 0.5rem;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+/* Inactive drawer tabs stay mounted (so a draft survives a trip to Photos)
+   and are hidden with the attribute. Stated explicitly so a later display
+   rule on .drawer-pane cannot resurrect a hidden pane. */
+.drawer-pane[hidden] {
+  display: none;
+}
+
+/* Text for screen readers only. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ── Tier editor ────────────────────────────────────────────────────── */
 
 .tier-list {
