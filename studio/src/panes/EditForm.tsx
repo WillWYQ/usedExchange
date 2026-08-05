@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchItemFields, patchItem, type FieldEdit, type ItemFields } from "../api";
 import { Button } from "../components/Button";
 import {
-  FIELD_GROUPS,
-  pathKey,
-  readAtPath,
-  WHOLE_OBJECT_GROUPS,
-  WHOLE_OBJECT_SEEDS,
-} from "../fields";
-import { FieldInput, fromInput, toInput } from "./FieldInput";
+  buildEdits,
+  computeDirtyKeys,
+  dirtyCountByGroup,
+  draftFromFields,
+  filledCountByGroup,
+  problemGroupIds,
+} from "../editForm";
+import { FIELD_GROUPS, pathKey, readAtPath, type GroupId } from "../fields";
+import { FieldInput } from "./FieldInput";
 
 type Tier = {
   label: string;
@@ -30,93 +32,15 @@ function isTierArray(value: unknown): value is Tier[] {
   return Array.isArray(value) && value.every(isTier);
 }
 
-/**
- * The blank "—" option means "no change" for the enums whose strict schemas
- * accept no empty value (status, condition, both units, shipping_payer): the
- * seller has no empty state to express for those fields, and silently sending
- * "" or null would 400 a batch of otherwise-valid edits. Blank is therefore
- * only ever shown, never sent — the one deliberate exception to "the form
- * shows the raw file" is that "clear the shipping_payer" is only possible by
- * editing the file by hand.
- */
-function buildEdits(
-  loaded: ItemFields,
-  draft: Record<string, string>,
-): { edits: FieldEdit[]; problems: string[] } {
-  const edits: FieldEdit[] = [];
-  const problems: string[] = [];
-  // Changes inside these objects are sent as ONE whole-object edit per
-  // object, not as leaf edits: a leaf edit for an item with no dimensions/
-  // weight object would create a partial object on disk that the site schema
-  // .catch()es to null, silently discarding the seller's edit.
-  const changedGroups = new Map<string, Record<string, unknown>>();
-
-  for (const group of FIELD_GROUPS) {
-    for (const field of group.fields) {
-      const key = pathKey(field.path);
-      const current = toInput(readAtPath(loaded, field.path), field.kind);
-      const next = draft[key] ?? "";
-      // Only changed fields are sent (spec §7) — an untouched field must not
-      // be rewritten, or every save would rewrite the whole file and bury the
-      // real change in the seller's git diff.
-      if (next === current) continue;
-
-      if (next === "" && field.kind === "select") continue;
-
-      const parsed = fromInput(next, field.kind);
-      if ("error" in parsed) {
-        problems.push(`${field.label}: ${parsed.error}`);
-        continue;
-      }
-
-      const head = field.path[0];
-      if (field.path.length > 1 && typeof head === "string" && head in WHOLE_OBJECT_GROUPS) {
-        const leaf = field.path[1];
-        if (typeof leaf !== "string") continue;
-        // Merge into the whole object OTHER descriptors in this group may
-        // already have built up this save, falling back to the loaded object.
-        // When the file has no such object at all (true of every item.json in
-        // this repo) — or holds a non-object where one belongs — the base is
-        // the template's null-leaf seed, so a single-leaf edit still produces
-        // a complete object the strict schema accepts.
-        const base = changedGroups.get(head) ?? readAtPath(loaded, [head]);
-        const merged: Record<string, unknown> =
-          typeof base === "object" && base !== null && !Array.isArray(base)
-            ? { ...(base as Record<string, unknown>) }
-            : { ...WHOLE_OBJECT_SEEDS[head] };
-        merged[leaf] = parsed.value;
-        changedGroups.set(head, merged);
-        continue;
-      }
-
-      edits.push({ path: field.path, value: parsed.value });
-    }
-  }
-
-  for (const [head, value] of changedGroups) {
-    // The seed has no `unit` (there is no null unit), so creating the object
-    // from scratch needs the seller to pick one. Saying so here, by the
-    // field's own name, beats the server's terser "unit: Required".
-    if (head in WHOLE_OBJECT_SEEDS && typeof value["unit"] !== "string") {
-      problems.push(
-        head === "dimensions"
-          ? "Size unit: pick a unit to set dimensions"
-          : "Weight unit: pick a unit to set a weight",
-      );
-      continue;
-    }
-    edits.push({ path: [head], value });
-  }
-
-  return { edits, problems };
-}
-
 function TierEditor({
   loadedTiers,
+  resetToken,
   onDirty,
   registerEdits,
 }: {
   loadedTiers: Tier[];
+  /** Bumped by Discard; the rows go back to what is on disk. */
+  resetToken: number;
   onDirty: (dirty: boolean) => void;
   /** Save calls this to collect the whole-array edit, or null when unchanged. */
   registerEdits: (collect: () => FieldEdit | null) => void;
@@ -128,10 +52,12 @@ function TierEditor({
   // The form reloads from disk after a save, which replaces loadedTiers; a
   // hand edit made while the drawer was open lands the same way. Resync —
   // this editor's local rows are only ever a staging copy of that prop.
+  // Discard bumps resetToken to force the same resync without the prop
+  // changing identity.
   useEffect(() => {
     setRows(loadedTiers);
     setBaseline(loadedTiers);
-  }, [loadedTiers]);
+  }, [loadedTiers, resetToken]);
 
   useEffect(() => {
     onDirty(JSON.stringify(rows) !== JSON.stringify(baseline));
@@ -141,6 +67,11 @@ function TierEditor({
         : { path: ["price", "tiers"], value: rows },
     );
   }, [rows, baseline, onDirty, registerEdits]);
+  // Both props must be referentially stable or this effect re-runs on every
+  // parent render. EditForm keeps the collector in a ref for exactly that
+  // reason — storing it in state made each registration re-render the parent,
+  // which handed down a new registerEdits, which re-ran this effect: React
+  // logged "Maximum update depth exceeded" every time the drawer opened.
 
   const setRow = (index: number, next: Tier) =>
     setRows((prev) => prev.map((row, i) => (i === index ? next : row)));
@@ -226,61 +157,119 @@ function TierEditor({
   );
 }
 
-export function EditForm({ id, onSaved }: { id: string; onSaved: () => void }) {
+export function EditForm({
+  id,
+  onSaved,
+  onDirtyChange,
+}: {
+  id: string;
+  onSaved: () => void;
+  /** Lets the drawer mark its Details tab while the pane is hidden. */
+  onDirtyChange?: (count: number) => void;
+}) {
   const [loaded, setLoaded] = useState<ItemFields | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tiersDirty, setTiersDirty] = useState(false);
-  const [tierCollector, setTierCollector] = useState<() => FieldEdit | null>(() => () => null);
+  const [tierResetToken, setTierResetToken] = useState(0);
+  // A ref, not state: writing it must not re-render, or registering the
+  // collector loops against TierEditor's effect (see the note there).
+  const tierCollector = useRef<() => FieldEdit | null>(() => null);
+  const registerTierEdits = useCallback((collect: () => FieldEdit | null) => {
+    tierCollector.current = collect;
+  }, []);
+  // Groups a failed save named. Collapsed groups open for these — an error
+  // pointing at a field the seller cannot see is not an error message.
+  const [forcedOpen, setForcedOpen] = useState<ReadonlySet<GroupId>>(new Set());
 
   const load = useCallback(async () => {
     const fields = await fetchItemFields(id);
     setLoaded(fields);
-    const next: Record<string, string> = {};
-    for (const group of FIELD_GROUPS) {
-      for (const field of group.fields) {
-        next[pathKey(field.path)] = toInput(readAtPath(fields, field.path), field.kind);
-      }
-    }
-    setDraft(next);
+    setDraft(draftFromFields(fields));
   }, [id]);
 
   useEffect(() => {
     setSaved(false);
+    setNotice(null);
     setLoaded(null);
     setError(null);
+    setForcedOpen(new Set());
     load().catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
   }, [load]);
+
+  const dirtyKeys = useMemo(
+    () => (loaded === null ? new Set<string>() : computeDirtyKeys(loaded, draft)),
+    [loaded, draft],
+  );
+  const dirtyByGroup = useMemo(() => dirtyCountByGroup(dirtyKeys), [dirtyKeys]);
+  const filledByGroup = useMemo(
+    () => (loaded === null ? {} : filledCountByGroup(loaded)),
+    [loaded],
+  );
+  // The tier editor is one array, not one field per row, so it counts as a
+  // single unsaved change however many rows moved.
+  const totalDirty = dirtyKeys.size + (tiersDirty ? 1 : 0);
+
+  useEffect(() => {
+    onDirtyChange?.(totalDirty);
+  }, [totalDirty, onDirtyChange]);
+
+  // Editing again means the green "Saved." refers to a state the form is no
+  // longer in; the same keystroke clears any leftover notice.
+  const setField = useCallback((key: string, next: string) => {
+    setDraft((prev) => ({ ...prev, [key]: next }));
+    setSaved(false);
+    setNotice(null);
+  }, []);
+
+  function discard() {
+    if (loaded === null) return;
+    setDraft(draftFromFields(loaded));
+    setTierResetToken((t) => t + 1);
+    setError(null);
+    setNotice(null);
+    setSaved(false);
+    setForcedOpen(new Set());
+  }
 
   async function save() {
     if (loaded === null) return;
     setBusy(true);
     setError(null);
+    setNotice(null);
     setSaved(false);
 
     const { edits, problems } = buildEdits(loaded, draft);
 
-    const tiersEdit = tierCollector();
+    const tiersEdit = tierCollector.current();
     if (tiersEdit !== null) edits.push(tiersEdit);
 
     if (problems.length > 0) {
-      setError(problems.join("; "));
+      setForcedOpen(problemGroupIds(problems));
+      setError(problems.map((p) => `${p.label}: ${p.message}`).join("; "));
       setBusy(false);
       return;
     }
     if (edits.length === 0) {
-      setError("Nothing changed.");
+      // Not an error — the Save button is disabled with nothing dirty, so
+      // this is the defensive branch, and it says so in a neutral voice.
+      setNotice("Nothing changed.");
       setBusy(false);
       return;
     }
 
     try {
       // The response is the re-read file, so the form reloads from disk rather
-      // than trusting its own draft.
+      // than trusting its own draft. The draft is rebuilt from it too:
+      // otherwise a value the server normalised (" 5 " -> 5) leaves its field
+      // permanently dirty and re-sent on every later save.
       const fields = await patchItem(id, edits);
       setLoaded(fields);
+      setDraft(draftFromFields(fields));
+      setForcedOpen(new Set());
       setSaved(true);
       onSaved();
     } catch (err: unknown) {
@@ -308,6 +297,40 @@ export function EditForm({ id, onSaved }: { id: string; onSaved: () => void }) {
   const tiersRaw = readAtPath(loaded, ["price", "tiers"]);
   const tiers: Tier[] = isTierArray(tiersRaw) ? tiersRaw : [];
 
+  const tierEditor = (
+    <TierEditor
+      loadedTiers={tiers}
+      resetToken={tierResetToken}
+      onDirty={setTiersDirty}
+      registerEdits={registerTierEdits}
+    />
+  );
+
+  function renderFields(group: (typeof FIELD_GROUPS)[number]) {
+    return group.fields.map((field) => {
+      const key = pathKey(field.path);
+      const input = (
+        <FieldInput
+          key={key}
+          field={field}
+          value={draft[key] ?? ""}
+          dirty={dirtyKeys.has(key)}
+          onChange={(next) => setField(key, next)}
+        />
+      );
+      // The amounts belong beside the currency they are in, not at the far
+      // end of the form: the tier editor is spliced in right after Currency.
+      return key === "price.currency" ? (
+        <Fragment key={key}>
+          {input}
+          {tierEditor}
+        </Fragment>
+      ) : (
+        input
+      );
+    });
+  }
+
   return (
     <form
       className="edit-form"
@@ -317,30 +340,54 @@ export function EditForm({ id, onSaved }: { id: string; onSaved: () => void }) {
       }}
     >
       {error !== null && <p role="alert" className="alert-error">{error}</p>}
+      {notice !== null && <p role="status" className="form-notice">{notice}</p>}
       {saved && <p className="form-saved">Saved.</p>}
 
-      {FIELD_GROUPS.map((group) => (
-        <fieldset key={group.title}>
-          <legend>{group.title}</legend>
-          {group.fields.map((field) => {
-            const key = pathKey(field.path);
-            const value = draft[key] ?? "";
-            const set = (next: string) => setDraft((prev) => ({ ...prev, [key]: next }));
-            return <FieldInput key={key} field={field} value={value} onChange={set} />;
-          })}
-        </fieldset>
-      ))}
+      {FIELD_GROUPS.map((group) => {
+        const dirtyCount = dirtyByGroup[group.id] ?? 0;
+        const filled = filledByGroup[group.id] ?? 0;
+        const badge =
+          dirtyCount > 0 ? (
+            <span className="group-badge group-badge-dirty">{dirtyCount} unsaved</span>
+          ) : filled > 0 ? (
+            <span className="group-badge">{filled} set</span>
+          ) : null;
 
-      <TierEditor
-        loadedTiers={tiers}
-        onDirty={setTiersDirty}
-        registerEdits={(collect) => setTierCollector(() => collect)}
-      />
+        return group.defaultOpen === true ? (
+          <fieldset key={group.id}>
+            <legend>
+              {group.title}
+              {badge}
+            </legend>
+            {renderFields(group)}
+          </fieldset>
+        ) : (
+          // `undefined`, never `false`: an uncontrolled <details> keeps
+          // whatever the seller opened. Passing false would slam a group shut
+          // under their cursor on the next unrelated re-render.
+          <details key={group.id} open={forcedOpen.has(group.id) ? true : undefined}>
+            <summary>
+              {group.title}
+              {badge}
+            </summary>
+            <fieldset>{renderFields(group)}</fieldset>
+          </details>
+        );
+      })}
 
-      <Button type="submit" variant="primary" disabled={busy}>
-        {busy ? "Saving…" : "Save changes"}
-      </Button>
-      {tiersDirty && <span className="field-hint"> Unsaved tier changes.</span>}
+      <div className="form-actions">
+        <Button type="submit" variant="primary" disabled={busy || totalDirty === 0}>
+          {busy ? "Saving…" : "Save changes"}
+        </Button>
+        <Button type="button" variant="ghost" onClick={discard} disabled={busy || totalDirty === 0}>
+          Discard
+        </Button>
+        <span className="field-hint" role="status">
+          {totalDirty === 0
+            ? "No unsaved changes"
+            : `${totalDirty} unsaved change${totalDirty === 1 ? "" : "s"}`}
+        </span>
+      </div>
     </form>
   );
 }

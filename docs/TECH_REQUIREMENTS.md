@@ -2767,7 +2767,16 @@ creation, CDN sync, and git publish. It is a Vite SPA (`studio/`) served togethe
 - `src/api.ts` wraps every `/api/*` route; `streamSync()` is an async generator that parses the sync
   **SSE stream over a `fetch` `ReadableStream`** (no `EventSource`, because the request is a POST).
 - `src/fields.ts` declares the `FIELD_GROUPS` driving `EditForm`; the paths must match the authority in
-  `scripts/lib/itemFields.ts`.
+  `scripts/lib/itemFields.ts`. Each group carries a stable `id: GroupId` (a string-literal union) and an
+  optional `defaultOpen`. `defaultOpen` governs the **edit form** only — groups without it render as a
+  collapsed `<details>`. `DefaultsPane` keeps its own `ReadonlySet<GroupId>` of pinned groups instead of
+  reusing the flag, because the groups a seller presets once (payment, pickup) are not the groups they
+  edit daily; typing it as `GroupId` makes a group rename a compile error rather than a silent
+  "match nothing, collapse everything".
+- `src/editForm.ts` holds the save logic as pure functions (`buildEdits`, `draftFromFields`,
+  `fieldIsDirty`, the per-group counts) so it is unit-tested directly; `src/fieldValues.ts` holds the
+  `toInput` / `fromInput` converters it shares with the components. `fieldIsDirty` is the single
+  definition of "changed" — the unsaved counter and the edits actually sent can never disagree.
 - `studio/vite.config.ts` installs the `studioApiPlugin` middleware: every `/api/*` request goes through
   `checkStudioCsrf` → a 32 MB body cap → `handleStudioRequest`. `App.tsx` keeps **no local item state**
   — it re-fetches from the server after every write, so there is no client-side drift.

@@ -2471,7 +2471,8 @@ Seller Studio（`pnpm studio`）是一个**仅本地**的浏览器仪表板，�
 
 - 入口链：`studio/index.html` → `src/main.tsx` → `src/App.tsx`；面板位于 `src/panes/`：`ItemList`、`BulkToolbar`、`Drawer`、`EditForm`、`ImagePane`、`NewItemDialog`、`PublishPane`、`SyncBar`。
 - `src/api.ts` 包装每个 `/api/*` 路由；`streamSync()` 是一个异步生成器，通过 `fetch` `ReadableStream` 解析同步 **SSE 流**（不用 `EventSource`，因为请求是 POST）。
-- `src/fields.ts` 声明驱动 `EditForm` 的 `FIELD_GROUPS`；路径必须与 `scripts/lib/itemFields.ts` 中的权威一致。
+- `src/fields.ts` 声明驱动 `EditForm` 的 `FIELD_GROUPS`；路径必须与 `scripts/lib/itemFields.ts` 中的权威一致。每个分组带一个稳定的 `id: GroupId`（字符串字面量联合类型）和一个可选的 `defaultOpen`。`defaultOpen` 只作用于**编辑表单**——没有该标志的分组渲染为折叠的 `<details>`。`DefaultsPane` 不复用这个标志，而是维护自己的 `ReadonlySet<GroupId>` 置顶集合：卖家预设一次的组（收款、面交）和日常编辑要动的组不是同一批；把它标注成 `GroupId` 类型，使得重命名分组会**编译失败**，而不是静默地「匹配不到、全部折叠」。
+- `src/editForm.ts` 以纯函数形式保存写入逻辑（`buildEdits`、`draftFromFields`、`fieldIsDirty`、各分组计数），可直接单测；`src/fieldValues.ts` 存放它与组件共用的 `toInput` / `fromInput` 转换。`fieldIsDirty` 是「改动过」的唯一定义——未保存计数与实际下发的 edit 不可能对不上。
 - `studio/vite.config.ts` 安装 `studioApiPlugin` 中间件：每个 `/api/*` 请求经过 `checkStudioCsrf` → 32 MB 请求体上限 → `handleStudioRequest`。`App.tsx` **不保留本地物品状态**——每次写入后从服务器重新获取，因此没有客户端漂移。
 
 ### 30.3 API 接口 — `scripts/lib/studioApi.ts`

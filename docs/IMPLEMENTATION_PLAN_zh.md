@@ -770,6 +770,22 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md（lib/ 模块参�
 
 ---
 
+## Phase 22 — Seller Studio 编辑表单体验 ✅
+
+- [x] `studio/src/fields.ts` 重新划分为八个分组，每组带稳定的 `id: GroupId` 与 `defaultOpen` 标志；43 个 descriptor 的 path 一个不改（新增测试固定数量，防止重排时丢字段）
+- [x] Listing 与 Price 打开即展开；Translations、Specs、Payment & pickup、Books & courses、Extras、Dates 渲染为折叠的 `<details>`，标题带徽标（未保存数，否则显示已填字段数）
+- [x] 价格档位编辑器移入 Price 组，紧跟 Currency
+- [x] `studio/src/editForm.ts` —— `buildEdits`、`draftFromFields` 与脏值计算抽为纯函数，配 `studio/src/editForm.test.ts`（19 个测试）；`fieldIsDirty` 是「改动过」的唯一定义，计数、标记与实际下发的 edit 共用
+- [x] `studio/src/fieldValues.ts` —— `toInput` / `fromInput` 移出 `FieldInput.tsx`，使纯模块不必导入组件
+- [x] 逐字段未保存标记、常驻底部的 Save / Discard / 未保存计数操作条；保存报错时，含出错字段的折叠组自动展开
+- [x] 保存成功后用服务端回读的文件重建草稿；再次输入即清除「Saved.」；「Nothing changed」改为中性提示而非红色错误
+- [x] `Drawer` 保持访问过的标签页挂载 —— 切到 Photos 不再丢弃草稿 —— 并在有未保存改动时标记 Details 标签
+- [x] 修复既有的 `TierEditor` 渲染死循环（每次打开抽屉都触发 React 的「Maximum update depth exceeded」）：收集器从 state 改为 ref，配一个引用稳定的注册函数
+- [x] `DefaultsPane` 改为按 `GroupId` 置顶而非按标题，分组重命名会编译失败而不是静默折叠
+- [x] 文档同步（CURRENT_FUNCTIONALITY、ARCHITECTURE、TECH_REQUIREMENTS、本计划），中英双语
+
+---
+
 ## 风险登记册
 
 | 风险 | 可能性 | 影响 | 缓解措施 |

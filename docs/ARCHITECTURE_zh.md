@@ -566,9 +566,11 @@ Seller Studio 是用于管理 `content/` 的仅本机浏览器 GUI——以 `pnp
 
 ### 前端（`studio/`）
 
-一个小型 Vite + React SPA（`index.html` → `src/main.tsx` → `src/App.tsx`）。面板位于 `src/panes/`：`ItemList`、`BulkToolbar`、`Drawer`、`EditForm`、`ImagePane`、`NewItemDialog`、`PublishPane`、`SyncBar`。`App.tsx` **不保存任何客户端物品状态**——每次变更后都完整重新拉取服务端数据，因此不存在状态漂移。`src/fields.ts` 声明编辑表单的字段分组（其路径必须与服务端权威 `scripts/lib/itemFields.ts` 一致）。
+一个小型 Vite + React SPA（`index.html` → `src/main.tsx` → `src/App.tsx`）。面板位于 `src/panes/`：`ItemList`、`BulkToolbar`、`Drawer`、`EditForm`、`ImagePane`、`NewItemDialog`、`PublishPane`、`SyncBar`。`App.tsx` **不保存任何客户端物品状态**——每次变更后都完整重新拉取服务端数据，因此不存在状态漂移。`src/fields.ts` 声明编辑表单的字段分组（其路径必须与服务端权威 `scripts/lib/itemFields.ts` 一致）；每个分组带一个稳定的 `id: GroupId` 和一个 `defaultOpen` 标志。
 
 - `studio/src/components/` — 共享展示组件：`Button`、`StatusBadge`、`ThemeToggle`，以及焦点管理 hook `useDialogBehavior`
+- `studio/src/editForm.ts` — `EditForm` 背后的纯保存逻辑：`buildEdits`（叶子 edit，以及 `dimensions`/`weight` 的整对象合并）、`draftFromFields` 和脏值计算。`fieldIsDirty` 是「改动过」的唯一定义，未保存计数、逐字段标记、分组徽标和实际下发的 edit 全部由它派生
+- `studio/src/fieldValues.ts` — `toInput` / `fromInput`，JSON 值 ↔ 输入框字符串的转换，由 `EditForm`、`DefaultsPane` 和 `editForm.ts` 共用（不含 React，这样纯模块不必导入组件）
 - `studio/src/filtering.ts` — 纯客户端筛选流水线（状态 → 分类 → fuse.js 模糊搜索 → 排序），外加给页签计数用的 `countByStatus`；控件由 `studio/src/panes/FilterBar.tsx` 渲染
 
 ### API 接口（`/api/*`）
