@@ -1,10 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { bulkStatus, fetchItems, type StudioItem } from "./api";
+import {
+  applyFiltersWithExemptions,
+  countByStatus,
+  DEFAULT_FILTERS,
+  type Filters,
+} from "./filtering";
 import { Button } from "./components/Button";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { BulkToolbar } from "./panes/BulkToolbar";
 import { DefaultsPane } from "./panes/DefaultsPane";
 import { Drawer } from "./panes/Drawer";
+import { FilterBar } from "./panes/FilterBar";
 import { ItemList } from "./panes/ItemList";
 import { NewItemDialog } from "./panes/NewItemDialog";
 import { PublishPane } from "./panes/PublishPane";
@@ -20,6 +27,11 @@ export function App() {
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [showNewItem, setShowNewItem] = useState(false);
   const [showDefaults, setShowDefaults] = useState(false);
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  // Rows the seller just acted on stay visible even when the change filters
+  // them out (marking sold in the Active view). Otherwise the row vanishes
+  // mid-animation and the only feedback for the action disappears with it.
+  const [exemptIds, setExemptIds] = useState<Set<string>>(new Set());
   // Bumped after every item write and every sync so the publish pane re-reads
   // the working tree. The pane holds the file list; the header needs only the
   // count, which the pane reports back up (null = not a git repo → hide it).
@@ -39,6 +51,18 @@ export function App() {
     );
   }, [refresh]);
 
+  const counts = useMemo(() => countByStatus(items), [items]);
+
+  const categories = useMemo(
+    () => [...new Set(items.map((i) => i.categorySlug))].sort(),
+    [items],
+  );
+
+  const visibleItems = useMemo(
+    () => applyFiltersWithExemptions(items, filters, exemptIds),
+    [items, filters, exemptIds],
+  );
+
   const toggle = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -50,10 +74,19 @@ export function App() {
 
   const toggleAll = useCallback(
     (checked: boolean) => {
-      setSelectedIds(checked ? new Set(items.map((i) => i.id)) : new Set());
+      setSelectedIds(checked ? new Set(visibleItems.map((i) => i.id)) : new Set());
     },
-    [items],
+    [visibleItems],
   );
+
+  // Changing what is on screen invalidates a selection made against the old
+  // view: a bulk action must never reach a row the seller can no longer see.
+  const changeFilters = useCallback((next: Filters) => {
+    setFilters(next);
+    setSelectedIds(new Set());
+    setExemptIds(new Set());
+    setFailedIds(new Set());
+  }, []);
 
   async function apply(status: string) {
     const ids = [...selectedIds];
@@ -68,6 +101,15 @@ export function App() {
       setJustStampedIds(
         status === "sold" ? new Set(ids.filter((id) => !failed.has(id))) : new Set(),
       );
+      // Every row that actually changed keeps its place in the table until the
+      // next filter change, whatever the new status is. Accumulated, not
+      // replaced: two bulk actions in a row without an intervening filter
+      // change must not make the first batch's rows disappear.
+      setExemptIds((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) if (!failed.has(id)) next.add(id);
+        return next;
+      });
       await refresh();
       bumpChanges();
       if (result.failed.length > 0) {
@@ -127,8 +169,24 @@ export function App() {
         </div>
       )}
       {items.length > 0 && (
+        <FilterBar
+          filters={filters}
+          counts={counts}
+          categories={categories}
+          resultCount={visibleItems.length}
+          onChange={changeFilters}
+          busy={busy}
+        />
+      )}
+      {items.length > 0 && visibleItems.length === 0 && (
+        <div className="empty-state">
+          <p>No items match your filters.</p>
+          <Button onClick={() => changeFilters(DEFAULT_FILTERS)}>Clear filters</Button>
+        </div>
+      )}
+      {visibleItems.length > 0 && (
         <ItemList
-          items={items}
+          items={visibleItems}
           selectedIds={selectedIds}
           failedIds={failedIds}
           justStampedIds={justStampedIds}
@@ -162,7 +220,7 @@ export function App() {
       })()}
       {showNewItem && (
         <NewItemDialog
-          categories={[...new Set(items.map((i) => i.categorySlug))].sort()}
+          categories={categories}
           onCancel={() => setShowNewItem(false)}
           onCreated={(id) => {
             setShowNewItem(false);
@@ -175,7 +233,7 @@ export function App() {
       )}
       {showDefaults && (
         <DefaultsPane
-          categories={[...new Set(items.map((i) => i.categorySlug))].sort()}
+          categories={categories}
           onClose={() => setShowDefaults(false)}
           onSaved={bumpChanges}
         />

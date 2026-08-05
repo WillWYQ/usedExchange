@@ -91,6 +91,16 @@ export type StudioItem = {
   currency: string;
   lowestTierAmount: number | null;
   imageCount: number;
+  /** Seller-authored tags, used by studio's client-side search. */
+  tags: string[];
+  /**
+   * YYYY-MM-DD for sorting. In practice always a string: the content loader
+   * fills a missing `listed_date` with the build date before studio sees the
+   * item (lib/content/loader.ts), so "no date" never reaches the client. The
+   * type stays nullable because the client's date sort shares its comparator
+   * with the price sort, where null is genuinely reachable.
+   */
+  listedDate: string | null;
 };
 
 export class StudioError extends Error {
@@ -163,6 +173,10 @@ export async function listStudioItems(projectRoot: string): Promise<StudioItem[]
         currency: item.price.currency,
         lowestTierAmount: amounts.length > 0 ? Math.min(...amounts) : null,
         imageCount,
+        // Defensive: the loader's schema defaults tags to [], but a hand-edited
+        // file that parsed oddly must not hand the client a non-array to iterate.
+        tags: Array.isArray(item.tags) ? item.tags : [],
+        listedDate: typeof item.listedDate === "string" ? item.listedDate : null,
       } satisfies StudioItem;
     }),
   );

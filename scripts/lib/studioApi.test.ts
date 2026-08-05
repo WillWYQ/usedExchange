@@ -64,6 +64,28 @@ describe("handleStudioRequest", () => {
     expect(Array.isArray(body.items)).toBe(true);
   });
 
+  it("includes tags and listedDate on every item", async () => {
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/items",
+      body: Buffer.alloc(0),
+      projectRoot: PROJECT_ROOT,
+    });
+    expect(res.status).toBe(200);
+    const body = asJson(res).body as { items: Array<Record<string, unknown>> };
+    expect(body.items.length).toBeGreaterThan(0);
+    for (const item of body.items) {
+      expect(Array.isArray(item.tags)).toBe(true);
+      // The loader fills a missing listed_date with the build date, so every
+      // item that reaches studio carries a real YYYY-MM-DD string. Asserting
+      // the string (not "string or null") is what pins that contract: if the
+      // loader ever stops filling it, this test fails instead of silently
+      // handing the client an unsortable value.
+      expect(typeof item.listedDate).toBe("string");
+      expect(item.listedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+
   it("404s an unknown route", async () => {
     const res = await handleStudioRequest({
       method: "GET",

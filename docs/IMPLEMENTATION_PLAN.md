@@ -746,6 +746,31 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md (lib/ Module Refe
 
 ---
 
+## Phase 20 — Seller Studio UI Visual Refresh ✅
+
+- [x] Dual-theme token system in `studio/src/tokens.css`: light values from the storefront palette (`app/globals.css`), matching dark set, semantic tokens only
+- [x] `data-theme` on `<html>` with localStorage persistence and a system-preference fallback, applied before React mounts (`studio/src/theme.ts`)
+- [x] Fonts: IBM Plex Sans + IBM Plex Mono bundled via `@fontsource` (Courier Prime and Archivo Narrow removed)
+- [x] Shared components in `studio/src/components/`: `Button`, `StatusBadge`, `ThemeToggle`, and the `useDialogBehavior` focus hook
+- [x] Status badges for all five states; the SOLD stamp presses once then settles into its badge
+- [x] Dialog focus management (initial focus, Tab trap, Esc, focus restore), styled empty state, skeleton loading rows
+- [x] WCAG AA contrast verified for every text pair in both themes
+- [x] Docs sync (TECH_REQUIREMENTS, CURRENT_FUNCTIONALITY, ARCHITECTURE) — both languages
+
+---
+
+## Phase 21 — Seller Studio List Search & Filtering ✅
+
+- [x] `listStudioItems` carries `tags` and `listedDate` (read-only additions; no new API parameters)
+- [x] `studio/src/filtering.ts`: status → category → fuzzy search (fuse.js, name/category/tags) → sort pipeline, with nulls sinking last in both price and date directions; `countByStatus` for tab counts
+- [x] `studio/src/panes/FilterBar.tsx`: status tabs with counts (Active hides sold), search box, category dropdown, sort dropdown, live result count
+- [x] `App` owns the filter state; select-all and bulk actions operate on the visible rows only; changing a filter clears the selection; just-changed rows stay visible until the next filter change
+- [x] Filtered-empty state distinct from the no-items state, with a clear-filters action
+- [x] Unit tests for the filter pipeline (`studio/src/filtering.test.ts`) — the first studio front-end logic tests
+- [x] Docs sync (CURRENT_FUNCTIONALITY, ARCHITECTURE, this plan) — both languages
+
+---
+
 ## Risk Register
 
 | Risk | Likelihood | Impact | Mitigation |

@@ -106,7 +106,7 @@ usedExchange/
 ├── studio/                           ← Seller Studio Vite SPA (pnpm studio; served only on 127.0.0.1)
 │   ├── index.html, vite.config.ts    ← Vite entry + studioApiPlugin middleware (CSRF → 32 MB cap → /api/*)
 │   ├── csrfGuard.ts                  ← checkStudioCsrf — CSRF/Origin guard for the /api/* middleware
-│   └── src/                          ← React app: App.tsx, api.ts, fields.ts, components/ (Button, StatusBadge, ThemeToggle, useDialogBehavior), panes/ (ItemList, EditForm, ImagePane, PublishPane, SyncBar, …)
+│   └── src/                          ← React app: App.tsx, api.ts, fields.ts, filtering.ts, components/ (Button, StatusBadge, ThemeToggle, useDialogBehavior), panes/ (ItemList, EditForm, ImagePane, PublishPane, SyncBar, …)
 │
 ├── hooks/                            ← Shared React hooks: use-outside-click.tsx (useOutsideClick)
 │
@@ -571,6 +571,7 @@ Seller Studio is a local-only browser GUI for managing `content/` — started wi
 A small Vite + React SPA (`index.html` → `src/main.tsx` → `src/App.tsx`). Panes in `src/panes/`: `ItemList`, `BulkToolbar`, `Drawer`, `EditForm`, `ImagePane`, `NewItemDialog`, `PublishPane`, `SyncBar`. `App.tsx` keeps **no client-side item state** — every mutation is followed by a full server re-fetch, so there is no drift. `src/fields.ts` declares the edit-form field groups (their paths must match `scripts/lib/itemFields.ts`, the server-side authority).
 
 - `studio/src/components/` — shared presentational components: `Button`, `StatusBadge`, `ThemeToggle`, and the `useDialogBehavior` focus-management hook
+- `studio/src/filtering.ts` — pure client-side filter pipeline (status → category → fuzzy search via fuse.js → sort) plus `countByStatus` for the tab counts; `studio/src/panes/FilterBar.tsx` renders the controls
 
 ### API surface (`/api/*`)
 
