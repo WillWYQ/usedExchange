@@ -106,7 +106,7 @@ usedExchange/
 ├── studio/                           ← Seller Studio Vite SPA (pnpm studio; served only on 127.0.0.1)
 │   ├── index.html, vite.config.ts    ← Vite entry + studioApiPlugin middleware (CSRF → 32 MB cap → /api/*)
 │   ├── csrfGuard.ts                  ← checkStudioCsrf — CSRF/Origin guard for the /api/* middleware
-│   └── src/                          ← React app: App.tsx, api.ts, fields.ts, filtering.ts, components/ (Button, StatusBadge, ThemeToggle, useDialogBehavior), panes/ (ItemList, EditForm, ImagePane, PublishPane, SyncBar, …)
+│   └── src/                          ← React app: App.tsx, api.ts, fields.ts, fieldValues.ts, editForm.ts, filtering.ts, components/ (Button, StatusBadge, ThemeToggle, useDialogBehavior), panes/ (ItemList, EditForm, ImagePane, PublishPane, SyncBar, …)
 │
 ├── hooks/                            ← Shared React hooks: use-outside-click.tsx (useOutsideClick)
 │
@@ -568,9 +568,11 @@ Seller Studio is a local-only browser GUI for managing `content/` — started wi
 
 ### Frontend (`studio/`)
 
-A small Vite + React SPA (`index.html` → `src/main.tsx` → `src/App.tsx`). Panes in `src/panes/`: `ItemList`, `BulkToolbar`, `Drawer`, `EditForm`, `ImagePane`, `NewItemDialog`, `PublishPane`, `SyncBar`. `App.tsx` keeps **no client-side item state** — every mutation is followed by a full server re-fetch, so there is no drift. `src/fields.ts` declares the edit-form field groups (their paths must match `scripts/lib/itemFields.ts`, the server-side authority).
+A small Vite + React SPA (`index.html` → `src/main.tsx` → `src/App.tsx`). Panes in `src/panes/`: `ItemList`, `BulkToolbar`, `Drawer`, `EditForm`, `ImagePane`, `NewItemDialog`, `PublishPane`, `SyncBar`. `App.tsx` keeps **no client-side item state** — every mutation is followed by a full server re-fetch, so there is no drift. `src/fields.ts` declares the edit-form field groups (their paths must match `scripts/lib/itemFields.ts`, the server-side authority); each group carries a stable `id: GroupId` and a `defaultOpen` flag.
 
 - `studio/src/components/` — shared presentational components: `Button`, `StatusBadge`, `ThemeToggle`, and the `useDialogBehavior` focus-management hook
+- `studio/src/editForm.ts` — pure save logic behind `EditForm`: `buildEdits` (leaf edits plus the whole-object merge for `dimensions`/`weight`), `draftFromFields`, and the dirty computation. `fieldIsDirty` is the single definition of "changed" that the unsaved counter, the per-field marker, the group badges and the sent edits all derive from
+- `studio/src/fieldValues.ts` — `toInput` / `fromInput`, the JSON-value ↔ input-string converters shared by `EditForm`, `DefaultsPane` and `editForm.ts` (React-free, so the pure module never imports a component)
 - `studio/src/filtering.ts` — pure client-side filter pipeline (status → category → fuzzy search via fuse.js → sort) plus `countByStatus` for the tab counts; `studio/src/panes/FilterBar.tsx` renders the controls
 
 ### API surface (`/api/*`)

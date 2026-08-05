@@ -771,6 +771,22 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md (lib/ Module Refe
 
 ---
 
+## Phase 22 — Seller Studio Edit Form Experience ✅
+
+- [x] `studio/src/fields.ts` re-partitioned into eight groups with a stable `id: GroupId` and a `defaultOpen` flag; all 43 descriptors keep their exact paths (a test pins the count so a regrouping cannot drop a field)
+- [x] Listing and Price open on arrival; Translations, Specs, Payment & pickup, Books & courses, Extras and Dates render as collapsed `<details>` with a badge (unsaved count, else filled-field count)
+- [x] The price tier editor moved inside the Price group, right after Currency
+- [x] `studio/src/editForm.ts` — `buildEdits`, `draftFromFields` and the dirty computation extracted as pure functions, with `studio/src/editForm.test.ts` (19 tests); `fieldIsDirty` is the single definition of "changed" shared by the counter, the markers and the edits sent
+- [x] `studio/src/fieldValues.ts` — `toInput` / `fromInput` moved out of `FieldInput.tsx` so the pure module imports no component
+- [x] Per-field unsaved markers, a sticky Save / Discard / unsaved-count bar, and collapsed groups that open themselves when a failed save names a field inside them
+- [x] The draft is rebuilt from the server's re-read file after a save; "Saved." clears on the next keystroke; "Nothing changed" is a neutral notice, not a red error
+- [x] `Drawer` keeps visited tabs mounted — switching to Photos no longer discards a draft — and marks the Details tab while anything is unsaved
+- [x] Fixed a pre-existing `TierEditor` render loop (React "Maximum update depth exceeded" on every drawer open): the collector moved from state into a ref behind a stable registrar
+- [x] `DefaultsPane` pins groups by `GroupId` instead of by title, so a group rename is a compile error rather than a silent collapse
+- [x] Docs sync (CURRENT_FUNCTIONALITY, ARCHITECTURE, TECH_REQUIREMENTS, this plan) — both languages
+
+---
+
 ## Risk Register
 
 | Risk | Likelihood | Impact | Mitigation |
