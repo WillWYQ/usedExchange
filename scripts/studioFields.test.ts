@@ -160,11 +160,14 @@ describe("studio field descriptors (Task 6)", () => {
     expect(readAtPath({}, ["dimensions", "length"])).toBeUndefined();
   });
 
-  it("EditForm sends tiers as one whole-array edit and never sends blank selects", () => {
+  it("EditForm sends tiers as one whole-array edit", () => {
     const source = readFileSync(path.join(ROOT, "studio/src/panes/EditForm.tsx"), "utf-8");
     expect(source).toContain('{ path: ["price", "tiers"], value: rows }');
-    // Blank select means "no change" — never sent (strict enums reject "").
-    expect(source).toContain('if (next === "" && field.kind === "select") continue;');
+    // "a blank select is never sent" used to be asserted here as a source
+    // string. buildEdits now lives in studio/src/editForm.ts and
+    // studio/src/editForm.test.ts asserts the behaviour itself, which is the
+    // same guarantee verified properly.
+    //
     // Off-list on-disk values are rendered raw, not snapped to a legal
     // option. The per-field rendering moved from EditForm into FieldInput
     // when the two were split for the defaults feature.
@@ -196,8 +199,8 @@ describe("studio field descriptors (Task 6)", () => {
     }
   });
 
-  it("EditForm seeds a missing object from WHOLE_OBJECT_SEEDS and asks for a unit", () => {
-    const source = readFileSync(path.join(ROOT, "studio/src/panes/EditForm.tsx"), "utf-8");
+  it("editForm seeds a missing object from WHOLE_OBJECT_SEEDS and asks for a unit", () => {
+    const source = readFileSync(path.join(ROOT, "studio/src/editForm.ts"), "utf-8");
     expect(source).toContain("WHOLE_OBJECT_SEEDS[head]");
     expect(source).toContain("pick a unit");
   });

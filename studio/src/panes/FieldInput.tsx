@@ -8,15 +8,30 @@ export function FieldInput({
   value,
   onChange,
   disabled,
+  dirty,
 }: {
   field: FieldDescriptor;
   value: string;
   onChange: (next: string) => void;
   disabled?: boolean;
+  /** Marks the label when this field differs from what is on disk. */
+  dirty?: boolean;
 }) {
   return (
     <label className="field">
-      <span className="field-label">{field.label}</span>
+      <span className="field-label">
+        {field.label}
+        {dirty === true && (
+          <>
+            {/* Colour alone must not carry the meaning: a glyph for sighted
+                users, real text for a screen reader. */}
+            <span className="field-dot" aria-hidden="true">
+              ●
+            </span>
+            <span className="visually-hidden"> (unsaved)</span>
+          </>
+        )}
+      </span>
       {field.kind === "textarea" ? (
         <textarea rows={3} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
       ) : field.kind === "boolean" ? (
