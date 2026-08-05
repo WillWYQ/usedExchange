@@ -84,6 +84,9 @@ public/search-index.json
 # ── Agent scratch (isolated worktrees + implementation ledgers) ──────────────
 .claude/worktrees/
 .superpowers/
+# Patches and bundles handed back by cloud routines that cannot push their own
+# branch. Kept locally until the work is landed; never committed.
+temp/
 
 # ── Editor / IDE ──────────────────────────────────────────────────────────────
 .vscode/settings.json
