@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Turn the drawer's Details tab from a flat 36-field wall into a two-tier form — the fields a seller touches every day are on the first screen (price tiers included), everything else is one click away — and close the four state bugs that let a draft go missing or a stale "Saved." linger.
+**Goal:** Turn the drawer's Details tab from a flat 43-input wall into a two-tier form — the fields a seller touches every day are on the first screen (price tiers included), everything else is one click away — and close the four state bugs that let a draft go missing or a stale "Saved." linger.
 
 **Architecture:** `studio/src/fields.ts` gains a stable `id` and a `defaultOpen` flag per group and is re-partitioned into eight groups. The edit logic (`buildEdits`, dirty computation, draft construction) moves out of `EditForm.tsx` into a pure module `studio/src/editForm.ts` that unit tests import directly, mirroring `filtering.ts` / `filtering.test.ts`. The value converters `toInput` / `fromInput` move from `FieldInput.tsx` to a React-free `studio/src/fieldValues.ts` so the pure module never imports a component. `EditForm` renders open groups as `<fieldset>` and closed ones as `<details>` with a badge, hosts the tier editor inside the Price group, and ends in a sticky action bar. `Drawer` keeps visited tabs mounted so switching to Photos no longer discards a draft.
 
@@ -19,7 +19,7 @@ Copied from the spec and `.claude/CLAUDE.md`. Every task inherits these:
 - Iron Rule 4: `reserved_for` never becomes a descriptor, never gets read, never gets rendered.
 - Iron Rule 7: Phase 22 is recorded in `IMPLEMENTATION_PLAN.md` / `_zh` with all tasks `[x]` and ✅ (Task 8, after verification).
 - Iron Rule 8 does not apply: no new `content/config.ts` field.
-- The 36 descriptors are re-partitioned and re-ordered, never added to or removed from. Every `path` stays byte-identical.
+- The 43 descriptors are re-partitioned and re-ordered, never added to or removed from. Every `path` stays byte-identical.
 - One dirty predicate: `fieldIsDirty` is the single definition used by the footer count, the per-field marker, the group badges and `buildEdits`. They can never disagree.
 - No new dependencies. Styling consumes existing tokens; no new colour literals.
 - Gates: `pnpm test`, `pnpm type-check`, `pnpm lint` (zero warnings) — all clean before every commit. The repo suite is **646 tests in 38 files** before this work; Tasks 1 and 2 add to that count.
@@ -124,8 +124,8 @@ Add one more test pinning the invariant this whole task must not break:
   it("re-grouping neither added nor dropped a descriptor", () => {
     const { FIELD_GROUPS } = loadFields();
     const paths = FIELD_GROUPS.flatMap((g) => g.fields.map((f) => f.path.join(".")));
-    expect(paths.length).toBe(36);
-    expect(new Set(paths).size).toBe(36);
+    expect(paths.length).toBe(43);
+    expect(new Set(paths).size).toBe(43);
   });
 ```
 
@@ -260,7 +260,7 @@ export function groupIdForPath(path: (string | number)[]): GroupId | null {
 
 It imports from `./editForm` relatively (same pattern as `filtering.test.ts`). Cases, one `it` each:
 
-1. `draftFromFields` returns a string for all 36 keys, `""` for absent values, `"true"`/`"false"` for booleans, newline-joined for `stringList`.
+1. `draftFromFields` returns a string for all 43 keys, `""` for absent values, `"true"`/`"false"` for booleans, newline-joined for `stringList`.
 2. `fieldIsDirty` — false when the draft equals disk; true when the text differs; **false** for a select whose draft is `""` (blank means "no change"); true for `" 5 "` against a stored `5` (documented, harmless: it re-sends `5`).
 3. `computeDirtyKeys` returns exactly the changed keys.
 4. `buildEdits` sends only changed leaves.

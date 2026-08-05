@@ -23,7 +23,12 @@ type FieldDescriptor = {
   options?: readonly string[];
   hint?: string;
 };
-type FieldGroup = { title: string; fields: FieldDescriptor[] };
+type FieldGroup = {
+  id: string;
+  title: string;
+  defaultOpen?: boolean;
+  fields: FieldDescriptor[];
+};
 
 type FieldsModule = {
   FIELD_GROUPS: readonly FieldGroup[];
@@ -87,16 +92,47 @@ describe("studio field descriptors (Task 6)", () => {
     }
   });
 
-  it("group order and titles match the spec's grouping", () => {
+  it("group ids, order and titles match the spec's grouping", () => {
     const { FIELD_GROUPS } = loadFields();
-    expect(FIELD_GROUPS.map((g) => g.title)).toEqual([
-      "Basic",
-      "Price",
-      "Specs",
-      "Platform",
-      "Student",
-      "Translations",
+    expect(FIELD_GROUPS.map((g) => g.id)).toEqual([
+      "listing",
+      "price",
+      "translations",
+      "specs",
+      "payment",
+      "books",
+      "extras",
+      "dates",
     ]);
+    expect(FIELD_GROUPS.map((g) => g.title)).toEqual([
+      "Listing",
+      "Price",
+      "Translations",
+      "Specs",
+      "Payment & pickup",
+      "Books & courses",
+      "Extras",
+      "Dates",
+    ]);
+    // Only the two groups a seller touches on an ordinary edit start open;
+    // the rest render as <details> the seller opens on demand.
+    expect(FIELD_GROUPS.filter((g) => g.defaultOpen === true).map((g) => g.id)).toEqual([
+      "listing",
+      "price",
+    ]);
+  });
+
+  // The 2026-08-05 regrouping moved descriptors between groups and reordered
+  // them. It must not have created or dropped one on the way: a lost
+  // descriptor is a field the seller can no longer edit from Studio at all.
+  it("re-grouping neither added nor dropped a descriptor", () => {
+    const { FIELD_GROUPS } = loadFields();
+    const paths = FIELD_GROUPS.flatMap((g) => g.fields.map((f) => f.path.join(".")));
+    // 43 leaf descriptors covering the schema's 36 editable fields — the
+    // nested price/dimensions/weight objects contribute one descriptor per
+    // leaf.
+    expect(paths.length).toBe(43);
+    expect(new Set(paths).size).toBe(43);
   });
 
   it("whole-object groups are exactly dimensions and weight", () => {
