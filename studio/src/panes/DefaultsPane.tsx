@@ -3,7 +3,8 @@ import { fetchDefaults, saveDefaults } from "../api";
 import { Button } from "../components/Button";
 import { useDialogBehavior } from "../components/useDialogBehavior";
 import { FIELD_GROUPS, pathKey, readAtPath, type FieldGroup } from "../fields";
-import { FieldInput, fromInput, toInput } from "./FieldInput";
+import { fromInput, toInput } from "../fieldValues";
+import { FieldInput } from "./FieldInput";
 
 // name/status/listed_date/sold_date belong to each item, never to a template;
 // the server rejects them too (scripts/lib/itemDefaults.ts). This set only

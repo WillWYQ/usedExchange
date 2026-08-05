@@ -8,7 +8,8 @@ import {
   WHOLE_OBJECT_GROUPS,
   WHOLE_OBJECT_SEEDS,
 } from "../fields";
-import { FieldInput, fromInput, toInput } from "./FieldInput";
+import { fromInput, toInput } from "../fieldValues";
+import { FieldInput } from "./FieldInput";
 
 type Tier = {
   label: string;
