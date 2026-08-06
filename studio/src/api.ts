@@ -1,9 +1,10 @@
 // Type-only import: studioApi.ts pulls in the content loader and node:fs, which
 // must never reach the browser bundle. `import type` is erased at compile time,
 // so this shares the types without shipping the module.
+import type { ConfigField, ConfigFieldKind } from "../../scripts/lib/configEdit";
 import type { BulkStatusResult, ImageEntry, StudioItem } from "../../scripts/lib/studioApi";
 
-export type { BulkStatusResult, ImageEntry, StudioItem };
+export type { BulkStatusResult, ConfigField, ConfigFieldKind, ImageEntry, StudioItem };
 
 // Every response body is read defensively rather than trusting res.json() to
 // succeed: the CSRF guard and Vite itself can answer a rejected request with
@@ -190,6 +191,34 @@ export async function saveDefaults(scope: string, defaults: Record<string, unkno
   if (!res.ok) {
     throw new Error(errorMessage(body, `saving ${scope} defaults failed with ${res.status} ${res.statusText}`));
   }
+}
+
+export async function fetchConfig(): Promise<ConfigField[]> {
+  const res = await fetch("/api/config");
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `loading site config failed with ${res.status} ${res.statusText}`));
+  }
+  if (!Array.isArray(body?.fields)) {
+    throw new Error(`GET /api/config returned an unreadable response (${res.status} ${res.statusText})`);
+  }
+  return body.fields as ConfigField[];
+}
+
+export async function saveConfigValue(
+  path: string,
+  value: string | number | boolean,
+): Promise<ConfigField[]> {
+  const res = await fetch("/api/config", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path, value }),
+  });
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `saving ${path} failed with ${res.status} ${res.statusText}`));
+  }
+  return (body?.fields as ConfigField[] | undefined) ?? [];
 }
 
 export type ChangedFile = { code: string; path: string };
