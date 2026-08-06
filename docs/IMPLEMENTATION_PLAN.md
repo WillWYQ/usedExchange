@@ -787,6 +787,16 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md (lib/ Module Refe
 
 ---
 
+## Phase 23 — Seller Studio Config Panel ✅
+
+- [x] `scripts/lib/configEdit.ts`: TypeScript-AST `readConfig` (dotted paths, literal kinds, enum options from the types file, docs and section titles from the file's own comments) and `writeConfigValue` (single value replaced by character range; all 182 comment lines preserved)
+- [x] Per-field validation: enum membership, number bounds, http(s) URLs, template-literal injection refused, array fields read-only
+- [x] `GET/PUT /api/config` with a `tsc --noEmit` gate — a write that fails type-check is discarded and the file left byte-identical
+- [x] `ConfigPane`: fields grouped as the file groups them, the file's comments as hints, danger warnings on `deploymentMode`/`baseUrl`/`imageStorage.provider`, UI translations collapsed, per-field save
+- [x] Docs sync (CURRENT_FUNCTIONALITY, ARCHITECTURE, this plan) — both languages
+
+---
+
 ## Risk Register
 
 | Risk | Likelihood | Impact | Mitigation |

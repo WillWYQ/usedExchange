@@ -512,6 +512,7 @@ Not standalone runnables — imported by the CLIs above. 10 of the 14 modules ha
 | `imageSync.ts` | Pure CDN pipeline: SHA-256 checksums, `UPLOAD_CONCURRENCY = 8`, per-file failure isolation, EXIF stripping, progress callbacks; drives both `pnpm upload-images` and Studio's sync |
 | `itemTemplate.ts` | 36-field `item.json` scaffold with `// options:` comments; shared by `create-item`, `create-template`, and Studio item creation (`reserved_for` excluded) |
 | `itemDefaults.ts` | Two-tier sparse `_defaults.json`: parse/validate/merge (`loadMergedDefaults`, `mergeDefaultsIntoTemplate`); shared by the studio defaults routes and `create-item`; `reserved_for` and per-item fields rejected |
+| `configEdit.ts` | TypeScript-AST reader and surgical writer for `content/config.ts`: flattens the config into a field list (value, kind, enum options from `lib/config/types.ts`, the file's own comments as docs) and replaces one value by character range, leaving all other bytes — including all 182 comment lines — untouched |
 | `itemEdit.ts` | Surgical JSONC edits via `jsonc-parser` — comments, formatting, and `reserved_for` survive every write |
 | `itemFields.ts` | Strict Zod allowlist of browser-writable field paths; `resolveFieldSchema(path)` is the single authority; `reserved_for` denied |
 | `markSold.ts` | `applyMarkSold(text, today)` — status → sold + `sold_date`; null when already sold |
@@ -574,6 +575,7 @@ A small Vite + React SPA (`index.html` → `src/main.tsx` → `src/App.tsx`). Pa
 - `studio/src/editForm.ts` — pure save logic behind `EditForm`: `buildEdits` (leaf edits plus the whole-object merge for `dimensions`/`weight`), `draftFromFields`, and the dirty computation. `fieldIsDirty` is the single definition of "changed" that the unsaved counter, the per-field marker, the group badges and the sent edits all derive from
 - `studio/src/fieldValues.ts` — `toInput` / `fromInput`, the JSON-value ↔ input-string converters shared by `EditForm`, `DefaultsPane` and `editForm.ts` (React-free, so the pure module never imports a component)
 - `studio/src/filtering.ts` — pure client-side filter pipeline (status → category → fuzzy search via fuse.js → sort) plus `countByStatus` for the tab counts; `studio/src/panes/FilterBar.tsx` renders the controls
+- `studio/src/panes/ConfigPane.tsx` — the site-config pane: fields grouped as `content/config.ts` groups them, that file's comments as hints, per-field save through `GET/PUT /api/config`
 
 ### API surface (`/api/*`)
 
