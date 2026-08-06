@@ -1605,3 +1605,66 @@ describe("publish routes", () => {
     ).toBe(405);
   });
 });
+
+// ── Readiness route ──────────────────────────────────────────────────────────
+
+describe("readiness route", () => {
+  let tempProjects: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+
+  async function readinessProject(): Promise<string> {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-readiness-"));
+    tempProjects.push(root);
+    return root;
+  }
+
+  it("GET returns a tiered report", async () => {
+    const root = await readinessProject();
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/readiness",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(200);
+    const report = (
+      asJson(res).body as {
+        report: { items: Array<{ id: string; tier: number }>; tier1Total: number };
+      }
+    ).report;
+    expect(report.items.map((i) => i.id)).toContain("identity");
+    expect(report.items.map((i) => i.id)).toContain("aceternity");
+    expect(report.tier1Total).toBe(6);
+  });
+
+  it("reports the sandbox's own state, not the real repo's", async () => {
+    // projectRoot must be honoured: an empty sandbox has no items, even though
+    // the repo this test runs in has several.
+    const root = await readinessProject();
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/readiness",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    const report = (
+      asJson(res).body as { report: { items: Array<{ id: string; done: boolean }> } }
+    ).report;
+    expect(report.items.find((i) => i.id === "first-item")?.done).toBe(false);
+  });
+
+  it("405s a POST", async () => {
+    const root = await readinessProject();
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/readiness",
+      body: Buffer.from("{}"),
+      projectRoot: root,
+    });
+    expect(res.status).toBe(405);
+  });
+});

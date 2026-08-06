@@ -29,6 +29,7 @@ import {
   readDefaultsFile,
   validateDefaults,
 } from "./itemDefaults";
+import { buildReadinessReport } from "./siteReadiness";
 // assertEditableValue, directly: handleItemPatch needs to validate a
 // COMPOSED tier object (built up from several leaf edits in the same batch)
 // against the exact schema a whole-tier write would have to satisfy, and
@@ -739,6 +740,18 @@ async function handleDefaultsPut(req: StudioRequest): Promise<StudioResponse> {
   return { status: 200, body: defaults };
 }
 
+// ── Setup readiness ──────────────────────────────────────────────────────────
+
+async function handleReadinessGet(req: StudioRequest): Promise<StudioResponse> {
+  // siteConfig is imported at module scope, so a config that fails to parse
+  // stops the studio server before any route runs — the `config: null` branch
+  // of buildReadinessReport is unreachable from here by construction. Only
+  // `pnpm setup-check` can hit it, which is why that shell loads the config
+  // defensively and this one does not.
+  const report = await buildReadinessReport(req.projectRoot, siteConfig, process.env);
+  return { status: 200, body: { report } };
+}
+
 async function handleItemCreate(req: StudioRequest): Promise<StudioResponse> {
   const { category, name, applyDefaults } = parseJsonBody(req.body, createItemBodySchema);
 
@@ -870,6 +883,11 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
       if (req.method === "GET") return await handleDefaultsGet(req);
       if (req.method === "PUT") return await handleDefaultsPut(req);
       return { status: 405, body: { error: "GET or PUT only" } };
+    }
+
+    if (pathname === "/api/readiness") {
+      if (req.method === "GET") return await handleReadinessGet(req);
+      return { status: 405, body: { error: "GET only" } };
     }
 
     // Matched against the raw, still-percent-encoded pathname on purpose: an
