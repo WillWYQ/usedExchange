@@ -1605,3 +1605,193 @@ describe("publish routes", () => {
     ).toBe(405);
   });
 });
+
+// ── Config routes ────────────────────────────────────────────────────────────
+// The fixture is a small hand-written config rather than the repo's real one:
+// these tests must stay fast and hermetic, and the real file is already
+// exercised by configEdit.test.ts.
+
+const CONFIG_FIXTURE = `import type { SiteConfig } from "@/lib/config/types";
+
+export const siteConfig: SiteConfig = {
+  // ── Identity ─────────────────────────────────────────────
+  name: "Test Store",
+  tagline: "Nothing to see here.",
+
+  // ── Deployment ───────────────────────────────────────────
+  deploymentMode: "static", // "static" | "vercel"
+  baseUrl: "https://example.com",
+
+  // ── Seller location ──────────────────────────────────────
+  location: {
+    lat: 37.7749,
+    lng: -122.4194,
+    label: "San Francisco, CA",
+  },
+
+  // ── Content defaults ─────────────────────────────────────
+  recentlyListedCount: 6,
+
+  // ── Contact ──────────────────────────────────────────────
+  contact: {
+    platforms: ["email", "sms"],
+  },
+};
+`;
+
+const CONFIG_TYPES_FIXTURE = `export interface SiteConfig {
+  name: string;
+  tagline: string;
+  deploymentMode: "static" | "vercel";
+  baseUrl: string;
+  location: { lat: number; lng: number; label: string };
+  recentlyListedCount: number;
+  contact: { platforms: string[] };
+}
+`;
+
+describe("config routes", () => {
+  let tempProjects: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+
+  /**
+   * A sandbox project with content/config.ts and lib/config/types.ts. No
+   * tsconfig.json: the tsc gate is skipped in that case (asserted explicitly
+   * below), which keeps these tests fast while the gate itself stays honest.
+   */
+  async function configProject(config = CONFIG_FIXTURE): Promise<string> {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-config-"));
+    tempProjects.push(root);
+    await fs.mkdir(path.join(root, "content"), { recursive: true });
+    await fs.mkdir(path.join(root, "lib", "config"), { recursive: true });
+    await fs.writeFile(path.join(root, "content", "config.ts"), config, "utf-8");
+    await fs.writeFile(path.join(root, "lib", "config", "types.ts"), CONFIG_TYPES_FIXTURE, "utf-8");
+    return root;
+  }
+
+  const configPath = (root: string): string => path.join(root, "content", "config.ts");
+
+  function req(root: string, method: string, body?: unknown) {
+    return handleStudioRequest({
+      method,
+      url: "/api/config",
+      body: body === undefined ? Buffer.alloc(0) : Buffer.from(JSON.stringify(body)),
+      projectRoot: root,
+    });
+  }
+
+  it("GET returns the field list", async () => {
+    const root = await configProject();
+    const res = await req(root, "GET");
+    expect(res.status).toBe(200);
+    const fields = (asJson(res).body as { fields: Array<{ path: string }> }).fields;
+    const paths = fields.map((f) => f.path);
+    expect(paths).toContain("name");
+    expect(paths).toContain("location.lat");
+  });
+
+  it("PUT writes a value, returns the new list, and changes exactly one line", async () => {
+    const root = await configProject();
+    const before = await fs.readFile(configPath(root), "utf-8");
+
+    const res = await req(root, "PUT", { path: "recentlyListedCount", value: 9 });
+    expect(res.status).toBe(200);
+
+    const fields = (asJson(res).body as { fields: Array<{ path: string; value: unknown }> }).fields;
+    expect(fields.find((f) => f.path === "recentlyListedCount")?.value).toBe(9);
+
+    const after = await fs.readFile(configPath(root), "utf-8");
+    const beforeLines = before.split("\n");
+    const afterLines = after.split("\n");
+    expect(afterLines.length).toBe(beforeLines.length);
+    expect(afterLines.filter((l, i) => l !== beforeLines[i]).length).toBe(1);
+    // Every comment survives the write.
+    expect((after.match(/^\s*\/\//gm) ?? []).length).toBe((before.match(/^\s*\/\//gm) ?? []).length);
+  });
+
+  it("400s an illegal enum value and leaves the file byte-identical", async () => {
+    const root = await configProject();
+    const before = await fs.readFile(configPath(root), "utf-8");
+
+    const res = await req(root, "PUT", { path: "deploymentMode", value: "netlify" });
+    expect(res.status).toBe(400);
+
+    expect(await fs.readFile(configPath(root), "utf-8")).toBe(before);
+  });
+
+  it("400s a write to an array field and leaves the file byte-identical", async () => {
+    const root = await configProject();
+    const before = await fs.readFile(configPath(root), "utf-8");
+
+    const res = await req(root, "PUT", { path: "contact.platforms", value: "x" });
+    expect(res.status).toBe(400);
+
+    expect(await fs.readFile(configPath(root), "utf-8")).toBe(before);
+  });
+
+  it("400s a path that does not exist", async () => {
+    const root = await configProject();
+    const res = await req(root, "PUT", { path: "nope.nothing", value: 1 });
+    expect(res.status).toBe(400);
+  });
+
+  it("400s an out-of-range latitude and leaves the file byte-identical", async () => {
+    const root = await configProject();
+    const before = await fs.readFile(configPath(root), "utf-8");
+
+    const res = await req(root, "PUT", { path: "location.lat", value: 91 });
+    expect(res.status).toBe(400);
+
+    expect(await fs.readFile(configPath(root), "utf-8")).toBe(before);
+  });
+
+  it("400s when content/config.ts is missing, naming the file", async () => {
+    const root = await configProject();
+    await fs.rm(configPath(root));
+    const res = await req(root, "GET");
+    expect(res.status).toBe(400);
+    expect((asJson(res).body as { error: string }).error).toContain("config.ts");
+  });
+
+  it("400s when the file has no siteConfig declaration", async () => {
+    const root = await configProject("export const notTheConfig = { name: \"x\" };\n");
+    const res = await req(root, "GET");
+    expect(res.status).toBe(400);
+    expect((asJson(res).body as { error: string }).error).toContain("siteConfig");
+  });
+
+  it("skips the tsc gate when the project has no tsconfig.json", async () => {
+    // Documented, tested fallback: a sandbox has no tsconfig, so the gate is
+    // skipped there. A silently absent gate would be dishonest — this test
+    // pins that the skip is deliberate and that writes still succeed.
+    const root = await configProject();
+    expect(await fs.readdir(root)).not.toContain("tsconfig.json");
+    const res = await req(root, "PUT", { path: "name", value: "Renamed" });
+    expect(res.status).toBe(200);
+    expect(await fs.readFile(configPath(root), "utf-8")).toContain('name: "Renamed"');
+  });
+
+  it("leaves no temp file behind after a successful write", async () => {
+    const root = await configProject();
+    await req(root, "PUT", { path: "name", value: "Renamed" });
+    const entries = await fs.readdir(path.join(root, "content"));
+    expect(entries).toEqual(["config.ts"]);
+  });
+
+  it("leaves no temp file behind after a rejected write", async () => {
+    const root = await configProject();
+    await req(root, "PUT", { path: "deploymentMode", value: "netlify" });
+    const entries = await fs.readdir(path.join(root, "content"));
+    expect(entries).toEqual(["config.ts"]);
+  });
+
+  it("405s POST /api/config", async () => {
+    const root = await configProject();
+    const res = await req(root, "POST", {});
+    expect(res.status).toBe(405);
+  });
+});
