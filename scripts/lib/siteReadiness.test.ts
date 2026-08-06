@@ -368,3 +368,31 @@ describe("the report never writes anything", () => {
     expect(after).toEqual(before);
   });
 });
+
+describe("the inlined template domains stay in sync with templateStatus.ts", () => {
+  it("matches the constants the site itself keys off", async () => {
+    // siteReadiness inlines these two strings so a broken content/config.ts
+    // cannot crash the checklist at module-load time (templateStatus.ts imports
+    // the config). That duplication is only safe if it cannot drift, so read
+    // the real source and compare.
+    const source = await fs.readFile(
+      path.join(process.cwd(), "lib/utils/templateStatus.ts"),
+      "utf-8",
+    );
+    const placeholder = /PLACEHOLDER_DOMAIN\s*=\s*"([^"]+)"/.exec(source)?.[1];
+    const demo = /DEMO_DOMAIN\s*=\s*"([^"]+)"/.exec(source)?.[1];
+    expect(placeholder).toBe("your-domain.com");
+    expect(demo).toBe("usedexchangeproject.willsleep.dev");
+
+    // And prove readiness actually treats both as "still the template".
+    const root = await sandbox();
+    for (const domain of [placeholder, demo]) {
+      const report = await buildReadinessReport(
+        root,
+        configuredConfig({ baseUrl: `https://${domain}` }),
+        {},
+      );
+      expect(byId(report.items, "identity").done).toBe(false);
+    }
+  });
+});

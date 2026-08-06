@@ -12,10 +12,19 @@ import { execFile } from "child_process";
 import fsPromises from "fs/promises";
 import path from "path";
 import { promisify } from "util";
-import { DEMO_DOMAIN, PLACEHOLDER_DOMAIN } from "../../lib/utils/templateStatus";
 import { REQUIRED_UI_STRING_KEYS } from "./i18nRequiredKeys";
 
 const run = promisify(execFile);
+
+// Deliberately NOT imported from lib/utils/templateStatus.ts. That module
+// statically imports @/content/config, so importing it here would load the
+// seller's config at module-load time — and a config with a syntax error would
+// crash `pnpm setup-check` before its own try/catch could report the problem,
+// which is precisely the case this checklist exists to explain. These two are
+// plain strings; templateStatus.ts stays the source of truth for the site's own
+// runtime behaviour, and readiness.test.ts pins that the values agree.
+const PLACEHOLDER_DOMAIN = "your-domain.com";
+const DEMO_DOMAIN = "usedexchangeproject.willsleep.dev";
 
 export type ReadinessTier = 1 | 2;
 
@@ -86,9 +95,9 @@ const STORAGE_DOC = "docs/setup_instruction.md";
 // ── Individual checks ────────────────────────────────────────────────────────
 
 function checkIdentity(config: ReadinessConfig): ReadinessItem {
-  // Both constants come from lib/utils/templateStatus.ts, which is the single
-  // source of truth for "still the template" — the site's own home page and
-  // the build-time config check key off the same two strings.
+  // These mirror lib/utils/templateStatus.ts, which is what the site's own home
+  // page and the build-time config check key off. See the note at the top for
+  // why they are inlined rather than imported; a test pins them in sync.
   const isTemplate =
     config.baseUrl.includes(PLACEHOLDER_DOMAIN) || config.baseUrl.includes(DEMO_DOMAIN);
   return {
