@@ -1,9 +1,14 @@
 // Type-only import: studioApi.ts pulls in the content loader and node:fs, which
 // must never reach the browser bundle. `import type` is erased at compile time,
 // so this shares the types without shipping the module.
+import type {
+  ReadinessAction,
+  ReadinessItem,
+  ReadinessReport,
+} from "../../scripts/lib/siteReadiness";
 import type { BulkStatusResult, ImageEntry, StudioItem } from "../../scripts/lib/studioApi";
 
-export type { BulkStatusResult, ImageEntry, StudioItem };
+export type { BulkStatusResult, ImageEntry, ReadinessAction, ReadinessItem, ReadinessReport, StudioItem };
 
 // Every response body is read defensively rather than trusting res.json() to
 // succeed: the CSRF guard and Vite itself can answer a rejected request with
@@ -190,6 +195,22 @@ export async function saveDefaults(scope: string, defaults: Record<string, unkno
   if (!res.ok) {
     throw new Error(errorMessage(body, `saving ${scope} defaults failed with ${res.status} ${res.statusText}`));
   }
+}
+
+export async function fetchReadiness(): Promise<ReadinessReport> {
+  const res = await fetch("/api/readiness");
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(
+      errorMessage(body, `loading setup status failed with ${res.status} ${res.statusText}`),
+    );
+  }
+  if (body?.report === undefined) {
+    throw new Error(
+      `GET /api/readiness returned an unreadable response (${res.status} ${res.statusText})`,
+    );
+  }
+  return body.report as ReadinessReport;
 }
 
 export type ChangedFile = { code: string; path: string };
