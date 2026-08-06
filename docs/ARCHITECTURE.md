@@ -512,6 +512,8 @@ Not standalone runnables — imported by the CLIs above. 10 of the 14 modules ha
 | `imageSync.ts` | Pure CDN pipeline: SHA-256 checksums, `UPLOAD_CONCURRENCY = 8`, per-file failure isolation, EXIF stripping, progress callbacks; drives both `pnpm upload-images` and Studio's sync |
 | `itemTemplate.ts` | 36-field `item.json` scaffold with `// options:` comments; shared by `create-item`, `create-template`, and Studio item creation (`reserved_for` excluded) |
 | `itemDefaults.ts` | Two-tier sparse `_defaults.json`: parse/validate/merge (`loadMergedDefaults`, `mergeDefaultsIntoTemplate`); shared by the studio defaults routes and `create-item`; `reserved_for` and per-item fields rejected |
+| `siteReadiness.ts` | The one place that decides what a fresh site is still missing: a tiered checklist (core path + optional extras) built from config, env vars and the filesystem. Config and env are injected, so it is unit-testable offline and can report a broken `content/config.ts` instead of crashing on it. Shared by `pnpm setup-check` and studio's readiness route |
+| `i18nRequiredKeys.ts` | The UI string keys every locale must resolve, shared by `check-config.ts` and `siteReadiness.ts` |
 | `itemEdit.ts` | Surgical JSONC edits via `jsonc-parser` — comments, formatting, and `reserved_for` survive every write |
 | `itemFields.ts` | Strict Zod allowlist of browser-writable field paths; `resolveFieldSchema(path)` is the single authority; `reserved_for` denied |
 | `markSold.ts` | `applyMarkSold(text, today)` — status → sold + `sold_date`; null when already sold |
@@ -574,6 +576,7 @@ A small Vite + React SPA (`index.html` → `src/main.tsx` → `src/App.tsx`). Pa
 - `studio/src/editForm.ts` — pure save logic behind `EditForm`: `buildEdits` (leaf edits plus the whole-object merge for `dimensions`/`weight`), `draftFromFields`, and the dirty computation. `fieldIsDirty` is the single definition of "changed" that the unsaved counter, the per-field marker, the group badges and the sent edits all derive from
 - `studio/src/fieldValues.ts` — `toInput` / `fromInput`, the JSON-value ↔ input-string converters shared by `EditForm`, `DefaultsPane` and `editForm.ts` (React-free, so the pure module never imports a component)
 - `studio/src/filtering.ts` — pure client-side filter pipeline (status → category → fuzzy search via fuse.js → sort) plus `countByStatus` for the tab counts; `studio/src/panes/FilterBar.tsx` renders the controls
+- `studio/src/panes/GettingStarted.tsx` — the first-run checklist panel, rendered inline above the item table; its actions open the Defaults pane or the new-item dialog
 
 ### API surface (`/api/*`)
 

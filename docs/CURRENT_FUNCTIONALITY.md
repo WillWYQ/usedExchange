@@ -364,11 +364,12 @@ Scripts run on the seller's machine. All listing changes write only to `content/
 
 A local-only web GUI for managing listings in a browser — an alternative to editing `item.json` by hand. Start it with `pnpm studio` (use `pnpm studio --port 3000` to change the port; any integer from 1024–65535 is accepted, default **5174**), then open the printed URL. It runs entirely on the seller's machine: it is never part of the build output, never deployed, and never reachable by site visitors. The launcher fails fast with a clear "run `pnpm update-site`" message if Vite or the Studio app is missing, and it loads `.env.local` so CDN credentials are picked up automatically. It follows the storefront's brand palette and offers light and dark themes, switchable from the header; the choice persists across sessions.
 
-Seven operations, all from one page:
+Eight operations, all from one page:
 
 | Operation | What it does |
 |---|---|
 | Create | Add a new item: pick a category and type a kebab-case name — the folder and a full template `item.json` are scaffolded (same 36-field template as `pnpm create-item`) |
+| Getting started | A setup checklist for a new site: what is still missing (site identity, CDN credentials, first item, git, contact) and where to fix each one. Opens itself until the core steps are done, then stays one click away in the header |
 | Search & filter | Status tabs (Active hides sold by default), fuzzy search over name, category and tags, a category dropdown, and sorting by name, price or listed date — all instant, computed in the browser |
 | Defaults | Manage site-wide and per-category default field values (sparse `_defaults.json` under `content/items/`); new items merge them over the template, with an opt-out checkbox in the new-item dialog |
 | Photos | Upload photos by dragging files onto an item (filenames sanitised, type sniffed from magic bytes), reorder them by dragging, delete them, and push changes to the CDN with live progress |
