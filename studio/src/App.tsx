@@ -9,6 +9,7 @@ import {
 import { Button } from "./components/Button";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { BulkToolbar } from "./panes/BulkToolbar";
+import { ConfigPane } from "./panes/ConfigPane";
 import { DefaultsPane } from "./panes/DefaultsPane";
 import { Drawer } from "./panes/Drawer";
 import { FilterBar } from "./panes/FilterBar";
@@ -27,6 +28,7 @@ export function App() {
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [showNewItem, setShowNewItem] = useState(false);
   const [showDefaults, setShowDefaults] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   // Rows the seller just acted on stay visible even when the change filters
   // them out (marking sold in the Active view). Otherwise the row vanishes
@@ -147,6 +149,9 @@ export function App() {
               bumpChanges();
             }}
           />
+          <Button onClick={() => setShowConfig(true)}>
+            Config
+          </Button>
           <Button onClick={() => setShowDefaults(true)}>
             Defaults
           </Button>
@@ -238,6 +243,7 @@ export function App() {
           onSaved={bumpChanges}
         />
       )}
+      {showConfig && <ConfigPane onClose={() => setShowConfig(false)} />}
     </>
   );
 }
