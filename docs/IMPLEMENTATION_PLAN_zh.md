@@ -786,7 +786,14 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md（lib/ 模块参�
 
 ---
 
-## Phase 23 — 首次安装引导 ✅
+## Phase 23 — Seller Studio 配置面板 ✅
+
+- [x] `scripts/lib/configEdit.ts`：TypeScript AST 的 `readConfig`（点分路径、字面量类型、来自类型文件的枚举选项、以文件自身注释为说明与分组标题）与 `writeConfigValue`（按字符区间替换单个值，全部 182 行注释原样保留）
+- [x] 逐字段校验：枚举合法值、数值范围、http(s) URL、拒绝模板字符串注入、数组字段只读
+- [x] `GET/PUT /api/config`，带 `tsc --noEmit` 关卡——类型检查不过的写入直接丢弃，文件逐字节不变
+- [x] `ConfigPane`：按文件本身的分组呈现字段、以文件注释为提示、`deploymentMode`/`baseUrl`/`imageStorage.provider` 标危险警告、UI 翻译折叠、逐字段保存
+- [x] 文档同步（CURRENT_FUNCTIONALITY、ARCHITECTURE、本计划），中英双语
+## Phase 24 — 首次安装引导 ✅
 
 - [x] `scripts/lib/siteReadiness.ts`：分级就绪清单（核心：站点身份、图片存储、第一个商品、商品上架、git、联系方式；可选：翻译、运费、Aceternity），config 与 env 采用注入，因而可单测，并能在 config 损坏时如实报告而非崩溃
 - [x] `scripts/lib/i18nRequiredKeys.ts`：抽出必需的 UI 字符串键，供 `check-config.ts` 与就绪引擎共用同一份列表

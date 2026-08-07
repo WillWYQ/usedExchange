@@ -1072,6 +1072,22 @@ tr.failed td {
   }
 }
 
+/* ── Config pane ─────────────────────────────────────────────────────────
+   Wider and scrollable like the defaults pane: it lists every field in
+   content/config.ts. Each row carries its own save button because each write
+   is type-checked separately — a rejected field reports under itself while
+   the rest of the pane stays usable. */
+
+.config-dialog {
+  width: min(46rem, calc(100vw - 2rem));
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.config-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 /* ── Getting started checklist ───────────────────────────────────────────
    Inline guidance above the item table, not a dialog: it never traps focus
    or blocks the table beneath it. Collapses to a single line once the core
@@ -1122,6 +1138,39 @@ tr.failed td {
   border-bottom: 1px solid var(--border);
 }
 
+.config-row:last-child {
+  border-bottom: 0;
+}
+
+.config-row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+}
+
+.config-path {
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+}
+
+.config-saved {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+/* Danger note sits under the input it warns about, in the danger colour but
+   without the filled alert background — it is a caution, not a failure. */
+.config-danger {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--danger);
+}
+
+.config-error {
+  /* tsc output is multi-line and its line breaks carry the meaning. */
+  white-space: pre-line;
+  font-size: 0.75rem;
 .gs-row:last-child {
   border-bottom: 0;
 }

@@ -9,6 +9,7 @@ import {
 import { Button } from "./components/Button";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { BulkToolbar } from "./panes/BulkToolbar";
+import { ConfigPane } from "./panes/ConfigPane";
 import { DefaultsPane } from "./panes/DefaultsPane";
 import { Drawer } from "./panes/Drawer";
 import { GettingStarted } from "./panes/GettingStarted";
@@ -28,6 +29,7 @@ export function App() {
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [showNewItem, setShowNewItem] = useState(false);
   const [showDefaults, setShowDefaults] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
   // The checklist opens itself once, the first time a site reports as not
   // ready; after that it is the seller's to open and close from the header.
   const [showGuide, setShowGuide] = useState(false);
@@ -152,6 +154,8 @@ export function App() {
               bumpChanges();
             }}
           />
+          <Button onClick={() => setShowConfig(true)}>
+            Config
           <Button onClick={() => setShowGuide((v) => !v)}>
             Setup
           </Button>
@@ -258,6 +262,7 @@ export function App() {
           onSaved={bumpChanges}
         />
       )}
+      {showConfig && <ConfigPane onClose={() => setShowConfig(false)} />}
     </>
   );
 }

@@ -1,6 +1,10 @@
 // Type-only import: studioApi.ts pulls in the content loader and node:fs, which
 // must never reach the browser bundle. `import type` is erased at compile time,
 // so this shares the types without shipping the module.
+import type { ConfigField, ConfigFieldKind } from "../../scripts/lib/configEdit";
+import type { BulkStatusResult, ImageEntry, StudioItem } from "../../scripts/lib/studioApi";
+
+export type { BulkStatusResult, ConfigField, ConfigFieldKind, ImageEntry, StudioItem };
 import type {
   ReadinessAction,
   ReadinessItem,
@@ -197,6 +201,32 @@ export async function saveDefaults(scope: string, defaults: Record<string, unkno
   }
 }
 
+export async function fetchConfig(): Promise<ConfigField[]> {
+  const res = await fetch("/api/config");
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `loading site config failed with ${res.status} ${res.statusText}`));
+  }
+  if (!Array.isArray(body?.fields)) {
+    throw new Error(`GET /api/config returned an unreadable response (${res.status} ${res.statusText})`);
+  }
+  return body.fields as ConfigField[];
+}
+
+export async function saveConfigValue(
+  path: string,
+  value: string | number | boolean,
+): Promise<ConfigField[]> {
+  const res = await fetch("/api/config", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path, value }),
+  });
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `saving ${path} failed with ${res.status} ${res.statusText}`));
+  }
+  return (body?.fields as ConfigField[] | undefined) ?? [];
 export async function fetchReadiness(): Promise<ReadinessReport> {
   const res = await fetch("/api/readiness");
   const body = await readJsonBody(res);

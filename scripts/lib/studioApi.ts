@@ -8,8 +8,10 @@
 // assertion against content/items/. Both layers, because the allowlist may be
 // relaxed later.
 
+import { execFile } from "child_process";
 import fsPromises from "fs/promises";
 import path from "path";
+import { promisify } from "util";
 import { z } from "zod";
 // Relative, not "@/…": this module is imported from studio/vite.config.ts, and
 // Vite's config bundler does not resolve the "@/" alias (it only applies inside
@@ -22,6 +24,12 @@ import { loadAllItemsRaw } from "../../lib/content/loader";
 import { isValidSlug } from "../../lib/utils/slug";
 import { applyFieldEdits, readItemField, readItemForEdit, type FieldEdit } from "./itemEdit";
 import { buildItemTemplate, renderItemTemplateJsonc } from "./itemTemplate";
+import {
+  readConfig,
+  validateConfigValue,
+  writeConfigValue,
+  type ConfigField,
+} from "./configEdit";
 import {
   DEFAULTS_FILENAME,
   loadMergedDefaults,
@@ -740,6 +748,122 @@ async function handleDefaultsPut(req: StudioRequest): Promise<StudioResponse> {
   return { status: 200, body: defaults };
 }
 
+// ── Site config ──────────────────────────────────────────────────────────────
+
+const runTsc = promisify(execFile);
+
+const configPutBodySchema = z.object({
+  path: z.string().min(1),
+  value: z.union([z.string(), z.number(), z.boolean()]),
+});
+
+function configPaths(projectRoot: string): { config: string; types: string; tsconfig: string } {
+  return {
+    config: path.join(projectRoot, "content", "config.ts"),
+    types: path.join(projectRoot, "lib", "config", "types.ts"),
+    tsconfig: path.join(projectRoot, "tsconfig.json"),
+  };
+}
+
+/**
+ * Reads both sources and parses them into the field list. Every failure —
+ * missing file, unreadable file, no `siteConfig` declaration — becomes a 400
+ * naming the file, so the pane can show the seller what to fix instead of
+ * rendering an opaque error.
+ */
+async function readConfigFields(projectRoot: string): Promise<{ fields: ConfigField[]; source: string }> {
+  const { config, types } = configPaths(projectRoot);
+  let source: string;
+  let typesSource: string;
+  try {
+    source = await fsPromises.readFile(config, "utf-8");
+  } catch (err: unknown) {
+    throw new StudioError(400, `cannot read ${config}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  try {
+    typesSource = await fsPromises.readFile(types, "utf-8");
+  } catch {
+    // The types file only supplies enum options. Without it every enum
+    // degrades to a plain string field, which is worse but still usable —
+    // better than refusing to open the pane at all.
+    typesSource = "";
+  }
+  try {
+    return { fields: readConfig(source, typesSource), source };
+  } catch (err: unknown) {
+    throw new StudioError(400, `cannot parse ${config}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function handleConfigGet(req: StudioRequest): Promise<StudioResponse> {
+  const { fields } = await readConfigFields(req.projectRoot);
+  return { status: 200, body: { fields } };
+}
+
+async function handleConfigPut(req: StudioRequest): Promise<StudioResponse> {
+  const { path: fieldPath, value } = parseJsonBody(req.body, configPutBodySchema);
+  const { config, tsconfig } = configPaths(req.projectRoot);
+  const { fields, source } = await readConfigFields(req.projectRoot);
+
+  const field = fields.find((f) => f.path === fieldPath);
+  if (field === undefined) {
+    throw new StudioError(400, `Unknown config path: ${fieldPath}`);
+  }
+
+  let next: string;
+  try {
+    validateConfigValue(field, value);
+    next = writeConfigValue(source, fieldPath, value);
+  } catch (err: unknown) {
+    throw new StudioError(400, err instanceof Error ? err.message : String(err));
+  }
+
+  // Write to a sibling temp file and only rename it over the real config once
+  // tsc is happy. A failed gate must leave content/config.ts byte-identical,
+  // so the original is never opened for writing at all — rename is atomic on
+  // the same filesystem, so there is no window where the file is half-written.
+  const tempPath = path.join(path.dirname(config), ".config.ts.tmp");
+  await fsPromises.writeFile(tempPath, next, "utf-8");
+
+  let hasTsconfig = true;
+  try {
+    await fsPromises.access(tsconfig);
+  } catch {
+    hasTsconfig = false;
+  }
+
+  if (hasTsconfig) {
+    // The gate: type-check the project with the candidate config in place.
+    // Swap it in, run tsc, and put the original back if anything fails —
+    // tsc has to see the file at its real path for the check to mean anything.
+    const backup = `${config}.studio-backup`;
+    await fsPromises.rename(config, backup);
+    try {
+      await fsPromises.rename(tempPath, config);
+      await runTsc("pnpm", ["exec", "tsc", "--noEmit"], { cwd: req.projectRoot });
+      await fsPromises.rm(backup, { force: true });
+    } catch (err: unknown) {
+      // Restore the original and report the type errors verbatim.
+      await fsPromises.rm(config, { force: true });
+      await fsPromises.rename(backup, config);
+      await fsPromises.rm(tempPath, { force: true });
+      const detail =
+        err !== null && typeof err === "object" && "stdout" in err
+          ? String((err as { stdout: unknown }).stdout)
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      throw new StudioError(400, `type-check failed, so ${fieldPath} was not saved:\n${detail}`);
+    }
+  } else {
+    // No tsconfig.json (a test sandbox, or a project that does not type-check
+    // at all): skip the gate rather than fail the write. Deliberate and
+    // covered by a test — a silently absent gate would be dishonest.
+    await fsPromises.rename(tempPath, config);
+  }
+
+  const { fields: after } = await readConfigFields(req.projectRoot);
+  return { status: 200, body: { fields: after } };
 // ── Setup readiness ──────────────────────────────────────────────────────────
 
 async function handleReadinessGet(req: StudioRequest): Promise<StudioResponse> {
@@ -885,6 +1009,10 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
       return { status: 405, body: { error: "GET or PUT only" } };
     }
 
+    if (pathname === "/api/config") {
+      if (req.method === "GET") return await handleConfigGet(req);
+      if (req.method === "PUT") return await handleConfigPut(req);
+      return { status: 405, body: { error: "GET or PUT only" } };
     if (pathname === "/api/readiness") {
       if (req.method === "GET") return await handleReadinessGet(req);
       return { status: 405, body: { error: "GET only" } };
