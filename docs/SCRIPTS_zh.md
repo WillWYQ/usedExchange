@@ -31,6 +31,7 @@
 | `pnpm new <category>/<name>` | `tsx scripts/create-item.ts` | `create-item` 的完全别名 |
 | `pnpm create-template [category]` | `tsx scripts/create-template.ts` | 写入带完整注释的 `_template.json`，供卖家复制使用 |
 | `pnpm mark-sold <category>/<item>` | `tsx scripts/mark-sold.ts` | 设置 `status="sold"` + `sold_date=today`，并保留 JSONC 注释 |
+| `pnpm setup-check` | `tsx scripts/setup-check.ts` | 打印就绪清单：还缺什么，以及每一步对应的命令或面板。核心步骤未完成时以 1 退出 |
 | `pnpm fb-export` | `tsx scripts/export-facebook.ts` | 交互式导出 Facebook Marketplace CSV |
 | `pnpm push` | `git add content lib/generated/image-manifest.json && git commit -m 'chore: update listings' && git push` | 提交并推送卖家内容与图片清单 |
 | `pnpm studio [--port <n>]` | `tsx scripts/studio.ts` | 仅本地（127.0.0.1）的浏览器管理界面，用于管理 `content/` —— 编辑物品、管理照片、CDN 同步、git 发布 |

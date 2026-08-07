@@ -787,6 +787,16 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md (lib/ Module Refe
 
 ---
 
+## Phase 23 — First-Run Setup Guide ✅
+
+- [x] `scripts/lib/siteReadiness.ts`: tiered readiness checklist (core: identity, image storage, first item, first item live, git, contact; optional: translations, shipping, Aceternity) with config and env injected so it is unit-testable and can report a broken config instead of crashing
+- [x] `scripts/lib/i18nRequiredKeys.ts`: required UI string keys extracted so `check-config.ts` and the readiness engine share one list
+- [x] `pnpm setup-check`: prints the checklist with a next step per item; exits 1 while core steps remain. Named setup-check because `pnpm doctor` is a pnpm builtin that shadows package.json scripts
+- [x] `GET /api/readiness` + `GettingStarted` panel: opens itself on a not-ready site, collapses when everything core is done, always reachable from the header
+- [x] Docs sync (CURRENT_FUNCTIONALITY, ARCHITECTURE, SCRIPTS, this plan) — both languages
+
+---
+
 ## Risk Register
 
 | Risk | Likelihood | Impact | Mitigation |
