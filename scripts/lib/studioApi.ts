@@ -864,6 +864,8 @@ async function handleConfigPut(req: StudioRequest): Promise<StudioResponse> {
 
   const { fields: after } = await readConfigFields(req.projectRoot);
   return { status: 200, body: { fields: after } };
+}
+
 // ── Setup readiness ──────────────────────────────────────────────────────────
 
 async function handleReadinessGet(req: StudioRequest): Promise<StudioResponse> {

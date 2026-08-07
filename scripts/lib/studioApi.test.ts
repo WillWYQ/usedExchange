@@ -1651,9 +1651,6 @@ const CONFIG_TYPES_FIXTURE = `export interface SiteConfig {
 `;
 
 describe("config routes", () => {
-// ── Readiness route ──────────────────────────────────────────────────────────
-
-describe("readiness route", () => {
   let tempProjects: string[] = [];
 
   afterEach(async () => {
@@ -1795,6 +1792,20 @@ describe("readiness route", () => {
   it("405s POST /api/config", async () => {
     const root = await configProject();
     const res = await req(root, "POST", {});
+    expect(res.status).toBe(405);
+  });
+});
+
+// ── Readiness route ──────────────────────────────────────────────────────────
+
+describe("readiness route", () => {
+  let tempProjects: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+
   async function readinessProject(): Promise<string> {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-readiness-"));
     tempProjects.push(root);
