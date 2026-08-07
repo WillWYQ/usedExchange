@@ -31,6 +31,7 @@
 | `pnpm new <category>/<name>` | `tsx scripts/create-item.ts` | Exact alias of `create-item` |
 | `pnpm create-template [category]` | `tsx scripts/create-template.ts` | Write a fully-commented `_template.json` sellers can copy |
 | `pnpm mark-sold <category>/<item>` | `tsx scripts/mark-sold.ts` | Set `status="sold"` + `sold_date=today`, preserving JSONC comments |
+| `pnpm setup-check` | `tsx scripts/setup-check.ts` | Print the setup checklist: what is still missing and the command or pane for each step. Exits 1 while core steps remain |
 | `pnpm fb-export` | `tsx scripts/export-facebook.ts` | Interactive Facebook Marketplace CSV export |
 | `pnpm push` | `git add content lib/generated/image-manifest.json && git commit -m 'chore: update listings' && git push` | Commit + push seller content and the image manifest |
 | `pnpm studio [--port <n>]` | `tsx scripts/studio.ts` | Local-only (127.0.0.1) browser GUI for managing `content/` — editing, photos, CDN sync, git publish |

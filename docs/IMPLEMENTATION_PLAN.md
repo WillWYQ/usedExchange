@@ -794,6 +794,13 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md (lib/ Module Refe
 - [x] `GET/PUT /api/config` with a `tsc --noEmit` gate — a write that fails type-check is discarded and the file left byte-identical
 - [x] `ConfigPane`: fields grouped as the file groups them, the file's comments as hints, danger warnings on `deploymentMode`/`baseUrl`/`imageStorage.provider`, UI translations collapsed, per-field save
 - [x] Docs sync (CURRENT_FUNCTIONALITY, ARCHITECTURE, this plan) — both languages
+## Phase 24 — First-Run Setup Guide ✅
+
+- [x] `scripts/lib/siteReadiness.ts`: tiered readiness checklist (core: identity, image storage, first item, first item live, git, contact; optional: translations, shipping, Aceternity) with config and env injected so it is unit-testable and can report a broken config instead of crashing
+- [x] `scripts/lib/i18nRequiredKeys.ts`: required UI string keys extracted so `check-config.ts` and the readiness engine share one list
+- [x] `pnpm setup-check`: prints the checklist with a next step per item; exits 1 while core steps remain. Named setup-check because `pnpm doctor` is a pnpm builtin that shadows package.json scripts
+- [x] `GET /api/readiness` + `GettingStarted` panel: opens itself on a not-ready site, collapses when everything core is done, always reachable from the header
+- [x] Docs sync (CURRENT_FUNCTIONALITY, ARCHITECTURE, SCRIPTS, this plan) — both languages
 
 ---
 

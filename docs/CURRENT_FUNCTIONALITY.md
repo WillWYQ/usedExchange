@@ -369,6 +369,7 @@ Eight operations, all from one page:
 | Operation | What it does |
 |---|---|
 | Create | Add a new item: pick a category and type a kebab-case name — the folder and a full template `item.json` are scaffolded (same 36-field template as `pnpm create-item`) |
+| Getting started | A setup checklist for a new site: what is still missing (site identity, CDN credentials, first item, git, contact) and where to fix each one. Opens itself until the core steps are done, then stays one click away in the header |
 | Search & filter | Status tabs (Active hides sold by default), fuzzy search over name, category and tags, a category dropdown, and sorting by name, price or listed date — all instant, computed in the browser |
 | Defaults | Manage site-wide and per-category default field values (sparse `_defaults.json` under `content/items/`); new items merge them over the template, with an opt-out checkbox in the new-item dialog |
 | Site config | Edit `content/config.ts` from the browser — site name, tagline, currency, location, contact, UI slots and the rest. Comments in the file survive every save; each write is type-checked before it lands, and a write that would break the build is discarded |

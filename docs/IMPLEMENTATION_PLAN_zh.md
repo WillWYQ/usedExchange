@@ -793,6 +793,13 @@ DESIGN.md §21 · TECH_REQUIREMENTS.md §29 · ARCHITECTURE.md（lib/ 模块参�
 - [x] `GET/PUT /api/config`，带 `tsc --noEmit` 关卡——类型检查不过的写入直接丢弃，文件逐字节不变
 - [x] `ConfigPane`：按文件本身的分组呈现字段、以文件注释为提示、`deploymentMode`/`baseUrl`/`imageStorage.provider` 标危险警告、UI 翻译折叠、逐字段保存
 - [x] 文档同步（CURRENT_FUNCTIONALITY、ARCHITECTURE、本计划），中英双语
+## Phase 24 — 首次安装引导 ✅
+
+- [x] `scripts/lib/siteReadiness.ts`：分级就绪清单（核心：站点身份、图片存储、第一个商品、商品上架、git、联系方式；可选：翻译、运费、Aceternity），config 与 env 采用注入，因而可单测，并能在 config 损坏时如实报告而非崩溃
+- [x] `scripts/lib/i18nRequiredKeys.ts`：抽出必需的 UI 字符串键，供 `check-config.ts` 与就绪引擎共用同一份列表
+- [x] `pnpm setup-check`：打印清单并为每项给出下一步；核心步骤未完成时以 1 退出。命名为 setup-check 是因为 `pnpm doctor` 是 pnpm 内置命令，会遮蔽 package.json 中的同名脚本
+- [x] `GET /api/readiness` 与 `GettingStarted` 面板：站点未就绪时自动展开，核心全部完成后收起，随时可从顶栏打开
+- [x] 文档同步（CURRENT_FUNCTIONALITY、ARCHITECTURE、SCRIPTS、本计划），中英双语
 
 ---
 

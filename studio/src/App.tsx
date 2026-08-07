@@ -12,6 +12,7 @@ import { BulkToolbar } from "./panes/BulkToolbar";
 import { ConfigPane } from "./panes/ConfigPane";
 import { DefaultsPane } from "./panes/DefaultsPane";
 import { Drawer } from "./panes/Drawer";
+import { GettingStarted } from "./panes/GettingStarted";
 import { FilterBar } from "./panes/FilterBar";
 import { ItemList } from "./panes/ItemList";
 import { NewItemDialog } from "./panes/NewItemDialog";
@@ -29,6 +30,10 @@ export function App() {
   const [showNewItem, setShowNewItem] = useState(false);
   const [showDefaults, setShowDefaults] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
+  // The checklist opens itself once, the first time a site reports as not
+  // ready; after that it is the seller's to open and close from the header.
+  const [showGuide, setShowGuide] = useState(false);
+  const [guideAutoOpened, setGuideAutoOpened] = useState(false);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   // Rows the seller just acted on stay visible even when the change filters
   // them out (marking sold in the Active view). Otherwise the row vanishes
@@ -151,6 +156,8 @@ export function App() {
           />
           <Button onClick={() => setShowConfig(true)}>
             Config
+          <Button onClick={() => setShowGuide((v) => !v)}>
+            Setup
           </Button>
           <Button onClick={() => setShowDefaults(true)}>
             Defaults
@@ -173,6 +180,18 @@ export function App() {
           </p>
         </div>
       )}
+      <GettingStarted
+        open={showGuide}
+        onToggle={() => setShowGuide((v) => !v)}
+        onOpenConfig={() => setShowDefaults(true)}
+        onNewItem={() => setShowNewItem(true)}
+        onReport={(report) => {
+          if (!guideAutoOpened && !report.allTier1Done) {
+            setShowGuide(true);
+            setGuideAutoOpened(true);
+          }
+        }}
+      />
       {items.length > 0 && (
         <FilterBar
           filters={filters}

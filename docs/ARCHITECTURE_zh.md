@@ -513,6 +513,8 @@ isTemplateConfigured(): boolean
 | `itemTemplate.ts` | 带 `// options:` 注释的 36 字段 `item.json` 脚手架；由 `create-item`、`create-template` 和 Studio 新建物品共用（不含 `reserved_for`） |
 | `itemDefaults.ts` | 两级稀疏 `_defaults.json`：解析/校验/合并（`loadMergedDefaults`、`mergeDefaultsIntoTemplate`）；studio 默认值路由与 `create-item` 共用；拒绝 `reserved_for` 和逐 item 字段 |
 | `configEdit.ts` | `content/config.ts` 的 TypeScript AST 读取器与外科式写入器：把配置拍平成字段列表（值、类型、来自 `lib/config/types.ts` 的枚举选项、以文件自身注释为说明），并按字符区间替换单个值，其余字节——包括全部 182 行注释——原样不动 |
+| `siteReadiness.ts` | 判断"新站点还缺什么"的唯一出处：由 config、环境变量与文件系统构建的分级清单（核心路径 + 可选增强）。config 与 env 采用注入，因此可离线单测，并能在 `content/config.ts` 损坏时如实报告而非崩溃。由 `pnpm setup-check` 与 studio 的就绪路由共用 |
+| `i18nRequiredKeys.ts` | 每个 locale 都必须解析的 UI 字符串键，由 `check-config.ts` 与 `siteReadiness.ts` 共用 |
 | `itemEdit.ts` | 基于 `jsonc-parser` 的外科式 JSONC 编辑——注释、格式与 `reserved_for` 在每次写入后均得以保留 |
 | `itemFields.ts` | 浏览器可写字段路径的严格 Zod 白名单；`resolveFieldSchema(path)` 是唯一权威；`reserved_for` 被拒绝 |
 | `markSold.ts` | `applyMarkSold(text, today)`——status → sold + `sold_date`；已售则返回 null |
@@ -574,7 +576,8 @@ Seller Studio 是用于管理 `content/` 的仅本机浏览器 GUI——以 `pnp
 - `studio/src/fieldValues.ts` — `toInput` / `fromInput`，JSON 值 ↔ 输入框字符串的转换，由 `EditForm`、`DefaultsPane` 和 `editForm.ts` 共用（不含 React，这样纯模块不必导入组件）
 - `studio/src/filtering.ts` — 纯客户端筛选流水线（状态 → 分类 → fuse.js 模糊搜索 → 排序），外加给页签计数用的 `countByStatus`；控件由 `studio/src/panes/FilterBar.tsx` 渲染
 - `studio/src/panes/ConfigPane.tsx` — 站点配置面板：按 `content/config.ts` 自身的分组呈现字段、以该文件的注释为提示，通过 `GET/PUT /api/config` 逐字段保存
-
+- `studio/src/panes/GettingStarted.tsx` — 首次上手清单面板，内联渲染在商品表格上方；面板中的动作会打开 Defaults 面板或新建商品弹窗
+  
 ### API 接口（`/api/*`）
 
 `studio/vite.config.ts` 中的 `studioApiPlugin` 中间件将每个请求依次经过 `checkStudioCsrf` → 32 MB 请求体上限 → `handleStudioRequest`（`scripts/lib/studioApi.ts`），返回 JSON、文件流或 SSE 流：

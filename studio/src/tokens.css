@@ -1088,6 +1088,52 @@ tr.failed td {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+/* ── Getting started checklist ───────────────────────────────────────────
+   Inline guidance above the item table, not a dialog: it never traps focus
+   or blocks the table beneath it. Collapses to a single line once the core
+   path is done, and stays reachable from the header button. */
+
+.getting-started {
+  margin: var(--gap) 1rem 0;
+  padding: var(--gap-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.gs-collapsed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 0.6rem var(--gap-lg);
+  color: var(--ink-soft);
+}
+
+.gs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+
+.gs-head h2 {
+  margin: 0;
+  font-size: var(--step-1);
+  font-weight: 600;
+}
+
+.gs-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gs-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gap);
   padding: 0.5rem 0;
   border-bottom: 1px solid var(--border);
 }
@@ -1125,4 +1171,67 @@ tr.failed td {
   /* tsc output is multi-line and its line breaks carry the meaning. */
   white-space: pre-line;
   font-size: 0.75rem;
+.gs-row:last-child {
+  border-bottom: 0;
+}
+
+.gs-status {
+  flex: none;
+  width: 1rem;
+  text-align: center;
+}
+
+.gs-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.gs-title {
+  font-weight: 500;
+}
+
+.gs-detail {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.gs-action {
+  flex: none;
+}
+
+.gs-command {
+  font-family: var(--font-data);
+  font-size: 0.75rem;
+  padding: 0.15rem 0.4rem;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+
+.gs-advanced {
+  margin-top: var(--gap);
+  border-top: 1px solid var(--border);
+  padding-top: var(--gap);
+}
+
+.gs-advanced summary {
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+/* Narrow screens: the action drops beneath the text rather than squeezing
+   it, same breakpoint the filter bar and item table use. */
+@media (max-width: 40rem) {
+  .gs-row {
+    flex-wrap: wrap;
+  }
+
+  .gs-action {
+    flex-basis: 100%;
+    padding-left: calc(1rem + var(--gap));
+  }
 }

@@ -11,35 +11,8 @@
 
 import { siteConfig } from "@/content/config";
 import { PLACEHOLDER_DOMAIN } from "@/lib/utils/templateStatus";
-import type { UIStrings } from "@/lib/config/types";
+import { REQUIRED_UI_STRING_KEYS } from "@/scripts/lib/i18nRequiredKeys";
 
-// All keys that must be present for every enabled locale.
-const REQUIRED_KEYS: (keyof UIStrings)[] = [
-  "home", "about", "browseAll",
-  "recentlyListed", "recentlyViewed", "categoriesHeading",
-  "contactSeller", "itemSold", "preferredPayment",
-  "makeOffer", "yourOffer", "send", "belowMinimumOffer",
-  "share", "copied", "linkCopied",
-  "brand", "model", "age", "color", "dimensions", "weight",
-  "originalSource", "originalPrice",
-  "conditionNew", "conditionLikeNew", "conditionGood", "conditionFair", "conditionForParts",
-  "statusAvailable", "statusPending", "statusReserved", "statusSold", "statusDraft",
-  "filterShowSold", "filterPrice",
-  "sortBy", "sortNewestFirst", "sortPriceLow", "sortPriceHigh", "sortConditionBest",
-  "listed",
-  "soldBanner",
-  "soldArchiveTitle",
-  "conditionGuideTitle",
-  "conditionNewDesc", "conditionLikeNewDesc", "conditionGoodDesc",
-  "conditionFairDesc", "conditionForPartsDesc",
-  "detectingLocation", "fromSeller", "locationDetected",
-  "enterManually", "distanceManualLabel", "distanceUnit", "distanceInputLabel",
-  "apply", "pricesAtPickupRate", "enterDistance", "edit", "clear",
-  "contactForPrice", "contactForPricingShort",
-  "pricingLabelHeader", "pricingDistanceHeader", "pricingPriceHeader",
-  "pickup", "obo", "hidePricingTiers", "viewAllPricingTiers",
-  "menuOpen", "menuClose",
-];
 
 function main(): void {
   let failed = false;
@@ -64,7 +37,7 @@ function main(): void {
 
   for (const locale of availableLocales) {
     const dict = translations[locale] ?? {};
-    const missing = REQUIRED_KEYS.filter(
+    const missing = REQUIRED_UI_STRING_KEYS.filter(
       (k) => !dict[k] && !defaultDict[k],
     );
 
