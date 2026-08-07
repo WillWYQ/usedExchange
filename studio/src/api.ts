@@ -2,9 +2,6 @@
 // must never reach the browser bundle. `import type` is erased at compile time,
 // so this shares the types without shipping the module.
 import type { ConfigField, ConfigFieldKind } from "../../scripts/lib/configEdit";
-import type { BulkStatusResult, ImageEntry, StudioItem } from "../../scripts/lib/studioApi";
-
-export type { BulkStatusResult, ConfigField, ConfigFieldKind, ImageEntry, StudioItem };
 import type {
   ReadinessAction,
   ReadinessItem,
@@ -12,7 +9,7 @@ import type {
 } from "../../scripts/lib/siteReadiness";
 import type { BulkStatusResult, ImageEntry, StudioItem } from "../../scripts/lib/studioApi";
 
-export type { BulkStatusResult, ImageEntry, ReadinessAction, ReadinessItem, ReadinessReport, StudioItem };
+export type { BulkStatusResult, ConfigField, ConfigFieldKind, ImageEntry, ReadinessAction, ReadinessItem, ReadinessReport, StudioItem };
 
 // Every response body is read defensively rather than trusting res.json() to
 // succeed: the CSRF guard and Vite itself can answer a rejected request with
@@ -227,6 +224,8 @@ export async function saveConfigValue(
     throw new Error(errorMessage(body, `saving ${path} failed with ${res.status} ${res.statusText}`));
   }
   return (body?.fields as ConfigField[] | undefined) ?? [];
+}
+
 export async function fetchReadiness(): Promise<ReadinessReport> {
   const res = await fetch("/api/readiness");
   const body = await readJsonBody(res);

@@ -156,6 +156,7 @@ export function App() {
           />
           <Button onClick={() => setShowConfig(true)}>
             Config
+          </Button>
           <Button onClick={() => setShowGuide((v) => !v)}>
             Setup
           </Button>

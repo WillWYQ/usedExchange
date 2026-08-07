@@ -1013,6 +1013,8 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
       if (req.method === "GET") return await handleConfigGet(req);
       if (req.method === "PUT") return await handleConfigPut(req);
       return { status: 405, body: { error: "GET or PUT only" } };
+    }
+
     if (pathname === "/api/readiness") {
       if (req.method === "GET") return await handleReadinessGet(req);
       return { status: 405, body: { error: "GET only" } };
