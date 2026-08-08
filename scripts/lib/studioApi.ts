@@ -100,6 +100,10 @@ export type StudioItem = {
   currency: string;
   lowestTierAmount: number | null;
   imageCount: number;
+  /** First image filename, or null if the item has no images. */
+  coverImage: string | null;
+  /** locale -> display name; defaultLocale is always included. */
+  localizedNames: Record<string, string>;
   /** Seller-authored tags, used by studio's client-side search. */
   tags: string[];
   /**
@@ -147,6 +151,35 @@ async function countImages(dir: string): Promise<number> {
   return (await listImageFiles(dir)).length;
 }
 
+async function firstCoverImage(dir: string): Promise<string | null> {
+  const files = await listImageFiles(dir);
+  const coverIdx = files.findIndex((f) => /^cover\./i.test(f.name));
+  return files[coverIdx]?.name ?? files[0]?.name ?? null;
+}
+
+function localizedNameFor(
+  item: {
+    name: string;
+    nameZh?: string;
+  },
+  locale: string,
+): string | undefined {
+  if (locale === siteConfig.i18n.defaultLocale) return item.name;
+  if (locale === "zh") return item.nameZh;
+  return undefined;
+}
+
+function buildLocalizedNames(item: { name: string; nameZh?: string }): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const locale of siteConfig.i18n.availableLocales) {
+    const value = localizedNameFor(item, locale);
+    if (typeof value === "string" && value.trim() !== "") {
+      result[locale] = value;
+    }
+  }
+  return result;
+}
+
 export async function listStudioItems(projectRoot: string): Promise<StudioItem[]> {
   // loadAllItemsRaw applies no visibility filter, which is exactly what the
   // seller needs to see: drafts, pending, and sold items included. Reading
@@ -163,13 +196,15 @@ export async function listStudioItems(projectRoot: string): Promise<StudioItem[]
   return Promise.all(
     items.map(async (item) => {
       let imageCount = 0;
+      let coverImage: string | null = null;
       try {
         const dir = resolveItemDir(projectRoot, item.categorySlug, item.itemSlug);
         imageCount = await countImages(dir);
+        coverImage = await firstCoverImage(dir);
       } catch {
         // Item's directory cannot be resolved (e.g., invalid slug in folder name).
-        // Still return the item with imageCount: 0 so the seller can see the
-        // malformed folder and fix it, rather than hiding the entire list.
+        // Still return the item with imageCount: 0 and no cover so the seller
+        // can see the malformed folder and fix it, rather than hiding the list.
       }
 
       const amounts = item.price.tiers.map((t) => t.amount);
@@ -182,6 +217,8 @@ export async function listStudioItems(projectRoot: string): Promise<StudioItem[]
         currency: item.price.currency,
         lowestTierAmount: amounts.length > 0 ? Math.min(...amounts) : null,
         imageCount,
+        coverImage,
+        localizedNames: buildLocalizedNames(item as { name: string; nameZh?: string }),
         // Defensive: the loader's schema defaults tags to [], but a hand-edited
         // file that parsed oddly must not hand the client a non-array to iterate.
         tags: Array.isArray(item.tags) ? item.tags : [],
@@ -987,7 +1024,14 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
   try {
     if (pathname === "/api/items") {
       if (req.method === "GET") {
-        return { status: 200, body: { items: await listStudioItems(req.projectRoot) } };
+        return {
+          status: 200,
+          body: {
+            items: await listStudioItems(req.projectRoot),
+            defaultLocale: siteConfig.i18n.defaultLocale,
+            availableLocales: siteConfig.i18n.availableLocales,
+          },
+        };
       }
       if (req.method === "POST") {
         return await handleItemCreate(req);
