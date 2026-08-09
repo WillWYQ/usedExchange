@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { IconCameraOff } from "@tabler/icons-react";
 import type { StudioItem } from "../api";
+import { ItemThumb } from "../components/ItemThumb";
 import { StatusBadge } from "../components/StatusBadge";
 import { coverImageUrl, displayName, formatPrice } from "../itemDisplay";
 
@@ -25,27 +25,6 @@ function StatusCell({ status, pressed }: { status: string; pressed: boolean }) {
     return <span className="stamp stamp-press">sold</span>;
   }
   return <StatusBadge status={status} />;
-}
-
-function Thumb({ item }: { item: StudioItem }) {
-  const [error, setError] = useState(false);
-  const src = coverImageUrl(item);
-  if (src === null || error) {
-    return (
-      <span className="item-thumb-placeholder" aria-hidden>
-        <IconCameraOff size={18} />
-      </span>
-    );
-  }
-  return (
-    <img
-      src={src}
-      alt=""
-      className="item-thumb"
-      loading="lazy"
-      onError={() => setError(true)}
-    />
-  );
 }
 
 export function ItemList({
@@ -110,7 +89,12 @@ export function ItemList({
                 />
               </td>
               <td className="photo-cell">
-                <Thumb item={item} />
+                <ItemThumb
+                  src={coverImageUrl(item)}
+                  imgClassName="item-thumb"
+                  placeholderClassName="item-thumb-placeholder"
+                  iconSize={18}
+                />
               </td>
               <td>
                 <button type="button" className="name-button" onClick={() => onOpen(item.id)}>

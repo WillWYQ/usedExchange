@@ -49,7 +49,7 @@ describe("ItemGrid", () => {
         onOpen={onOpen}
       />,
     );
-    await userEvent.click(screen.getByRole("button", { name: /Lamp/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Lamp" }));
     expect(onOpen).toHaveBeenCalledWith("electronics/lamp");
   });
 

@@ -1,5 +1,5 @@
-import { IconCameraOff } from "@tabler/icons-react";
 import type { StudioItem } from "../api";
+import { ItemThumb } from "../components/ItemThumb";
 import { StatusBadge } from "../components/StatusBadge";
 import { coverImageUrl, formatPrice } from "../itemDisplay";
 
@@ -12,7 +12,6 @@ export type ItemCardProps = {
 };
 
 export function ItemCard({ item, displayName, selected, onToggle, onClick }: ItemCardProps) {
-  const src = coverImageUrl(item);
   return (
     <div className="item-card">
       <label className="item-card-select">
@@ -23,15 +22,19 @@ export function ItemCard({ item, displayName, selected, onToggle, onClick }: Ite
           aria-label={`Select ${displayName}`}
         />
       </label>
-      <button type="button" className="item-card-main" onClick={() => onClick(item.id)}>
+      <button
+        type="button"
+        className="item-card-main"
+        aria-label={displayName}
+        onClick={() => onClick(item.id)}
+      >
         <div className="item-card-image">
-          {src !== null ? (
-            <img src={src} alt="" loading="lazy" />
-          ) : (
-            <span className="item-card-placeholder" aria-hidden>
-              <IconCameraOff size={32} />
-            </span>
-          )}
+          <ItemThumb
+            src={coverImageUrl(item)}
+            imgClassName="item-card-img"
+            placeholderClassName="item-card-placeholder"
+            iconSize={32}
+          />
         </div>
         <div className="item-card-body">
           <div className="item-card-meta">
