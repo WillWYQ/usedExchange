@@ -122,6 +122,14 @@ describe("readConfig — docs and sections", () => {
     expect(byPath("deploymentMode").section).toBe("Deployment");
     expect(byPath("search.enabled").section).toBe("Full-text search");
   });
+
+  it("assigns translation fields to their nearest category divider", () => {
+    const real = fs.readFileSync(path.join(process.cwd(), "content/config.ts"), "utf-8");
+    const realTypes = fs.readFileSync(path.join(process.cwd(), "lib/config/types.ts"), "utf-8");
+    const list = readConfig(real, realTypes);
+    expect(list.find((f) => f.path === "i18n.translations.en.home")?.subsection).toBe("Navigation");
+    expect(list.find((f) => f.path === "i18n.translations.en.contactSeller")?.subsection).toBe("Contact");
+  });
 });
 
 describe("writeConfigValue — surgical, comment-preserving", () => {

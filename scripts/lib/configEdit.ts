@@ -25,6 +25,8 @@ export type ConfigField = {
   doc?: string;
   /** Grouping title from the `// ── Title ─` dividers (or "UI translations"). */
   section: string;
+  /** Optional nested grouping for subsection tabs within a section. */
+  subsection?: string;
   /** Character range [start, end) of the value literal in the source. */
   range: [number, number];
 };
@@ -182,6 +184,16 @@ function sectionFor(sf: ts.SourceFile, prop: ts.PropertyAssignment, path: string
   return best === undefined ? "" : best.title;
 }
 
+function subsectionFor(sf: ts.SourceFile, prop: ts.PropertyAssignment, path: string, dividers: Array<{ line: number; title: string }>): string | undefined {
+  if (!path.startsWith(I18N_TRANSLATIONS_PREFIX)) return undefined;
+  const line = sf.getLineAndCharacterOfPosition(prop.getStart(sf)).line;
+  let best: { line: number; title: string } | undefined;
+  for (const d of dividers) {
+    if (d.line < line && (best === undefined || d.line > best.line)) best = d;
+  }
+  return best?.title;
+}
+
 // ── readConfig ───────────────────────────────────────────────────────────────
 
 export function readConfig(source: string, typesSource: string): ConfigField[] {
@@ -217,9 +229,10 @@ export function readConfig(source: string, typesSource: string): ConfigField[] {
         doc = pendingDoc;
         pendingConsumed = true;
       }
+      const subsection = subsectionFor(sf, member, path, dividers);
 
       const range: [number, number] = [init.getStart(sf), init.getEnd()];
-      const base: Omit<ConfigField, "kind" | "value" | "options"> = { path, doc, section, range };
+      const base: Omit<ConfigField, "kind" | "value" | "options"> = { path, doc, section, subsection, range };
 
       if (ts.isStringLiteral(init)) {
         const options = enumOptions(resolveTypeNode(typeMembers, path.split("."), typesSf));
