@@ -45,6 +45,7 @@ export function App() {
   const [changesToken, setChangesToken] = useState(0);
   const [changeCount, setChangeCount] = useState<number | null>(null);
   const bumpChanges = useCallback(() => setChangesToken((t) => t + 1), []);
+  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
 
   // Studio keeps no local copy of item state: after any write it re-reads the
   // full list, so the table can never drift from what is on disk.
@@ -201,6 +202,8 @@ export function App() {
           resultCount={visibleItems.length}
           onChange={changeFilters}
           busy={busy}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
         />
       )}
       {items.length > 0 && visibleItems.length === 0 && (

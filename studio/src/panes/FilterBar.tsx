@@ -1,3 +1,4 @@
+import { IconLayoutGrid, IconList } from "@tabler/icons-react";
 import type { Filters, SortKey, StatusFilter } from "../filtering";
 
 // Order matters: the working set first, then the individual states in the
@@ -27,6 +28,8 @@ export function FilterBar({
   resultCount,
   onChange,
   busy,
+  viewMode,
+  onViewModeChange,
 }: {
   filters: Filters;
   counts: Record<StatusFilter, number>;
@@ -38,6 +41,8 @@ export function FilterBar({
   // (setSelectedIds/setExemptIds), letting a later action reach rows the
   // seller can no longer see. Disabling input here is the simple guard.
   busy?: boolean;
+  viewMode: "table" | "cards";
+  onViewModeChange: (mode: "table" | "cards") => void;
 }) {
   const searching = filters.query.trim() !== "";
 
@@ -110,6 +115,31 @@ export function FilterBar({
             ))}
           </select>
         </label>
+
+        <div className="view-toggle" role="group" aria-label="View mode">
+          <button
+            type="button"
+            className={
+              viewMode === "table" ? "view-toggle-btn view-toggle-active" : "view-toggle-btn"
+            }
+            aria-pressed={viewMode === "table"}
+            aria-label="Table"
+            onClick={() => onViewModeChange("table")}
+          >
+            <IconList size={18} />
+          </button>
+          <button
+            type="button"
+            className={
+              viewMode === "cards" ? "view-toggle-btn view-toggle-active" : "view-toggle-btn"
+            }
+            aria-pressed={viewMode === "cards"}
+            aria-label="Cards"
+            onClick={() => onViewModeChange("cards")}
+          >
+            <IconLayoutGrid size={18} />
+          </button>
+        </div>
 
         <span className="filter-count" role="status">
           {resultCount} {resultCount === 1 ? "item" : "items"}
