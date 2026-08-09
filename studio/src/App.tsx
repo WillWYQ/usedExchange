@@ -207,6 +207,7 @@ export function App() {
           </Button>
         </div>
       </header>
+      <PublishPane refreshToken={changesToken} onChanges={setChangeCount} />
       {error !== null && (
         <p role="alert" className="alert-error page-error">
           {error}
@@ -275,7 +276,6 @@ export function App() {
           onOpen={setOpenItemId}
         />
       )}
-      <PublishPane refreshToken={changesToken} onChanges={setChangeCount} />
       <BulkToolbar
         count={selectedIds.size}
         busy={busy}
