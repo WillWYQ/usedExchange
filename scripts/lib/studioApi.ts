@@ -21,6 +21,9 @@ import { z } from "zod";
 // hook resolving it at runtime, an undeclared and untested resolution chain.
 import { siteConfig } from "../../content/config";
 import { loadAllItemsRaw } from "../../lib/content/loader";
+import type { Item } from "../../lib/content/types";
+import { pickCoverFilename } from "../../lib/utils/coverImage";
+import { LOCALE_FIELD_MAP } from "../../lib/utils/i18n";
 import { isValidSlug } from "../../lib/utils/slug";
 import { applyFieldEdits, readItemField, readItemForEdit, type FieldEdit } from "./itemEdit";
 import { buildItemTemplate, renderItemTemplateJsonc } from "./itemTemplate";
@@ -143,33 +146,28 @@ export function resolveItemDir(projectRoot: string, category: string, name: stri
   return dir;
 }
 
-async function countImages(dir: string): Promise<number> {
-  // Delegates to listImageFiles rather than re-implementing the same readdir
-  // + filter: the table's IMG column and the image pane's grid must count
-  // the same thing, or the seller sees a number that disagrees with what
-  // they can see and manage — the exact bug this shared function closes.
-  return (await listImageFiles(dir)).length;
-}
-
-async function firstCoverImage(dir: string): Promise<string | null> {
+/** One readdir, shared by the table's Photo/count column and the image pane's
+ * grid: they must agree on both the count and the cover, or the seller sees
+ * numbers and thumbnails that disagree with what they can see and manage. */
+async function readImageState(
+  dir: string,
+): Promise<{ imageCount: number; coverImage: string | null }> {
   const files = await listImageFiles(dir);
-  const coverIdx = files.findIndex((f) => /^cover\./i.test(f.name));
-  return files[coverIdx]?.name ?? files[0]?.name ?? null;
+  return {
+    imageCount: files.length,
+    coverImage: pickCoverFilename(files.map((f) => f.name)),
+  };
 }
 
-function localizedNameFor(
-  item: {
-    name: string;
-    nameZh?: string;
-  },
-  locale: string,
-): string | undefined {
+function localizedNameFor(item: Item, locale: string): string | undefined {
   if (locale === siteConfig.i18n.defaultLocale) return item.name;
-  if (locale === "zh") return item.nameZh;
-  return undefined;
+  const fieldMap = LOCALE_FIELD_MAP[locale];
+  if (fieldMap === undefined) return undefined;
+  const value = item[fieldMap.name];
+  return typeof value === "string" ? value : undefined;
 }
 
-function buildLocalizedNames(item: { name: string; nameZh?: string }): Record<string, string> {
+function buildLocalizedNames(item: Item): Record<string, string> {
   const result: Record<string, string> = {};
   for (const locale of siteConfig.i18n.availableLocales) {
     const value = localizedNameFor(item, locale);
@@ -199,8 +197,7 @@ export async function listStudioItems(projectRoot: string): Promise<StudioItem[]
       let coverImage: string | null = null;
       try {
         const dir = resolveItemDir(projectRoot, item.categorySlug, item.itemSlug);
-        imageCount = await countImages(dir);
-        coverImage = await firstCoverImage(dir);
+        ({ imageCount, coverImage } = await readImageState(dir));
       } catch {
         // Item's directory cannot be resolved (e.g., invalid slug in folder name).
         // Still return the item with imageCount: 0 and no cover so the seller
@@ -218,7 +215,7 @@ export async function listStudioItems(projectRoot: string): Promise<StudioItem[]
         lowestTierAmount: amounts.length > 0 ? Math.min(...amounts) : null,
         imageCount,
         coverImage,
-        localizedNames: buildLocalizedNames(item as { name: string; nameZh?: string }),
+        localizedNames: buildLocalizedNames(item),
         // Defensive: the loader's schema defaults tags to [], but a hand-edited
         // file that parsed oddly must not hand the client a non-array to iterate.
         tags: Array.isArray(item.tags) ? item.tags : [],

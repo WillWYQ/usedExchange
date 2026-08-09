@@ -267,6 +267,39 @@ describe("listStudioItems cover and localized names", () => {
       mockLoadAllItemsRaw.mockRestore();
     }
   });
+
+  it("omits a locale whose translated name is empty or whitespace-only", async () => {
+    const mockLoadAllItemsRaw = vi
+      .spyOn(loaderModule, "loadAllItemsRaw")
+      .mockResolvedValue([mockItem({ nameZh: "   " })]);
+    try {
+      await seedItemWithImages(
+        "electronics/desk-lamp",
+        JSON.stringify({ name: "Desk Lamp", status: "available" }),
+      );
+      const items = await listStudioItems(coverSandbox);
+      expect(items[0]?.localizedNames).toEqual({ en: "Desk Lamp" });
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+    }
+  });
+
+  it("falls through to the default name for a locale with no LOCALE_FIELD_MAP entry", async () => {
+    siteConfig.i18n.availableLocales = ["en", "fr"];
+    const mockLoadAllItemsRaw = vi
+      .spyOn(loaderModule, "loadAllItemsRaw")
+      .mockResolvedValue([mockItem()]);
+    try {
+      await seedItemWithImages(
+        "electronics/desk-lamp",
+        JSON.stringify({ name: "Desk Lamp", status: "available" }),
+      );
+      const items = await listStudioItems(coverSandbox);
+      expect(items[0]?.localizedNames).toEqual({ en: "Desk Lamp" });
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+    }
+  });
 });
 
 const ITEM_JSON = `{
