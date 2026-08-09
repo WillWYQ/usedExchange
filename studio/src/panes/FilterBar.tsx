@@ -30,6 +30,8 @@ export function FilterBar({
   busy,
   viewMode,
   onViewModeChange,
+  allSelected,
+  onToggleAll,
 }: {
   filters: Filters;
   counts: Record<StatusFilter, number>;
@@ -43,6 +45,11 @@ export function FilterBar({
   busy?: boolean;
   viewMode: "table" | "cards";
   onViewModeChange: (mode: "table" | "cards") => void;
+  // Table view already has a select-all checkbox in its own header row;
+  // this one is what makes bulk selection possible in cards view too,
+  // where there's no shared header row to put a checkbox in.
+  allSelected: boolean;
+  onToggleAll: (checked: boolean) => void;
 }) {
   const searching = filters.query.trim() !== "";
 
@@ -115,6 +122,19 @@ export function FilterBar({
             ))}
           </select>
         </label>
+
+        {viewMode === "cards" && (
+          <label className="filter-select-all">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              disabled={busy || resultCount === 0}
+              onChange={(e) => onToggleAll(e.target.checked)}
+              aria-label="Select all items"
+            />
+            <span className="filter-label">Select all</span>
+          </label>
+        )}
 
         <div className="view-toggle" role="group" aria-label="View mode">
           <button

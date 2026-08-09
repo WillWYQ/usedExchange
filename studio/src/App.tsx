@@ -242,6 +242,10 @@ export function App() {
           busy={busy}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
+          allSelected={
+            visibleItems.length > 0 && visibleItems.every((i) => selectedIds.has(i.id))
+          }
+          onToggleAll={toggleAll}
         />
       )}
       {items.length > 0 && visibleItems.length === 0 && (

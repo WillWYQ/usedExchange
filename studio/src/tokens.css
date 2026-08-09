@@ -1094,6 +1094,16 @@ tr.failed td {
   white-space: nowrap;
 }
 
+/* Cards view has no shared header row to hang a select-all checkbox off
+   of (unlike the table, which has one in its own thead) — this fills that
+   gap and only renders while viewMode === "cards". */
+.filter-select-all {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
 .view-toggle {
   display: inline-flex;
   align-items: center;
