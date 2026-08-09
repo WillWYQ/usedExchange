@@ -30,7 +30,11 @@ function errorMessage(body: Record<string, unknown> | null, fallback: string): s
   return typeof body?.error === "string" ? body.error : fallback;
 }
 
-export async function fetchItems(): Promise<StudioItem[]> {
+export async function fetchItems(): Promise<{
+  items: StudioItem[];
+  defaultLocale: string;
+  availableLocales: string[];
+}> {
   const res = await fetch("/api/items");
   const body = await readJsonBody(res);
   if (!res.ok) {
@@ -41,12 +45,20 @@ export async function fetchItems(): Promise<StudioItem[]> {
   // wasn't the shape we expect). Falling back to [] here would render as an
   // empty table with no error, which looks identical to a seller's first
   // run with zero listings and gives no signal that anything is wrong.
-  if (!Array.isArray(body?.items)) {
+  if (
+    !Array.isArray(body?.items) ||
+    typeof body?.defaultLocale !== "string" ||
+    !Array.isArray(body?.availableLocales)
+  ) {
     throw new Error(
       `GET /api/items returned an unreadable response (${res.status} ${res.statusText})`,
     );
   }
-  return body.items as StudioItem[];
+  return {
+    items: body.items as StudioItem[],
+    defaultLocale: body.defaultLocale as string,
+    availableLocales: body.availableLocales as string[],
+  };
 }
 
 export async function bulkStatus(ids: string[], status: string): Promise<BulkStatusResult> {

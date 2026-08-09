@@ -21,6 +21,9 @@ import { z } from "zod";
 // hook resolving it at runtime, an undeclared and untested resolution chain.
 import { siteConfig } from "../../content/config";
 import { loadAllItemsRaw } from "../../lib/content/loader";
+import type { Item } from "../../lib/content/types";
+import { pickCoverFilename } from "../../lib/utils/coverImage";
+import { LOCALE_FIELD_MAP } from "../../lib/utils/i18n";
 import { isValidSlug } from "../../lib/utils/slug";
 import { applyFieldEdits, readItemField, readItemForEdit, type FieldEdit } from "./itemEdit";
 import { buildItemTemplate, renderItemTemplateJsonc } from "./itemTemplate";
@@ -100,6 +103,10 @@ export type StudioItem = {
   currency: string;
   lowestTierAmount: number | null;
   imageCount: number;
+  /** First image filename, or null if the item has no images. */
+  coverImage: string | null;
+  /** locale -> display name; defaultLocale is always included. */
+  localizedNames: Record<string, string>;
   /** Seller-authored tags, used by studio's client-side search. */
   tags: string[];
   /**
@@ -139,12 +146,36 @@ export function resolveItemDir(projectRoot: string, category: string, name: stri
   return dir;
 }
 
-async function countImages(dir: string): Promise<number> {
-  // Delegates to listImageFiles rather than re-implementing the same readdir
-  // + filter: the table's IMG column and the image pane's grid must count
-  // the same thing, or the seller sees a number that disagrees with what
-  // they can see and manage — the exact bug this shared function closes.
-  return (await listImageFiles(dir)).length;
+/** One readdir, shared by the table's Photo/count column and the image pane's
+ * grid: they must agree on both the count and the cover, or the seller sees
+ * numbers and thumbnails that disagree with what they can see and manage. */
+async function readImageState(
+  dir: string,
+): Promise<{ imageCount: number; coverImage: string | null }> {
+  const files = await listImageFiles(dir);
+  return {
+    imageCount: files.length,
+    coverImage: pickCoverFilename(files.map((f) => f.name)),
+  };
+}
+
+function localizedNameFor(item: Item, locale: string): string | undefined {
+  if (locale === siteConfig.i18n.defaultLocale) return item.name;
+  const fieldMap = LOCALE_FIELD_MAP[locale];
+  if (fieldMap === undefined) return undefined;
+  const value = item[fieldMap.name];
+  return typeof value === "string" ? value : undefined;
+}
+
+function buildLocalizedNames(item: Item): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const locale of siteConfig.i18n.availableLocales) {
+    const value = localizedNameFor(item, locale);
+    if (typeof value === "string" && value.trim() !== "") {
+      result[locale] = value;
+    }
+  }
+  return result;
 }
 
 export async function listStudioItems(projectRoot: string): Promise<StudioItem[]> {
@@ -163,13 +194,14 @@ export async function listStudioItems(projectRoot: string): Promise<StudioItem[]
   return Promise.all(
     items.map(async (item) => {
       let imageCount = 0;
+      let coverImage: string | null = null;
       try {
         const dir = resolveItemDir(projectRoot, item.categorySlug, item.itemSlug);
-        imageCount = await countImages(dir);
+        ({ imageCount, coverImage } = await readImageState(dir));
       } catch {
         // Item's directory cannot be resolved (e.g., invalid slug in folder name).
-        // Still return the item with imageCount: 0 so the seller can see the
-        // malformed folder and fix it, rather than hiding the entire list.
+        // Still return the item with imageCount: 0 and no cover so the seller
+        // can see the malformed folder and fix it, rather than hiding the list.
       }
 
       const amounts = item.price.tiers.map((t) => t.amount);
@@ -182,6 +214,8 @@ export async function listStudioItems(projectRoot: string): Promise<StudioItem[]
         currency: item.price.currency,
         lowestTierAmount: amounts.length > 0 ? Math.min(...amounts) : null,
         imageCount,
+        coverImage,
+        localizedNames: buildLocalizedNames(item),
         // Defensive: the loader's schema defaults tags to [], but a hand-edited
         // file that parsed oddly must not hand the client a non-array to iterate.
         tags: Array.isArray(item.tags) ? item.tags : [],
@@ -987,7 +1021,14 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
   try {
     if (pathname === "/api/items") {
       if (req.method === "GET") {
-        return { status: 200, body: { items: await listStudioItems(req.projectRoot) } };
+        return {
+          status: 200,
+          body: {
+            items: await listStudioItems(req.projectRoot),
+            defaultLocale: siteConfig.i18n.defaultLocale,
+            availableLocales: siteConfig.i18n.availableLocales,
+          },
+        };
       }
       if (req.method === "POST") {
         return await handleItemCreate(req);

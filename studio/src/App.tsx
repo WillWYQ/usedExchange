@@ -7,6 +7,7 @@ import {
   type Filters,
 } from "./filtering";
 import { Button } from "./components/Button";
+import { LocaleSwitcher } from "./components/LocaleSwitcher";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { BulkToolbar } from "./panes/BulkToolbar";
 import { ConfigPane } from "./panes/ConfigPane";
@@ -14,10 +15,23 @@ import { DefaultsPane } from "./panes/DefaultsPane";
 import { Drawer } from "./panes/Drawer";
 import { GettingStarted } from "./panes/GettingStarted";
 import { FilterBar } from "./panes/FilterBar";
+import { ItemGrid } from "./panes/ItemGrid";
 import { ItemList } from "./panes/ItemList";
 import { NewItemDialog } from "./panes/NewItemDialog";
 import { PublishPane } from "./panes/PublishPane";
 import { SyncBar } from "./panes/SyncBar";
+
+const VIEW_MODE_KEY = "usedexchange-studio-view-mode";
+const LOCALE_KEY = "usedexchange-studio-locale";
+
+function readViewMode(): "table" | "cards" {
+  const raw = localStorage.getItem(VIEW_MODE_KEY);
+  return raw === "cards" ? "cards" : "table";
+}
+
+function readDisplayLocale(defaultLocale: string): string {
+  return localStorage.getItem(LOCALE_KEY) ?? defaultLocale;
+}
 
 export function App() {
   const [items, setItems] = useState<StudioItem[]>([]);
@@ -45,11 +59,23 @@ export function App() {
   const [changesToken, setChangesToken] = useState(0);
   const [changeCount, setChangeCount] = useState<number | null>(null);
   const bumpChanges = useCallback(() => setChangesToken((t) => t + 1), []);
+  const [viewMode, setViewMode] = useState<"table" | "cards">(() => readViewMode());
+  const [availableLocales, setAvailableLocales] = useState<string[]>(["en"]);
+  const [displayLocale, setDisplayLocale] = useState<string>(() => readDisplayLocale("en"));
 
   // Studio keeps no local copy of item state: after any write it re-reads the
   // full list, so the table can never drift from what is on disk.
+  //
+  // Deliberately has no dependency on displayLocale: if it did, changing the
+  // display language would recreate this callback and re-trigger the mount
+  // effect below, re-reading every item.json from disk on every language
+  // switch. The functional setDisplayLocale update below corrects an
+  // invalidated locale without refresh needing to know the current one.
   const refresh = useCallback(async () => {
-    setItems(await fetchItems());
+    const { items, defaultLocale, availableLocales: al } = await fetchItems();
+    setItems(items);
+    setAvailableLocales(al);
+    setDisplayLocale((prev) => (al.includes(prev) ? prev : defaultLocale));
   }, []);
 
   useEffect(() => {
@@ -57,6 +83,14 @@ export function App() {
       setError(err instanceof Error ? err.message : String(err)),
     );
   }, [refresh]);
+
+  useEffect(() => {
+    localStorage.setItem(VIEW_MODE_KEY, viewMode);
+  }, [viewMode]);
+
+  useEffect(() => {
+    localStorage.setItem(LOCALE_KEY, displayLocale);
+  }, [displayLocale]);
 
   const counts = useMemo(() => countByStatus(items), [items]);
 
@@ -147,6 +181,11 @@ export function App() {
           {changeCount !== null && changeCount > 0 && <> · {changeCount} uncommitted</>}
         </span>
         <div className="head-actions">
+          <LocaleSwitcher
+            availableLocales={availableLocales}
+            value={displayLocale}
+            onChange={setDisplayLocale}
+          />
           <ThemeToggle />
           <SyncBar
             onFinished={() => {
@@ -201,6 +240,12 @@ export function App() {
           resultCount={visibleItems.length}
           onChange={changeFilters}
           busy={busy}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          allSelected={
+            visibleItems.length > 0 && visibleItems.every((i) => selectedIds.has(i.id))
+          }
+          onToggleAll={toggleAll}
         />
       )}
       {items.length > 0 && visibleItems.length === 0 && (
@@ -209,14 +254,24 @@ export function App() {
           <Button onClick={() => changeFilters(DEFAULT_FILTERS)}>Clear filters</Button>
         </div>
       )}
-      {visibleItems.length > 0 && (
+      {visibleItems.length > 0 && viewMode === "table" && (
         <ItemList
           items={visibleItems}
           selectedIds={selectedIds}
           failedIds={failedIds}
           justStampedIds={justStampedIds}
+          displayLocale={displayLocale}
           onToggle={toggle}
           onToggleAll={toggleAll}
+          onOpen={setOpenItemId}
+        />
+      )}
+      {visibleItems.length > 0 && viewMode === "cards" && (
+        <ItemGrid
+          items={visibleItems}
+          selectedIds={selectedIds}
+          displayLocale={displayLocale}
+          onToggle={toggle}
           onOpen={setOpenItemId}
         />
       )}

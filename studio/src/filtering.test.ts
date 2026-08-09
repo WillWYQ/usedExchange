@@ -17,6 +17,8 @@ function item(over: Partial<StudioItem> & { id: string }): StudioItem {
     currency: "USD",
     lowestTierAmount: 10,
     imageCount: 0,
+    coverImage: null,
+    localizedNames: { en: "Item" },
     tags: [],
     listedDate: "2026-01-01",
     ...over,

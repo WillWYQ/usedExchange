@@ -12,9 +12,13 @@ import type { Item } from "@/lib/content/types";
 //   3. An unsupported locale code (e.g. "fr") returns undefined from the map
 //      and cleanly falls through to the default-locale value.
 
-type TranslatableField = "name" | "description";
+export type TranslatableField = "name" | "description";
 
-const LOCALE_FIELD_MAP: Partial<
+// Exported so callers that need only the name field (e.g. Seller Studio's
+// item list, which builds a locale -> display-name map without wanting the
+// full getLocalizedField fallback-to-default semantics) can drive the same
+// mapping instead of re-declaring it — see scripts/lib/studioApi.ts.
+export const LOCALE_FIELD_MAP: Partial<
   Record<string, Record<TranslatableField, keyof Item>>
 > = {
   zh: { name: "nameZh", description: "descriptionZh" },

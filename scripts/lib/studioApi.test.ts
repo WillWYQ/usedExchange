@@ -5,6 +5,7 @@ import os from "os";
 import path from "path";
 import { promisify } from "util";
 import * as loaderModule from "@/lib/content/loader";
+import { siteConfig } from "../../content/config";
 import {
   handleStudioRequest,
   resolveItemDir,
@@ -86,6 +87,23 @@ describe("handleStudioRequest", () => {
     }
   });
 
+  it("returns defaultLocale and availableLocales on GET /api/items", async () => {
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/items",
+      body: Buffer.alloc(0),
+      projectRoot: PROJECT_ROOT,
+    });
+    expect(res.status).toBe(200);
+    const body = asJson(res).body as {
+      items: unknown[];
+      defaultLocale: unknown;
+      availableLocales: unknown;
+    };
+    expect(typeof body.defaultLocale).toBe("string");
+    expect(Array.isArray(body.availableLocales)).toBe(true);
+  });
+
   it("404s an unknown route", async () => {
     const res = await handleStudioRequest({
       method: "GET",
@@ -146,6 +164,138 @@ describe("listStudioItems resilience to invalid slugs", () => {
         expect(items[1].itemSlug).toBe("Old Sofa");
         expect(items[1].imageCount).toBe(0); // Invalid slug item should have 0 images
       }
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+    }
+  });
+});
+
+describe("listStudioItems cover and localized names", () => {
+  let coverSandbox: string;
+  let originalLocales: string[];
+  let originalDefault: string;
+
+  beforeEach(async () => {
+    coverSandbox = await fs.mkdtemp(path.join(os.tmpdir(), "studio-cover-"));
+    originalLocales = siteConfig.i18n.availableLocales.slice();
+    originalDefault = siteConfig.i18n.defaultLocale;
+    siteConfig.i18n.defaultLocale = "en";
+    siteConfig.i18n.availableLocales = ["en", "zh"];
+  });
+
+  afterEach(async () => {
+    siteConfig.i18n.defaultLocale = originalDefault;
+    siteConfig.i18n.availableLocales = originalLocales;
+    await fs.rm(coverSandbox, { recursive: true, force: true });
+  });
+
+  async function seedItemWithImages(
+    id: string,
+    itemJson: string,
+    images: string[] = [],
+  ): Promise<void> {
+    const dir = path.join(coverSandbox, "content", "items", ...id.split("/"));
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, "item.json"), itemJson, "utf-8");
+    for (const name of images) {
+      await fs.writeFile(path.join(dir, name), Buffer.from([0xff, 0xd8, 0xff]));
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function mockItem(over: Record<string, unknown> = {}): any {
+    return {
+      categorySlug: "electronics",
+      itemSlug: "desk-lamp",
+      name: "Desk Lamp",
+      nameZh: "台灯",
+      status: "available",
+      price: { currency: "USD", tiers: [{ amount: 20 }] },
+      tags: [],
+      listedDate: "2026-01-01",
+      ...over,
+    };
+  }
+
+  it("picks cover.* as the cover image when present", async () => {
+    const mockLoadAllItemsRaw = vi
+      .spyOn(loaderModule, "loadAllItemsRaw")
+      .mockResolvedValue([mockItem()]);
+    try {
+      await seedItemWithImages(
+        "electronics/desk-lamp",
+        JSON.stringify({ name: "Desk Lamp", status: "available" }),
+        ["01-side.jpg", "cover.webp", "03-back.jpg"],
+      );
+      const items = await listStudioItems(coverSandbox);
+      expect(items[0]?.coverImage).toBe("cover.webp");
+      expect(items[0]?.localizedNames).toEqual({ en: "Desk Lamp", zh: "台灯" });
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+    }
+  });
+
+  it("falls back to the first image when there is no cover.*", async () => {
+    const mockLoadAllItemsRaw = vi
+      .spyOn(loaderModule, "loadAllItemsRaw")
+      .mockResolvedValue([mockItem()]);
+    try {
+      await seedItemWithImages(
+        "electronics/desk-lamp",
+        JSON.stringify({ name: "Desk Lamp", status: "available" }),
+        ["01-front.jpg"],
+      );
+      const items = await listStudioItems(coverSandbox);
+      expect(items[0]?.coverImage).toBe("01-front.jpg");
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+    }
+  });
+
+  it("returns null coverImage when the item has no images", async () => {
+    const mockLoadAllItemsRaw = vi
+      .spyOn(loaderModule, "loadAllItemsRaw")
+      .mockResolvedValue([mockItem()]);
+    try {
+      await seedItemWithImages(
+        "electronics/desk-lamp",
+        JSON.stringify({ name: "Desk Lamp", status: "available" }),
+      );
+      const items = await listStudioItems(coverSandbox);
+      expect(items[0]?.coverImage).toBeNull();
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+    }
+  });
+
+  it("omits a locale whose translated name is empty or whitespace-only", async () => {
+    const mockLoadAllItemsRaw = vi
+      .spyOn(loaderModule, "loadAllItemsRaw")
+      .mockResolvedValue([mockItem({ nameZh: "   " })]);
+    try {
+      await seedItemWithImages(
+        "electronics/desk-lamp",
+        JSON.stringify({ name: "Desk Lamp", status: "available" }),
+      );
+      const items = await listStudioItems(coverSandbox);
+      expect(items[0]?.localizedNames).toEqual({ en: "Desk Lamp" });
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+    }
+  });
+
+  it("falls through to the default name for a locale with no LOCALE_FIELD_MAP entry", async () => {
+    siteConfig.i18n.availableLocales = ["en", "fr"];
+    const mockLoadAllItemsRaw = vi
+      .spyOn(loaderModule, "loadAllItemsRaw")
+      .mockResolvedValue([mockItem()]);
+    try {
+      await seedItemWithImages(
+        "electronics/desk-lamp",
+        JSON.stringify({ name: "Desk Lamp", status: "available" }),
+      );
+      const items = await listStudioItems(coverSandbox);
+      expect(items[0]?.localizedNames).toEqual({ en: "Desk Lamp" });
     } finally {
       mockLoadAllItemsRaw.mockRestore();
     }
