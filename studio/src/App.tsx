@@ -49,7 +49,7 @@ export function App() {
   // Studio keeps no local copy of item state: after any write it re-reads the
   // full list, so the table can never drift from what is on disk.
   const refresh = useCallback(async () => {
-    setItems(await fetchItems());
+    setItems((await fetchItems()).items);
   }, []);
 
   useEffect(() => {

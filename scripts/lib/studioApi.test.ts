@@ -202,7 +202,8 @@ describe("listStudioItems cover and localized names", () => {
     }
   }
 
-  function mockItem(over: Record<string, unknown> = {}) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function mockItem(over: Record<string, unknown> = {}): any {
     return {
       categorySlug: "electronics",
       itemSlug: "desk-lamp",

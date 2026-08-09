@@ -1,21 +1,7 @@
 import { useEffect, useState } from "react";
 import type { StudioItem } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
-
-function formatPrice(item: StudioItem): string {
-  if (item.lowestTierAmount === null) return "—";
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: item.currency,
-    }).format(item.lowestTierAmount);
-  } catch {
-    // item.currency is seller-authored (content/) and may be empty or not a
-    // valid ISO 4217 code — Intl.NumberFormat throws a RangeError on those.
-    // Fall back to the bare amount rather than crashing the row.
-    return item.lowestTierAmount.toFixed(2);
-  }
-}
+import { formatPrice } from "../itemDisplay";
 
 function StatusCell({ status, pressed }: { status: string; pressed: boolean }) {
   // A just-stamped row plays the SOLD stamp once, then settles into the
