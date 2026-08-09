@@ -272,6 +272,17 @@ input[type="radio"] {
   padding: 0.35rem;
 }
 
+.locale-switcher {
+  height: 2.25rem;
+  padding: 0 0.5rem;
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
 /* ── Item table ─────────────────────────────────────────────────────── */
 
 .item-table {
@@ -328,8 +339,34 @@ tr.failed td {
   color: var(--accent);
 }
 
+.photo-cell {
+  width: 3.25rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.item-thumb {
+  width: 2.5rem;
+  height: 2.5rem;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.item-thumb-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  color: var(--ink-soft);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+
 /* Narrow screens: each row becomes a card (structure unchanged from v1,
-   re-skinned with tokens). */
+   re-skinned with tokens). Column order is now checkbox / photo / name /
+   category / status / price. */
 @media (max-width: 40rem) {
   .item-table thead {
     display: none;
@@ -337,10 +374,10 @@ tr.failed td {
 
   .item-table tr {
     display: grid;
-    grid-template-columns: auto 1fr auto auto;
+    grid-template-columns: auto auto 1fr auto auto;
     column-gap: var(--gap);
     row-gap: 0.15rem;
-    align-items: baseline;
+    align-items: center;
     padding: 0.625rem 0.75rem;
     border-bottom: 1px solid var(--border);
   }
@@ -350,47 +387,44 @@ tr.failed td {
     padding: 0;
   }
 
+  /* checkbox */
   .item-table td:nth-child(1) {
     grid-column: 1;
     grid-row: 1 / 3;
     align-self: start;
   }
 
+  /* photo */
   .item-table td:nth-child(2) {
-    grid-column: 2 / 4;
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+
+  /* name */
+  .item-table td:nth-child(3) {
+    grid-column: 3 / 5;
     grid-row: 1;
     font-weight: 500;
   }
 
-  .item-table td:nth-child(5) {
-    grid-column: 4;
-    grid-row: 1;
-    text-align: right;
-  }
-
-  .item-table td:nth-child(3) {
-    grid-column: 2;
-    grid-row: 2;
-  }
-
+  /* category */
   .item-table td:nth-child(4) {
     grid-column: 3;
     grid-row: 2;
-  }
-
-  .item-table td:nth-child(6) {
-    grid-column: 4;
-    grid-row: 2;
-    text-align: right;
-  }
-
-  .item-table td:nth-child(3),
-  .item-table td:nth-child(6) {
     color: var(--ink-soft);
   }
 
-  .item-table td:nth-child(6)::after {
-    content: " img";
+  /* status */
+  .item-table td:nth-child(5) {
+    grid-column: 4;
+    grid-row: 2;
+  }
+
+  /* price */
+  .item-table td:nth-child(6) {
+    grid-column: 5;
+    grid-row: 1 / 3;
+    text-align: right;
   }
 
   .item-table tr.failed td {
@@ -1060,6 +1094,40 @@ tr.failed td {
   white-space: nowrap;
 }
 
+.view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.15rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.view-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  cursor: pointer;
+}
+
+.view-toggle-btn:hover:not(.view-toggle-active) {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+.view-toggle-active {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
 /* Narrow screens: the controls stack under the tabs, same breakpoint the
    item table uses to fold into cards. */
 @media (max-width: 40rem) {
@@ -1234,4 +1302,112 @@ tr.failed td {
     flex-basis: 100%;
     padding-left: calc(1rem + var(--gap));
   }
+}
+
+/* ── Card grid ───────────────────────────────────────────────────────── */
+
+.item-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--gap-lg);
+  padding: var(--gap) 1rem;
+}
+
+@media (min-width: 40rem) {
+  .item-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 64rem) {
+  .item-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 80rem) {
+  .item-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.item-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.item-card-select {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: 0.5rem 0.75rem 0;
+}
+
+.item-card-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.75rem 0.75rem;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.item-card-image {
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+.item-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.item-card-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--ink-soft);
+}
+
+.item-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.item-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.item-card-category {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.item-card-name {
+  margin: 0;
+  font-size: var(--step-1);
+  font-weight: 500;
+}
+
+.item-card-price {
+  margin: 0;
+  font-family: var(--font-data);
+  color: var(--ink-soft);
 }
