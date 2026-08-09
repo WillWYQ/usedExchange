@@ -244,10 +244,9 @@ export function ConfigPane({ onClose }: { onClose: () => void }) {
   const groups = useMemo(() => (fields === null ? [] : groupBySection(fields)), [fields]);
   const currentSection =
     (selectedSection === null ? groups[0] : groups.find((group) => group.section === selectedSection) ?? groups[0]) ?? null;
-  const currentSectionFields = currentSection?.fields ?? [];
   const subsectionGroups = useMemo(
-    () => (currentSection?.section === I18N_SECTION ? groupBySubsection(currentSectionFields) : []),
-    [currentSection, currentSectionFields],
+    () => (currentSection?.section === I18N_SECTION ? groupBySubsection(currentSection.fields) : []),
+    [currentSection],
   );
   const currentSubsection: { subsection: string; fields: ConfigField[] } | null =
     subsectionGroups.length === 0
