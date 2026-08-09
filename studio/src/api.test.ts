@@ -15,7 +15,7 @@ describe("fetchItems", () => {
           defaultLocale: "en",
           availableLocales: ["en", "zh"],
         }),
-      })) as any,
+      })) as unknown as typeof fetch,
     );
     const result = await fetchItems();
     expect(result.items).toHaveLength(1);
@@ -32,7 +32,7 @@ describe("fetchItems", () => {
         status: 200,
         statusText: "OK",
         json: async () => ({ items: [], availableLocales: ["en"] }),
-      })) as any,
+      })) as unknown as typeof fetch,
     );
     await expect(fetchItems()).rejects.toThrow(/unreadable response/);
     vi.unstubAllGlobals();
@@ -46,7 +46,7 @@ describe("fetchItems", () => {
         status: 200,
         statusText: "OK",
         json: async () => ({ items: [], defaultLocale: "en", availableLocales: "en" }),
-      })) as any,
+      })) as unknown as typeof fetch,
     );
     await expect(fetchItems()).rejects.toThrow(/unreadable response/);
     vi.unstubAllGlobals();
