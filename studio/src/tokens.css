@@ -1156,6 +1156,8 @@ tr.failed td {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+}
+
 /* ── Getting started checklist ───────────────────────────────────────────
    Inline guidance above the item table, not a dialog: it never traps focus
    or blocks the table beneath it. Collapses to a single line once the core
@@ -1239,6 +1241,8 @@ tr.failed td {
   /* tsc output is multi-line and its line breaks carry the meaning. */
   white-space: pre-line;
   font-size: 0.75rem;
+}
+
 .gs-row:last-child {
   border-bottom: 0;
 }
