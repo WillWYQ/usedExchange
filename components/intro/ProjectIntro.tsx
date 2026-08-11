@@ -3,6 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { IconBrandGithub } from "@tabler/icons-react";
+import { IconArrowRight } from "@tabler/icons-react";
 import { FlipWords } from "@/components/ui/flip-words";
 import { useLocale } from "@/components/i18n/useLocale";
 import {
@@ -11,8 +12,7 @@ import {
   type ProjectIntroLocale,
 } from "./projectIntro.dictionary";
 import { UISlotPlayground } from "./UISlotPlayground";
-import { ReleaseTimeline } from "./ReleaseTimeline";
-import type { GitHubRelease } from "@/lib/github/releases";
+import Link from "next/link";
 
 // Decorative effects pull in framer-motion / three.js — load client-side only,
 // same pattern as components/ui-adapters/{BackgroundEffect,ItemCardAdapter}.
@@ -118,7 +118,7 @@ const LOCALE_NAMES: Record<ProjectIntroLocale, string> = {
 // this page ships translations for six major languages regardless — see
 // projectIntro.dictionary.ts. It still seeds its initial pick from the active
 // site locale when that happens to be one of the six.
-export function ProjectIntro({ releases }: { releases: GitHubRelease[] }) {
+export function ProjectIntro() {
   const { locale: siteLocale } = useLocale();
   const [locale, setLocale] = useState<ProjectIntroLocale>(() =>
     (PROJECT_INTRO_LOCALES as readonly string[]).includes(siteLocale)
@@ -294,16 +294,26 @@ export function ProjectIntro({ releases }: { releases: GitHubRelease[] }) {
         />
       </section>
 
-      {/* ── Release history ── */}
-      <ReleaseTimeline
-        releases={releases}
-        copy={{
-          title: copy.releasesTitle,
-          caption: copy.releasesCaption,
-          viewOnGitHub: copy.releasesViewOnGitHub,
-          empty: copy.releasesEmpty,
-        }}
-      />
+      {/* ── Release history link ── */}
+      <section className="mb-16">
+        <Link
+          href="/releases"
+          className="group flex items-center justify-between gap-4 rounded-2xl bg-foreground/[0.03] p-5 ring-1 ring-border transition-colors hover:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background md:p-6"
+        >
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">
+              {copy.releasesLinkTitle}
+            </h2>
+            <p className="mt-1 text-sm text-foreground/55">
+              {copy.releasesLinkCaption}
+            </p>
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-background transition-transform group-hover:translate-x-0.5">
+            {copy.releasesLinkLabel}
+            <IconArrowRight size={14} stroke={2} aria-hidden="true" />
+          </span>
+        </Link>
+      </section>
 
       {/* ── Get started ── */}
       <section>

@@ -9,7 +9,6 @@ import { RecentlyListedSection } from "@/components/home/RecentlyListedSection";
 import { RecentlyViewed } from "@/components/common/RecentlyViewed";
 import { ProjectIntro } from "@/components/intro/ProjectIntro";
 import { getTranslations } from "@/lib/i18n/getTranslations";
-import { fetchGitHubReleases } from "@/lib/github/releases";
 
 // Memoised per-request so generateMetadata and HomePage share one parse pass.
 const getHomePageData = cache(loadHomePageData);
@@ -43,8 +42,7 @@ export default async function HomePage() {
   // Show the project introduction until the seller points baseUrl at a real
   // domain — see lib/utils/templateStatus.ts. Afterwards it lives at /about.
   if (!isTemplateConfigured()) {
-    const releases = await fetchGitHubReleases();
-    return <ProjectIntro releases={releases} />;
+    return <ProjectIntro />;
   }
 
   const { categories, recentItems } = await getHomePageData();

@@ -36,6 +36,9 @@ export type ProjectIntroCopy = {
   releasesCaption: string;
   releasesViewOnGitHub: string;
   releasesEmpty: string;
+  releasesLinkTitle: string;
+  releasesLinkCaption: string;
+  releasesLinkLabel: string;
 };
 
 const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
@@ -134,6 +137,9 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     releasesCaption: "A timeline of UsedExchange updates from GitHub.",
     releasesViewOnGitHub: "View release on GitHub",
     releasesEmpty: "Release history is temporarily unavailable.",
+    releasesLinkTitle: "Release history",
+    releasesLinkCaption: "See what's new in UsedExchange.",
+    releasesLinkLabel: "View all releases",
   },
   zh: {
     eyebrow: "开源二手商店模板",
@@ -229,6 +235,9 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     releasesCaption: "来自 GitHub 的 UsedExchange 更新时间线。",
     releasesViewOnGitHub: "在 GitHub 上查看发布",
     releasesEmpty: "发布历史暂时无法加载。",
+    releasesLinkTitle: "发布历史",
+    releasesLinkCaption: "看看 UsedExchange 最近更新了哪些内容。",
+    releasesLinkLabel: "查看全部发布",
   },
   fr: {
     eyebrow: "Modèle de boutique open source",
@@ -326,6 +335,9 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     releasesCaption: "La frise chronologique des mises à jour UsedExchange sur GitHub.",
     releasesViewOnGitHub: "Voir la version sur GitHub",
     releasesEmpty: "L'historique des versions est temporairement indisponible.",
+    releasesLinkTitle: "Historique des versions",
+    releasesLinkCaption: "Découvrez les dernières nouveautés de UsedExchange.",
+    releasesLinkLabel: "Voir toutes les versions",
   },
   es: {
     eyebrow: "Plantilla de tienda de código abierto",
@@ -423,6 +435,9 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     releasesCaption: "Cronología de actualizaciones de UsedExchange en GitHub.",
     releasesViewOnGitHub: "Ver versión en GitHub",
     releasesEmpty: "El historial de versiones no está disponible temporalmente.",
+    releasesLinkTitle: "Historial de versiones",
+    releasesLinkCaption: "Descubre las novedades de UsedExchange.",
+    releasesLinkLabel: "Ver todas las versiones",
   },
   ja: {
     eyebrow: "オープンソースのストアテンプレート",
@@ -520,6 +535,9 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     releasesCaption: "GitHub 上の UsedExchange のアップデートタイムライン。",
     releasesViewOnGitHub: "GitHub でリリースを見る",
     releasesEmpty: "リリース履歴は一時的に読み込めません。",
+    releasesLinkTitle: "リリース履歴",
+    releasesLinkCaption: "UsedExchange の最新アップデートを確認する。",
+    releasesLinkLabel: "すべてのリリースを見る",
   },
   ko: {
     eyebrow: "오픈소스 스토어 템플릿",
@@ -617,6 +635,9 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
     releasesCaption: "GitHub의 UsedExchange 업데이트 타임라인.",
     releasesViewOnGitHub: "GitHub에서 릴리스 보기",
     releasesEmpty: "릴리스 기록을 일시적으로 불러올 수 없습니다.",
+    releasesLinkTitle: "릴리스 기록",
+    releasesLinkCaption: "UsedExchange의 최신 업데이트를 확인하세요.",
+    releasesLinkLabel: "모든 릴리스 보기",
   },
 };
 
