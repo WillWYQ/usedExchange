@@ -32,6 +32,10 @@ export type ProjectIntroCopy = {
   workflowCaption: string;
   getStartedTitle: string;
   getStartedSteps: string[];
+  releasesTitle: string;
+  releasesCaption: string;
+  releasesViewOnGitHub: string;
+  releasesEmpty: string;
 };
 
 const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
@@ -126,6 +130,10 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       "Add your first listings to content/items/ — generate them with /update-items from photos, or write item.json by hand — then run pnpm upload-images and push to the release branch.",
       "Later, pull template updates from the source repo using docs/UPDATE_GUIDE.md without losing anything in your content/ folder.",
     ],
+    releasesTitle: "Release history",
+    releasesCaption: "A timeline of UsedExchange updates from GitHub.",
+    releasesViewOnGitHub: "View release on GitHub",
+    releasesEmpty: "Release history is temporarily unavailable.",
   },
   zh: {
     eyebrow: "开源二手商店模板",
@@ -217,6 +225,10 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       "把第一批商品添加到 content/items/——可用 /update-items 从照片生成，也可手动编写 item.json——然后运行 pnpm upload-images 并推送到 release 分支。",
       "之后可参照 docs/UPDATE_GUIDE.md 从源仓库拉取模板更新，content/ 文件夹中的内容不会受影响。",
     ],
+    releasesTitle: "发布历史",
+    releasesCaption: "来自 GitHub 的 UsedExchange 更新时间线。",
+    releasesViewOnGitHub: "在 GitHub 上查看发布",
+    releasesEmpty: "发布历史暂时无法加载。",
   },
   fr: {
     eyebrow: "Modèle de boutique open source",
@@ -310,6 +322,10 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       "Ajoutez vos premières annonces dans content/items/ — générez-les avec /update-items à partir de photos, ou écrivez item.json à la main — puis exécutez pnpm upload-images et poussez vers la branche release.",
       "Plus tard, récupérez les mises à jour du modèle depuis le dépôt source en suivant docs/UPDATE_GUIDE.md, sans rien perdre de votre dossier content/.",
     ],
+    releasesTitle: "Historique des versions",
+    releasesCaption: "La frise chronologique des mises à jour UsedExchange sur GitHub.",
+    releasesViewOnGitHub: "Voir la version sur GitHub",
+    releasesEmpty: "L'historique des versions est temporairement indisponible.",
   },
   es: {
     eyebrow: "Plantilla de tienda de código abierto",
@@ -403,6 +419,10 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       "Añade tus primeros artículos en content/items/ — genéralos con /update-items a partir de fotos, o escribe item.json a mano — luego ejecuta pnpm upload-images y haz push a la rama release.",
       "Más adelante, obtén las actualizaciones de la plantilla desde el repositorio original siguiendo docs/UPDATE_GUIDE.md, sin perder nada de tu carpeta content/.",
     ],
+    releasesTitle: "Historial de versiones",
+    releasesCaption: "Cronología de actualizaciones de UsedExchange en GitHub.",
+    releasesViewOnGitHub: "Ver versión en GitHub",
+    releasesEmpty: "El historial de versiones no está disponible temporalmente.",
   },
   ja: {
     eyebrow: "オープンソースのストアテンプレート",
@@ -496,6 +516,10 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       "最初の出品を content/items/ に追加します——/update-items で写真から生成するか、item.json を手動で作成し——その後 pnpm upload-images を実行して release ブランチに push します。",
       "その後は docs/UPDATE_GUIDE.md に従って元リポジトリからテンプレートの更新を取り込めます。content/ フォルダの内容は失われません。",
     ],
+    releasesTitle: "リリース履歴",
+    releasesCaption: "GitHub 上の UsedExchange のアップデートタイムライン。",
+    releasesViewOnGitHub: "GitHub でリリースを見る",
+    releasesEmpty: "リリース履歴は一時的に読み込めません。",
   },
   ko: {
     eyebrow: "오픈소스 스토어 템플릿",
@@ -589,6 +613,10 @@ const PROJECT_INTRO_DICTIONARY: Record<ProjectIntroLocale, ProjectIntroCopy> = {
       "첫 상품들을 content/items/에 추가하세요 — /update-items로 사진에서 생성하거나 item.json을 직접 작성한 뒤 — pnpm upload-images를 실행하고 release 브랜치로 push하세요.",
       "이후에는 docs/UPDATE_GUIDE.md를 참고하여 원본 저장소에서 템플릿 업데이트를 받아올 수 있습니다. content/ 폴더의 내용은 그대로 유지됩니다.",
     ],
+    releasesTitle: "릴리스 기록",
+    releasesCaption: "GitHub의 UsedExchange 업데이트 타임라인.",
+    releasesViewOnGitHub: "GitHub에서 릴리스 보기",
+    releasesEmpty: "릴리스 기록을 일시적으로 불러올 수 없습니다.",
   },
 };
 

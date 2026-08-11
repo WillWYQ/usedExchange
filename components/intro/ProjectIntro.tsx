@@ -11,6 +11,8 @@ import {
   type ProjectIntroLocale,
 } from "./projectIntro.dictionary";
 import { UISlotPlayground } from "./UISlotPlayground";
+import { ReleaseTimeline } from "./ReleaseTimeline";
+import type { GitHubRelease } from "@/lib/github/releases";
 
 // Decorative effects pull in framer-motion / three.js — load client-side only,
 // same pattern as components/ui-adapters/{BackgroundEffect,ItemCardAdapter}.
@@ -116,7 +118,7 @@ const LOCALE_NAMES: Record<ProjectIntroLocale, string> = {
 // this page ships translations for six major languages regardless — see
 // projectIntro.dictionary.ts. It still seeds its initial pick from the active
 // site locale when that happens to be one of the six.
-export function ProjectIntro() {
+export function ProjectIntro({ releases }: { releases: GitHubRelease[] }) {
   const { locale: siteLocale } = useLocale();
   const [locale, setLocale] = useState<ProjectIntroLocale>(() =>
     (PROJECT_INTRO_LOCALES as readonly string[]).includes(siteLocale)
@@ -292,7 +294,16 @@ export function ProjectIntro() {
         />
       </section>
 
-
+      {/* ── Release history ── */}
+      <ReleaseTimeline
+        releases={releases}
+        copy={{
+          title: copy.releasesTitle,
+          caption: copy.releasesCaption,
+          viewOnGitHub: copy.releasesViewOnGitHub,
+          empty: copy.releasesEmpty,
+        }}
+      />
 
       {/* ── Get started ── */}
       <section>
