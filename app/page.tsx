@@ -42,8 +42,8 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function HomePage() {
   // Show the project introduction until the seller points baseUrl at a real
   // domain — see lib/utils/templateStatus.ts. Afterwards it lives at /about.
-  const releases = await fetchGitHubReleases();
   if (!isTemplateConfigured()) {
+    const releases = await fetchGitHubReleases();
     return <ProjectIntro releases={releases} />;
   }
 
