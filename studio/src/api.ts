@@ -7,9 +7,9 @@ import type {
   ReadinessItem,
   ReadinessReport,
 } from "../../scripts/lib/siteReadiness";
-import type { BulkStatusResult, ImageEntry, StudioItem } from "../../scripts/lib/studioApi";
+import type { BulkStatusResult, BulkTiersResult, ImageEntry, StudioItem } from "../../scripts/lib/studioApi";
 
-export type { BulkStatusResult, ConfigField, ConfigFieldKind, ImageEntry, ReadinessAction, ReadinessItem, ReadinessReport, StudioItem };
+export type { BulkStatusResult, BulkTiersResult, ConfigField, ConfigFieldKind, ImageEntry, ReadinessAction, ReadinessItem, ReadinessReport, StudioItem };
 
 // Every response body is read defensively rather than trusting res.json() to
 // succeed: the CSRF guard and Vite itself can answer a rejected request with
@@ -75,6 +75,22 @@ export async function bulkStatus(ids: string[], status: string): Promise<BulkSta
     throw new Error(`bulk status returned an unreadable response (${res.status} ${res.statusText})`);
   }
   return body as unknown as BulkStatusResult;
+}
+
+export async function applyDefaultTiers(ids: string[]): Promise<BulkTiersResult> {
+  const res = await fetch("/api/items/bulk-apply-tiers", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `bulk apply tiers failed with ${res.status} ${res.statusText}`));
+  }
+  if (body === null) {
+    throw new Error(`bulk apply tiers returned an unreadable response (${res.status} ${res.statusText})`);
+  }
+  return body as unknown as BulkTiersResult;
 }
 
 export async function fetchImages(id: string): Promise<ImageEntry[]> {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { bulkStatus, fetchItems, type StudioItem } from "./api";
+import { applyDefaultTiers, bulkStatus, fetchItems, type StudioItem } from "./api";
 import {
   applyFiltersWithExemptions,
   countByStatus,
@@ -172,6 +172,37 @@ export function App() {
     }
   }
 
+  async function applyTiers() {
+    const ids = [...selectedIds];
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await applyDefaultTiers(ids);
+      const failed = new Set(result.failed.map((f) => f.id));
+      setFailedIds(failed);
+      // Failed rows stay selected so the seller can retry them directly.
+      setSelectedIds(failed);
+      await refresh();
+      bumpChanges();
+      if (result.failed.length > 0) {
+        setError(
+          `${result.failed.length} of ${ids.length} items could not be updated: ` +
+            result.failed.map((f) => `${f.id} (${f.error})`).join(", "),
+        );
+      }
+      if (result.failed.length === 0 && result.skipped > 0) {
+        setError(
+          `${result.ok} updated, ${result.skipped} skipped (no default tiers for their ` +
+            `category, or already matching).`,
+        );
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <header className="studio-head">
@@ -280,6 +311,7 @@ export function App() {
         count={selectedIds.size}
         busy={busy}
         onApply={(status) => void apply(status)}
+        onApplyTiers={() => void applyTiers()}
         onClear={() => setSelectedIds(new Set())}
       />
       {openItemId !== null && (() => {

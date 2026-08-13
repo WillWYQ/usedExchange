@@ -13,11 +13,13 @@ export function BulkToolbar({
   count,
   busy,
   onApply,
+  onApplyTiers,
   onClear,
 }: {
   count: number;
   busy: boolean;
   onApply: (status: string) => void;
+  onApplyTiers: () => void;
   onClear: () => void;
 }) {
   if (count === 0) return null;
@@ -30,6 +32,9 @@ export function BulkToolbar({
           {action.label}
         </Button>
       ))}
+      <Button disabled={busy} onClick={onApplyTiers}>
+        Apply default tiers
+      </Button>
       <Button variant="ghost" onClick={onClear} disabled={busy}>
         Clear selection
       </Button>
