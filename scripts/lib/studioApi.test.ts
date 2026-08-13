@@ -478,6 +478,161 @@ describe("bulk-status counts a no-op as skipped, not ok", () => {
   });
 });
 
+// ── POST /api/items/bulk-apply-tiers ────────────────────────────────────────
+
+let tiersSandbox: string;
+
+async function seedTiersItem(id: string, json: string): Promise<void> {
+  const dir = path.join(tiersSandbox, "content", "items", ...id.split("/"));
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, "item.json"), json);
+}
+
+async function seedTiersDefaults(scope: string, json: string): Promise<void> {
+  const filePath =
+    scope === "site"
+      ? path.join(tiersSandbox, "content", "items", "_defaults.json")
+      : path.join(tiersSandbox, "content", "items", scope, "_defaults.json");
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, json);
+}
+
+async function readTiersItem(id: string): Promise<string> {
+  return fs.readFile(
+    path.join(tiersSandbox, "content", "items", ...id.split("/"), "item.json"),
+    "utf-8",
+  );
+}
+
+function bulkApplyTiers(ids: string[]) {
+  return handleStudioRequest({
+    method: "POST",
+    url: "/api/items/bulk-apply-tiers",
+    body: Buffer.from(JSON.stringify({ ids })),
+    projectRoot: tiersSandbox,
+  });
+}
+
+describe("POST /api/items/bulk-apply-tiers", () => {
+  beforeEach(async () => {
+    tiersSandbox = await fs.mkdtemp(path.join(os.tmpdir(), "studio-tiers-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tiersSandbox, { recursive: true, force: true });
+  });
+
+  const ITEM = `{
+  "name": "Desk lamp",
+  // options: available | pending | reserved | sold | draft
+  "status": "available",
+  "reserved_for": "alice@example.com"
+}
+`;
+
+  const SITE_DEFAULTS = `{
+  "price": {
+    "tiers": [
+      { "label": "Pickup", "miles_max": 5, "amount": 40 },
+      { "label": "Shipping", "miles_min": 5, "amount": 55 }
+    ]
+  }
+}
+`;
+
+  it("writes the site default tiers into selected items", async () => {
+    await seedTiersItem("electronics/desk-lamp", ITEM);
+    await seedTiersDefaults("site", SITE_DEFAULTS);
+
+    const res = await bulkApplyTiers(["electronics/desk-lamp"]);
+
+    expect(res.status).toBe(200);
+    expect(asJson(res).body).toMatchObject({ ok: 1, skipped: 0, failed: [] });
+    const text = await readTiersItem("electronics/desk-lamp");
+    expect(text).toContain('"tiers"');
+    expect(text).toContain('"label": "Pickup"');
+    expect(text).toContain('"amount": 55');
+  });
+
+  it("preserves comments and reserved_for", async () => {
+    await seedTiersItem("electronics/desk-lamp", ITEM);
+    await seedTiersDefaults("site", SITE_DEFAULTS);
+    await bulkApplyTiers(["electronics/desk-lamp"]);
+    const text = await readTiersItem("electronics/desk-lamp");
+    expect(text).toContain("// options: available | pending | reserved | sold | draft");
+    expect(text).toContain('"reserved_for": "alice@example.com"');
+  });
+
+  it("lets category defaults override site defaults", async () => {
+    await seedTiersItem("books/cs61a", ITEM);
+    await seedTiersDefaults("site", SITE_DEFAULTS);
+    await seedTiersDefaults(
+      "books",
+      `{
+  "price": {
+    "tiers": [{ "label": "Campus pickup", "miles_max": 2, "amount": 10 }]
+  }
+}
+`,
+    );
+
+    await bulkApplyTiers(["books/cs61a"]);
+
+    const text = await readTiersItem("books/cs61a");
+    expect(text).toContain('"label": "Campus pickup"');
+    expect(text).not.toContain('"label": "Pickup"');
+  });
+
+  it("skips items whose merged defaults have no tiers", async () => {
+    await seedTiersItem("electronics/desk-lamp", ITEM);
+
+    const res = await bulkApplyTiers(["electronics/desk-lamp"]);
+
+    expect(asJson(res).body).toMatchObject({ ok: 0, skipped: 1, failed: [] });
+    expect(await readTiersItem("electronics/desk-lamp")).toBe(ITEM);
+  });
+
+  it("skips items whose tiers already match (idempotent, file untouched)", async () => {
+    await seedTiersDefaults("site", SITE_DEFAULTS);
+    await seedTiersItem(
+      "electronics/desk-lamp",
+      `{
+  "name": "Desk lamp",
+  "status": "available",
+  "price": {
+    "tiers": [
+      { "label": "Pickup", "miles_max": 5, "amount": 40 },
+      { "label": "Shipping", "miles_min": 5, "amount": 55 }
+    ]
+  }
+}
+`,
+    );
+    const before = await readTiersItem("electronics/desk-lamp");
+
+    const res = await bulkApplyTiers(["electronics/desk-lamp"]);
+
+    expect(asJson(res).body).toMatchObject({ ok: 0, skipped: 1, failed: [] });
+    expect(await readTiersItem("electronics/desk-lamp")).toBe(before);
+  });
+
+  it("reports per-item failures without discarding successes", async () => {
+    await seedTiersItem("electronics/desk-lamp", ITEM);
+    await seedTiersDefaults("site", SITE_DEFAULTS);
+
+    const res = await bulkApplyTiers(["electronics/desk-lamp", "books/missing"]);
+
+    const body = asJson(res).body as { ok: number; failed: Array<{ id: string }> };
+    expect(body.ok).toBe(1);
+    expect(body.failed.map((f) => f.id)).toEqual(["books/missing"]);
+  });
+
+  it("rejects an empty id list", async () => {
+    const res = await bulkApplyTiers([]);
+    expect(res.status).toBe(400);
+  });
+});
+
 const PNG_BYTES = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 
 async function seedImage(id: string, filename: string): Promise<void> {

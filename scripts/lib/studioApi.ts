@@ -321,6 +321,99 @@ async function handleBulkStatus(req: StudioRequest): Promise<StudioResponse> {
   return { status: 200, body: result };
 }
 
+// ── Bulk apply default tiers ─────────────────────────────────────────────────
+// Writes each selected item's price.tiers from its OWN category's merged
+// defaults (site ← category) — the same tiers a new item of that category
+// would receive. Items with no default tiers, or tiers already matching, are
+// skipped; failures are per-item and never abort the batch (same philosophy
+// as handleBulkStatus).
+
+const bulkApplyTiersBodySchema = z.object({
+  ids: z.array(z.string()).min(1),
+});
+
+export type BulkTiersResult = {
+  ok: number;
+  /** No default tiers for this item's merged scope, or tiers already match. */
+  skipped: number;
+  failed: Array<{ id: string; error: string }>;
+};
+
+// Tiers compare equal when their four fields match, whatever key order the
+// on-disk JSON uses. Missing optional bounds read as null on both sides.
+function canonicalTier(tier: Record<string, unknown>): string {
+  return JSON.stringify([
+    tier.label ?? "",
+    tier.miles_min ?? null,
+    tier.miles_max ?? null,
+    tier.amount ?? 0,
+  ]);
+}
+
+function sameTiers(current: unknown, next: unknown[]): boolean {
+  if (!Array.isArray(current) || current.length !== next.length) return false;
+  return current.every((tier, i) => {
+    const other = next[i];
+    return (
+      isPlainRecord(tier) &&
+      isPlainRecord(other) &&
+      canonicalTier(tier) === canonicalTier(other)
+    );
+  });
+}
+
+async function applyDefaultTiersToItem(
+  projectRoot: string,
+  id: string,
+  itemsRoot: string,
+): Promise<"written" | "skipped"> {
+  const slashIdx = id.indexOf("/");
+  if (slashIdx === -1) {
+    throw new StudioError(400, `id must be "<category>/<item>": got "${id}"`);
+  }
+  const category = id.slice(0, slashIdx);
+  const dir = resolveItemDir(projectRoot, category, id.slice(slashIdx + 1));
+  const jsonPath = path.join(dir, "item.json");
+  const text = await fsPromises.readFile(jsonPath, "utf-8");
+
+  // loadMergedDefaults validates both _defaults.json layers as it reads; a
+  // hand-broken file surfaces here as a per-item failure naming the file.
+  const merged = await loadMergedDefaults(itemsRoot, category);
+  const price = merged["price"];
+  const tiers = isPlainRecord(price) ? price["tiers"] : undefined;
+  if (!Array.isArray(tiers) || tiers.length === 0) return "skipped";
+
+  const currentPrice = readItemField(text, "price") as { tiers?: unknown } | undefined;
+  if (sameTiers(currentPrice?.tiers, tiers)) return "skipped";
+
+  // The edit form's own write path: field allowlist + strict tier schema are
+  // re-checked here, and a rejected edit leaves the file untouched.
+  const next = applyFieldEdits(text, [{ path: ["price", "tiers"], value: tiers }]);
+  await fsPromises.writeFile(jsonPath, next, "utf-8");
+  return "written";
+}
+
+async function handleBulkApplyTiers(req: StudioRequest): Promise<StudioResponse> {
+  const { ids } = parseJsonBody(req.body, bulkApplyTiersBodySchema);
+  const itemsRoot = path.join(req.projectRoot, "content", "items");
+  const result: BulkTiersResult = { ok: 0, skipped: 0, failed: [] };
+
+  for (const id of ids) {
+    try {
+      const outcome = await applyDefaultTiersToItem(req.projectRoot, id, itemsRoot);
+      if (outcome === "skipped") result.skipped++;
+      else result.ok++;
+    } catch (err: unknown) {
+      result.failed.push({
+        id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return { status: 200, body: result };
+}
+
 // /api/items/<category>/<item>/images[/<filename>]
 const IMAGE_ROUTE_RE = /^\/api\/items\/([^/]+)\/([^/]+)\/images(?:\/([^/]+))?$/;
 
@@ -1044,6 +1137,14 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
       // rejects after the block has exited, so StudioError would escape the
       // catch below instead of becoming its 400/404 response.
       return await handleBulkStatus(req);
+    }
+
+    if (pathname === "/api/items/bulk-apply-tiers") {
+      if (req.method !== "POST") {
+        return { status: 405, body: { error: "POST only" } };
+      }
+      // `await`, not a bare return — same reason as bulk-status above.
+      return await handleBulkApplyTiers(req);
     }
 
     if (pathname === "/api/defaults") {
