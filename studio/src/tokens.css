@@ -1000,6 +1000,10 @@ tr.failed td {
   opacity: 0.7;
 }
 
+.defaults-tier-block {
+  flex: 1;
+}
+
 /* ── Motion preferences ─────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {

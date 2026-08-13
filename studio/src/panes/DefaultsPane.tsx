@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchDefaults, saveDefaults } from "../api";
 import { Button } from "../components/Button";
+import { TierEditor, isTierArray, type Tier } from "../components/TierEditor";
 import { useDialogBehavior } from "../components/useDialogBehavior";
 import { FIELD_GROUPS, pathKey, readAtPath, type FieldGroup, type GroupId } from "../fields";
 import { fromInput, toInput } from "../fieldValues";
@@ -88,6 +89,18 @@ export function DefaultsPane({
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // Tiers are one array, not one leaf per row, so they sit outside the
+  // per-field draft: a single checkbox gates the whole block, and the shared
+  // TierEditor stages the rows. The collector lives in a ref for the same
+  // reason as EditForm's: writing it must not re-render (registration would
+  // loop against TierEditor's effect).
+  const [tiersEnabled, setTiersEnabled] = useState(false);
+  const [tiersInitial, setTiersInitial] = useState<Tier[]>([]);
+  const tiersCollector = useRef<() => Tier[] | null>(() => null);
+  const registerTiersCollector = useCallback((collect: () => Tier[] | null) => {
+    tiersCollector.current = collect;
+  }, []);
+
   const dialogRef = useDialogBehavior(onClose);
 
   const load = useCallback(async (nextScope: string) => {
@@ -104,6 +117,9 @@ export function DefaultsPane({
       }
     }
     setDraft(nextDraft);
+    const tiersRaw = readAtPath(current, ["price", "tiers"]);
+    setTiersEnabled(Array.isArray(tiersRaw));
+    setTiersInitial(isTierArray(tiersRaw) ? tiersRaw : []);
     setLoaded(true);
   }, []);
 
@@ -133,6 +149,16 @@ export function DefaultsPane({
           continue;
         }
         writeAtPath(out, field.path, parsed.value);
+      }
+    }
+    if (tiersEnabled) {
+      // Unchanged rows come back as null from the collector; fall back to
+      // what was loaded so an enabled-but-untouched block still saves.
+      const rows = tiersCollector.current() ?? tiersInitial;
+      if (rows.length === 0) {
+        problems.push("Price tiers: add at least one tier or switch the field off");
+      } else {
+        writeAtPath(out, ["price", "tiers"], rows);
       }
     }
     if (problems.length > 0) {
@@ -198,13 +224,56 @@ export function DefaultsPane({
             }}
           >
             {SORTED_GROUPS.map((group) => {
-              const fields = group.fields.map((field) => {
+              const siteTiers = readAtPath(siteDefaults, ["price", "tiers"]);
+              const tiersInherited =
+                scope !== "site" && !tiersEnabled && isTierArray(siteTiers)
+                  ? siteTiers.length
+                  : undefined;
+              const tiersBlock = (
+                <div
+                  key="price.tiers"
+                  className={tiersEnabled ? "defaults-row" : "defaults-row defaults-row-off"}
+                >
+                  <input
+                    type="checkbox"
+                    className="defaults-enable"
+                    checked={tiersEnabled}
+                    aria-label="Set a default for price tiers"
+                    onChange={(e) => {
+                      setTiersEnabled(e.target.checked);
+                      setSaved(false);
+                    }}
+                  />
+                  <div className="defaults-tier-block">
+                    {tiersEnabled ? (
+                      <TierEditor
+                        initialTiers={tiersInitial}
+                        resetToken={0}
+                        registerCollector={registerTiersCollector}
+                      />
+                    ) : (
+                      <span className="field-label">Price tiers</span>
+                    )}
+                    {tiersInherited !== undefined && (
+                      <span className="field-hint defaults-inherited">
+                        site: {tiersInherited} tiers
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+              const fields = group.fields.flatMap((field) => {
                 const key = pathKey(field.path);
                 const state = draft[key] ?? { enabled: false, raw: "" };
                 const inherited =
-                  scope !== "site" && !state.enabled ? readAtPath(siteDefaults, field.path) : undefined;
-                return (
-                  <div key={key} className={state.enabled ? "defaults-row" : "defaults-row defaults-row-off"}>
+                  scope !== "site" && !state.enabled
+                    ? readAtPath(siteDefaults, field.path)
+                    : undefined;
+                const row = (
+                  <div
+                    key={key}
+                    className={state.enabled ? "defaults-row" : "defaults-row defaults-row-off"}
+                  >
                     <input
                       type="checkbox"
                       className="defaults-enable"
@@ -235,6 +304,9 @@ export function DefaultsPane({
                     )}
                   </div>
                 );
+                // The tiers block sits next to the currency its amounts are
+                // in — same placement rule as the item edit form.
+                return key === "price.currency" ? [row, tiersBlock] : [row];
               });
               return PINNED_GROUPS.has(group.id) ? (
                 <fieldset key={group.id}>
