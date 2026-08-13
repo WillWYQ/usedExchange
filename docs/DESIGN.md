@@ -2269,6 +2269,15 @@ A **local-only** browser GUI for managing `content/` without editing JSON. Run `
   pane and merged over the scaffold on item creation: template ← site ← category, with
   `name`/`listed_date`/`status` re-applied last. `pnpm create-item` applies the same merge
   (`scripts/lib/itemDefaults.ts`); `reserved_for` and the per-item fields are rejected.
+- Price tiers are defaultable too: the Defaults pane carries a **Price tiers** block
+  (enable checkbox plus the same tier editor the item form uses). Saved tiers land in
+  `price.tiers` of the scope's `_defaults.json` and replace the template's tiers wholesale
+  on item creation — the full layering is `siteConfig.content.defaultPriceTiers` (or the
+  built-in 3-tier template) ← site defaults ← category defaults.
+- A bulk action, **Apply default tiers** (selection toolbar, `POST /api/items/bulk-apply-tiers`),
+  writes each selected item's `price.tiers` from its own category's merged defaults. Items
+  with no default tiers, or tiers already matching, are skipped and reported; failures are
+  per-item and never abort the batch; only `price.tiers` is written.
 
 ### Facebook Marketplace export (`pnpm fb-export`, Phase 17)
 Interactive CLI that exports available/pending/reserved items to Facebook Marketplace bulk-upload

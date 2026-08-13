@@ -371,10 +371,11 @@ Eight operations, all from one page:
 | Create | Add a new item: pick a category and type a kebab-case name — the folder and a full template `item.json` are scaffolded (same 36-field template as `pnpm create-item`) |
 | Getting started | A setup checklist for a new site: what is still missing (site identity, CDN credentials, first item, git, contact) and where to fix each one. Opens itself until the core steps are done, then stays one click away in the header |
 | Search & filter | Status tabs (Active hides sold by default), fuzzy search over name, category and tags, a category dropdown, and sorting by name, price or listed date — all instant, computed in the browser. A table/cards toggle switches the item list between a dense table and a photo-forward card grid; the choice persists across sessions |
-| Defaults | Manage site-wide and per-category default field values (sparse `_defaults.json` under `content/items/`); new items merge them over the template, with an opt-out checkbox in the new-item dialog |
+| Defaults | Manage site-wide and per-category default field values (sparse `_defaults.json` under `content/items/`); new items merge them over the template, with an opt-out checkbox in the new-item dialog. Price tiers are set through a dedicated "Price tiers" block (one checkbox gates the whole array). |
 | Site config | Edit `content/config.ts` from the browser — site name, tagline, currency, location, contact, UI slots and the rest. Comments in the file survive every save; each write is type-checked before it lands, and a write that would break the build is discarded |
 | Photos | Upload photos by dragging files onto an item (filenames sanitised, type sniffed from magic bytes), reorder them by dragging, delete them, and push changes to the CDN with live progress |
 | Bulk status | Change `status` (available / reserved / pending / sold / draft) for many items at once, with per-item failure reporting; items already at the target status are skipped and reported |
+| Bulk apply default tiers | Overwrite `price.tiers` on the selected items with each item's own merged defaults (site ← category); items without default tiers, or already matching, are skipped and reported |
 | Edit form | Edit any item's fields with a two-tier, schema-driven form: the groups you touch daily are open, the rest are one click away; only the fields you changed are written back, preserving JSONC comments |
 | Publish | Review uncommitted changes, write a commit message, and commit + push `content/` plus the image manifest |
 

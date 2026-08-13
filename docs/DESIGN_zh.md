@@ -2057,6 +2057,13 @@ shipping?: {
   "模板 ← 全站 ← 分类" 叠加，最后强制重新写入 `name`/`listed_date`/`status`。
   `pnpm create-item` 走同一套合并逻辑（`scripts/lib/itemDefaults.ts`）；
   `reserved_for` 和逐 item 字段会被拒绝写入。
+- 价格档位同样可以设为默认值：Defaults 面板带有 **Price tiers** 区块（一个启用复选框加上与
+  物品编辑表单相同的档位编辑器）。保存的档位写入该作用域 `_defaults.json` 的 `price.tiers`，
+  建 item 时整体替换模板中的档位——完整层级为 `siteConfig.content.defaultPriceTiers`
+  （或内置的三档模板）← 站点级默认值 ← 分类级默认值。
+- 批量操作 **Apply default tiers**（选择工具栏，`POST /api/items/bulk-apply-tiers`）会把每个
+  选中物品的 `price.tiers` 覆写为该物品所属分类合并后的默认值。无默认档位、或档位已一致的
+  物品会被跳过并提示；失败按物品报告、不会中断整批；只写入 `price.tiers`。
 
 ### Facebook Marketplace 导出（`pnpm fb-export`，第 17 阶段）
 交互式 CLI，将 available/pending/reserved 物品导出为 Facebook Marketplace 批量上传 CSV
