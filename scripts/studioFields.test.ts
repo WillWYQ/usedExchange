@@ -162,7 +162,7 @@ describe("studio field descriptors (Task 6)", () => {
 
   it("EditForm sends tiers as one whole-array edit", () => {
     const source = readFileSync(path.join(ROOT, "studio/src/panes/EditForm.tsx"), "utf-8");
-    expect(source).toContain('{ path: ["price", "tiers"], value: rows }');
+    expect(source).toContain('{ path: ["price", "tiers"], value: tierRows }');
     // "a blank select is never sent" used to be asserted here as a source
     // string. buildEdits now lives in studio/src/editForm.ts and
     // studio/src/editForm.test.ts asserts the behaviour itself, which is the
