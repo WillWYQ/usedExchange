@@ -16,7 +16,6 @@ function makeItem(overrides: Partial<ItemPdfView> = {}): ItemPdfView {
     categorySlug: "electronics",
     itemSlug: "desk-lamp",
     name: "Desk Lamp",
-    nameZh: "",
     description: "A bright desk lamp.",
     condition: "good",
     status: "available",

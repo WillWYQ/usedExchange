@@ -5,7 +5,6 @@ export type ItemPdfView = {
   categorySlug: string;
   itemSlug: string;
   name: string;
-  nameZh: string;
   description: string;
   condition: Condition;
   status: Status;
@@ -53,9 +52,23 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+// Mirrors components/contact/PlatformButton.tsx's formatPrice and
+// studio/src/itemDisplay.ts's formatPrice: currency is seller-authored
+// (item.json's price.currency, free-form and not ISO-validated), so
+// Intl.NumberFormat can throw a RangeError on it — caught and replaced with a
+// plain "$" fallback that never re-embeds the raw currency string, so this
+// stays safe to interpolate into the page HTML without an explicit
+// escapeHtml call.
 function formatAmount(currency: string, amount: number): string {
-  const symbol = currency === "USD" ? "$" : `${currency} `;
-  return `${symbol}${amount.toLocaleString()}`;
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currency || "USD",
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    return `$${amount.toLocaleString()}`;
+  }
 }
 
 export function buildPriceHtml(price: Price): string {
@@ -162,7 +175,7 @@ export function buildItemHtml(item: ItemPdfView, baseUrl: string): string {
     images.length === 0
       ? ""
       : `<div class="item-images">${images
-          .map((src) => `<img src="${escapeHtml(src)}" loading="lazy" alt="" onerror="this.remove()" />`)
+          .map((src) => `<img src="${escapeHtml(src)}" alt="" onerror="this.remove()" />`)
           .join("")}</div>`;
   const statusBadge =
     item.status === "available" ? "" : `<span class="status-badge status-${item.status}">${item.status}</span>`;

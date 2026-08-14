@@ -2214,6 +2214,7 @@ describe("POST /api/export-pdf", () => {
     if (isFileResponse(res)) {
       expect(res.contentType).toBe("application/pdf");
       expect(res.file.endsWith(".pdf")).toBe(true);
+      await fs.unlink(res.file);
     }
   });
 

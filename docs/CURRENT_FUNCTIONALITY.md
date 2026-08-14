@@ -364,7 +364,7 @@ Scripts run on the seller's machine. All listing changes write only to `content/
 
 A local-only web GUI for managing listings in a browser — an alternative to editing `item.json` by hand. Start it with `pnpm studio` (use `pnpm studio --port 3000` to change the port; any integer from 1024–65535 is accepted, default **5174**), then open the printed URL. It runs entirely on the seller's machine: it is never part of the build output, never deployed, and never reachable by site visitors. The launcher fails fast with a clear "run `pnpm update-site`" message if Vite or the Studio app is missing, and it loads `.env.local` so CDN credentials are picked up automatically. It follows the storefront's brand palette and offers light and dark themes, switchable from the header; the choice persists across sessions.
 
-Eight operations, all from one page:
+Eleven operations, all from one page:
 
 | Operation | What it does |
 |---|---|

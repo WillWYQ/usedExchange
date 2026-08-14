@@ -1,7 +1,6 @@
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
-import { chromium } from "playwright";
 import { loadAllItemsRaw, loadCategories } from "../../../lib/content/loader";
 import type { Category, Item } from "../../../lib/content/types";
 import { siteConfig } from "../../../content/config";
@@ -9,12 +8,32 @@ import { buildFullCatalogHtml, escapeHtml, type CategoryGroup, type ItemPdfView 
 
 const EXPORTABLE_STATUSES = new Set(["available", "pending", "reserved"]);
 
+// page.pdf() has no `timeout` option of its own (unlike setContent(), which
+// does) — Playwright's Page.pdf() type simply does not expose one in this
+// version. This race is the manual equivalent, so both render steps still
+// share the same generous ceiling instead of pdf() alone being able to hang
+// indefinitely.
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 function toItemPdfView(item: Item): ItemPdfView {
   return {
     categorySlug: item.categorySlug,
     itemSlug: item.itemSlug,
     name: item.name,
-    nameZh: item.nameZh,
     description: item.description,
     condition: item.condition,
     status: item.status,
@@ -60,6 +79,12 @@ export function groupEligibleItems(items: Item[], categories: Category[]): Categ
     });
 }
 
+// Takes no parameters — unlike the design spec's original
+// `generateCatalogPdf(projectRoot: string)` sketch — because
+// loadAllItemsRaw()/loadCategories() always resolve content/ from
+// process.cwd(), and Studio's server process cwd and req.projectRoot
+// coincide (see the "Note:" comment on listStudioItems in studioApi.ts for
+// the established precedent of documenting this same fact).
 export async function generateCatalogPdf(): Promise<{ file: string } | { error: string }> {
   const [items, categories] = await Promise.all([loadAllItemsRaw(), loadCategories()]);
   const groups = groupEligibleItems(items, categories);
@@ -77,28 +102,68 @@ export async function generateCatalogPdf(): Promise<{ file: string } | { error: 
     new Date().toISOString().slice(0, 10),
   );
 
+  // Dynamic import, not a static one: studioApi.ts imports this module at
+  // module scope, so every Studio boot would otherwise load the `playwright`
+  // package eagerly — including on a downstream site that ran
+  // `pnpm update-site --skip-verify` (which explicitly skips `pnpm install`)
+  // and never got the package installed at all. A missing *package* throws at
+  // import time, before this try/catch exists to catch it, crashing the whole
+  // Studio dev server with a raw "Cannot find module" error. Deferring the
+  // import to here means "playwright missing" and "Chromium binary missing"
+  // both land in the same catch and produce the same friendly typed error.
   let browser;
   try {
+    const { chromium } = await import("playwright");
     browser = await chromium.launch();
   } catch {
     return { error: "PDF renderer not installed. Run: npx playwright install chromium" };
   }
 
+  // Generous timeout, well above Playwright's 30s default: a catalog with many
+  // items (up to 4 CDN photos each) waiting for `networkidle`, followed by
+  // full-document PDF layout, can plausibly exceed the default. Both calls
+  // below share this value.
+  const RENDER_TIMEOUT_MS = 60_000;
+
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle" });
-    const pdfBytes = await page.pdf({
-      format: "Letter",
-      printBackground: true,
-      displayHeaderFooter: true,
-      headerTemplate: "<div></div>",
-      footerTemplate: `<div style="font-size:8px; width:100%; text-align:center; color:#888;">${escapeHtml(siteConfig.name)} · Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>`,
-      margin: { top: "20mm", bottom: "16mm", left: "14mm", right: "14mm" },
-    });
+    let pdfBytes: Buffer;
+    try {
+      await page.setContent(html, { waitUntil: "networkidle", timeout: RENDER_TIMEOUT_MS });
+      pdfBytes = await withTimeout(
+        page.pdf({
+          format: "Letter",
+          printBackground: true,
+          displayHeaderFooter: true,
+          headerTemplate: "<div></div>",
+          footerTemplate: `<div style="font-size:8px; width:100%; text-align:center; color:#888;">${escapeHtml(siteConfig.name)} · Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>`,
+          margin: { top: "20mm", bottom: "16mm", left: "14mm", right: "14mm" },
+        }),
+        RENDER_TIMEOUT_MS,
+        `PDF generation exceeded ${RENDER_TIMEOUT_MS}ms`,
+      );
+    } catch {
+      // A raw Playwright error (e.g. "Timeout 60000ms exceeded") is not
+      // actionable for a seller. Surface a typed error with real guidance
+      // instead of letting this reject and fall through to
+      // handleStudioRequest's generic catch-all, which would otherwise turn
+      // it into an opaque 500.
+      return {
+        error:
+          "PDF rendering timed out or failed — the catalog may be too large (many items or photos). Try again, or retry after trimming a few item photos.",
+      };
+    }
+
     const file = path.join(os.tmpdir(), `usedexchange-catalog-${Date.now()}.pdf`);
     await fs.writeFile(file, pdfBytes);
     return { file };
   } finally {
-    await browser.close();
+    try {
+      await browser.close();
+    } catch {
+      // A close failure here must not mask whatever error caused this
+      // `finally` to run in the first place (or override a successful result
+      // already computed above) — swallow it.
+    }
   }
 }

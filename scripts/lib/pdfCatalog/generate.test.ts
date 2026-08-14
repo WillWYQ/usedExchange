@@ -77,14 +77,20 @@ describe("groupEligibleItems", () => {
   });
 
   it("drops categories with zero eligible items and preserves the given category order otherwise", () => {
-    const items = [makeItem({ categorySlug: "books", itemSlug: "novel" })];
+    const items = [
+      makeItem({ categorySlug: "books", itemSlug: "novel" }),
+      makeItem({ categorySlug: "toys", itemSlug: "yo-yo" }),
+    ];
     const categories = [
       makeCategory({ slug: "electronics", displayName: "Electronics" }),
+      makeCategory({ slug: "toys", displayName: "Toys" }),
       makeCategory({ slug: "books", displayName: "Books" }),
     ];
     const groups = groupEligibleItems(items, categories);
-    expect(groups).toHaveLength(1);
-    expect(groups[0]?.slug).toBe("books");
+    // electronics has zero eligible items and is dropped; toys and books both
+    // have one each and must come back in the categories array's own order
+    // (toys before books), not sorted by anything derived from the items.
+    expect(groups.map((g) => g.slug)).toEqual(["toys", "books"]);
   });
 
   it("sorts items within a category newest-first, falling back to name", () => {

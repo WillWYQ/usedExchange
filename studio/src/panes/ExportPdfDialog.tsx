@@ -5,6 +5,11 @@ import { Button } from "../components/Button";
 import { useDialogBehavior } from "../components/useDialogBehavior";
 import { useStudioT } from "../i18n/StudioI18n";
 
+// Must stay in sync with scripts/lib/pdfCatalog/generate.ts's own copy of
+// this set, which is the actual export-eligibility source of truth (this
+// copy only drives the dialog's item/category count preview before the
+// request is sent) — a client/server drift here would silently show the
+// wrong count in the dialog without ever erroring.
 const EXPORTABLE_STATUSES = new Set(["available", "pending", "reserved"]);
 
 export function ExportPdfDialog({ items, onClose }: { items: StudioItem[]; onClose: () => void }) {
