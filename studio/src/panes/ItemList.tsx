@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { StudioItem } from "../api";
 import { ItemThumb } from "../components/ItemThumb";
 import { StatusBadge } from "../components/StatusBadge";
+import { useStudioT } from "../i18n/StudioI18n";
 import { coverImageUrl, displayName, formatPrice } from "../itemDisplay";
 
 function StatusCell({ status, pressed }: { status: string; pressed: boolean }) {
@@ -9,6 +10,7 @@ function StatusCell({ status, pressed }: { status: string; pressed: boolean }) {
   // regular sold badge. 900ms lets the 260ms press animation land and hold
   // for a beat. With reduced motion the animation is off but the settle
   // still happens.
+  const { t } = useStudioT();
   const [settled, setSettled] = useState(!pressed);
 
   useEffect(() => {
@@ -22,7 +24,7 @@ function StatusCell({ status, pressed }: { status: string; pressed: boolean }) {
   }, [pressed]);
 
   if (status === "sold" && !settled) {
-    return <span className="stamp stamp-press">sold</span>;
+    return <span className="stamp stamp-press">{t("statusBadge.sold")}</span>;
   }
   return <StatusBadge status={status} />;
 }
@@ -46,6 +48,7 @@ export function ItemList({
   onToggleAll: (checked: boolean) => void;
   onOpen: (id: string) => void;
 }) {
+  const { t } = useStudioT();
   const allSelected = items.length > 0 && items.every((i) => selectedIds.has(i.id));
 
   return (
@@ -57,14 +60,14 @@ export function ItemList({
               type="checkbox"
               checked={allSelected}
               onChange={(e) => onToggleAll(e.target.checked)}
-              aria-label="Select all items"
+              aria-label={t("itemList.selectAll")}
             />
           </th>
-          <th scope="col">Photo</th>
-          <th scope="col">Name</th>
-          <th scope="col">Category</th>
-          <th scope="col">Status</th>
-          <th scope="col">Price</th>
+          <th scope="col">{t("itemList.photo")}</th>
+          <th scope="col">{t("itemList.name")}</th>
+          <th scope="col">{t("itemList.category")}</th>
+          <th scope="col">{t("itemList.status")}</th>
+          <th scope="col">{t("itemList.price")}</th>
         </tr>
       </thead>
       <tbody>
@@ -73,19 +76,18 @@ export function ItemList({
           return (
             <tr
               key={item.id}
-              className={[
-                failedIds.has(item.id) ? "failed" : "",
-                selectedIds.has(item.id) ? "selected" : "",
-              ]
-                .filter((c) => c !== "")
-                .join(" ") || undefined}
+              className={
+                [failedIds.has(item.id) ? "failed" : "", selectedIds.has(item.id) ? "selected" : ""]
+                  .filter((c) => c !== "")
+                  .join(" ") || undefined
+              }
             >
               <td>
                 <input
                   type="checkbox"
                   checked={selectedIds.has(item.id)}
                   onChange={() => onToggle(item.id)}
-                  aria-label={`Select ${shownName}`}
+                  aria-label={t("itemList.selectItem", { name: shownName })}
                 />
               </td>
               <td className="photo-cell">

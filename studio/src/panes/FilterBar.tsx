@@ -1,24 +1,27 @@
 import { IconLayoutGrid, IconList } from "@tabler/icons-react";
 import type { Filters, SortKey, StatusFilter } from "../filtering";
+import { useStudioT } from "../i18n/StudioI18n";
+import type { StudioKey } from "../i18n/types";
 
 // Order matters: the working set first, then the individual states in the
 // order an item moves through them, with the archive and the escape hatch last.
-const TABS: Array<{ key: StatusFilter; label: string }> = [
-  { key: "active", label: "Active" },
-  { key: "available", label: "Available" },
-  { key: "reserved", label: "Reserved" },
-  { key: "pending", label: "Pending" },
-  { key: "draft", label: "Draft" },
-  { key: "sold", label: "Sold" },
-  { key: "all", label: "All" },
+// Labels come from the i18n dictionary: `filter.status.${key}`.
+const TABS: Array<{ key: StatusFilter }> = [
+  { key: "active" },
+  { key: "available" },
+  { key: "reserved" },
+  { key: "pending" },
+  { key: "draft" },
+  { key: "sold" },
+  { key: "all" },
 ];
 
-const SORTS: Array<{ key: SortKey; label: string }> = [
-  { key: "name-asc", label: "Name A–Z" },
-  { key: "price-asc", label: "Price low–high" },
-  { key: "price-desc", label: "Price high–low" },
-  { key: "date-desc", label: "Newest" },
-  { key: "date-asc", label: "Oldest" },
+const SORTS: Array<{ key: SortKey; labelKey: StudioKey }> = [
+  { key: "name-asc", labelKey: "filter.sort.nameAsc" },
+  { key: "price-asc", labelKey: "filter.sort.priceAsc" },
+  { key: "price-desc", labelKey: "filter.sort.priceDesc" },
+  { key: "date-desc", labelKey: "filter.sort.newest" },
+  { key: "date-asc", labelKey: "filter.sort.oldest" },
 ];
 
 export function FilterBar({
@@ -51,11 +54,12 @@ export function FilterBar({
   allSelected: boolean;
   onToggleAll: (checked: boolean) => void;
 }) {
+  const { t } = useStudioT();
   const searching = filters.query.trim() !== "";
 
   return (
-    <section className="filter-bar" aria-label="Filter items">
-      <div className="filter-tabs" role="tablist" aria-label="Item status">
+    <section className="filter-bar" aria-label={t("filter.ariaLabel")}>
+      <div className="filter-tabs" role="tablist" aria-label={t("filter.statusAria")}>
         {TABS.map((tab) => (
           <button
             key={tab.key}
@@ -66,7 +70,7 @@ export function FilterBar({
             disabled={busy}
             onClick={() => onChange({ ...filters, status: tab.key })}
           >
-            {tab.label} <span className="tab-count">{counts[tab.key]}</span>
+            {t(`filter.status.${tab.key}`)} <span className="tab-count">{counts[tab.key]}</span>
           </button>
         ))}
       </div>
@@ -76,8 +80,8 @@ export function FilterBar({
           type="search"
           className="filter-search"
           value={filters.query}
-          aria-label="Search items by name, category, or tag"
-          placeholder="Search name, category, tags"
+          aria-label={t("filter.search.ariaLabel")}
+          placeholder={t("filter.search.placeholder")}
           disabled={busy}
           // Typing never rewrites the sort. "relevance" is the automatic
           // setting — it means "best match" while a query runs and "the order
@@ -88,13 +92,13 @@ export function FilterBar({
         />
 
         <label className="filter-field">
-          <span className="filter-label">Category</span>
+          <span className="filter-label">{t("filter.category.label")}</span>
           <select
             value={filters.category}
             disabled={busy}
             onChange={(e) => onChange({ ...filters, category: e.target.value })}
           >
-            <option value="all">All categories</option>
+            <option value="all">{t("filter.category.all")}</option>
             {categories.map((c) => (
               <option key={c} value={c}>
                 {c}
@@ -104,7 +108,7 @@ export function FilterBar({
         </label>
 
         <label className="filter-field">
-          <span className="filter-label">Sort</span>
+          <span className="filter-label">{t("filter.sort.label")}</span>
           <select
             value={filters.sort}
             disabled={busy}
@@ -114,10 +118,12 @@ export function FilterBar({
                 option — it is the default sort. Only the label changes: with a
                 query it ranks by match quality, without one it is the order
                 the item list arrived in. */}
-            <option value="relevance">{searching ? "Best match" : "Default order"}</option>
+            <option value="relevance">
+              {searching ? t("filter.sort.bestMatch") : t("filter.sort.default")}
+            </option>
             {SORTS.map((s) => (
               <option key={s.key} value={s.key}>
-                {s.label}
+                {t(s.labelKey)}
               </option>
             ))}
           </select>
@@ -130,9 +136,9 @@ export function FilterBar({
               checked={allSelected}
               disabled={busy || resultCount === 0}
               onChange={(e) => onToggleAll(e.target.checked)}
-              aria-label="Select all items"
+              aria-label={t("itemList.selectAll")}
             />
-            <span className="filter-label">Select all</span>
+            <span className="filter-label">{t("filter.selectAll")}</span>
           </label>
         )}
 
@@ -143,7 +149,7 @@ export function FilterBar({
               viewMode === "table" ? "view-toggle-btn view-toggle-active" : "view-toggle-btn"
             }
             aria-pressed={viewMode === "table"}
-            aria-label="Table"
+            aria-label={t("filter.viewModeTable")}
             onClick={() => onViewModeChange("table")}
           >
             <IconList size={18} />
@@ -154,7 +160,7 @@ export function FilterBar({
               viewMode === "cards" ? "view-toggle-btn view-toggle-active" : "view-toggle-btn"
             }
             aria-pressed={viewMode === "cards"}
-            aria-label="Cards"
+            aria-label={t("filter.viewModeCards")}
             onClick={() => onViewModeChange("cards")}
           >
             <IconLayoutGrid size={18} />
@@ -162,7 +168,9 @@ export function FilterBar({
         </div>
 
         <span className="filter-count" role="status">
-          {resultCount} {resultCount === 1 ? "item" : "items"}
+          {t(resultCount === 1 ? "filter.itemCount" : "filter.itemCount.plural", {
+            count: resultCount,
+          })}
         </span>
       </div>
     </section>
