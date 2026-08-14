@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createItem } from "../api";
 import { Button } from "../components/Button";
 import { useDialogBehavior } from "../components/useDialogBehavior";
+import { useStudioT } from "../i18n/StudioI18n";
 
 // Mirrors lib/utils/slug.ts's SAFE_SLUG_RE — the server is the real gate
 // (resolveItemDir re-checks with the shared allowlist plus a containment
@@ -17,6 +18,7 @@ export function NewItemDialog({
   onCreated: (id: string) => void;
   onCancel: () => void;
 }) {
+  const { t } = useStudioT();
   const [category, setCategory] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +31,7 @@ export function NewItemDialog({
     const cat = category.trim();
     const slug = name.trim();
     if (!SLUG_RE.test(cat) || !SLUG_RE.test(slug)) {
-      setError("Category and name must be kebab-case (lowercase letters, digits, hyphens).");
+      setError(t("newItem.slugError"));
       return;
     }
     setBusy(true);
@@ -50,10 +52,10 @@ export function NewItemDialog({
         className="dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="New item"
+        aria-label={t("newItem.title")}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2>New item</h2>
+        <h2>{t("newItem.title")}</h2>
         {error !== null && <p role="alert" className="alert-error">{error}</p>}
         <form
           onSubmit={(e) => {
@@ -62,34 +64,31 @@ export function NewItemDialog({
           }}
         >
           <label className="field">
-            <span className="field-label">Category</span>
+            <span className="field-label">{t("newItem.category")}</span>
             <input
               type="text"
               list="studio-categories"
               value={category}
               autoFocus
               onChange={(e) => setCategory(e.target.value)}
-              placeholder="e.g. electronics"
+              placeholder={t("newItem.categoryPlaceholder")}
             />
             <datalist id="studio-categories">
               {categories.map((c) => (
                 <option key={c} value={c} />
               ))}
             </datalist>
-            <span className="field-hint">Pick an existing category or type a new one.</span>
+            <span className="field-hint">{t("newItem.categoryHint")}</span>
           </label>
           <label className="field">
-            <span className="field-label">Item name (slug)</span>
+            <span className="field-label">{t("newItem.name")}</span>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. ikea-desk-lamp"
+              placeholder={t("newItem.namePlaceholder")}
             />
-            <span className="field-hint">
-              Lowercase letters, digits, hyphens. Created as a draft — invisible on the site until
-              published.
-            </span>
+            <span className="field-hint">{t("newItem.nameHint")}</span>
           </label>
           <label className="field">
             <span className="field-label">
@@ -98,19 +97,16 @@ export function NewItemDialog({
                 checked={applyDefaults}
                 onChange={(e) => setApplyDefaults(e.target.checked)}
               />{" "}
-              Apply defaults
+              {t("newItem.applyDefaults")}
             </span>
-            <span className="field-hint">
-              Uses your site and category defaults (manage them under Defaults). Switch off for
-              a blank template.
-            </span>
+            <span className="field-hint">{t("newItem.applyDefaultsHint")}</span>
           </label>
           <div className="dialog-actions">
             <Button type="submit" variant="primary" disabled={busy}>
-              {busy ? "Creating…" : "Create"}
+              {busy ? t("newItem.creating") : t("newItem.create")}
             </Button>
             <Button variant="ghost" onClick={onCancel}>
-              Cancel
+              {t("newItem.cancel")}
             </Button>
           </div>
         </form>

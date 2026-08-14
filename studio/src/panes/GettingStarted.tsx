@@ -6,6 +6,7 @@ import {
   type ReadinessReport,
 } from "../api";
 import { Button } from "../components/Button";
+import { useStudioT } from "../i18n/StudioI18n";
 
 /**
  * The first-run checklist: what a new site is still missing and where to fix
@@ -25,11 +26,12 @@ function ActionControl({
   onOpenConfig: () => void;
   onNewItem: () => void;
 }) {
+  const { t } = useStudioT();
   switch (action.kind) {
     case "pane":
-      return <Button onClick={onOpenConfig}>Open Config</Button>;
+      return <Button onClick={onOpenConfig}>{t("gettingStarted.openConfig")}</Button>;
     case "studio":
-      return <Button onClick={onNewItem}>New item</Button>;
+      return <Button onClick={onNewItem}>{t("gettingStarted.newItem")}</Button>;
     case "command":
       return <code className="gs-command">{action.command}</code>;
     case "docs":
@@ -50,6 +52,7 @@ function Row({
   onOpenConfig: () => void;
   onNewItem: () => void;
 }) {
+  const { t } = useStudioT();
   return (
     <li className="gs-row">
       {/* The glyph is decorative; the state is spelled out for screen readers
@@ -57,7 +60,9 @@ function Row({
       <span className="gs-status" aria-hidden="true">
         {item.done ? "✓" : "○"}
       </span>
-      <span className="visually-hidden">{item.done ? "Done: " : "Still to do: "}</span>
+      <span className="visually-hidden">
+        {item.done ? t("gettingStarted.done") : t("gettingStarted.stillToDo")}
+      </span>
       <span className="gs-body">
         <span className="gs-title">{item.title}</span>
         <span className="gs-detail">{item.detail}</span>
@@ -85,6 +90,7 @@ export function GettingStarted({
   /** Lets App auto-open the panel the first time a site turns out unready. */
   onReport: (report: ReadinessReport) => void;
 }) {
+  const { t } = useStudioT();
   const [report, setReport] = useState<ReadinessReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,7 +116,7 @@ export function GettingStarted({
 
   if (report === null) {
     return (
-      <section className="getting-started" aria-busy="true" aria-label="Loading setup status">
+      <section className="getting-started" aria-busy="true" aria-label={t("gettingStarted.loading")}>
         <div className="skeleton" />
         <div className="skeleton" />
         <div className="skeleton" />
@@ -128,11 +134,11 @@ export function GettingStarted({
       <section className="getting-started gs-collapsed">
         <span>
           {report.allTier1Done
-            ? "All set — your site is ready to publish."
-            : `Setup: ${report.tier1Done} of ${report.tier1Total} core steps done.`}
+            ? t("gettingStarted.allSet")
+            : t("gettingStarted.progress", { done: report.tier1Done, total: report.tier1Total })}
         </span>
         <Button variant="ghost" onClick={onToggle}>
-          Show checklist
+          {t("gettingStarted.showChecklist")}
         </Button>
       </section>
     );
@@ -141,11 +147,9 @@ export function GettingStarted({
   return (
     <section className="getting-started" aria-label="Getting started checklist">
       <div className="gs-head">
-        <h2>
-          Getting started — {report.tier1Done} of {report.tier1Total} done
-        </h2>
+        <h2>{t("gettingStarted.title", { done: report.tier1Done, total: report.tier1Total })}</h2>
         <Button variant="ghost" onClick={onToggle}>
-          Hide
+          {t("gettingStarted.hide")}
         </Button>
       </div>
 
@@ -157,7 +161,7 @@ export function GettingStarted({
 
       {advanced.length > 0 && (
         <details className="gs-advanced">
-          <summary>Advanced (optional)</summary>
+          <summary>{t("gettingStarted.advanced")}</summary>
           <ul className="gs-list">
             {advanced.map((item) => (
               <Row key={item.id} item={item} onOpenConfig={onOpenConfig} onNewItem={onNewItem} />
