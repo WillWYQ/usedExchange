@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useStudioT } from "../i18n/StudioI18n";
 import { applyTheme, currentTheme, type Theme } from "../theme";
 
 // Inline icons keep studio dependency-free and offline-capable.
@@ -39,6 +40,7 @@ function MoonIcon() {
 }
 
 export function ThemeToggle() {
+  const { t } = useStudioT();
   const [theme, setTheme] = useState<Theme>(currentTheme);
 
   function toggle() {
@@ -52,7 +54,7 @@ export function ThemeToggle() {
       type="button"
       className="btn btn-ghost theme-toggle"
       onClick={toggle}
-      aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+      aria-label={theme === "dark" ? t("themeToggle.light") : t("themeToggle.dark")}
     >
       {theme === "dark" ? <SunIcon /> : <MoonIcon />}
     </button>
