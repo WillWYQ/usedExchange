@@ -164,7 +164,7 @@ export function DefaultsPane({
       // what was loaded so an enabled-but-untouched block still saves.
       const rows = tiersCollector.current() ?? tiersInitial;
       if (rows.length === 0) {
-        problems.push("Price tiers: add at least one tier or switch the field off");
+        problems.push(t("defaults.tiersError"));
       } else {
         writeAtPath(out, ["price", "tiers"], rows);
       }
@@ -196,16 +196,13 @@ export function DefaultsPane({
         className="dialog defaults-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Item defaults"
+        aria-label={t("defaults.title")}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2>Item defaults</h2>
-        <p className="field-hint">
-          New items start with these values. Category defaults override site-wide ones; name,
-          status and dates always start fresh.
-        </p>
+        <h2>{t("defaults.title")}</h2>
+        <p className="field-hint">{t("defaults.hint")}</p>
         {error !== null && <p role="alert" className="alert-error">{error}</p>}
-        {saved && <p className="form-saved">Saved.</p>}
+        {saved && <p className="form-saved">{t("defaults.saved")}</p>}
 
         <div className="defaults-scopes" role="tablist" aria-label="Defaults scope">
           {["site", ...categories].map((s) => (
@@ -217,12 +214,12 @@ export function DefaultsPane({
               className={scope === s ? "tab tab-active" : "tab"}
               onClick={() => setScope(s)}
             >
-              {s === "site" ? "Site-wide" : s}
+              {s === "site" ? t("defaults.siteWide") : s}
             </button>
           ))}
         </div>
 
-        {!loaded && error === null && <p>Loading…</p>}
+        {!loaded && error === null && <p>{t("defaults.loading")}</p>}
         {loaded && (
           <form
             className="edit-form"
@@ -246,7 +243,7 @@ export function DefaultsPane({
                     type="checkbox"
                     className="defaults-enable"
                     checked={tiersEnabled}
-                    aria-label="Set a default for price tiers"
+                    aria-label={t("defaults.tiersLabel")}
                     onChange={(e) => {
                       setTiersEnabled(e.target.checked);
                       setSaved(false);
@@ -260,11 +257,11 @@ export function DefaultsPane({
                         registerCollector={registerTiersCollector}
                       />
                     ) : (
-                      <span className="field-label">Price tiers</span>
+                      <span className="field-label">{t("defaults.tiersEnabled")}</span>
                     )}
                     {tiersInherited !== undefined && (
                       <span className="field-hint defaults-inherited">
-                        site: {tiersInherited} tiers
+                        {t("defaults.tiersInherited", { count: tiersInherited })}
                       </span>
                     )}
                   </div>
@@ -308,7 +305,9 @@ export function DefaultsPane({
                       }}
                     />
                     {inherited !== undefined && (
-                      <span className="field-hint defaults-inherited">site: {formatInherited(inherited)}</span>
+                      <span className="field-hint defaults-inherited">
+                        {t("defaults.inherited", { value: formatInherited(inherited) })}
+                      </span>
                     )}
                   </div>
                 );
@@ -330,10 +329,10 @@ export function DefaultsPane({
             })}
             <div className="dialog-actions">
               <Button type="submit" variant="primary" disabled={busy}>
-                {busy ? "Saving…" : "Save defaults"}
+                {busy ? t("defaults.saving") : t("defaults.save")}
               </Button>
               <Button variant="ghost" onClick={onClose}>
-                Close
+                {t("defaults.close")}
               </Button>
             </div>
           </form>
