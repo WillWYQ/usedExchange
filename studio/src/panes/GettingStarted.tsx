@@ -7,6 +7,38 @@ import {
 } from "../api";
 import { Button } from "../components/Button";
 import { useStudioT } from "../i18n/StudioI18n";
+import type { StudioKey } from "../i18n/types";
+
+// scripts/lib/siteReadiness.ts IDs are kebab-case; dictionary key segments
+// are camelCase to match the rest of the Studio key namespace.
+const READINESS_ID_TO_KEY: Readonly<Record<string, string>> = {
+  identity: "identity",
+  "image-storage": "imageStorage",
+  "first-item": "firstItem",
+  "first-item-live": "firstItemLive",
+  "git-ready": "gitReady",
+  contact: "contact",
+  translations: "translations",
+  shipping: "shipping",
+  aceternity: "aceternity",
+  "config-parse": "configParse",
+};
+
+function localizedTitle(t: (key: StudioKey, params?: Record<string, string | number>) => string, item: ReadinessItem): string {
+  const segment = READINESS_ID_TO_KEY[item.id];
+  if (segment === undefined) return item.title;
+  const key = `readiness.${segment}.title` as StudioKey;
+  const translated = t(key);
+  return translated === key ? item.title : translated;
+}
+
+function localizedDetail(t: (key: StudioKey, params?: Record<string, string | number>) => string, item: ReadinessItem): string {
+  const segment = READINESS_ID_TO_KEY[item.id];
+  if (segment === undefined || item.params === undefined) return item.detail;
+  const key = `readiness.${segment}.${item.params.variant}` as StudioKey;
+  const translated = t(key, item.params as Record<string, string | number>);
+  return translated === key ? item.detail : translated;
+}
 
 /**
  * The first-run checklist: what a new site is still missing and where to fix
@@ -64,8 +96,8 @@ function Row({
         {item.done ? t("gettingStarted.done") : t("gettingStarted.stillToDo")}
       </span>
       <span className="gs-body">
-        <span className="gs-title">{item.title}</span>
-        <span className="gs-detail">{item.detail}</span>
+        <span className="gs-title">{localizedTitle(t, item)}</span>
+        <span className="gs-detail">{localizedDetail(t, item)}</span>
       </span>
       {!item.done && item.action !== undefined && (
         <span className="gs-action">

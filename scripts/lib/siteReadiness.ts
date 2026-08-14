@@ -41,6 +41,15 @@ export type ReadinessItem = {
   title: string;
   /** One line describing the CURRENT state, not the desired one. */
   detail: string;
+  /**
+   * Structured data behind `title`/`detail`, additive so `pnpm doctor`'s plain
+   * English output is untouched. Studio uses `id` + `params.variant` to look
+   * up a translated string, falling back to `title`/`detail` when absent.
+   */
+  params?: {
+    variant: string;
+    [key: string]: unknown;
+  };
   done: boolean;
   action?: ReadinessAction;
 };
@@ -107,6 +116,7 @@ function checkIdentity(config: ReadinessConfig): ReadinessItem {
     detail: isTemplate
       ? `baseUrl is still the template value (${config.baseUrl})`
       : `baseUrl is set to ${config.baseUrl}`,
+    params: { variant: isTemplate ? "template" : "set", baseUrl: config.baseUrl },
     done: !isTemplate,
     action: { kind: "pane", pane: "config" },
   };
@@ -121,6 +131,7 @@ function checkImageStorage(config: ReadinessConfig, env: ReadinessEnv): Readines
     return {
       ...base,
       detail: "Local provider — photos are served from the repo, no credentials needed",
+      params: { variant: "local" },
       done: true,
     };
   }
@@ -133,6 +144,11 @@ function checkImageStorage(config: ReadinessConfig, env: ReadinessEnv): Readines
         missing.length === 0
           ? "Cloudflare R2 credentials present"
           : `Cloudflare R2 selected, but missing: ${missing.join(", ")}`,
+      params: {
+        variant: missing.length === 0 ? "ok" : "missing",
+        provider: "Cloudflare R2",
+        missing: missing.join(", "),
+      },
       done: missing.length === 0,
       action: { kind: "docs", doc: STORAGE_DOC },
     };
@@ -145,6 +161,11 @@ function checkImageStorage(config: ReadinessConfig, env: ReadinessEnv): Readines
       detail: ok
         ? "Vercel Blob token present"
         : "Vercel Blob selected, but missing: BLOB_READ_WRITE_TOKEN",
+      params: {
+        variant: ok ? "ok" : "missing",
+        provider: "Vercel Blob",
+        missing: "BLOB_READ_WRITE_TOKEN",
+      },
       done: ok,
       action: { kind: "docs", doc: STORAGE_DOC },
     };
@@ -153,6 +174,7 @@ function checkImageStorage(config: ReadinessConfig, env: ReadinessEnv): Readines
   return {
     ...base,
     detail: `Unrecognised image storage provider: ${provider}`,
+    params: { variant: "unknown", provider },
     done: false,
     action: { kind: "docs", doc: STORAGE_DOC },
   };
@@ -217,12 +239,14 @@ function checkFirstItem(scan: ItemScan): ReadinessItem {
     tier: 1,
     title: "First item",
     detail: scan.count === 0 ? "No items yet" : `${scan.count} item(s) in content/items/`,
+    params: { variant: scan.count === 0 ? "empty" : "has", count: scan.count },
     done: scan.count > 0,
     action: { kind: "studio", view: "new-item" },
   };
 }
 
 function checkFirstItemLive(scan: ItemScan): ReadinessItem {
+  const variant = scan.count === 0 ? "empty" : scan.liveCount === 0 ? "allDraft" : "has";
   return {
     id: "first-item-live",
     tier: 1,
@@ -233,6 +257,7 @@ function checkFirstItemLive(scan: ItemScan): ReadinessItem {
         : scan.liveCount === 0
           ? "Every item is still a draft — drafts never appear on the site"
           : `${scan.liveCount} item(s) published`,
+    params: { variant, liveCount: scan.liveCount },
     done: scan.liveCount > 0,
     action: { kind: "pane", pane: "config" },
   };
@@ -254,6 +279,7 @@ async function checkGit(projectRoot: string): Promise<ReadinessItem> {
     detail: isRepo
       ? "Repository found"
       : "Not a git repository — `pnpm push` needs one to publish",
+    params: { variant: isRepo ? "repo" : "no-repo" },
     done: isRepo,
     action: { kind: "command", command: "git init" },
   };
@@ -266,6 +292,7 @@ function checkContact(config: ReadinessConfig): ReadinessItem {
     tier: 1,
     title: "Contact info",
     detail: count === 0 ? "No contact platforms configured" : `${count} platform(s) configured`,
+    params: { variant: count === 0 ? "empty" : "has", count },
     done: count > 0,
     action: { kind: "pane", pane: "config" },
   };
@@ -298,6 +325,7 @@ function checkTranslations(config: ReadinessConfig): ReadinessItem {
     tier: 2,
     title: "Translations",
     detail: problem ?? "Every enabled locale resolves all UI strings",
+    params: problem === undefined ? { variant: "ok" } : { variant: "problem", problem },
     done: problem === undefined,
     action: { kind: "pane", pane: "config" },
   };
@@ -310,6 +338,7 @@ function checkShipping(config: ReadinessConfig): ReadinessItem {
     tier: 2,
     title: "Shipping estimates",
     detail: enabled ? "Enabled" : "Optional — not configured",
+    params: { variant: enabled ? "enabled" : "disabled" },
     done: enabled,
     action: { kind: "docs", doc: STORAGE_DOC },
   };
@@ -328,6 +357,7 @@ async function checkAceternity(projectRoot: string): Promise<ReadinessItem> {
     tier: 2,
     title: "Aceternity UI",
     detail: installed ? "Components installed" : "components/ui/ not installed",
+    params: { variant: installed ? "installed" : "missing" },
     done: installed,
     action: { kind: "command", command: "pnpm setup-ui" },
   };
@@ -362,6 +392,7 @@ export async function buildReadinessReport(
         tier: 1,
         title: "Site config",
         detail: "content/config.ts could not be loaded — fix it before anything else",
+        params: { variant: "error" },
         done: false,
         action: { kind: "command", command: "pnpm type-check" },
       },
