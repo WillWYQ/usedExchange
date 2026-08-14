@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { fetchItems } from "./api";
+import { fetchItems, exportCatalogPdf } from "./api";
 
 describe("fetchItems", () => {
   it("returns items and locale metadata for a valid response", async () => {
@@ -49,6 +49,38 @@ describe("fetchItems", () => {
       })) as unknown as typeof fetch,
     );
     await expect(fetchItems()).rejects.toThrow(/unreadable response/);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("exportCatalogPdf", () => {
+  it("returns the response body as a Blob on success", async () => {
+    const fakeBlob = new Blob(["%PDF-fake"], { type: "application/pdf" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        blob: async () => fakeBlob,
+      })) as unknown as typeof fetch,
+    );
+    const result = await exportCatalogPdf();
+    expect(result).toBe(fakeBlob);
+    vi.unstubAllGlobals();
+  });
+
+  it("throws the server's error message on failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 400,
+        statusText: "Bad Request",
+        json: async () => ({ error: "No public-visible items to export." }),
+      })) as unknown as typeof fetch,
+    );
+    await expect(exportCatalogPdf()).rejects.toThrow("No public-visible items to export.");
     vi.unstubAllGlobals();
   });
 });
