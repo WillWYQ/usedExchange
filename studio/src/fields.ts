@@ -16,11 +16,16 @@ export type FieldKind =
 
 export type FieldDescriptor = {
   path: (string | number)[];
-  label: string;
+  /**
+   * Key into the Studio i18n dictionary, resolved with t() at render time.
+   * Kept as a plain string so this module stays React-free; the renderers
+   * (FieldInput, EditForm, DefaultsPane) look it up.
+   */
+  labelKey: string;
   kind: FieldKind;
   options?: readonly string[];
-  /** Shown under the input; keep it to one short line. */
-  hint?: string;
+  /** Key for the hint shown under the input; keep it to one short line. */
+  hintKey?: string;
 };
 
 /**
@@ -41,7 +46,8 @@ export type GroupId =
 
 export type FieldGroup = {
   id: GroupId;
-  title: string;
+  /** Key into the Studio i18n dictionary, resolved with t() at render time. */
+  titleKey: string;
   /**
    * Expanded on load in the EditForm; every other group renders as a
    * collapsed <details>. This describes the EDIT FORM only — DefaultsPane
@@ -58,77 +64,77 @@ export type FieldGroup = {
 export const FIELD_GROUPS: readonly FieldGroup[] = [
   {
     id: "listing",
-    title: "Listing",
+    titleKey: "fieldGroup.listing",
     defaultOpen: true,
     fields: [
-      { path: ["name"], label: "Name", kind: "text" },
+      { path: ["name"], labelKey: "field.name", kind: "text" },
       {
         path: ["status"],
-        label: "Status",
+        labelKey: "field.status",
         kind: "select",
         options: ["available", "pending", "reserved", "sold", "draft"],
-        hint: "Draft items never appear on the site.",
+        hintKey: "field.status.hint",
       },
       {
         path: ["condition"],
-        label: "Condition",
+        labelKey: "field.condition",
         kind: "select",
         options: ["new", "like-new", "good", "fair", "for-parts"],
       },
-      { path: ["quantity"], label: "Quantity", kind: "integer" },
-      { path: ["description"], label: "Description", kind: "textarea" },
-      { path: ["tags"], label: "Tags", kind: "stringList", hint: "One per line." },
+      { path: ["quantity"], labelKey: "field.quantity", kind: "integer" },
+      { path: ["description"], labelKey: "field.description", kind: "textarea" },
+      { path: ["tags"], labelKey: "field.tags", kind: "stringList", hintKey: "field.tags.hint" },
     ],
   },
   {
     id: "price",
-    title: "Price",
+    titleKey: "fieldGroup.price",
     defaultOpen: true,
     // EditForm renders the tier editor inside this group, right after
     // Currency: the amounts belong next to the currency they are in, not at
     // the far end of the form behind every other group.
     fields: [
-      { path: ["price", "currency"], label: "Currency", kind: "text", hint: "e.g. USD" },
-      { path: ["price", "negotiable"], label: "Negotiable", kind: "boolean" },
-      { path: ["price", "show_tiers"], label: "Show all tiers to buyers", kind: "boolean" },
-      { path: ["min_acceptable_offer"], label: "Minimum acceptable offer", kind: "number" },
-      { path: ["no_lowball"], label: "No lowball offers", kind: "boolean" },
-      { path: ["price_reduced"], label: "Price reduced", kind: "boolean" },
-      { path: ["previous_lowest_price"], label: "Previous lowest price", kind: "number" },
+      { path: ["price", "currency"], labelKey: "field.currency", kind: "text", hintKey: "field.currency.hint" },
+      { path: ["price", "negotiable"], labelKey: "field.negotiable", kind: "boolean" },
+      { path: ["price", "show_tiers"], labelKey: "field.showTiers", kind: "boolean" },
+      { path: ["min_acceptable_offer"], labelKey: "field.minAcceptableOffer", kind: "number" },
+      { path: ["no_lowball"], labelKey: "field.noLowball", kind: "boolean" },
+      { path: ["price_reduced"], labelKey: "field.priceReduced", kind: "boolean" },
+      { path: ["previous_lowest_price"], labelKey: "field.previousLowestPrice", kind: "number" },
       {
         path: ["price", "shipping_payer"],
-        label: "Shipping paid by",
+        labelKey: "field.shippingPayer",
         kind: "select",
         options: ["seller", "buyer"],
-        hint: "Leave blank to use the site default.",
+        hintKey: "field.shippingPayer.hint",
       },
     ],
   },
   {
     id: "translations",
-    title: "Translations",
+    titleKey: "fieldGroup.translations",
     fields: [
-      { path: ["name_zh"], label: "Name (中文)", kind: "text" },
-      { path: ["description_zh"], label: "Description (中文)", kind: "textarea" },
+      { path: ["name_zh"], labelKey: "field.nameZh", kind: "text" },
+      { path: ["description_zh"], labelKey: "field.descriptionZh", kind: "textarea" },
     ],
   },
   {
     id: "specs",
-    title: "Specs",
+    titleKey: "fieldGroup.specs",
     fields: [
-      { path: ["brand"], label: "Brand", kind: "text" },
-      { path: ["model"], label: "Model", kind: "text" },
-      { path: ["color"], label: "Colour", kind: "text" },
-      { path: ["age_years"], label: "Age (years)", kind: "number" },
-      { path: ["dimensions", "length"], label: "Length", kind: "number" },
-      { path: ["dimensions", "width"], label: "Width", kind: "number" },
-      { path: ["dimensions", "height"], label: "Height", kind: "number" },
-      { path: ["dimensions", "unit"], label: "Size unit", kind: "select", options: ["cm", "in"] },
-      { path: ["weight", "value"], label: "Weight", kind: "number" },
-      { path: ["weight", "unit"], label: "Weight unit", kind: "select", options: ["kg", "lb"] },
-      { path: ["original_source"], label: "Bought from", kind: "text" },
-      { path: ["original_link"], label: "Original listing URL", kind: "text" },
-      { path: ["original_price"], label: "Original price", kind: "number" },
+      { path: ["brand"], labelKey: "field.brand", kind: "text" },
+      { path: ["model"], labelKey: "field.model", kind: "text" },
+      { path: ["color"], labelKey: "field.color", kind: "text" },
+      { path: ["age_years"], labelKey: "field.age", kind: "number" },
+      { path: ["dimensions", "length"], labelKey: "field.length", kind: "number" },
+      { path: ["dimensions", "width"], labelKey: "field.width", kind: "number" },
+      { path: ["dimensions", "height"], labelKey: "field.height", kind: "number" },
+      { path: ["dimensions", "unit"], labelKey: "field.sizeUnit", kind: "select", options: ["cm", "in"] },
+      { path: ["weight", "value"], labelKey: "field.weight", kind: "number" },
+      { path: ["weight", "unit"], labelKey: "field.weightUnit", kind: "select", options: ["kg", "lb"] },
+      { path: ["original_source"], labelKey: "field.boughtFrom", kind: "text" },
+      { path: ["original_link"], labelKey: "field.originalUrl", kind: "text" },
+      { path: ["original_price"], labelKey: "field.originalPrice", kind: "number" },
     ],
   },
   {
@@ -136,39 +142,39 @@ export const FIELD_GROUPS: readonly FieldGroup[] = [
     // windows or the contact note sitting beside them. The question this
     // group answers is how the money and the goods change hands.
     id: "payment",
-    title: "Payment & pickup",
+    titleKey: "fieldGroup.payment",
     fields: [
       {
         path: ["preferred_payment"],
-        label: "Preferred payment",
+        labelKey: "field.preferredPayment",
         kind: "stringList",
-        hint: "One per line.",
+        hintKey: "field.preferredPayment.hint",
       },
-      { path: ["pickup_windows"], label: "Pickup windows", kind: "stringList", hint: "One per line." },
-      { path: ["contact_note"], label: "Contact note", kind: "textarea" },
-      { path: ["stripe_payment_link"], label: "Stripe payment link", kind: "text" },
-      { path: ["venmo_payment_request"], label: "Venmo request link", kind: "text" },
+      { path: ["pickup_windows"], labelKey: "field.pickupWindows", kind: "stringList", hintKey: "field.pickupWindows.hint" },
+      { path: ["contact_note"], labelKey: "field.contactNote", kind: "textarea" },
+      { path: ["stripe_payment_link"], labelKey: "field.stripeLink", kind: "text" },
+      { path: ["venmo_payment_request"], labelKey: "field.venmoLink", kind: "text" },
     ],
   },
   {
     // Was "Student" — which described who the seller is rather than what the
     // fields are. Nobody selling a bike fills these in.
     id: "books",
-    title: "Books & courses",
+    titleKey: "fieldGroup.books",
     fields: [
-      { path: ["isbn"], label: "ISBN", kind: "text" },
-      { path: ["course"], label: "Course", kind: "text" },
-      { path: ["edition"], label: "Edition", kind: "text" },
-      { path: ["semester_listed"], label: "Semester listed", kind: "text" },
+      { path: ["isbn"], labelKey: "field.isbn", kind: "text" },
+      { path: ["course"], labelKey: "field.course", kind: "text" },
+      { path: ["edition"], labelKey: "field.edition", kind: "text" },
+      { path: ["semester_listed"], labelKey: "field.semester", kind: "text" },
     ],
   },
   {
     id: "extras",
-    title: "Extras",
+    titleKey: "fieldGroup.extras",
     fields: [
-      { path: ["meta_description"], label: "Meta description", kind: "textarea" },
-      { path: ["category_override"], label: "Category override", kind: "text" },
-      { path: ["youtube_link"], label: "YouTube link", kind: "text" },
+      { path: ["meta_description"], labelKey: "field.metaDescription", kind: "textarea" },
+      { path: ["category_override"], labelKey: "field.categoryOverride", kind: "text" },
+      { path: ["youtube_link"], labelKey: "field.youtubeLink", kind: "text" },
     ],
   },
   {
@@ -177,10 +183,10 @@ export const FIELD_GROUPS: readonly FieldGroup[] = [
     // reachable but out of the way — not sitting in the first screen next to
     // Name inviting a change.
     id: "dates",
-    title: "Dates",
+    titleKey: "fieldGroup.dates",
     fields: [
-      { path: ["listed_date"], label: "Listed date", kind: "date" },
-      { path: ["sold_date"], label: "Sold date", kind: "date" },
+      { path: ["listed_date"], labelKey: "field.listedDate", kind: "date" },
+      { path: ["sold_date"], labelKey: "field.soldDate", kind: "date" },
     ],
   },
 ];

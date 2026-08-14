@@ -18,14 +18,14 @@ import { assertEditableValue, isEditableField, resolveFieldSchema } from "./lib/
 
 type FieldDescriptor = {
   path: (string | number)[];
-  label: string;
+  labelKey: string;
   kind: string;
   options?: readonly string[];
-  hint?: string;
+  hintKey?: string;
 };
 type FieldGroup = {
   id: string;
-  title: string;
+  titleKey: string;
   defaultOpen?: boolean;
   fields: FieldDescriptor[];
 };
@@ -68,7 +68,7 @@ describe("studio field descriptors (Task 6)", () => {
         assert.equal(
           isEditableField(field.path),
           true,
-          `${group.title} / ${field.label} (${field.path.join(".")}) is not an editable path`,
+          `${group.titleKey} / ${field.labelKey} (${field.path.join(".")}) is not an editable path`,
         );
       }
     }
@@ -92,7 +92,7 @@ describe("studio field descriptors (Task 6)", () => {
     }
   });
 
-  it("group ids, order and titles match the spec's grouping", () => {
+  it("group ids, order and title keys match the spec's grouping", () => {
     const { FIELD_GROUPS } = loadFields();
     expect(FIELD_GROUPS.map((g) => g.id)).toEqual([
       "listing",
@@ -104,15 +104,17 @@ describe("studio field descriptors (Task 6)", () => {
       "extras",
       "dates",
     ]);
-    expect(FIELD_GROUPS.map((g) => g.title)).toEqual([
-      "Listing",
-      "Price",
-      "Translations",
-      "Specs",
-      "Payment & pickup",
-      "Books & courses",
-      "Extras",
-      "Dates",
+    // Titles are Studio i18n dictionary keys now; the English dictionary maps
+    // them to the spec's group names.
+    expect(FIELD_GROUPS.map((g) => g.titleKey)).toEqual([
+      "fieldGroup.listing",
+      "fieldGroup.price",
+      "fieldGroup.translations",
+      "fieldGroup.specs",
+      "fieldGroup.payment",
+      "fieldGroup.books",
+      "fieldGroup.extras",
+      "fieldGroup.dates",
     ]);
     // Only the two groups a seller touches on an ordinary edit start open;
     // the rest render as <details> the seller opens on demand.
@@ -202,6 +204,8 @@ describe("studio field descriptors (Task 6)", () => {
   it("editForm seeds a missing object from WHOLE_OBJECT_SEEDS and asks for a unit", () => {
     const source = readFileSync(path.join(ROOT, "studio/src/editForm.ts"), "utf-8");
     expect(source).toContain("WHOLE_OBJECT_SEEDS[head]");
-    expect(source).toContain("pick a unit");
+    // The ask-for-a-unit messages are Studio i18n keys now, not prose.
+    expect(source).toContain("editFormProblem.pickSizeUnit");
+    expect(source).toContain("editFormProblem.pickWeightUnit");
   });
 });

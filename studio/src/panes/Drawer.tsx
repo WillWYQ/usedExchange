@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { StudioItem } from "../api";
 import { Button } from "../components/Button";
+import { useStudioT } from "../i18n/StudioI18n";
 import { EditForm } from "./EditForm";
 import { ImagePane } from "./ImagePane";
 
@@ -13,6 +14,7 @@ export function Drawer({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const { t } = useStudioT();
   const [tab, setTab] = useState<"photos" | "details">("photos");
   // Visited tabs stay mounted. Rendering only the active one used to throw a
   // half-typed edit away the moment the seller clicked Photos to check an
@@ -38,11 +40,11 @@ export function Drawer({
   }, [onClose]);
 
   return (
-    <aside className="drawer" aria-label={`${item.name} — item editor`}>
+    <aside className="drawer" aria-label={t("drawer.editor", { name: item.name })}>
       <header className="drawer-head">
         <h2>{item.name}</h2>
         <Button variant="ghost" onClick={onClose}>
-          Close
+          {t("drawer.close")}
         </Button>
       </header>
 
@@ -56,13 +58,13 @@ export function Drawer({
             className={tab === name ? "tab tab-active" : "tab"}
             onClick={() => open(name)}
           >
-            {name === "photos" ? "Photos" : "Details"}
+            {name === "photos" ? t("drawer.photos") : t("drawer.details")}
             {name === "details" && dirtyCount > 0 && (
               <>
                 <span className="field-dot" aria-hidden="true">
                   ●
                 </span>
-                <span className="visually-hidden"> (unsaved changes)</span>
+                <span className="visually-hidden">{t("drawer.unsavedChanges")}</span>
               </>
             )}
           </button>
