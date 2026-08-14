@@ -2279,6 +2279,47 @@ A **local-only** browser GUI for managing `content/` without editing JSON. Run `
   with no default tiers, or tiers already matching, are skipped and reported; failures are
   per-item and never abort the batch; only `price.tiers` is written.
 
+### Seller Studio i18n — the UI follows the language selector
+Studio's UI chrome (buttons, labels, tabs, statuses, filter bar, edit form, config pane,
+readiness checklist, etc.) follows the same `displayLocale` as the header's language
+switcher — one switch drives both the item-content language and the UI language.
+- **Hybrid dictionary:** built-in dictionaries ship with the template in `studio/src/i18n/`
+  (`strings.en.ts` is the complete source of truth — every string Studio can render;
+  `strings.zh.ts` is a built-in Chinese override in which any missing key falls back to
+  English). Sellers may optionally override individual keys per locale via
+  `siteConfig.studio.translations` in `content/config.ts` (a `locale → key → string` map).
+  The field is TypeScript-optional and read with `?? {}` (Iron Rule 8); as a pure override
+  it is intentionally absent from the upstream `content/config.ts` and not registered in
+  `scripts/lib/configDefaults.ts`.
+- **Locale source:** the switcher offers the site's own `siteConfig.i18n.availableLocales`
+  and renders only when more than one locale is configured. Seller overrides reach the
+  client in the `GET /api/items` response body (`studioTranslations`).
+- **Context provider + hook:** `StudioI18nProvider` (React Context) wraps the app with the
+  active locale and overrides; every pane calls `useStudioT()` → `{ t, locale }`.
+  `t(key, params?)` is typed against the EN dictionary (`StudioKey = keyof typeof EN`),
+  so a typo'd key is a compile error.
+- **Merge order** (highest priority wins): seller override for the active locale → built-in
+  dictionary for the active locale → built-in English, resolved once per locale switch by
+  `resolveStudioStrings()`.
+- **Key namespacing:** flat dot-separated keys grouped by component — `app.*`, `header.*`,
+  `sync.*`, `gettingStarted.*`, `filter.status.*` / `filter.*`, `bulk.*`, `publish.*`,
+  `itemList.*`, `newItem.*`, `drawer.*`, `editForm.*`, `field.*` / `fieldGroup.*` /
+  `fieldValue.*` / `editFormProblem.*`, `configPane.*`, `defaults.*`, `imagePane.*`,
+  `tierEditor.*`, `statusBadge.*`, `emptyState.*`, `readiness.*`, `localeSwitcher.*`,
+  `themeToggle.*`, `common.*`.
+- **Parameterized strings:** dynamic values use `{param}` interpolation (e.g.
+  `"{count} selected"`). English pluralization uses a `{plural}` token that expands to
+  `"s"` when the count ≠ 1 and `""` when it is 1; other locales override the whole
+  template string (ignoring `{plural}`), so their grammar stays unconstrained.
+- **Readiness checklist localization:** each `ReadinessItem` served by `/api/readiness`
+  (`scripts/lib/siteReadiness.ts`, shared with `pnpm doctor`) keeps its English
+  `title`/`detail` prose as the fallback and additionally carries an optional structured
+  `params` field (`{ variant, …values }`). The client picks the dictionary key
+  `readiness.<id>.<variant>`, interpolates `params` into it, and falls back to the
+  English `detail` when the active locale has no such key. The change is additive —
+  `pnpm doctor` reads `title`/`detail` directly and is untouched.
+- Low-level `StudioError` messages and auto-parsed config field docs stay English by design.
+
 ### Facebook Marketplace export (`pnpm fb-export`, Phase 17)
 Interactive CLI that exports available/pending/reserved items to Facebook Marketplace bulk-upload
 CSVs (50-item batches, ≤150-char titles, ≤10 photo columns with CDN URLs). Supports skip-previous,
