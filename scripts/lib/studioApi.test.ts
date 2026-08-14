@@ -2163,3 +2163,67 @@ describe("readiness route", () => {
     expect(res.status).toBe(405);
   });
 });
+
+describe("POST /api/export-pdf", () => {
+  it("returns 400 with a clear message when there are no eligible items", async () => {
+    // Each spy is captured and explicitly restored in `finally` — this file has
+    // no global afterEach mock reset, so a leaked mock would leak into whichever
+    // test runs next (see the existing loadAllItemsRaw spies above for the pattern).
+    const mockLoadAllItemsRaw = vi.spyOn(loaderModule, "loadAllItemsRaw").mockResolvedValue([]);
+    const mockLoadCategories = vi.spyOn(loaderModule, "loadCategories").mockResolvedValue([]);
+
+    try {
+      const res = await handleStudioRequest({
+        method: "POST",
+        url: "/api/export-pdf",
+        body: Buffer.from("{}"),
+        projectRoot: PROJECT_ROOT,
+      });
+
+      expect(res.status).toBe(400);
+      expect(asJson(res).body).toEqual({ error: "No public-visible items to export." });
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+      mockLoadCategories.mockRestore();
+    }
+  });
+
+  it("returns a PDF file response for the real local catalog", async () => {
+    const { chromium } = await import("playwright");
+    let chromiumAvailable = true;
+    try {
+      const browser = await chromium.launch();
+      await browser.close();
+    } catch {
+      chromiumAvailable = false;
+    }
+    if (!chromiumAvailable) {
+      console.warn("Skipping: Chromium not installed. Run `npx playwright install chromium`.");
+      return;
+    }
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/export-pdf",
+      body: Buffer.from("{}"),
+      projectRoot: PROJECT_ROOT,
+    });
+
+    expect(res.status).toBe(200);
+    expect(isFileResponse(res)).toBe(true);
+    if (isFileResponse(res)) {
+      expect(res.contentType).toBe("application/pdf");
+      expect(res.file.endsWith(".pdf")).toBe(true);
+    }
+  });
+
+  it("rejects non-POST methods", async () => {
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/export-pdf",
+      body: Buffer.alloc(0),
+      projectRoot: PROJECT_ROOT,
+    });
+    expect(res.status).toBe(405);
+  });
+});
