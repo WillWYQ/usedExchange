@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useStudioT } from "../i18n/StudioI18n";
 import { Button } from "./Button";
 
 export type Tier = {
@@ -38,6 +39,7 @@ export function TierEditor({
   /** Save calls this to collect the current rows, or null when unchanged. */
   registerCollector: (collect: () => Tier[] | null) => void;
 }) {
+  const { t } = useStudioT();
   const blank = (): Tier => ({ label: "", amount: 0 });
   const [rows, setRows] = useState<Tier[]>(initialTiers);
   const [baseline, setBaseline] = useState<Tier[]>(initialTiers);
@@ -64,15 +66,15 @@ export function TierEditor({
 
   return (
     <fieldset>
-      <legend>Price tiers</legend>
+      <legend>{t("tierEditor.title")}</legend>
       {rows.length === 0 && (
-        <p className="field-hint">No tiers. The listing needs at least one price tier.</p>
+        <p className="field-hint">{t("tierEditor.noTiers")}</p>
       )}
       <ol className="tier-list">
         {rows.map((tier, index) => (
           <li key={index} className="tier-row">
             <label className="tier-cell">
-              <span className="field-label">Label</span>
+              <span className="field-label">{t("tierEditor.label")}</span>
               <input
                 type="text"
                 value={tier.label}
@@ -80,7 +82,7 @@ export function TierEditor({
               />
             </label>
             <label className="tier-cell">
-              <span className="field-label">From (mi)</span>
+              <span className="field-label">{t("tierEditor.from")}</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -98,7 +100,7 @@ export function TierEditor({
               />
             </label>
             <label className="tier-cell">
-              <span className="field-label">To (mi)</span>
+              <span className="field-label">{t("tierEditor.to")}</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -116,7 +118,7 @@ export function TierEditor({
               />
             </label>
             <label className="tier-cell">
-              <span className="field-label">Amount</span>
+              <span className="field-label">{t("tierEditor.amount")}</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -131,13 +133,13 @@ export function TierEditor({
               variant="ghost"
               onClick={() => setRows((prev) => prev.filter((_, i) => i !== index))}
             >
-              Remove
+              {t("tierEditor.remove")}
             </Button>
           </li>
         ))}
       </ol>
       <Button variant="ghost" onClick={() => setRows((prev) => [...prev, blank()])}>
-        Add tier
+        {t("tierEditor.addTier")}
       </Button>
     </fieldset>
   );

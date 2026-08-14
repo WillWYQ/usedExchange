@@ -8,6 +8,7 @@ import {
   type StudioItem,
 } from "../api";
 import { Button } from "../components/Button";
+import { useStudioT } from "../i18n/StudioI18n";
 
 export function ImagePane({
   item,
@@ -16,6 +17,7 @@ export function ImagePane({
   item: StudioItem;
   onChanged: () => void;
 }) {
+  const { t } = useStudioT();
   const [files, setFiles] = useState<ImageEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -75,7 +77,8 @@ export function ImagePane({
           failed.push(msg.includes(file.name) ? msg : `${file.name}: ${msg}`);
         }
       }
-      if (failed.length > 0) throw new Error(`Could not add ${failed.join(", ")}`);
+      if (failed.length > 0)
+        throw new Error(t("imagePane.couldNotAdd", { details: failed.join(", ") }));
     });
   }
 
@@ -92,7 +95,7 @@ export function ImagePane({
   }
 
   return (
-    <div className="pane" aria-label={`Photos for ${item.name}`}>
+    <div className="pane" aria-label={t("imagePane.photosFor", { name: item.name })}>
       {error !== null && <p role="alert" className="alert-error">{error}</p>}
 
       <div
@@ -114,9 +117,9 @@ export function ImagePane({
           if (e.dataTransfer.files.length > 0) void addFiles(e.dataTransfer.files);
         }}
       >
-        <p>Drop photos here</p>
+        <p>{t("imagePane.dropHere")}</p>
         <label className="file-button">
-          Choose photos
+          {t("imagePane.choosePhotos")}
           <input
             type="file"
             accept="image/jpeg,image/png,image/webp,image/gif"
@@ -130,7 +133,7 @@ export function ImagePane({
         </label>
       </div>
 
-      {files.length === 0 && <p>No photos yet. The listing needs at least one.</p>}
+      {files.length === 0 && <p>{t("imagePane.noPhotos")}</p>}
 
       <ol className="thumb-grid">
         {files.map((entry, index) => (
@@ -150,28 +153,24 @@ export function ImagePane({
               <img src={`/api/items/${item.id}/images/${encodeURIComponent(entry.name)}`} alt="" />
             ) : (
               <div className="thumb-placeholder" aria-hidden="true">
-                No preview
+                {t("imagePane.noPreview")}
               </div>
             )}
             <span className="thumb-name">{entry.name}</span>
             {!entry.editable && (
-              <p className="thumb-note">
-                Studio can&apos;t work with this file&apos;s name (spaces, parentheses, or similar
-                characters) — the site will still publish it. Rename it to letters, digits, and
-                hyphens to manage it here.
-              </p>
+              <p className="thumb-note">{t("imagePane.nonEditableNote")}</p>
             )}
             <Button
               variant="ghost"
               disabled={busy || !entry.editable}
-              title={entry.editable ? undefined : "Rename this file before studio can remove it"}
+              title={entry.editable ? undefined : t("imagePane.removeTitle")}
               onClick={() =>
                 void run(async () => {
                   setFiles(await deleteImage(item.id, entry.name));
                 })
               }
             >
-              Remove
+              {t("imagePane.remove")}
             </Button>
           </li>
         ))}
