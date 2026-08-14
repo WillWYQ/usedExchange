@@ -34,6 +34,7 @@ export async function fetchItems(): Promise<{
   items: StudioItem[];
   defaultLocale: string;
   availableLocales: string[];
+  studioTranslations: Record<string, Record<string, string>>;
 }> {
   const res = await fetch("/api/items");
   const body = await readJsonBody(res);
@@ -58,6 +59,10 @@ export async function fetchItems(): Promise<{
     items: body.items as StudioItem[],
     defaultLocale: body.defaultLocale as string,
     availableLocales: body.availableLocales as string[],
+    // Lenient read: an older server without the field answers no overrides,
+    // and the client falls back to its built-in dictionaries.
+    studioTranslations:
+      (body.studioTranslations as Record<string, Record<string, string>> | undefined) ?? {},
   };
 }
 

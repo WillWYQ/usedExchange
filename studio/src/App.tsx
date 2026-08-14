@@ -9,6 +9,7 @@ import {
 import { Button } from "./components/Button";
 import { LocaleSwitcher } from "./components/LocaleSwitcher";
 import { ThemeToggle } from "./components/ThemeToggle";
+import { StudioI18nProvider, useStudioT } from "./i18n/StudioI18n";
 import { BulkToolbar } from "./panes/BulkToolbar";
 import { ConfigPane } from "./panes/ConfigPane";
 import { DefaultsPane } from "./panes/DefaultsPane";
@@ -36,6 +37,77 @@ function readDisplayLocale(defaultLocale: string): string {
 export function App() {
   const [items, setItems] = useState<StudioItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [availableLocales, setAvailableLocales] = useState<string[]>(["en"]);
+  const [displayLocale, setDisplayLocale] = useState<string>(() => readDisplayLocale("en"));
+  // Seller overrides for the built-in Studio dictionaries, loaded with the
+  // items. Empty = the built-in EN/… dictionaries stand unchanged.
+  const [studioTranslations, setStudioTranslations] = useState<
+    Record<string, Record<string, string>>
+  >({});
+
+  // Studio keeps no local copy of item state: after any write it re-reads the
+  // full list, so the table can never drift from what is on disk.
+  //
+  // Deliberately has no dependency on displayLocale: if it did, changing the
+  // display language would recreate this callback and re-trigger the mount
+  // effect below, re-reading every item.json from disk on every language
+  // switch. The functional setDisplayLocale update below corrects an
+  // invalidated locale without refresh needing to know the current one.
+  const refresh = useCallback(async () => {
+    const { items, defaultLocale, availableLocales: al, studioTranslations: st } =
+      await fetchItems();
+    setItems(items);
+    setAvailableLocales(al);
+    setStudioTranslations(st);
+    setDisplayLocale((prev) => (al.includes(prev) ? prev : defaultLocale));
+  }, []);
+
+  useEffect(() => {
+    refresh().catch((err: unknown) =>
+      setError(err instanceof Error ? err.message : String(err)),
+    );
+  }, [refresh]);
+
+  useEffect(() => {
+    localStorage.setItem(LOCALE_KEY, displayLocale);
+  }, [displayLocale]);
+
+  // A component cannot consume context from a provider it renders itself, so
+  // App owns the data the provider needs (locale + overrides) and the chrome
+  // that calls useStudioT() lives one level down in StudioChrome.
+  return (
+    <StudioI18nProvider locale={displayLocale} overrides={studioTranslations}>
+      <StudioChrome
+        items={items}
+        error={error}
+        setError={setError}
+        availableLocales={availableLocales}
+        displayLocale={displayLocale}
+        setDisplayLocale={setDisplayLocale}
+        refresh={refresh}
+      />
+    </StudioI18nProvider>
+  );
+}
+
+function StudioChrome({
+  items,
+  error,
+  setError,
+  availableLocales,
+  displayLocale,
+  setDisplayLocale,
+  refresh,
+}: {
+  items: StudioItem[];
+  error: string | null;
+  setError: (error: string | null) => void;
+  availableLocales: string[];
+  displayLocale: string;
+  setDisplayLocale: (locale: string) => void;
+  refresh: () => Promise<void>;
+}) {
+  const { t } = useStudioT();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
   const [justStampedIds, setJustStampedIds] = useState<Set<string>>(new Set());
@@ -58,39 +130,12 @@ export function App() {
   // count, which the pane reports back up (null = not a git repo → hide it).
   const [changesToken, setChangesToken] = useState(0);
   const [changeCount, setChangeCount] = useState<number | null>(null);
-  const bumpChanges = useCallback(() => setChangesToken((t) => t + 1), []);
+  const bumpChanges = useCallback(() => setChangesToken((token) => token + 1), []);
   const [viewMode, setViewMode] = useState<"table" | "cards">(() => readViewMode());
-  const [availableLocales, setAvailableLocales] = useState<string[]>(["en"]);
-  const [displayLocale, setDisplayLocale] = useState<string>(() => readDisplayLocale("en"));
-
-  // Studio keeps no local copy of item state: after any write it re-reads the
-  // full list, so the table can never drift from what is on disk.
-  //
-  // Deliberately has no dependency on displayLocale: if it did, changing the
-  // display language would recreate this callback and re-trigger the mount
-  // effect below, re-reading every item.json from disk on every language
-  // switch. The functional setDisplayLocale update below corrects an
-  // invalidated locale without refresh needing to know the current one.
-  const refresh = useCallback(async () => {
-    const { items, defaultLocale, availableLocales: al } = await fetchItems();
-    setItems(items);
-    setAvailableLocales(al);
-    setDisplayLocale((prev) => (al.includes(prev) ? prev : defaultLocale));
-  }, []);
-
-  useEffect(() => {
-    refresh().catch((err: unknown) =>
-      setError(err instanceof Error ? err.message : String(err)),
-    );
-  }, [refresh]);
 
   useEffect(() => {
     localStorage.setItem(VIEW_MODE_KEY, viewMode);
   }, [viewMode]);
-
-  useEffect(() => {
-    localStorage.setItem(LOCALE_KEY, displayLocale);
-  }, [displayLocale]);
 
   const counts = useMemo(() => countByStatus(items), [items]);
 
@@ -206,10 +251,12 @@ export function App() {
   return (
     <>
       <header className="studio-head">
-        <h1>Seller Studio</h1>
+        <h1>{t("app.title")}</h1>
         <span className="counts">
-          content/ · {items.length} items
-          {changeCount !== null && changeCount > 0 && <> · {changeCount} uncommitted</>}
+          {t("app.itemCount", { count: items.length })}
+          {changeCount !== null && changeCount > 0 && (
+            <> · {t("app.uncommitted", { count: changeCount })}</>
+          )}
         </span>
         <div className="head-actions">
           <LocaleSwitcher
@@ -225,16 +272,16 @@ export function App() {
             }}
           />
           <Button onClick={() => setShowConfig(true)}>
-            Config
+            {t("header.config")}
           </Button>
           <Button onClick={() => setShowGuide((v) => !v)}>
-            Setup
+            {t("header.setup")}
           </Button>
           <Button onClick={() => setShowDefaults(true)}>
-            Defaults
+            {t("header.defaults")}
           </Button>
           <Button variant="primary" onClick={() => setShowNewItem(true)}>
-            New item
+            {t("header.newItem")}
           </Button>
         </div>
       </header>
@@ -246,9 +293,11 @@ export function App() {
       )}
       {error === null && items.length === 0 && (
         <div className="empty-state">
-          <p>No items yet.</p>
+          <p>{t("emptyState.noItems")}</p>
           <p>
-            Use <strong>New item</strong> in the header to create your first listing.
+            {t("emptyState.useNewItem")}
+            <strong>New item</strong>
+            {t("emptyState.useNewItemSuffix")}
           </p>
         </div>
       )}
@@ -282,8 +331,10 @@ export function App() {
       )}
       {items.length > 0 && visibleItems.length === 0 && (
         <div className="empty-state">
-          <p>No items match your filters.</p>
-          <Button onClick={() => changeFilters(DEFAULT_FILTERS)}>Clear filters</Button>
+          <p>{t("emptyState.noMatch")}</p>
+          <Button onClick={() => changeFilters(DEFAULT_FILTERS)}>
+            {t("emptyState.clearFilters")}
+          </Button>
         </div>
       )}
       {visibleItems.length > 0 && viewMode === "table" && (

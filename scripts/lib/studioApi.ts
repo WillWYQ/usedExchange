@@ -1120,6 +1120,9 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
             items: await listStudioItems(req.projectRoot),
             defaultLocale: siteConfig.i18n.defaultLocale,
             availableLocales: siteConfig.i18n.availableLocales,
+            // Optional per Iron Rule 8: absent config field → empty overrides,
+            // and the studio client falls back to its built-in dictionaries.
+            studioTranslations: siteConfig.studio?.translations ?? {},
           },
         };
       }

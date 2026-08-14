@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { streamSync } from "../api";
 import { Button } from "../components/Button";
+import { useStudioT } from "../i18n/StudioI18n";
 
 export function SyncBar({ onFinished }: { onFinished: () => void }) {
+  const { t } = useStudioT();
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -10,15 +12,19 @@ export function SyncBar({ onFinished }: { onFinished: () => void }) {
   async function push() {
     setRunning(true);
     setError(null);
-    setStatus("Starting…");
+    setStatus(t("sync.starting"));
     try {
       for await (const evt of streamSync()) {
         if (evt.event === "progress") {
           const d = evt.data;
           setStatus(
             d.type === "scanned"
-              ? `Found ${d.total} photos`
-              : `${d.completed} of ${d.total} — ${d.manifestKey ?? ""}`,
+              ? t("sync.found", { count: d.total ?? 0 })
+              : t("sync.progress", {
+                  completed: d.completed ?? 0,
+                  total: d.total ?? 0,
+                  manifestKey: d.manifestKey ?? "",
+                }),
           );
         } else if (evt.event === "done") {
           const d = evt.data;
@@ -30,8 +36,14 @@ export function SyncBar({ onFinished }: { onFinished: () => void }) {
               ? "\n" + d.failures.map((f) => `${f.manifestKey}: ${f.error}`).join("\n")
               : "";
           setStatus(
-            `Pushed ${d.uploaded}, skipped ${d.skipped}` +
-              (d.failures.length > 0 ? `, ${d.failures.length} failed${failureDetail}` : ""),
+            d.failures.length > 0
+              ? t("sync.failed", {
+                  uploaded: d.uploaded,
+                  skipped: d.skipped,
+                  failedCount: d.failures.length,
+                  failureDetail,
+                })
+              : t("sync.done", { uploaded: d.uploaded, skipped: d.skipped }),
           );
           onFinished();
         } else {
@@ -50,7 +62,7 @@ export function SyncBar({ onFinished }: { onFinished: () => void }) {
   return (
     <div className="sync-bar">
       <Button disabled={running} onClick={() => void push()}>
-        {running ? "Pushing to CDN…" : "Push photos to CDN"}
+        {running ? t("sync.pushing") : t("sync.push")}
       </Button>
       {status !== null && <span className="sync-status">{status}</span>}
       {error !== null && (

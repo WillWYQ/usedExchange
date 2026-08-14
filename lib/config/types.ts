@@ -131,6 +131,15 @@ export type SiteConfig = {
     // omit entirely for a single global unit system.
     localeMeasurementUnits?: Partial<Record<string, "metric" | "imperial">>;
   };
+
+  // Seller Studio — optional override of built-in UI strings.
+  // Any locale with a built-in Studio dictionary ships with the template.
+  // This field lets sellers add strings for locales the template doesn't
+  // ship, or override individual keys. Optional per Iron Rule 8: read with
+  // `?? {}` in the studio API handler.
+  studio?: {
+    translations?: Record<string, Record<string, string>>;
+  };
 };
 
 // All UI labels that can be localised. Every key must have a value in the

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchChanges, publish, type Changes } from "../api";
 import { Button } from "../components/Button";
+import { useStudioT } from "../i18n/StudioI18n";
 
 const DEFAULT_MESSAGE = "chore: update listings";
 
@@ -16,6 +17,7 @@ export function PublishPane({
   // is not a git repository, so the header can hide the segment entirely.
   onChanges: (count: number | null) => void;
 }) {
+  const { t } = useStudioT();
   const [changes, setChanges] = useState<Changes | null>(null);
   // A git-less project is not an error to shout about — studio still edits
   // files, it just can't commit them. The sniff below couples to the server
@@ -60,7 +62,9 @@ export function PublishPane({
     try {
       const result = await publish(message);
       setPublished(
-        `${result.commit} — ${result.files.length} file${result.files.length === 1 ? "" : "s"} shipped`,
+        result.files.length === 1
+          ? t("publish.shipped", { commit: result.commit, count: result.files.length })
+          : t("publish.shippedMulti", { commit: result.commit, count: result.files.length }),
       );
       // The commit cleared the working tree, so the list should come back
       // empty — re-fetch rather than assume, since a failed push is the one
@@ -75,12 +79,12 @@ export function PublishPane({
 
   return (
     <section className="publish-pane" aria-label="Publish changes">
-      <h2>Publish</h2>
+      <h2>{t("publish.title")}</h2>
       {notAGitRepo && (
         <p>
-          This project is not a git repository, so studio cannot commit or push.
-          Edits are still saved to <code>content/</code> — set up git to publish
-          them from here.
+          {t("publish.notGitRepo")}
+          <code>content/</code>
+          {t("publish.notGitRepoSuffix")}
         </p>
       )}
       {loadError !== null && (
@@ -89,7 +93,7 @@ export function PublishPane({
         </p>
       )}
       {changes !== null && changes.files.length === 0 && changes.unpushed === 0 && (
-        <p className="change-empty">Nothing to publish — the working tree is clean.</p>
+        <p className="change-empty">{t("publish.clean")}</p>
       )}
       {changes !== null && changes.files.length === 0 && changes.unpushed > 0 && (
         // A prior publish committed but its push failed (e.g. the network
@@ -97,9 +101,14 @@ export function PublishPane({
         // publish" and disable the button while the live site stayed stale —
         // the retry path existing on the server but unreachable from here.
         <p className="change-empty">
-          {changes.unpushed} committed change{changes.unpushed === 1 ? "" : "s"} from an earlier
-          publish {changes.unpushed === 1 ? "is" : "are"} still waiting to be pushed. Publish
-          again to finish sending {changes.unpushed === 1 ? "it" : "them"}.
+          {changes.unpushed === 1
+            ? t("publish.unpushedOne")
+            : t("publish.unpushed", {
+                count: changes.unpushed,
+                s: "s",
+                isAre: "are",
+                itThem: "them",
+              })}
         </p>
       )}
       {changes !== null && changes.files.length > 0 && (
@@ -115,7 +124,7 @@ export function PublishPane({
         <input
           type="text"
           value={message}
-          aria-label="Commit message"
+          aria-label={t("publish.commitMessage")}
           onChange={(e) => setMessage(e.target.value)}
         />
         <Button
@@ -127,7 +136,7 @@ export function PublishPane({
           }
           onClick={() => void submit()}
         >
-          {busy ? "Publishing…" : "Publish"}
+          {busy ? t("publish.publishing") : t("publish.publish")}
         </Button>
       </div>
       {published !== null && <p className="publish-done">{published}</p>}
