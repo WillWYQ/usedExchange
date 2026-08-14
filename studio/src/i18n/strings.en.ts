@@ -1,0 +1,303 @@
+// studio/src/i18n/strings.en.ts
+//
+// The complete built-in English dictionary for Seller Studio — the source of
+// truth for every key. Values match the formerly hardcoded strings exactly, so
+// the i18n switch is invisible in English.
+//
+// Strings that render around an inline tag (<strong>/<code>) are split into a
+// prefix key and a `…Suffix` key; the JSX tag stays between the two t() calls.
+export const EN = {
+  // ── App header ──────────────────────────────────────────────────
+  "app.title": "Seller Studio",
+  "app.itemCount": "content/ · {count} items",
+  "app.uncommitted": "{count} uncommitted",
+
+  // ── Header buttons ──────────────────────────────────────────────
+  "header.config": "Config",
+  "header.setup": "Setup",
+  "header.defaults": "Defaults",
+  "header.newItem": "New item",
+
+  // ── Sync bar ────────────────────────────────────────────────────
+  "sync.push": "Push photos to CDN",
+  "sync.pushing": "Pushing to CDN…",
+  "sync.starting": "Starting…",
+  "sync.found": "Found {count} photos",
+  "sync.progress": "{completed} of {total} — {manifestKey}",
+  "sync.done": "Pushed {uploaded}, skipped {skipped}",
+  "sync.failed": "Pushed {uploaded}, skipped {skipped}, {failedCount} failed{failureDetail}",
+
+  // ── Getting started (collapsed chrome) ──────────────────────────
+  "gettingStarted.allSet": "All set — your site is ready to publish.",
+  "gettingStarted.progress": "Setup: {done} of {total} core steps done.",
+  "gettingStarted.showChecklist": "Show checklist",
+  "gettingStarted.hide": "Hide",
+  "gettingStarted.title": "Getting started — {done} of {total} done",
+  "gettingStarted.advanced": "Advanced (optional)",
+  "gettingStarted.done": "Done: ",
+  "gettingStarted.stillToDo": "Still to do: ",
+  "gettingStarted.openConfig": "Open Config",
+  "gettingStarted.newItem": "New item",
+  "gettingStarted.loading": "Loading setup status",
+
+  // ── Filter bar status tabs ──────────────────────────────────────
+  "filter.status.active": "Active",
+  "filter.status.available": "Available",
+  "filter.status.reserved": "Reserved",
+  "filter.status.pending": "Pending",
+  "filter.status.draft": "Draft",
+  "filter.status.sold": "Sold",
+  "filter.status.all": "All",
+
+  // ── Filter bar controls ─────────────────────────────────────────
+  "filter.search.placeholder": "Search name, category, tags",
+  "filter.search.ariaLabel": "Search items by name, category, or tag",
+  "filter.category.label": "Category",
+  "filter.category.all": "All categories",
+  "filter.sort.label": "Sort",
+  "filter.sort.default": "Default order",
+  "filter.sort.bestMatch": "Best match",
+  "filter.sort.nameAsc": "Name A–Z",
+  "filter.sort.priceAsc": "Price low–high",
+  "filter.sort.priceDesc": "Price high–low",
+  "filter.sort.newest": "Newest",
+  "filter.sort.oldest": "Oldest",
+  "filter.selectAll": "Select all",
+  "filter.viewModeTable": "Table",
+  "filter.viewModeCards": "Cards",
+  "filter.itemCount": "{count} item",
+  "filter.itemCount.plural": "{count} items",
+  "filter.ariaLabel": "Filter items",
+  "filter.statusAria": "Item status",
+
+  // ── Bulk toolbar ────────────────────────────────────────────────
+  "bulk.selected": "{count} selected",
+  "bulk.markSold": "Mark sold",
+  "bulk.markPending": "Mark pending",
+  "bulk.markAvailable": "Mark available",
+  "bulk.moveToDraft": "Move to draft",
+  "bulk.applyDefaultTiers": "Apply default tiers",
+  "bulk.clearSelection": "Clear selection",
+  "bulk.ariaLabel": "Bulk actions",
+
+  // ── Item list (table headers) ───────────────────────────────────
+  "itemList.selectAll": "Select all items",
+  "itemList.photo": "Photo",
+  "itemList.name": "Name",
+  "itemList.category": "Category",
+  "itemList.status": "Status",
+  "itemList.price": "Price",
+  "itemList.selectItem": "Select {name}",
+
+  // ── Publish pane ────────────────────────────────────────────────
+  "publish.title": "Publish",
+  // Prefix/suffix around <code>content/</code> (see file-head note).
+  "publish.notGitRepo": "This project is not a git repository, so studio cannot commit or push. Edits are still saved to ",
+  "publish.notGitRepoSuffix": " — set up git to publish them from here.",
+  "publish.clean": "Nothing to publish — the working tree is clean.",
+  "publish.unpushed": "{count} committed change{s} from an earlier publish {isAre} still waiting to be pushed. Publish again to finish sending {itThem}.",
+  "publish.unpushedOne": "1 committed change from an earlier publish is still waiting to be pushed. Publish again to finish sending it.",
+  "publish.commitMessage": "Commit message",
+  "publish.publish": "Publish",
+  "publish.publishing": "Publishing…",
+  "publish.shipped": "{commit} — {count} file shipped",
+  "publish.shippedMulti": "{commit} — {count} files shipped",
+
+  // ── New item dialog ─────────────────────────────────────────────
+  "newItem.title": "New item",
+  "newItem.category": "Category",
+  "newItem.categoryPlaceholder": "e.g. electronics",
+  "newItem.categoryHint": "Pick an existing category or type a new one.",
+  "newItem.name": "Item name (slug)",
+  "newItem.namePlaceholder": "e.g. ikea-desk-lamp",
+  "newItem.nameHint": "Lowercase letters, digits, hyphens. Created as a draft — invisible on the site until published.",
+  "newItem.applyDefaults": "Apply defaults",
+  "newItem.applyDefaultsHint": "Uses your site and category defaults (manage them under Defaults). Switch off for a blank template.",
+  "newItem.create": "Create",
+  "newItem.creating": "Creating…",
+  "newItem.cancel": "Cancel",
+  "newItem.slugError": "Category and name must be kebab-case (lowercase letters, digits, hyphens).",
+
+  // ── Drawer ──────────────────────────────────────────────────────
+  "drawer.photos": "Photos",
+  "drawer.details": "Details",
+  "drawer.close": "Close",
+  "drawer.unsavedChanges": " (unsaved changes)",
+  "drawer.editor": "{name} — item editor",
+
+  // ── Edit form ───────────────────────────────────────────────────
+  "editForm.saveChanges": "Save changes",
+  "editForm.saving": "Saving…",
+  "editForm.discard": "Discard",
+  "editForm.noUnsaved": "No unsaved changes",
+  "editForm.unsaved": "{count} unsaved change",
+  "editForm.unsavedPlural": "{count} unsaved changes",
+  "editForm.nothingChanged": "Nothing changed.",
+  "editForm.saved": "Saved.",
+  "editForm.loading": "Loading item fields",
+  "editForm.groupDirty": "{count} unsaved",
+  "editForm.groupSet": "{count} set",
+
+  // ── Field labels & hints (from fields.ts) ───────────────────────
+  "field.name": "Name",
+  "field.status": "Status",
+  "field.status.hint": "Draft items never appear on the site.",
+  "field.condition": "Condition",
+  "field.quantity": "Quantity",
+  "field.description": "Description",
+  "field.tags": "Tags",
+  "field.tags.hint": "One per line.",
+  "field.currency": "Currency",
+  "field.currency.hint": "e.g. USD",
+  "field.negotiable": "Negotiable",
+  "field.showTiers": "Show all tiers to buyers",
+  "field.minAcceptableOffer": "Minimum acceptable offer",
+  "field.noLowball": "No lowball offers",
+  "field.priceReduced": "Price reduced",
+  "field.previousLowestPrice": "Previous lowest price",
+  "field.shippingPayer": "Shipping paid by",
+  "field.shippingPayer.hint": "Leave blank to use the site default.",
+  "field.nameZh": "Name (中文)",
+  "field.descriptionZh": "Description (中文)",
+  "field.brand": "Brand",
+  "field.model": "Model",
+  "field.color": "Colour",
+  "field.age": "Age (years)",
+  "field.length": "Length",
+  "field.width": "Width",
+  "field.height": "Height",
+  "field.sizeUnit": "Size unit",
+  "field.weight": "Weight",
+  "field.weightUnit": "Weight unit",
+  "field.boughtFrom": "Bought from",
+  "field.originalUrl": "Original listing URL",
+  "field.originalPrice": "Original price",
+  "field.preferredPayment": "Preferred payment",
+  "field.preferredPayment.hint": "One per line.",
+  "field.pickupWindows": "Pickup windows",
+  "field.pickupWindows.hint": "One per line.",
+  "field.contactNote": "Contact note",
+  "field.stripeLink": "Stripe payment link",
+  "field.venmoLink": "Venmo request link",
+  "field.isbn": "ISBN",
+  "field.course": "Course",
+  "field.edition": "Edition",
+  "field.semester": "Semester listed",
+  "field.metaDescription": "Meta description",
+  "field.categoryOverride": "Category override",
+  "field.youtubeLink": "YouTube link",
+  "field.listedDate": "Listed date",
+  "field.soldDate": "Sold date",
+
+  // ── Field group titles ──────────────────────────────────────────
+  "fieldGroup.listing": "Listing",
+  "fieldGroup.price": "Price",
+  "fieldGroup.translations": "Translations",
+  "fieldGroup.specs": "Specs",
+  "fieldGroup.payment": "Payment & pickup",
+  "fieldGroup.books": "Books & courses",
+  "fieldGroup.extras": "Extras",
+  "fieldGroup.dates": "Dates",
+
+  // ── Field value validation errors ───────────────────────────────
+  "fieldValue.mustBeNumber": "must be a number",
+  "fieldValue.mustBeWholeNumber": "must be a whole number",
+
+  // ── Edit form problem messages ──────────────────────────────────
+  "editFormProblem.pickSizeUnit": "pick a unit to set dimensions",
+  "editFormProblem.pickWeightUnit": "pick a unit to set a weight",
+
+  // ── Config pane ─────────────────────────────────────────────────
+  "configPane.title": "Site config",
+  "configPane.headCopy": "Top-level sections work like subpages. The UI translations page adds a second level so related locales stay together.",
+  "configPane.sections": "Sections",
+  "configPane.subnavLabel": "Translation page",
+  "configPane.saveSection": "Save section",
+  "configPane.saving": "Saving…",
+  "configPane.close": "Close",
+  "configPane.loading": "Loading site config",
+  "configPane.other": "Other",
+  "configPane.allTranslations": "All translations",
+  "configPane.translationMatrixKey": "Key",
+  "configPane.translationMatrixCopy": "Each row is one key; each column is one locale. Save only touches the entries in this translation page.",
+  "configPane.missing": "Missing",
+  "configPane.unsaved": " (unsaved)",
+  "configPane.readOnly": "(edit this field in content/config.ts)",
+  // Prefix/suffix around <code>content/config.ts</code> (see file-head note).
+  "configPane.readOnlyHint": "Arrays and structured values are read-only here — edit them directly in ",
+  "configPane.readOnlyHintSuffix": ".",
+  "configPane.careful": "Careful:",
+  "configPane.mustBeNumber": "must be a number",
+  "configPane.saved": "Saved.",
+  "configPane.danger.deploymentMode": "Wrong value here and the site builds for the wrong host — check your deploy target before changing.",
+  "configPane.danger.baseUrl": "Used for canonical URLs, sitemap and social previews. A wrong value ships broken links.",
+  "configPane.danger.imageStorage": "Switching providers makes every existing image URL point somewhere new — photos go missing until you re-sync.",
+
+  // ── Defaults pane ───────────────────────────────────────────────
+  "defaults.title": "Item defaults",
+  "defaults.hint": "New items start with these values. Category defaults override site-wide ones; name, status and dates always start fresh.",
+  "defaults.siteWide": "Site-wide",
+  "defaults.save": "Save defaults",
+  "defaults.saving": "Saving…",
+  "defaults.close": "Close",
+  "defaults.loading": "Loading…",
+  "defaults.saved": "Saved.",
+  "defaults.tiersLabel": "Set a default for price tiers",
+  "defaults.tiersInherited": "site: {count} tiers",
+  "defaults.inherited": "site: {value}",
+  "defaults.tiersEnabled": "Price tiers",
+  "defaults.selectError": "{label}: pick a value or switch the field off",
+  "defaults.fieldError": "{label}: {error}",
+  "defaults.tiersError": "Price tiers: add at least one tier or switch the field off",
+  "defaults.fieldLabel": "Set a default for {label}",
+
+  // ── Image pane ──────────────────────────────────────────────────
+  "imagePane.dropHere": "Drop photos here",
+  "imagePane.choosePhotos": "Choose photos",
+  "imagePane.remove": "Remove",
+  "imagePane.noPhotos": "No photos yet. The listing needs at least one.",
+  "imagePane.noPreview": "No preview",
+  "imagePane.nonEditableNote": "Studio can't work with this file's name (spaces, parentheses, or similar characters) — the site will still publish it. Rename it to letters, digits, and hyphens to manage it here.",
+  "imagePane.removeTitle": "Rename this file before studio can remove it",
+  "imagePane.couldNotAdd": "Could not add {details}",
+  "imagePane.photosFor": "Photos for {name}",
+
+  // ── Tier editor ─────────────────────────────────────────────────
+  "tierEditor.title": "Price tiers",
+  "tierEditor.noTiers": "No tiers. The listing needs at least one price tier.",
+  "tierEditor.label": "Label",
+  "tierEditor.from": "From (mi)",
+  "tierEditor.to": "To (mi)",
+  "tierEditor.amount": "Amount",
+  "tierEditor.remove": "Remove",
+  "tierEditor.addTier": "Add tier",
+
+  // ── Status badge ────────────────────────────────────────────────
+  "statusBadge.available": "available",
+  "statusBadge.pending": "pending",
+  "statusBadge.reserved": "reserved",
+  "statusBadge.sold": "sold",
+  "statusBadge.draft": "draft",
+
+  // ── Empty states ────────────────────────────────────────────────
+  "emptyState.noItems": "No items yet.",
+  // Prefix/suffix around <strong>New item</strong> (see file-head note).
+  "emptyState.useNewItem": "Use ",
+  "emptyState.useNewItemSuffix": " in the header to create your first listing.",
+  "emptyState.noMatch": "No items match your filters.",
+  "emptyState.clearFilters": "Clear filters",
+
+  // ── Locale switcher ─────────────────────────────────────────────
+  "localeSwitcher.aria": "Display language",
+
+  // ── Theme toggle ────────────────────────────────────────────────
+  "themeToggle.light": "Switch to light theme",
+  "themeToggle.dark": "Switch to dark theme",
+
+  // ── Common ──────────────────────────────────────────────────────
+  "common.save": "Save",
+  "common.close": "Close",
+  "common.loading": "Loading…",
+  "common.saving": "Saving…",
+  "common.error": "Error",
+} as const;
