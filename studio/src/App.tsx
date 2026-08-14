@@ -14,6 +14,7 @@ import { BulkToolbar } from "./panes/BulkToolbar";
 import { ConfigPane } from "./panes/ConfigPane";
 import { DefaultsPane } from "./panes/DefaultsPane";
 import { Drawer } from "./panes/Drawer";
+import { ExportPdfDialog } from "./panes/ExportPdfDialog";
 import { GettingStarted } from "./panes/GettingStarted";
 import { FilterBar } from "./panes/FilterBar";
 import { ItemGrid } from "./panes/ItemGrid";
@@ -116,6 +117,7 @@ function StudioChrome({
   const [showNewItem, setShowNewItem] = useState(false);
   const [showDefaults, setShowDefaults] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
+  const [showExportPdf, setShowExportPdf] = useState(false);
   // The checklist opens itself once, the first time a site reports as not
   // ready; after that it is the seller's to open and close from the header.
   const [showGuide, setShowGuide] = useState(false);
@@ -280,6 +282,9 @@ function StudioChrome({
           <Button onClick={() => setShowDefaults(true)}>
             {t("header.defaults")}
           </Button>
+          <Button onClick={() => setShowExportPdf(true)}>
+            {t("header.exportPdf")}
+          </Button>
           <Button variant="primary" onClick={() => setShowNewItem(true)}>
             {t("header.newItem")}
           </Button>
@@ -402,6 +407,7 @@ function StudioChrome({
         />
       )}
       {showConfig && <ConfigPane onClose={() => setShowConfig(false)} />}
+      {showExportPdf && <ExportPdfDialog items={items} onClose={() => setShowExportPdf(false)} />}
     </>
   );
 }

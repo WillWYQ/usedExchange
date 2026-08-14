@@ -78,6 +78,8 @@
 - **Touches:** reads `studio/vite.config.ts`; reads/writes `content/items/**/item.json` and item photo dirs (via `scripts/lib/studioApi.ts`, `itemEdit.ts`, `itemFields.ts`, `studioImages.ts`); git status/add/commit/push limited to `content/` + `lib/generated/image-manifest.json` (`studioGit.ts` — mirrors `pnpm push`, never uses `git add -A`); CDN sync writes `lib/generated/image-manifest.json` and `.image-cache/checksums.json` (`studioSync.ts` — one-run-at-a-time mutex, SSE progress).
 - **API surface** (routed in `scripts/lib/studioApi.ts`): `GET /api/items`, `POST /api/items`, `POST /api/items/bulk-status`, `GET|PATCH /api/items/<cat>/<item>`, `GET /api/items/<cat>/<item>/images`, `GET …/images/<filename>` (file serve, `no-store`), `POST …/images` (base64 upload), `POST …/images/reorder`, `DELETE …/images/<filename>`, `POST /api/sync-images` (SSE progress/done/error), `GET /api/changes`, `POST /api/publish` (409 while a sync runs). Non-GET/HEAD requests pass `studio/csrfGuard.ts` (`Content-Type: application/json` required → 415; `Origin` must equal the server's own origin → 403).
 
+> **Catalog PDF export** (Seller Studio's "Export PDF" button) renders via headless Chromium. One-time setup: `npx playwright install chromium`.
+
 ### `sync-images.ts` — unified image pipeline
 
 - **Command:** `tsx scripts/sync-images.ts --mode <upload|dev-sync|build-check>` (exits 1 if `--mode` is missing or invalid).

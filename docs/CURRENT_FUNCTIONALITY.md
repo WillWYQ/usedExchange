@@ -364,7 +364,7 @@ Scripts run on the seller's machine. All listing changes write only to `content/
 
 A local-only web GUI for managing listings in a browser — an alternative to editing `item.json` by hand. Start it with `pnpm studio` (use `pnpm studio --port 3000` to change the port; any integer from 1024–65535 is accepted, default **5174**), then open the printed URL. It runs entirely on the seller's machine: it is never part of the build output, never deployed, and never reachable by site visitors. The launcher fails fast with a clear "run `pnpm update-site`" message if Vite or the Studio app is missing, and it loads `.env.local` so CDN credentials are picked up automatically. It follows the storefront's brand palette and offers light and dark themes, switchable from the header; the choice persists across sessions.
 
-Eight operations, all from one page:
+Eleven operations, all from one page:
 
 | Operation | What it does |
 |---|---|
@@ -378,6 +378,7 @@ Eight operations, all from one page:
 | Bulk apply default tiers | Overwrite `price.tiers` on the selected items with each item's own merged defaults (site ← category); items without default tiers, or already matching, are skipped and reported |
 | Edit form | Edit any item's fields with a two-tier, schema-driven form: the groups you touch daily are open, the rest are one click away; only the fields you changed are written back, preserving JSONC comments |
 | Publish | Review uncommitted changes, write a commit message, and commit + push `content/` plus the image manifest |
+| Catalog PDF export | Generate and download a single combined PDF catalog of all public-visible items (cover page, table of contents, per-category sections, one page per item with a live link) directly from Studio |
 
 **The default view hides sold items.** Studio opens on the **Active** tab, which shows everything except `sold` — the working set a seller acts on day to day. Sold listings are one click away on their own tab, and **All** shows everything. Bulk actions apply to exactly the rows currently visible: selecting all with a filter applied selects only that filtered set, and changing any filter clears the selection so an action can never reach a row that scrolled out of view. A row whose status you just changed stays put until the next filter change, so the SOLD stamp is not swept away by the very filter it triggers. The table's header carries a select-all checkbox; cards view has no shared header row, so its own select-all checkbox sits in the filter bar instead, appearing only while cards view is active.
 

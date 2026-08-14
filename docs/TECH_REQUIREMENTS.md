@@ -2797,6 +2797,7 @@ creation, CDN sync, and git publish. It is a Vite SPA (`studio/`) served togethe
 | `POST /api/sync-images` | Start a CDN sync; returns an **SSE** progress stream (`progress`/`done`/`error`). |
 | `GET /api/changes` | Git status (uncommitted changes) for the publish pane. |
 | `POST /api/publish` | `git add content + manifest`, commit, push. Refused (409) while a sync is running. |
+| `POST /api/export-pdf` | Generates the combined catalog PDF via headless Chromium and streams it back as `application/pdf`; `400` with `{ error }` when there are no eligible items or Chromium isn't installed. |
 
 Route regexes match the raw percent-encoded path and decode each segment **after** matching (traversal-safe).
 

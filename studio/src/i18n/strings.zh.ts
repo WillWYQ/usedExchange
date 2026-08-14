@@ -10,6 +10,15 @@ export const ZH: Partial<StudioStrings> = {
   "header.setup": "引导",
   "header.defaults": "默认值",
   "header.newItem": "新建商品",
+  "header.exportPdf": "导出 PDF",
+
+  "exportPdf.title": "导出目录 PDF",
+  "exportPdf.summary": "共 {itemCount} 件商品、{categoryCount} 个分类将被包含。",
+  "exportPdf.summaryEmpty": "目前没有可导出的公开商品。",
+  "exportPdf.generate": "生成并下载",
+  "exportPdf.generating": "正在生成…",
+  "exportPdf.done": "已下载 {filename}",
+  "exportPdf.close": "关闭",
 
   "sync.push": "推送照片到 CDN",
   "sync.pushing": "正在推送到 CDN…",

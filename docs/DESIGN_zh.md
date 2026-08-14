@@ -2098,6 +2098,10 @@ shipping?: {
   不受影响。
 - 底层 `StudioError` 消息与自动解析的配置字段说明按设计保持英文。
 
+#### 目录 PDF 导出
+
+顶部的 **导出 PDF** 按钮会打开一个对话框，生成一份合并的 PDF 目录，涵盖所有公开可见的商品（`available`/`pending`/`reserved`；不含 `sold`/`draft`）：封面页、按分类分组的可点击目录、每个分类的分隔页，以及每件商品单独一页（含已解析价格、照片、规格，以及指向该商品在线页面的链接）。通过 Headless Chromium（Playwright）基于独立的打印模板渲染，无需运行 `next dev` 服务器。目录中的条目是可点击的 PDF 内部跳转链接，条目旁不会显示具体页码（Chromium 的打印为 PDF 功能不支持 CSS 的 `target-counter()`），但每页页脚都会显示真实的"第 N 页，共 M 页"。首次使用需要执行一次 `npx playwright install chromium`。
+
 ### Facebook Marketplace 导出（`pnpm fb-export`，第 17 阶段）
 交互式 CLI，将 available/pending/reserved 物品导出为 Facebook Marketplace 批量上传 CSV
 （每批 50 件、标题 ≤150 字符、≤10 个 photo 列、使用 CDN URL）。支持跳过上次已导出、

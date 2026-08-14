@@ -315,6 +315,19 @@ export async function publish(message: string): Promise<{ commit: string; files:
   };
 }
 
+export async function exportCatalogPdf(): Promise<Blob> {
+  const res = await fetch("/api/export-pdf", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  if (!res.ok) {
+    const body = await readJsonBody(res);
+    throw new Error(errorMessage(body, `PDF export failed with ${res.status} ${res.statusText}`));
+  }
+  return res.blob();
+}
+
 export type SyncEvent =
   | { event: "progress"; data: { type: string; total?: number; completed?: number; manifestKey?: string } }
   | {
