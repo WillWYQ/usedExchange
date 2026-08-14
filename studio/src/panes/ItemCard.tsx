@@ -1,6 +1,7 @@
 import type { StudioItem } from "../api";
 import { ItemThumb } from "../components/ItemThumb";
 import { StatusBadge } from "../components/StatusBadge";
+import { useStudioT } from "../i18n/StudioI18n";
 import { coverImageUrl, formatPrice } from "../itemDisplay";
 
 export type ItemCardProps = {
@@ -12,6 +13,8 @@ export type ItemCardProps = {
 };
 
 export function ItemCard({ item, displayName, selected, onToggle, onClick }: ItemCardProps) {
+  const { t } = useStudioT();
+
   return (
     <div className="item-card">
       <label className="item-card-select">
@@ -19,7 +22,7 @@ export function ItemCard({ item, displayName, selected, onToggle, onClick }: Ite
           type="checkbox"
           checked={selected}
           onChange={() => onToggle(item.id)}
-          aria-label={`Select ${displayName}`}
+          aria-label={t("itemList.selectItem", { name: displayName })}
         />
       </label>
       <button
