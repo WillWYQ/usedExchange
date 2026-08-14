@@ -2065,6 +2065,39 @@ shipping?: {
   选中物品的 `price.tiers` 覆写为该物品所属分类合并后的默认值。无默认档位、或档位已一致的
   物品会被跳过并提示；失败按物品报告、不会中断整批；只写入 `price.tiers`。
 
+### Seller Studio i18n —— 界面跟随语言切换器
+工作台的界面元素（按钮、标签、页签、状态、筛选栏、编辑表单、配置面板、就绪清单等）
+与顶栏语言切换器使用同一个 `displayLocale` —— 一次切换同时驱动商品内容语言与界面语言。
+- **混合词典：** 模板在 `studio/src/i18n/` 内置词典（`strings.en.ts` 是完整的权威来源，
+  涵盖工作台可能渲染的全部文案；`strings.zh.ts` 是内置中文覆盖，缺失的键回退英文）。
+  卖家可选通过 `content/config.ts` 的 `siteConfig.studio.translations`（一个
+  `语言 → 键 → 文案` 的映射）按语言覆盖个别键。该字段为 TypeScript 可选、读取时用
+  `?? {}`（Iron Rule 8）；作为纯覆盖项，它有意不出现在上游 `content/config.ts` 中，
+  也不登记进 `scripts/lib/configDefaults.ts`。
+- **语言来源：** 切换器提供站点自身的 `siteConfig.i18n.availableLocales`，仅在配置了
+  多种语言时渲染。卖家覆盖随 `GET /api/items` 响应体（`studioTranslations`）下发到客户端。
+- **Context provider + hook：** `StudioI18nProvider`（React Context）以当前语言与覆盖项
+  包裹整个应用；每个面板调用 `useStudioT()` → `{ t, locale }`。`t(key, params?)` 以 EN
+  词典定类型（`StudioKey = keyof typeof EN`），键名写错会在编译期报错。
+- **合并顺序**（优先级从高到低）：当前语言的卖家覆盖 → 当前语言的内置词典 → 内置英文，
+  由 `resolveStudioStrings()` 在每次切换语言时解析一次。
+- **键名命名空间：** 扁平的点分隔键，按组件分组 —— `app.*`、`header.*`、`sync.*`、
+  `gettingStarted.*`、`filter.status.*` / `filter.*`、`bulk.*`、`publish.*`、`itemList.*`、
+  `newItem.*`、`drawer.*`、`editForm.*`、`field.*` / `fieldGroup.*` / `fieldValue.*` /
+  `editFormProblem.*`、`configPane.*`、`defaults.*`、`imagePane.*`、`tierEditor.*`、
+  `statusBadge.*`、`emptyState.*`、`readiness.*`、`localeSwitcher.*`、`themeToggle.*`、
+  `common.*`。
+- **带参数字符串：** 动态值使用 `{param}` 插值（如 `"{count} selected"`）。英文复数通过
+  `{plural}` 词元实现：计数 ≠ 1 时展开为 `"s"`，等于 1 时为空串；其他语言整体覆盖模板
+  字符串（忽略 `{plural}`），语法不受限制。
+- **就绪清单本地化：** `/api/readiness` 返回的每个 `ReadinessItem`
+  （`scripts/lib/siteReadiness.ts`，与 `pnpm doctor` 共用）保留英文 `title`/`detail`
+  表述作为回退，并额外携带可选的结构化 `params` 字段（`{ variant, …values }`）。
+  客户端按 `readiness.<id>.<variant>` 取词典中的模板并插入 `params`；当前语言没有对应
+  键时回退英文 `detail`。该改动是纯增量的 —— `pnpm doctor` 直接读 `title`/`detail`，
+  不受影响。
+- 底层 `StudioError` 消息与自动解析的配置字段说明按设计保持英文。
+
 ### Facebook Marketplace 导出（`pnpm fb-export`，第 17 阶段）
 交互式 CLI，将 available/pending/reserved 物品导出为 Facebook Marketplace 批量上传 CSV
 （每批 50 件、标题 ≤150 字符、≤10 个 photo 列、使用 CDN URL）。支持跳过上次已导出、
