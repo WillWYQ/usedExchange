@@ -17,6 +17,16 @@ export const EN = {
   "header.setup": "Setup",
   "header.defaults": "Defaults",
   "header.newItem": "New item",
+  "header.exportPdf": "Export PDF",
+
+  // ── Export PDF dialog ────────────────────────────────────────────
+  "exportPdf.title": "Export catalog PDF",
+  "exportPdf.summary": "{itemCount} items across {categoryCount} categories will be included.",
+  "exportPdf.summaryEmpty": "No public-visible items to export yet.",
+  "exportPdf.generate": "Generate & Download",
+  "exportPdf.generating": "Generating…",
+  "exportPdf.done": "Downloaded {filename}",
+  "exportPdf.close": "Close",
 
   // ── Sync bar ────────────────────────────────────────────────────
   "sync.push": "Push photos to CDN",
