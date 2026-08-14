@@ -11,6 +11,8 @@ import {
   problemGroupIds,
 } from "../editForm";
 import { FIELD_GROUPS, pathKey, readAtPath, type GroupId } from "../fields";
+import { useStudioT } from "../i18n/StudioI18n";
+import type { StudioKey } from "../i18n/types";
 import { FieldInput } from "./FieldInput";
 
 export function EditForm({
@@ -23,6 +25,7 @@ export function EditForm({
   /** Lets the drawer mark its Details tab while the pane is hidden. */
   onDirtyChange?: (count: number) => void;
 }) {
+  const { t } = useStudioT();
   const [loaded, setLoaded] = useState<ItemFields | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +87,7 @@ export function EditForm({
   function discard() {
     if (loaded === null) return;
     setDraft(draftFromFields(loaded));
-    setTierResetToken((t) => t + 1);
+    setTierResetToken((n) => n + 1);
     setError(null);
     setNotice(null);
     setSaved(false);
@@ -105,14 +108,18 @@ export function EditForm({
 
     if (problems.length > 0) {
       setForcedOpen(problemGroupIds(problems));
-      setError(problems.map((p) => `${p.label}: ${p.message}`).join("; "));
+      setError(
+        problems
+          .map((p) => `${t(p.labelKey as StudioKey)}: ${t(p.messageKey as StudioKey)}`)
+          .join("; "),
+      );
       setBusy(false);
       return;
     }
     if (edits.length === 0) {
       // Not an error — the Save button is disabled with nothing dirty, so
       // this is the defensive branch, and it says so in a neutral voice.
-      setNotice("Nothing changed.");
+      setNotice(t("editForm.nothingChanged"));
       setBusy(false);
       return;
     }
@@ -142,7 +149,7 @@ export function EditForm({
   if (loaded === null) {
     if (error !== null) return <p role="alert" className="alert-error">{error}</p>;
     return (
-      <div aria-busy="true" aria-label="Loading item fields">
+      <div aria-busy="true" aria-label={t("editForm.loading")}>
         <div className="skeleton" />
         <div className="skeleton" />
         <div className="skeleton" />
@@ -197,22 +204,24 @@ export function EditForm({
     >
       {error !== null && <p role="alert" className="alert-error">{error}</p>}
       {notice !== null && <p role="status" className="form-notice">{notice}</p>}
-      {saved && <p className="form-saved">Saved.</p>}
+      {saved && <p className="form-saved">{t("editForm.saved")}</p>}
 
       {FIELD_GROUPS.map((group) => {
         const dirtyCount = dirtyByGroup[group.id] ?? 0;
         const filled = filledByGroup[group.id] ?? 0;
         const badge =
           dirtyCount > 0 ? (
-            <span className="group-badge group-badge-dirty">{dirtyCount} unsaved</span>
+            <span className="group-badge group-badge-dirty">
+              {t("editForm.groupDirty", { count: dirtyCount })}
+            </span>
           ) : filled > 0 ? (
-            <span className="group-badge">{filled} set</span>
+            <span className="group-badge">{t("editForm.groupSet", { count: filled })}</span>
           ) : null;
 
         return group.defaultOpen === true ? (
           <fieldset key={group.id}>
             <legend>
-              {group.title}
+              {t(group.titleKey as StudioKey)}
               {badge}
             </legend>
             {renderFields(group)}
@@ -223,7 +232,7 @@ export function EditForm({
           // under their cursor on the next unrelated re-render.
           <details key={group.id} open={forcedOpen.has(group.id) ? true : undefined}>
             <summary>
-              {group.title}
+              {t(group.titleKey as StudioKey)}
               {badge}
             </summary>
             <fieldset>{renderFields(group)}</fieldset>
@@ -233,15 +242,17 @@ export function EditForm({
 
       <div className="form-actions">
         <Button type="submit" variant="primary" disabled={busy || totalDirty === 0}>
-          {busy ? "Saving…" : "Save changes"}
+          {busy ? t("editForm.saving") : t("editForm.saveChanges")}
         </Button>
         <Button type="button" variant="ghost" onClick={discard} disabled={busy || totalDirty === 0}>
-          Discard
+          {t("editForm.discard")}
         </Button>
         <span className="field-hint" role="status">
           {totalDirty === 0
-            ? "No unsaved changes"
-            : `${totalDirty} unsaved change${totalDirty === 1 ? "" : "s"}`}
+            ? t("editForm.noUnsaved")
+            : t(totalDirty === 1 ? "editForm.unsaved" : "editForm.unsavedPlural", {
+                count: totalDirty,
+              })}
         </span>
       </div>
     </form>

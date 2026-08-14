@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { renderWithStudioI18n } from "../i18n/StudioI18n";
 import { DefaultsPane } from "./DefaultsPane";
 
 afterEach(() => {
@@ -26,7 +27,10 @@ function mountPane(defaults: Record<string, unknown>) {
   });
   vi.stubGlobal("fetch", fetchMock);
   const onSaved = vi.fn();
-  render(<DefaultsPane categories={[]} onClose={vi.fn()} onSaved={onSaved} />);
+  // The pane resolves field labels and group titles through useStudioT, so it
+  // must mount inside a StudioI18nProvider (English built-ins here — the same
+  // strings the pane used to hardcode).
+  renderWithStudioI18n(<DefaultsPane categories={[]} onClose={vi.fn()} onSaved={onSaved} />);
   return { fetchMock, onSaved };
 }
 

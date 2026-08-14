@@ -19,8 +19,12 @@ import {
 } from "./fields";
 import { fromInput, toInput } from "./fieldValues";
 
-/** One field that could not be saved, and the group holding it. */
-export type Problem = { label: string; message: string; groupId: GroupId | null };
+/**
+ * One field that could not be saved, and the group holding it. Label and
+ * message are Studio i18n dictionary KEYS — this module is pure (no React),
+ * so EditForm resolves them with t() at display time.
+ */
+export type Problem = { labelKey: string; messageKey: string; groupId: GroupId | null };
 
 /** The input strings for every descriptor, read out of a loaded item file. */
 export function draftFromFields(fields: ItemFields): Record<string, string> {
@@ -118,7 +122,7 @@ export function buildEdits(
       const next = draft[pathKey(field.path)] ?? "";
       const parsed = fromInput(next, field.kind);
       if ("error" in parsed) {
-        problems.push({ label: field.label, message: parsed.error, groupId: group.id });
+        problems.push({ labelKey: field.labelKey, messageKey: parsed.error, groupId: group.id });
         continue;
       }
 
@@ -153,8 +157,8 @@ export function buildEdits(
     if (head in WHOLE_OBJECT_SEEDS && typeof value["unit"] !== "string") {
       problems.push(
         head === "dimensions"
-          ? { label: "Size unit", message: "pick a unit to set dimensions", groupId: groupIdForPath([head]) }
-          : { label: "Weight unit", message: "pick a unit to set a weight", groupId: groupIdForPath([head]) },
+          ? { labelKey: "field.sizeUnit", messageKey: "editFormProblem.pickSizeUnit", groupId: groupIdForPath([head]) }
+          : { labelKey: "field.weightUnit", messageKey: "editFormProblem.pickWeightUnit", groupId: groupIdForPath([head]) },
       );
       continue;
     }

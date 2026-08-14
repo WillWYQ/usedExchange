@@ -17,6 +17,9 @@ export function toInput(value: unknown, kind: FieldDescriptor["kind"]): string {
  * The input string turned back into the JSON value the API will receive.
  * Returns { error } rather than throwing so one bad field reports itself
  * without discarding the seller's other edits.
+ *
+ * The error is a Studio i18n dictionary KEY, not display text: this module is
+ * pure (no React, no hook access), so the consumer resolves it with t().
  */
 export function fromInput(
   raw: string,
@@ -33,8 +36,8 @@ export function fromInput(
       // Empty means "not set", which item.json spells as null.
       if (trimmed === "") return { value: null };
       const n = Number(trimmed);
-      if (!Number.isFinite(n)) return { error: "must be a number" };
-      if (kind === "integer" && !Number.isInteger(n)) return { error: "must be a whole number" };
+      if (!Number.isFinite(n)) return { error: "fieldValue.mustBeNumber" };
+      if (kind === "integer" && !Number.isInteger(n)) return { error: "fieldValue.mustBeWholeNumber" };
       return { value: n };
     }
     case "date":

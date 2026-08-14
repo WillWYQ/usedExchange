@@ -5,6 +5,8 @@ import { TierEditor, isTierArray, type Tier } from "../components/TierEditor";
 import { useDialogBehavior } from "../components/useDialogBehavior";
 import { FIELD_GROUPS, pathKey, readAtPath, type FieldGroup, type GroupId } from "../fields";
 import { fromInput, toInput } from "../fieldValues";
+import { useStudioT } from "../i18n/StudioI18n";
+import type { StudioKey } from "../i18n/types";
 import { FieldInput } from "./FieldInput";
 
 // name/status/listed_date/sold_date belong to each item, never to a template;
@@ -81,6 +83,7 @@ export function DefaultsPane({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useStudioT();
   const [scope, setScope] = useState("site");
   const [siteDefaults, setSiteDefaults] = useState<Record<string, unknown>>({});
   const [draft, setDraft] = useState<Record<string, FieldState>>({});
@@ -140,12 +143,17 @@ export function DefaultsPane({
         // An enabled select with no choice would send "" and 400 server-side;
         // say so by the field's own name instead.
         if (field.kind === "select" && state.raw === "") {
-          problems.push(`${field.label}: pick a value or switch the field off`);
+          problems.push(t("defaults.selectError", { label: t(field.labelKey as StudioKey) }));
           continue;
         }
         const parsed = fromInput(state.raw, field.kind);
         if ("error" in parsed) {
-          problems.push(`${field.label}: ${parsed.error}`);
+          problems.push(
+            t("defaults.fieldError", {
+              label: t(field.labelKey as StudioKey),
+              error: t(parsed.error as StudioKey),
+            }),
+          );
           continue;
         }
         writeAtPath(out, field.path, parsed.value);
@@ -278,7 +286,7 @@ export function DefaultsPane({
                       type="checkbox"
                       className="defaults-enable"
                       checked={state.enabled}
-                      aria-label={`Set a default for ${field.label}`}
+                      aria-label={t("defaults.fieldLabel", { label: t(field.labelKey as StudioKey) })}
                       onChange={(e) => {
                         setDraft((prev) => ({
                           ...prev,
@@ -310,12 +318,12 @@ export function DefaultsPane({
               });
               return PINNED_GROUPS.has(group.id) ? (
                 <fieldset key={group.id}>
-                  <legend>{group.title}</legend>
+                  <legend>{t(group.titleKey as StudioKey)}</legend>
                   {fields}
                 </fieldset>
               ) : (
                 <details key={group.id}>
-                  <summary>{group.title}</summary>
+                  <summary>{t(group.titleKey as StudioKey)}</summary>
                   <fieldset>{fields}</fieldset>
                 </details>
               );

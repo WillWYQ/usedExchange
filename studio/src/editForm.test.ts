@@ -159,7 +159,7 @@ describe("buildEdits", () => {
     });
     expect(edits).toEqual([{ path: ["name"], value: "Floor lamp" }]);
     expect(problems).toEqual([
-      { label: "Age (years)", message: "must be a number", groupId: "specs" },
+      { labelKey: "field.age", messageKey: "fieldValue.mustBeNumber", groupId: "specs" },
     ]);
     expect([...problemGroupIds(problems)]).toEqual(["specs"]);
   });
@@ -169,7 +169,7 @@ describe("buildEdits", () => {
     const { edits, problems } = buildEdits(loaded, { ...draft, quantity: "1.5" });
     expect(edits).toEqual([]);
     expect(problems).toEqual([
-      { label: "Quantity", message: "must be a whole number", groupId: "listing" },
+      { labelKey: "field.quantity", messageKey: "fieldValue.mustBeWholeNumber", groupId: "listing" },
     ]);
   });
 
@@ -178,7 +178,7 @@ describe("buildEdits", () => {
     const { edits, problems } = buildEdits(loaded, { ...draft, "dimensions.length": "40" });
     expect(edits).toEqual([]);
     expect(problems).toEqual([
-      { label: "Size unit", message: "pick a unit to set dimensions", groupId: "specs" },
+      { labelKey: "field.sizeUnit", messageKey: "editFormProblem.pickSizeUnit", groupId: "specs" },
     ]);
   });
 
@@ -213,7 +213,7 @@ describe("buildEdits", () => {
     const { loaded, draft } = form(BASE);
     const { problems } = buildEdits(loaded, { ...draft, "weight.value": "3" });
     expect(problems).toEqual([
-      { label: "Weight unit", message: "pick a unit to set a weight", groupId: "specs" },
+      { labelKey: "field.weightUnit", messageKey: "editFormProblem.pickWeightUnit", groupId: "specs" },
     ]);
   });
 
