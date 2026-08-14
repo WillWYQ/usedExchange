@@ -49,9 +49,14 @@ export function renderWithStudioI18n(
   opts: { locale?: string; overrides?: Record<string, Record<string, string>> } = {},
 ): RenderResult {
   const { locale = "en", overrides } = opts;
-  return render(
-    <StudioI18nProvider locale={locale} overrides={overrides}>
-      {ui}
-    </StudioI18nProvider>,
-  );
+  // Uses RTL's `wrapper` option rather than manually nesting `ui` inside the
+  // provider: `wrapper` is re-applied on every `rerender(...)` call too, so a
+  // test that rerenders with new props keeps the provider in the tree.
+  return render(ui, {
+    wrapper: ({ children }) => (
+      <StudioI18nProvider locale={locale} overrides={overrides}>
+        {children}
+      </StudioI18nProvider>
+    ),
+  });
 }

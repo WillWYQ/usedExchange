@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { renderWithStudioI18n } from "../i18n/StudioI18n";
 import { TierEditor, type Tier } from "./TierEditor";
 
 afterEach(() => {
@@ -11,7 +12,7 @@ afterEach(() => {
 
 function mount(initialTiers: Tier[]): { collect: () => Tier[] | null } {
   const holder: { collect: () => Tier[] | null } = { collect: () => null };
-  render(
+  renderWithStudioI18n(
     <TierEditor
       initialTiers={initialTiers}
       resetToken={0}

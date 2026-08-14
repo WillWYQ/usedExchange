@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
+import { renderWithStudioI18n as render } from "../i18n/StudioI18n";
 import { ItemList } from "./ItemList";
 import type { StudioItem } from "../api";
 

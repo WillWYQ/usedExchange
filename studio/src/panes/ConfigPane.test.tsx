@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { renderWithStudioI18n as render } from "../i18n/StudioI18n";
 import { ConfigPane } from "./ConfigPane";
 import type { ConfigField } from "../api";
 
