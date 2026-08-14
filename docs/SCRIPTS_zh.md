@@ -78,6 +78,8 @@
 - **触碰的文件：** 读取 `studio/vite.config.ts`；读写 `content/items/**/item.json` 及物品照片目录（经由 `scripts/lib/studioApi.ts`、`itemEdit.ts`、`itemFields.ts`、`studioImages.ts`）；git status/add/commit/push 仅限 `content/` + `lib/generated/image-manifest.json`（`studioGit.ts` —— 与 `pnpm push` 保持一致，绝不使用 `git add -A`）；CDN 同步写入 `lib/generated/image-manifest.json` 与 `.image-cache/checksums.json`（`studioSync.ts` —— 同时只允许一次同步的互斥锁，SSE 进度推送）。
 - **API 面**（由 `scripts/lib/studioApi.ts` 路由）：`GET /api/items`、`POST /api/items`、`POST /api/items/bulk-status`、`GET|PATCH /api/items/<cat>/<item>`、`GET /api/items/<cat>/<item>/images`、`GET …/images/<filename>`（文件服务，`no-store`）、`POST …/images`（base64 上传）、`POST …/images/reorder`、`DELETE …/images/<filename>`、`POST /api/sync-images`（SSE progress/done/error 事件）、`GET /api/changes`、`POST /api/publish`（同步进行中返回 409）。非 GET/HEAD 请求须通过 `studio/csrfGuard.ts` 校验（要求 `Content-Type: application/json` → 否则 415；`Origin` 必须与服务器自身源一致 → 否则 403）。
 
+> **目录 PDF 导出**（Seller Studio 中的"导出 PDF"按钮）通过 headless Chromium 渲染。首次使用需要执行一次：`npx playwright install chromium`。
+
 ### `sync-images.ts` —— 统一图片流水线
 
 - **命令：** `tsx scripts/sync-images.ts --mode <upload|dev-sync|build-check>`（`--mode` 缺失或非法时退出码为 1）。

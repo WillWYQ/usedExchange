@@ -2320,6 +2320,10 @@ switcher — one switch drives both the item-content language and the UI languag
   `pnpm doctor` reads `title`/`detail` directly and is untouched.
 - Low-level `StudioError` messages and auto-parsed config field docs stay English by design.
 
+#### Catalog PDF export
+
+The header's **Export PDF** button opens a dialog that generates a single combined PDF catalog of every public-visible item (`available`/`pending`/`reserved`; `sold`/`draft` excluded): a cover page, a clickable table of contents grouped by category, a divider per category, and one page per item with its resolved price, photos, specs, and a link back to its live page. Rendered via headless Chromium (Playwright) from a standalone print template — no `next dev` server required. Table-of-contents entries are clickable in-PDF jump links; they do not show literal page numbers next to each title (Chromium's print-to-PDF does not support CSS `target-counter()`), though every page's footer does show a real "Page N of M". Requires a one-time `npx playwright install chromium`.
+
 ### Facebook Marketplace export (`pnpm fb-export`, Phase 17)
 Interactive CLI that exports available/pending/reserved items to Facebook Marketplace bulk-upload
 CSVs (50-item batches, ≤150-char titles, ≤10 photo columns with CDN URLs). Supports skip-previous,
