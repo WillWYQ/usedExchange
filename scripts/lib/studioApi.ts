@@ -63,6 +63,13 @@ import {
   writeImage,
   type ImageEntry,
 } from "./studioImages";
+import {
+  countCategoryItems,
+  listCategorySlugs,
+  readCategoryMeta,
+  writeCategoryMeta,
+  type CategoryMetaInput,
+} from "./studioCategories";
 
 export type { ImageEntry };
 
@@ -147,6 +154,22 @@ export function resolveItemDir(projectRoot: string, category: string, name: stri
   return dir;
 }
 
+function resolveCategoryDir(projectRoot: string, slug: string): string {
+  if (!isValidSlug(slug)) {
+    throw new StudioError(
+      400,
+      `category must be kebab-case (lowercase letters, digits, hyphens): got "${slug}"`,
+    );
+  }
+  const itemsRoot = path.join(projectRoot, "content", "items");
+  const dir = path.resolve(itemsRoot, slug);
+  const rel = path.relative(itemsRoot, dir);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new StudioError(400, "resolved path escapes content/items");
+  }
+  return dir;
+}
+
 /** One readdir, shared by the table's Photo/count column and the image pane's
  * grid: they must agree on both the count and the cover, or the seller sees
  * numbers and thumbnails that disagree with what they can see and manage. */
@@ -224,6 +247,99 @@ export async function listStudioItems(projectRoot: string): Promise<StudioItem[]
       } satisfies StudioItem;
     }),
   );
+}
+
+export type CategorySummary = {
+  slug: string;
+  displayName: string;
+  description: string;
+  icon: string;
+  sortOrder: number | null;
+  itemCount: number;
+};
+
+async function listCategorySummaries(projectRoot: string): Promise<CategorySummary[]> {
+  const itemsRoot = path.join(projectRoot, "content", "items");
+  const slugs = await listCategorySlugs(itemsRoot);
+
+  // Deliberately NOT loadAllItemsRaw(): that function resolves content/ from
+  // process.cwd(), not from projectRoot (see listStudioItems's own comment
+  // above), which would silently ignore a sandboxed projectRoot in tests.
+  // countCategoryItems reads the given directory directly instead.
+  return Promise.all(
+    slugs.map(async (slug) => {
+      const dir = path.join(itemsRoot, slug);
+      const [meta, itemCount] = await Promise.all([readCategoryMeta(dir), countCategoryItems(dir)]);
+      return {
+        slug,
+        displayName: meta.display_name,
+        description: meta.description,
+        icon: meta.icon,
+        sortOrder: meta.sort_order,
+        itemCount,
+      } satisfies CategorySummary;
+    }),
+  );
+}
+
+const categoryMetaInputSchema = z.object({
+  display_name: z.string().optional(),
+  description: z.string().optional(),
+  icon: z.string().optional(),
+  sort_order: z.number().int().nullable().optional(),
+});
+
+const createCategoryBodySchema = z.object({
+  slug: z.string().min(1),
+  meta: categoryMetaInputSchema.optional(),
+});
+
+async function handleCategoryCreate(req: StudioRequest): Promise<StudioResponse> {
+  const { slug, meta } = parseJsonBody(req.body, createCategoryBodySchema);
+  const dir = resolveCategoryDir(req.projectRoot, slug);
+
+  await fsPromises.mkdir(path.dirname(dir), { recursive: true });
+  try {
+    // Non-recursive mkdir fails with EEXIST if the category already exists,
+    // making the existence check and the creation one atomic step — the
+    // same reason handleItemCreate writes item.json with the "wx" flag.
+    await fsPromises.mkdir(dir);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new StudioError(409, `category "${slug}" already exists`);
+    }
+    throw err;
+  }
+
+  if (meta !== undefined) {
+    await writeCategoryMeta(dir, meta as CategoryMetaInput);
+  }
+
+  return { status: 201, body: { slug } };
+}
+
+async function handleCategoryMetaPut(req: StudioRequest, slug: string): Promise<StudioResponse> {
+  const meta = parseJsonBody(req.body, categoryMetaInputSchema);
+  const dir = resolveCategoryDir(req.projectRoot, slug);
+
+  try {
+    await fsPromises.access(dir);
+  } catch {
+    throw new StudioError(404, `category "${slug}" does not exist`);
+  }
+
+  await writeCategoryMeta(dir, meta as CategoryMetaInput);
+  const updated = await readCategoryMeta(dir);
+  return {
+    status: 200,
+    body: {
+      slug,
+      displayName: updated.display_name,
+      description: updated.description,
+      icon: updated.icon,
+      sortOrder: updated.sort_order,
+    },
+  };
 }
 
 // Input validation deliberately does NOT reuse itemJsonSchema's field schemas:
@@ -586,6 +702,7 @@ function handleSyncImages(): StudioResponse {
 // /api/items/<category>/<item> — the bare item, no trailing segment. Anchored
 // on $ so it can never swallow the /images routes above it.
 const ITEM_ROUTE_RE = /^\/api\/items\/([^/]+)\/([^/]+)$/;
+const CATEGORY_ROUTE_RE = /^\/api\/categories\/([^/]+)$/;
 
 async function readItemJson(req: StudioRequest, category: string, item: string): Promise<{
   jsonPath: string;
@@ -1169,6 +1286,32 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
       if (req.method === "GET") return await handleConfigGet(req);
       if (req.method === "PUT") return await handleConfigPut(req);
       return { status: 405, body: { error: "GET or PUT only" } };
+    }
+
+    if (pathname === "/api/categories") {
+      if (req.method === "GET") {
+        return { status: 200, body: { categories: await listCategorySummaries(req.projectRoot) } };
+      }
+      if (req.method === "POST") {
+        return await handleCategoryCreate(req);
+      }
+      return { status: 405, body: { error: "GET or POST only" } };
+    }
+
+    const categoryMatch = CATEGORY_ROUTE_RE.exec(pathname);
+    if (categoryMatch !== null) {
+      const [, slugRaw] = categoryMatch;
+      if (slugRaw === undefined) {
+        return { status: 400, body: { error: "malformed category route" } };
+      }
+      let slug: string;
+      try {
+        slug = decodeURIComponent(slugRaw);
+      } catch {
+        return { status: 400, body: { error: "malformed URL encoding" } };
+      }
+      if (req.method === "PUT") return await handleCategoryMetaPut(req, slug);
+      return { status: 405, body: { error: `method not allowed: ${req.method}` } };
     }
 
     if (pathname === "/api/readiness") {

@@ -2228,3 +2228,162 @@ describe("POST /api/export-pdf", () => {
     expect(res.status).toBe(405);
   });
 });
+
+describe("GET /api/categories", () => {
+  let tempProjects: string[] = [];
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+  async function emptyProject(): Promise<string> {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-categories-get-"));
+    await fs.mkdir(path.join(root, "content", "items"), { recursive: true });
+    tempProjects.push(root);
+    return root;
+  }
+
+  it("returns [] when there are no category folders", async () => {
+    const root = await emptyProject();
+    const res = asJson(
+      await handleStudioRequest({ method: "GET", url: "/api/categories", body: Buffer.alloc(0), projectRoot: root }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ categories: [] });
+  });
+
+  it("lists a folder-only category with default metadata and zero items", async () => {
+    const root = await emptyProject();
+    await fs.mkdir(path.join(root, "content", "items", "electronics"));
+    const res = asJson(
+      await handleStudioRequest({ method: "GET", url: "/api/categories", body: Buffer.alloc(0), projectRoot: root }),
+    );
+    expect(res.body).toEqual({
+      categories: [
+        { slug: "electronics", displayName: "", description: "", icon: "", sortOrder: null, itemCount: 0 },
+      ],
+    });
+  });
+
+  it("counts only subfolders that contain an item.json", async () => {
+    const root = await emptyProject();
+    const catDir = path.join(root, "content", "items", "electronics");
+    await fs.mkdir(path.join(catDir, "phone"), { recursive: true });
+    await fs.writeFile(path.join(catDir, "phone", "item.json"), "{}");
+    await fs.mkdir(path.join(catDir, "laptop"), { recursive: true });
+    await fs.writeFile(path.join(catDir, "laptop", "item.json"), "{}");
+    // A stray directory with no item.json must not inflate the count.
+    await fs.mkdir(path.join(catDir, "drafts-scratch"), { recursive: true });
+    const res = asJson(
+      await handleStudioRequest({ method: "GET", url: "/api/categories", body: Buffer.alloc(0), projectRoot: root }),
+    );
+    expect((res.body as { categories: Array<{ itemCount: number }> }).categories[0]?.itemCount).toBe(2);
+  });
+});
+
+describe("POST /api/categories", () => {
+  let tempProjects: string[] = [];
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+  async function emptyProject(): Promise<string> {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-categories-post-"));
+    await fs.mkdir(path.join(root, "content", "items"), { recursive: true });
+    tempProjects.push(root);
+    return root;
+  }
+  function create(root: string, body: unknown) {
+    return handleStudioRequest({
+      method: "POST",
+      url: "/api/categories",
+      body: Buffer.from(JSON.stringify(body)),
+      projectRoot: root,
+    });
+  }
+
+  it("creates an empty folder when no meta is given", async () => {
+    const root = await emptyProject();
+    const res = asJson(await create(root, { slug: "electronics" }));
+    expect(res.status).toBe(201);
+    const stat = await fs.stat(path.join(root, "content", "items", "electronics"));
+    expect(stat.isDirectory()).toBe(true);
+    await expect(
+      fs.access(path.join(root, "content", "items", "electronics", "_category.json")),
+    ).rejects.toThrow();
+  });
+
+  it("creates the folder and a sparse _category.json when meta is given", async () => {
+    const root = await emptyProject();
+    await create(root, { slug: "electronics", meta: { display_name: "Electronics", sort_order: 1 } });
+    const written = JSON.parse(
+      await fs.readFile(path.join(root, "content", "items", "electronics", "_category.json"), "utf-8"),
+    );
+    expect(written).toEqual({ display_name: "Electronics", sort_order: 1 });
+  });
+
+  it("409s rather than overwriting an existing category", async () => {
+    const root = await emptyProject();
+    await fs.mkdir(path.join(root, "content", "items", "electronics"));
+    const res = asJson(await create(root, { slug: "electronics" }));
+    expect(res.status).toBe(409);
+  });
+
+  it("400s on a non-kebab-case slug", async () => {
+    const root = await emptyProject();
+    const res = asJson(await create(root, { slug: "Not Kebab" }));
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("PUT /api/categories/:slug", () => {
+  let tempProjects: string[] = [];
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+  async function projectWithCategory(): Promise<string> {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-categories-put-"));
+    await fs.mkdir(path.join(root, "content", "items", "electronics"), { recursive: true });
+    tempProjects.push(root);
+    return root;
+  }
+  function put(root: string, slug: string, body: unknown) {
+    return handleStudioRequest({
+      method: "PUT",
+      url: `/api/categories/${slug}`,
+      body: Buffer.from(JSON.stringify(body)),
+      projectRoot: root,
+    });
+  }
+
+  it("writes sparse metadata for an existing category", async () => {
+    const root = await projectWithCategory();
+    const res = asJson(await put(root, "electronics", { display_name: "Electronics", icon: "📱" }));
+    expect(res.status).toBe(200);
+    const written = JSON.parse(
+      await fs.readFile(path.join(root, "content", "items", "electronics", "_category.json"), "utf-8"),
+    );
+    expect(written).toEqual({ display_name: "Electronics", icon: "📱" });
+  });
+
+  it("deletes _category.json when saved back to all-default", async () => {
+    const root = await projectWithCategory();
+    await put(root, "electronics", { display_name: "Electronics" });
+    await put(root, "electronics", {});
+    await expect(
+      fs.access(path.join(root, "content", "items", "electronics", "_category.json")),
+    ).rejects.toThrow();
+  });
+
+  it("404s for a category that doesn't exist", async () => {
+    const root = await projectWithCategory();
+    const res = asJson(await put(root, "nonexistent", { display_name: "Ghost" }));
+    expect(res.status).toBe(404);
+  });
+
+  it("400s for a non-integer sort_order", async () => {
+    const root = await projectWithCategory();
+    const res = asJson(await put(root, "electronics", { sort_order: 1.5 }));
+    expect(res.status).toBe(400);
+  });
+});
