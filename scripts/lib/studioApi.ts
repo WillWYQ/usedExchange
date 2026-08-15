@@ -33,6 +33,7 @@ import {
   writeConfigValue,
   type ConfigField,
 } from "./configEdit";
+import { readContactPlatforms, writeContactPlatformQrImage } from "./contactPlatforms";
 import {
   DEFAULTS_FILENAME,
   loadMergedDefaults,
@@ -766,6 +767,7 @@ function handleSyncImages(): StudioResponse {
 // on $ so it can never swallow the /images routes above it.
 const ITEM_ROUTE_RE = /^\/api\/items\/([^/]+)\/([^/]+)$/;
 const CATEGORY_ROUTE_RE = /^\/api\/categories\/([^/]+)$/;
+const CONTACT_PLATFORM_ROUTE_RE = /^\/api\/contact-platforms\/(\d+)$/;
 const CONTACT_IMAGE_ROUTE_RE = /^\/api\/contact\/images\/([^/]+)$/;
 
 async function readItemJson(req: StudioRequest, category: string, item: string): Promise<{
@@ -1105,13 +1107,66 @@ async function readConfigFields(projectRoot: string): Promise<{ fields: ConfigFi
 }
 
 async function handleConfigGet(req: StudioRequest): Promise<StudioResponse> {
-  const { fields } = await readConfigFields(req.projectRoot);
-  return { status: 200, body: { fields } };
+  const { fields, source } = await readConfigFields(req.projectRoot);
+  return { status: 200, body: { fields, contactPlatforms: readContactPlatforms(source) } };
+}
+
+/** Writes `next` over content/config.ts, gated by a full `tsc --noEmit` check
+ * of the project with the candidate file in place. On failure the original
+ * file is restored byte-for-byte and a StudioError carrying tsc's own output
+ * is thrown; on success the temp/backup files are cleaned up. Shared by every
+ * write path that touches content/config.ts, so "a write that would break
+ * the build is discarded" holds uniformly, not just for scalar field edits. */
+async function writeConfigSourceWithTypeCheckGate(
+  req: StudioRequest,
+  next: string,
+  whatFailed: string,
+): Promise<void> {
+  const { config, tsconfig } = configPaths(req.projectRoot);
+  const tempPath = path.join(path.dirname(config), ".config.ts.tmp");
+  await fsPromises.writeFile(tempPath, next, "utf-8");
+
+  let hasTsconfig = true;
+  try {
+    await fsPromises.access(tsconfig);
+  } catch {
+    hasTsconfig = false;
+  }
+
+  if (!hasTsconfig) {
+    // No tsconfig.json (a test sandbox, or a project that does not type-check
+    // at all): skip the gate rather than fail the write. Deliberate and
+    // covered by a test — a silently absent gate would be dishonest.
+    await fsPromises.rename(tempPath, config);
+    return;
+  }
+
+  // The gate: type-check the project with the candidate config in place.
+  // Swap it in, run tsc, and put the original back if anything fails — tsc
+  // has to see the file at its real path for the check to mean anything.
+  const backup = `${config}.studio-backup`;
+  await fsPromises.rename(config, backup);
+  try {
+    await fsPromises.rename(tempPath, config);
+    await runTsc("pnpm", ["exec", "tsc", "--noEmit"], { cwd: req.projectRoot });
+    await fsPromises.rm(backup, { force: true });
+  } catch (err: unknown) {
+    // Restore the original and report the type errors verbatim.
+    await fsPromises.rm(config, { force: true });
+    await fsPromises.rename(backup, config);
+    await fsPromises.rm(tempPath, { force: true });
+    const detail =
+      err !== null && typeof err === "object" && "stdout" in err
+        ? String((err as { stdout: unknown }).stdout)
+        : err instanceof Error
+          ? err.message
+          : String(err);
+    throw new StudioError(400, `type-check failed, so ${whatFailed} was not saved:\n${detail}`);
+  }
 }
 
 async function handleConfigPut(req: StudioRequest): Promise<StudioResponse> {
   const { path: fieldPath, value } = parseJsonBody(req.body, configPutBodySchema);
-  const { config, tsconfig } = configPaths(req.projectRoot);
   const { fields, source } = await readConfigFields(req.projectRoot);
 
   const field = fields.find((f) => f.path === fieldPath);
@@ -1127,52 +1182,40 @@ async function handleConfigPut(req: StudioRequest): Promise<StudioResponse> {
     throw new StudioError(400, err instanceof Error ? err.message : String(err));
   }
 
-  // Write to a sibling temp file and only rename it over the real config once
-  // tsc is happy. A failed gate must leave content/config.ts byte-identical,
-  // so the original is never opened for writing at all — rename is atomic on
-  // the same filesystem, so there is no window where the file is half-written.
-  const tempPath = path.join(path.dirname(config), ".config.ts.tmp");
-  await fsPromises.writeFile(tempPath, next, "utf-8");
-
-  let hasTsconfig = true;
-  try {
-    await fsPromises.access(tsconfig);
-  } catch {
-    hasTsconfig = false;
-  }
-
-  if (hasTsconfig) {
-    // The gate: type-check the project with the candidate config in place.
-    // Swap it in, run tsc, and put the original back if anything fails —
-    // tsc has to see the file at its real path for the check to mean anything.
-    const backup = `${config}.studio-backup`;
-    await fsPromises.rename(config, backup);
-    try {
-      await fsPromises.rename(tempPath, config);
-      await runTsc("pnpm", ["exec", "tsc", "--noEmit"], { cwd: req.projectRoot });
-      await fsPromises.rm(backup, { force: true });
-    } catch (err: unknown) {
-      // Restore the original and report the type errors verbatim.
-      await fsPromises.rm(config, { force: true });
-      await fsPromises.rename(backup, config);
-      await fsPromises.rm(tempPath, { force: true });
-      const detail =
-        err !== null && typeof err === "object" && "stdout" in err
-          ? String((err as { stdout: unknown }).stdout)
-          : err instanceof Error
-            ? err.message
-            : String(err);
-      throw new StudioError(400, `type-check failed, so ${fieldPath} was not saved:\n${detail}`);
-    }
-  } else {
-    // No tsconfig.json (a test sandbox, or a project that does not type-check
-    // at all): skip the gate rather than fail the write. Deliberate and
-    // covered by a test — a silently absent gate would be dishonest.
-    await fsPromises.rename(tempPath, config);
-  }
+  await writeConfigSourceWithTypeCheckGate(req, next, fieldPath);
 
   const { fields: after } = await readConfigFields(req.projectRoot);
   return { status: 200, body: { fields: after } };
+}
+
+const contactPlatformQrBodySchema = z.object({ qr_image: z.string().min(1) });
+
+async function handleContactPlatformQrPut(req: StudioRequest, indexRaw: string): Promise<StudioResponse> {
+  const index = Number(indexRaw);
+  if (!Number.isInteger(index) || index < 0) {
+    throw new StudioError(400, `invalid contact platform index: "${indexRaw}"`);
+  }
+  const { qr_image } = parseJsonBody(req.body, contactPlatformQrBodySchema);
+  const { config } = configPaths(req.projectRoot);
+
+  let source: string;
+  try {
+    source = await fsPromises.readFile(config, "utf-8");
+  } catch (err: unknown) {
+    throw new StudioError(400, `cannot read ${config}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  let next: string;
+  try {
+    next = writeContactPlatformQrImage(source, index, qr_image);
+  } catch (err: unknown) {
+    throw new StudioError(400, err instanceof Error ? err.message : String(err));
+  }
+
+  await writeConfigSourceWithTypeCheckGate(req, next, `contact.platforms[${index}].qr_image`);
+
+  const after = await fsPromises.readFile(config, "utf-8");
+  return { status: 200, body: { contactPlatforms: readContactPlatforms(after) } };
 }
 
 // ── Setup readiness ──────────────────────────────────────────────────────────
@@ -1350,6 +1393,16 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
       if (req.method === "GET") return await handleConfigGet(req);
       if (req.method === "PUT") return await handleConfigPut(req);
       return { status: 405, body: { error: "GET or PUT only" } };
+    }
+
+    const contactPlatformMatch = CONTACT_PLATFORM_ROUTE_RE.exec(pathname);
+    if (contactPlatformMatch !== null) {
+      const [, indexRaw] = contactPlatformMatch;
+      if (indexRaw === undefined) {
+        return { status: 400, body: { error: "malformed contact platform route" } };
+      }
+      if (req.method === "PUT") return await handleContactPlatformQrPut(req, indexRaw);
+      return { status: 405, body: { error: `method not allowed: ${req.method}` } };
     }
 
     if (pathname === "/api/categories") {

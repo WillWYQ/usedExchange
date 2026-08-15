@@ -63,17 +63,26 @@ export function App() {
     // fetchCategories() is caught on its own: before this feature, the item
     // table depended on nothing but fetchItems(), and a plain Promise.all
     // would make a categories-endpoint failure block even a fully successful
-    // item load. Falling back to [] keeps that independence — the seller
-    // loses the category list (New item's dropdown, the Categories pane)
-    // but still sees their items and the real error surfaces from wherever
-    // triggered it, not as a blanket page error.
+    // item load. `null` (not []) marks "the fetch failed" so the fallback
+    // below can tell that apart from "there really are zero categories" —
+    // falling back to [] unconditionally would empty the category dropdown
+    // even while items with real categories are on screen.
     const [{ items, defaultLocale, availableLocales: al, studioTranslations: st }, categories] =
-      await Promise.all([fetchItems(), fetchCategories().catch(() => [])]);
+      await Promise.all([fetchItems(), fetchCategories().catch(() => null)]);
     setItems(items);
     setAvailableLocales(al);
     setStudioTranslations(st);
     setDisplayLocale((prev) => (al.includes(prev) ? prev : defaultLocale));
-    setCategorySlugs(categories.map((c) => c.slug).sort());
+    // On a categories-endpoint failure, fall back to what the pre-feature
+    // code always did: derive the list from the items that just loaded
+    // successfully. This loses only the enhancement (a category folder with
+    // zero items showing up before any item exists in it), never the list
+    // itself.
+    setCategorySlugs(
+      categories === null
+        ? [...new Set(items.map((i) => i.categorySlug))].sort()
+        : categories.map((c) => c.slug).sort(),
+    );
   }, []);
 
   useEffect(() => {
@@ -429,12 +438,11 @@ function StudioChrome({
       )}
       {showConfig && <ConfigPane onClose={() => setShowConfig(false)} />}
       {showCategories && (
-        <CategoriesPane
-          onClose={() => setShowCategories(false)}
-          onSaved={() => {
-            void refresh();
-          }}
-        />
+        // bumpChanges, not refresh: editing a category's metadata never
+        // changes categorySlugs (the slug itself is untouched) or any item,
+        // so a full items+categories refetch here would be pure waste on
+        // every single save.
+        <CategoriesPane onClose={() => setShowCategories(false)} onSaved={bumpChanges} />
       )}
       {showExportPdf && <ExportPdfDialog items={items} onClose={() => setShowExportPdf(false)} />}
     </>

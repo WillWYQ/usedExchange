@@ -1447,11 +1447,33 @@ tr.failed td {
   font: inherit;
 }
 
-.qr-image-control {
+.qr-platforms-section {
+  margin-top: var(--gap-lg);
+  padding-top: var(--gap-lg);
+  border-top: 1px solid var(--border);
+}
+
+.qr-platforms-section h3 {
+  margin: 0 0 0.25rem;
+  font-size: var(--step-1);
+  font-weight: 600;
+}
+
+.qr-platform-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--gap);
-  margin-top: 0.35rem;
+  padding: 0.5rem 0;
+}
+
+.qr-preview-thumb {
+  width: 2.5rem;
+  height: 2.5rem;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
 }
 
 .config-row-actions {

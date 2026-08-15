@@ -46,17 +46,19 @@ export async function countCategoryItems(categoryDir: string): Promise<number> {
   } catch {
     return 0;
   }
-  let count = 0;
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !isValidSlug(entry.name)) continue;
-    try {
-      await fsPromises.access(path.join(categoryDir, entry.name, "item.json"));
-      count++;
-    } catch {
-      // Not an item folder — skip.
-    }
-  }
-  return count;
+  const checks = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory() && isValidSlug(entry.name))
+      .map(async (entry) => {
+        try {
+          await fsPromises.access(path.join(categoryDir, entry.name, "item.json"));
+          return true;
+        } catch {
+          return false; // Not an item folder — skip.
+        }
+      }),
+  );
+  return checks.filter(Boolean).length;
 }
 
 /** Falls back to all-default metadata on a missing or malformed file — the

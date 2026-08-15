@@ -38,7 +38,7 @@ const DIVIDER_RE = /^\s*\/\/\s*─+\s*(.+?)\s*─+\s*$/;
 // ── Parsing helpers ──────────────────────────────────────────────────────────
 
 /** Returns the ObjectLiteralExpression assigned to `siteConfig`, or undefined. */
-function findConfigObject(source: string): { sf: ts.SourceFile; obj: ts.ObjectLiteralExpression } | undefined {
+export function findConfigObject(source: string): { sf: ts.SourceFile; obj: ts.ObjectLiteralExpression } | undefined {
   const sf = ts.createSourceFile("config.ts", source, ts.ScriptTarget.Latest, true);
   let found: ts.ObjectLiteralExpression | undefined;
   const visit = (node: ts.Node): void => {

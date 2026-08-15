@@ -105,15 +105,35 @@ describe("ConfigPane", () => {
     expect((within(matrix as HTMLElement).getByLabelText("i18n.translations.zh.home") as HTMLInputElement).value).toBe("首页");
   });
 
-  it("renders an upload control for a qr_image field and writes the returned path into the draft", async () => {
+  it("renders a QR upload row per contact platform and saves immediately on upload", async () => {
+    // contact.platforms is an array in content/config.ts — configEdit.ts's
+    // readConfig() never walks into arrays, so it always shows up as ONE
+    // opaque "unsupported" field, never as per-element paths. Any test that
+    // fabricates a "contact.platforms.0.qr_image" ConfigField is testing a
+    // shape the real GET /api/config response can never produce.
     const fields: ConfigField[] = [
-      makeField({ path: "contact.platforms.0.qr_image", value: "", section: "Contact" }),
+      makeField({ path: "contact.platforms", value: null, kind: "unsupported", section: "Contact" }),
+    ];
+    const contactPlatforms = [
+      { index: 0, type: "email", value: "you@example.com", label: undefined, qrImage: undefined },
+      { index: 1, type: "zelle", value: undefined, label: "Zelle", qrImage: "/contact/zelle-qr.png" },
     ];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url === "/api/config" && init?.method === undefined) return jsonResponse({ fields });
+      if (url === "/api/config" && init?.method === undefined) return jsonResponse({ fields, contactPlatforms });
       if (url === "/api/contact/images" && init?.method === "POST") {
-        return jsonResponse({ file: "wechat-qr.png", path: "/contact/wechat-qr.png" });
+        return jsonResponse({ file: "zelle-qr-2.png", path: "/contact/zelle-qr-2.png" });
+      }
+      if (url === "/api/contact-platforms/1" && init?.method === "PUT") {
+        return jsonResponse({
+          contactPlatforms: [
+            contactPlatforms[0],
+            { ...contactPlatforms[1], qrImage: "/contact/zelle-qr-2.png" },
+          ],
+        });
+      }
+      if (url === "/api/contact/images/zelle-qr.png" && init?.method === "DELETE") {
+        return jsonResponse({ ok: true });
       }
       throw new Error(`unexpected fetch: ${url} ${init?.method ?? "GET"}`);
     });
@@ -121,15 +141,26 @@ describe("ConfigPane", () => {
 
     render(<ConfigPane onClose={vi.fn()} />);
     await screen.findByRole("tab", { name: "Contact" });
+    await screen.findByText("Zelle");
 
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(fileInput).not.toBeNull();
-    const file = new File(["x"], "wechat-qr.png", { type: "image/png" });
-    await userEvent.upload(fileInput, file);
+    const fileInputs = document.querySelectorAll('input[type="file"]');
+    // One row per platform — email (no existing QR) and zelle (has one).
+    expect(fileInputs.length).toBe(2);
+    const file = new File(["x"], "zelle-qr-2.png", { type: "image/png" });
+    await userEvent.upload(fileInputs[1] as HTMLInputElement, file);
 
     await vi.waitFor(() => {
-      const textInput = screen.getByDisplayValue("/contact/wechat-qr.png") as HTMLInputElement;
-      expect(textInput.value).toBe("/contact/wechat-qr.png");
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/contact-platforms/1",
+        expect.objectContaining({ method: "PUT" }),
+      );
+    });
+    // The old file is deleted only after the new path is confirmed saved.
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/contact/images/zelle-qr.png",
+        expect.objectContaining({ method: "DELETE" }),
+      );
     });
   });
 });

@@ -2093,14 +2093,34 @@ shipping?: {
   商品照片管线中未经修改的 `sanitizeUploadFilename` / `sniffImageType` / `writeImage`
   （三者本就接受一个普通的 `dir` 参数），仅额外加上一道仅限 PNG 的文件名校验——扩展名**与**
   魔数都必须是 PNG。返回 `{ file, path }`，其中 `path`（`/contact/<file>`）就是应存入
-  `qr_image` 的值。`GET /api/contact/images/:file` 会把文件流式返回——之所以需要这个接口，
-  是因为工作台自身的开发服务器并不会把 `content/contact/` 当作 `/contact/*` 提供服务；
-  只有站点独立的构建期复制步骤（`scripts/sync-images.ts` 的 `copyContactFiles`，与 CDN
-  同步路径无关）才会这样做，所以配置面板的实时预览改为通过这个路由读取。`DELETE
-  /api/contact/images/:file` 删除文件（不存在时返回 `404`），但不会修改 `content/config.ts`
-  ——卖家仍需在配置面板里点击保存才能持久化清空后的 `qr_image` 字段，这与配置面板其他
-  字段的"草稿直到保存"模型一致。这些上传从不进入 CDN/R2 同步路径或
+  `qr_image` 的值。`GET /api/contact/images/:file` 会把文件流式返回，供配置面板的实时预览
+  缩略图使用——之所以需要这个接口，是因为工作台自身的开发服务器并不会把 `content/contact/`
+  当作 `/contact/*` 提供服务；只有站点独立的构建期复制步骤（`scripts/sync-images.ts` 的
+  `copyContactFiles`，与 CDN 同步路径无关）才会这样做。`DELETE /api/contact/images/:file`
+  删除文件（不存在时返回 `404`）。这些上传从不进入 CDN/R2 同步路径或
   `lib/generated/image-manifest.json`——该清单只服务于 `content/items/` 下的照片。
+- **为什么 `contact.platforms[].qr_image` 不是一个普通的 Config 字段。** `content/config.ts`
+  的通用字段模型（`scripts/lib/configEdit.ts` 的 `readConfig`）刻意不遍历数组字面量——其
+  自身注释写道：数组元素的增删“是一个比这个模块所保证的单值替换风险大得多的操作”——因此
+  `contact.platforms`（一个数组）在那里始终呈现为一个不透明的 `"unsupported"` 字段，永远不会
+  产生 `contact.platforms.0.qr_image` 这样的逐元素路径。新增模块 `scripts/lib/contactPlatforms.ts`
+  在不触碰 `configEdit.ts` 数组回避原则的前提下，专门填补这一个缺口：`readContactPlatforms(source)`
+  直接解析 `contact.platforms`，得到 `{ index, type, value?, label?, qrImage? }[]`；
+  `writeContactPlatformQrImage(source, index, path)` 要么原地替换已存在的 `qr_image` 字符串字面量
+  （与 `writeConfigValue` 对其他字段的替换保证完全相同），要么在已存在的元素上插入 `qr_image`
+  （以及缺失时的 `label`）这两个新属性——它从不新增、删除或重排数组*元素*本身，而这正是
+  `configEdit.ts` 特别指出的高风险操作。`PUT /api/contact-platforms/:index` 携带
+  `{ qr_image }` 驱动这一写入，其类型检查关卡（写入前跑一次 `tsc --noEmit`）与标量字段的
+  `/api/config` PUT 完全相同（两条路由现在共用同一个 `writeConfigSourceWithTypeCheckGate`
+  辅助函数抽取出来）——这里的写入同样遵循“会破坏构建的写入会被丢弃”的原则。`GET /api/config`
+  的响应体在 `fields` 之外新增了 `contactPlatforms` 字段，供面板逐平台渲染。
+- 配置面板的 Contact 分区在只读的 `contact.platforms` 字段下方渲染一个**联系方式二维码**区块：
+  每个平台一行，已设置 `qr_image` 的平台带实时预览，并配有一个文件选择器。上传会立即保存——
+  与面板里其他所有 Config 字段不同，那些字段会先暂存草稿，直到点击“保存分区”——因为把数组元素
+  编辑与待保存的标量字段写入放在同一批次里，会需要在同一个类型检查关卡下调和两种截然不同的
+  待处理改动。新文件在 `config.ts` 中被确认保存*之后*，旧文件（如果有）才会被删除；上传失败时
+  会删除刚写入的新文件，而不是留下孤儿文件。彻底移除某个平台的二维码（同时删除文件和
+  `qr_image`/`label` 属性）刻意排除在范围之外——卖家仍可以像编辑其他数组内容一样手动完成。
 - 以上功能都没有引入任何新的 `content/config.ts` 字段（Iron Rule 8 的检查清单未被触发）——
   `Platform.qr_image` 早已是可选字段，分类元数据是基于文件而非基于配置的，因此
   `scripts/lib/configDefaults.ts` 无需登记任何新条目。

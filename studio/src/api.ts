@@ -8,9 +8,10 @@ import type {
   ReadinessReport,
 } from "../../scripts/lib/siteReadiness";
 import type { CategoryMetaInput } from "../../scripts/lib/studioCategories";
+import type { ContactPlatformSummary } from "../../scripts/lib/contactPlatforms";
 import type { BulkStatusResult, BulkTiersResult, CategorySummary, ImageEntry, StudioItem } from "../../scripts/lib/studioApi";
 
-export type { BulkStatusResult, BulkTiersResult, CategoryMetaInput, CategorySummary, ConfigField, ConfigFieldKind, ImageEntry, ReadinessAction, ReadinessItem, ReadinessReport, StudioItem };
+export type { BulkStatusResult, BulkTiersResult, CategoryMetaInput, CategorySummary, ConfigField, ConfigFieldKind, ContactPlatformSummary, ImageEntry, ReadinessAction, ReadinessItem, ReadinessReport, StudioItem };
 
 // Every response body is read defensively rather than trusting res.json() to
 // succeed: the CSRF guard and Vite itself can answer a rejected request with
@@ -309,6 +310,35 @@ export async function fetchConfig(): Promise<ConfigField[]> {
     throw new Error(`GET /api/config returned an unreadable response (${res.status} ${res.statusText})`);
   }
   return body.fields as ConfigField[];
+}
+
+// Hits the same GET /api/config endpoint as fetchConfig() — the server
+// response carries both `fields` and `contactPlatforms` together — but reads
+// the other half of the body. Kept as a separate call (not a combined return
+// type on fetchConfig) so existing callers of fetchConfig() are unaffected.
+export async function fetchContactPlatforms(): Promise<ContactPlatformSummary[]> {
+  const res = await fetch("/api/config");
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `loading contact platforms failed with ${res.status} ${res.statusText}`));
+  }
+  if (!Array.isArray(body?.contactPlatforms)) {
+    throw new Error(`GET /api/config returned an unreadable response (${res.status} ${res.statusText})`);
+  }
+  return body.contactPlatforms as ContactPlatformSummary[];
+}
+
+export async function saveContactPlatformQrImage(index: number, qrImage: string): Promise<ContactPlatformSummary[]> {
+  const res = await fetch(`/api/contact-platforms/${index}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ qr_image: qrImage }),
+  });
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `saving contact.platforms[${index}].qr_image failed with ${res.status} ${res.statusText}`));
+  }
+  return (body?.contactPlatforms as ContactPlatformSummary[] | undefined) ?? [];
 }
 
 export async function saveConfigValue(

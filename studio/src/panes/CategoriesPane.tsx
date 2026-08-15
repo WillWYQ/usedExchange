@@ -16,15 +16,15 @@ function toDraft(cat: CategorySummary): CategoryMetaDraft {
 
 function CategoryRow({ category, onSaved }: { category: CategorySummary; onSaved: () => void }) {
   const { t } = useStudioT();
+  // Deliberately NOT re-synced from the `category` prop after mount: saving
+  // one row triggers the pane's own reload, which hands every row a
+  // brand-new `category` object (same slug, new reference) even for rows
+  // nobody touched. A prop-driven resync here would silently overwrite an
+  // in-progress edit in a sibling row the instant any other row saves.
   const [draft, setDraft] = useState<CategoryMetaDraft>(() => toDraft(category));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    setDraft(toDraft(category));
-    setSaved(false);
-  }, [category]);
 
   async function save() {
     const parsed = draftToMetaInput(draft);

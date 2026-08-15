@@ -136,8 +136,11 @@ export const ZH: Partial<StudioStrings> = {
   "categoriesPane.saved": "已保存",
   "categoriesPane.close": "关闭",
 
-  "configPane.qr.remove": "删除",
   "configPane.qr.uploading": "上传中…",
+  "configPane.qr.sectionTitle": "联系方式二维码",
+  "configPane.qr.sectionHint": "上传 PNG 图片以设置或替换某个平台的二维码。此操作会立即保存——不属于上方的分区保存。",
+  "configPane.qr.replaceHint": "上传新 PNG 将替换该平台的二维码。",
+  "configPane.qr.addHint": "上传 PNG 将为该平台添加二维码。",
 
   "drawer.photos": "照片",
   "drawer.details": "详情",

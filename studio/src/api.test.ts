@@ -8,6 +8,8 @@ import {
   saveCategoryMeta,
   uploadContactImage,
   deleteContactImage,
+  fetchContactPlatforms,
+  saveContactPlatformQrImage,
 } from "./api";
 
 describe("fetchItems", () => {
@@ -204,6 +206,41 @@ describe("deleteContactImage", () => {
     const [url, init] = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/contact/images/qr.png");
     expect(init.method).toBe("DELETE");
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("fetchContactPlatforms", () => {
+  it("returns the contactPlatforms array from GET /api/config", async () => {
+    const contactPlatforms = [{ index: 0, type: "zelle", value: undefined, label: "Zelle", qrImage: "/contact/zelle-qr.png" }];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({ fields: [], contactPlatforms }),
+      })) as unknown as typeof fetch,
+    );
+    expect(await fetchContactPlatforms()).toEqual(contactPlatforms);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("saveContactPlatformQrImage", () => {
+  it("PUTs to /api/contact-platforms/:index with qr_image", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ contactPlatforms: [] }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+    await saveContactPlatformQrImage(2, "/contact/zelle-qr-2.png");
+    const [url, init] = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/contact-platforms/2");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string)).toEqual({ qr_image: "/contact/zelle-qr-2.png" });
     vi.unstubAllGlobals();
   });
 });

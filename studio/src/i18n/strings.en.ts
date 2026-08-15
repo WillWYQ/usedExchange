@@ -155,8 +155,11 @@ export const EN = {
   "categoriesPane.saved": "Saved",
   "categoriesPane.close": "Close",
 
-  "configPane.qr.remove": "Remove",
   "configPane.qr.uploading": "Uploading…",
+  "configPane.qr.sectionTitle": "Contact QR images",
+  "configPane.qr.sectionHint": "Upload a PNG to set or replace a platform's QR code. This saves immediately — it isn't part of the section save above.",
+  "configPane.qr.replaceHint": "Uploading a new PNG replaces this platform's QR code.",
+  "configPane.qr.addHint": "Uploading a PNG adds a QR code to this platform.",
 
   // ── Drawer ──────────────────────────────────────────────────────
   "drawer.photos": "Photos",

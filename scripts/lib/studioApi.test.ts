@@ -1955,6 +1955,25 @@ const CONFIG_TYPES_FIXTURE = `export interface SiteConfig {
 }
 `;
 
+// contact.platforms as real object-literal entries — CONFIG_FIXTURE above
+// deliberately keeps them as bare strings for the unrelated field-list tests,
+// but the contact-platforms routes need the actual array-of-objects shape
+// content/config.ts really uses.
+const CONFIG_FIXTURE_WITH_PLATFORMS = `import type { SiteConfig } from "@/lib/config/types";
+
+export const siteConfig: SiteConfig = {
+  name: "Test Store",
+  contact: {
+    reveal_behavior: "click",
+    platforms: [
+      { type: "email", value: "you@example.com" },
+      { type: "venmo", value: "your_username" },
+      { type: "zelle", qr_image: "/contact/zelle-qr.png", label: "Zelle" },
+    ],
+  },
+};
+`;
+
 describe("config routes", () => {
   let tempProjects: string[] = [];
 
@@ -2097,6 +2116,79 @@ describe("config routes", () => {
   it("405s POST /api/config", async () => {
     const root = await configProject();
     const res = await req(root, "POST", {});
+    expect(res.status).toBe(405);
+  });
+
+  it("GET includes contactPlatforms alongside fields", async () => {
+    const root = await configProject(CONFIG_FIXTURE_WITH_PLATFORMS);
+    const res = await req(root, "GET");
+    expect(res.status).toBe(200);
+    const contactPlatforms = (asJson(res).body as { contactPlatforms: Array<{ type: string }> }).contactPlatforms;
+    expect(contactPlatforms.map((p) => p.type)).toEqual(["email", "venmo", "zelle"]);
+  });
+});
+
+describe("PUT /api/contact-platforms/:index", () => {
+  let tempProjects: string[] = [];
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+  async function configProject(): Promise<string> {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-contact-platforms-"));
+    tempProjects.push(root);
+    await fs.mkdir(path.join(root, "content"), { recursive: true });
+    await fs.writeFile(path.join(root, "content", "config.ts"), CONFIG_FIXTURE_WITH_PLATFORMS, "utf-8");
+    return root;
+  }
+  function put(root: string, index: number | string, body: unknown) {
+    return handleStudioRequest({
+      method: "PUT",
+      url: `/api/contact-platforms/${index}`,
+      body: Buffer.from(JSON.stringify(body)),
+      projectRoot: root,
+    });
+  }
+
+  it("replaces an existing qr_image value (no tsconfig.json → gate skipped)", async () => {
+    const root = await configProject();
+    const res = asJson(await put(root, 2, { qr_image: "/contact/zelle-qr-2.png" }));
+    expect(res.status).toBe(200);
+    const contactPlatforms = (res.body as { contactPlatforms: Array<{ index: number; qrImage?: string }> }).contactPlatforms;
+    expect(contactPlatforms[2]?.qrImage).toBe("/contact/zelle-qr-2.png");
+    const written = await fs.readFile(path.join(root, "content", "config.ts"), "utf-8");
+    expect(written).toContain('qr_image: "/contact/zelle-qr-2.png"');
+  });
+
+  it("inserts qr_image and a default label for a platform that has neither", async () => {
+    const root = await configProject();
+    const res = asJson(await put(root, 1, { qr_image: "/contact/venmo-qr.png" }));
+    expect(res.status).toBe(200);
+    const written = await fs.readFile(path.join(root, "content", "config.ts"), "utf-8");
+    expect(written).toContain('qr_image: "/contact/venmo-qr.png"');
+    expect(written).toContain('label: "Venmo"');
+  });
+
+  it("400s an out-of-range index", async () => {
+    const root = await configProject();
+    const res = asJson(await put(root, 99, { qr_image: "/contact/x.png" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("404s a negative or non-numeric index (the route itself only matches digits)", async () => {
+    const root = await configProject();
+    expect((await put(root, -1, { qr_image: "/contact/x.png" })).status).toBe(404);
+    expect((await put(root, "nope", { qr_image: "/contact/x.png" })).status).toBe(404);
+  });
+
+  it("405s GET /api/contact-platforms/:index", async () => {
+    const root = await configProject();
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/contact-platforms/0",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
     expect(res.status).toBe(405);
   });
 });

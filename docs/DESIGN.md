@@ -2312,15 +2312,41 @@ A **local-only** browser GUI for managing `content/` without editing JSON. Run `
   unmodified (all three already take a plain `dir` argument), adding only a PNG-only filename
   gate — extension **and** magic bytes must both say PNG. Returns `{ file, path }`, where
   `path` (`/contact/<file>`) is the value to store in `qr_image`. `GET /api/contact/images/:file`
-  streams the file back — needed because Studio's own dev server does not serve
-  `content/contact/` as `/contact/*`; only the site's separate build-time copy step
-  (`scripts/sync-images.ts`'s `copyContactFiles`, unrelated to the CDN sync path) does that, so
-  the Config pane's live preview reads through this route instead. `DELETE
-  /api/contact/images/:file` removes the file (`404` if missing) but does not edit
-  `content/config.ts` — the seller must still Save the Config pane to persist a cleared
-  `qr_image` field, consistent with every other Config field's dirty-draft-until-Save model.
-  These uploads never reach the CDN/R2 sync path or `lib/generated/image-manifest.json` — that
+  streams the file back for the Config pane's live preview thumbnail — needed because Studio's
+  own dev server does not serve `content/contact/` as `/contact/*`; only the site's separate
+  build-time copy step (`scripts/sync-images.ts`'s `copyContactFiles`, unrelated to the CDN sync
+  path) does that. `DELETE /api/contact/images/:file` removes a file (`404` if missing). These
+  uploads never reach the CDN/R2 sync path or `lib/generated/image-manifest.json` — that
   manifest is for `content/items/` photos only.
+- **Why `contact.platforms[].qr_image` isn't a normal Config field.** `content/config.ts`'s
+  generic field model (`scripts/lib/configEdit.ts`'s `readConfig`) deliberately does not walk
+  array literals — its own comment: an element add/remove is "a different, far riskier
+  operation than the single-value splices this module guarantees" — so `contact.platforms` (an
+  array) always surfaces there as one opaque `"unsupported"` field, and no per-element path like
+  `contact.platforms.0.qr_image` is ever produced. A new module,
+  `scripts/lib/contactPlatforms.ts`, fills exactly that one gap without touching
+  `configEdit.ts`'s array-avoidance stance: `readContactPlatforms(source)` parses
+  `contact.platforms` directly into `{ index, type, value?, label?, qrImage? }[]`, and
+  `writeContactPlatformQrImage(source, index, path)` either replaces an existing `qr_image`
+  string literal in place (the same splice guarantee `writeConfigValue` gives every other
+  field) or inserts `qr_image` (and `label`, if that's also absent) as new properties on an
+  element that already exists — it never adds, removes, or reorders an array *element*, which
+  is the one operation `configEdit.ts` calls out as risky. `PUT /api/contact-platforms/:index`
+  with `{ qr_image }` drives this, gated by the same `tsc --noEmit` type-check-before-write the
+  scalar `/api/config` PUT already used (factored into a shared
+  `writeConfigSourceWithTypeCheckGate` helper both routes now call) — a write that would break
+  the build is discarded here too. `GET /api/config`'s response gained a `contactPlatforms`
+  field alongside `fields` so the pane can render one row per platform.
+- The Config pane's Contact section renders a **Contact QR images** block below the read-only
+  `contact.platforms` field: one row per platform, each with a live preview (for platforms that
+  already have a `qr_image`) and a file input. Uploading saves immediately — unlike every other
+  Config field, which stages into a draft until "Save section" — because batching an
+  array-element edit with pending scalar-field writes would mean reconciling two different kinds
+  of pending change against the same type-check gate. The new file is confirmed saved in
+  `config.ts` *before* the old one (if any) is deleted from disk, and a failed upload deletes
+  the new file rather than leaving it orphaned. Removing a platform's QR code entirely (deleting
+  both the file and the `qr_image`/`label` properties) is intentionally out of scope — sellers
+  can still do that by hand, the same as any other array edit.
 - No new `content/config.ts` field was introduced for any of this — `Platform.qr_image` was
   already optional, and category metadata is file-based, not config-based — so Iron Rule 8's
   `scripts/lib/configDefaults.ts` checklist has nothing to register.
