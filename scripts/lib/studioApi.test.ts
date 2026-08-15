@@ -2387,3 +2387,109 @@ describe("PUT /api/categories/:slug", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("POST /api/contact/images", () => {
+  let tempProjects: string[] = [];
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+  async function emptyProject(): Promise<string> {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-contact-post-"));
+    await fs.mkdir(path.join(root, "content", "contact"), { recursive: true });
+    tempProjects.push(root);
+    return root;
+  }
+  // Real PNG header bytes, base64-encoded — a sniffer that passes on
+  // fabricated input proves nothing.
+  const PNG_BASE64 = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex").toString("base64");
+  const JPG_BASE64 = Buffer.from("ffd8ffe000104a4649460001", "hex").toString("base64");
+  function upload(root: string, body: unknown) {
+    return handleStudioRequest({
+      method: "POST",
+      url: "/api/contact/images",
+      body: Buffer.from(JSON.stringify(body)),
+      projectRoot: root,
+    });
+  }
+
+  it("writes a real PNG into content/contact/", async () => {
+    const root = await emptyProject();
+    const res = asJson(await upload(root, { filename: "wechat-qr.png", contentBase64: PNG_BASE64 }));
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({ file: "wechat-qr.png", path: "/contact/wechat-qr.png" });
+    await expect(fs.access(path.join(root, "content", "contact", "wechat-qr.png"))).resolves.toBeUndefined();
+  });
+
+  it("rejects a .png-named file whose bytes aren't a real PNG", async () => {
+    const root = await emptyProject();
+    const res = asJson(await upload(root, { filename: "fake.png", contentBase64: JPG_BASE64 }));
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a non-png extension outright", async () => {
+    const root = await emptyProject();
+    const res = asJson(await upload(root, { filename: "wechat-qr.jpg", contentBase64: PNG_BASE64 }));
+    expect(res.status).toBe(400);
+  });
+
+  it("appends a -1 suffix on a filename collision", async () => {
+    const root = await emptyProject();
+    await upload(root, { filename: "qr.png", contentBase64: PNG_BASE64 });
+    const res = asJson(await upload(root, { filename: "qr.png", contentBase64: PNG_BASE64 }));
+    expect(res.body).toEqual({ file: "qr-1.png", path: "/contact/qr-1.png" });
+  });
+});
+
+describe("GET/DELETE /api/contact/images/:filename", () => {
+  let tempProjects: string[] = [];
+  afterEach(async () => {
+    await Promise.all(tempProjects.map((root) => fs.rm(root, { recursive: true, force: true })));
+    tempProjects = [];
+  });
+  async function projectWithImage(): Promise<string> {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-contact-del-"));
+    await fs.mkdir(path.join(root, "content", "contact"), { recursive: true });
+    await fs.writeFile(path.join(root, "content", "contact", "qr.png"), "x");
+    tempProjects.push(root);
+    return root;
+  }
+
+  it("GETs an existing file with the right content type", async () => {
+    const root = await projectWithImage();
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/contact/images/qr.png",
+      body: Buffer.alloc(0),
+      projectRoot: root,
+    });
+    expect(isFileResponse(res)).toBe(true);
+  });
+
+  it("removes an existing file", async () => {
+    const root = await projectWithImage();
+    const res = asJson(
+      await handleStudioRequest({
+        method: "DELETE",
+        url: "/api/contact/images/qr.png",
+        body: Buffer.alloc(0),
+        projectRoot: root,
+      }),
+    );
+    expect(res.status).toBe(200);
+    await expect(fs.access(path.join(root, "content", "contact", "qr.png"))).rejects.toThrow();
+  });
+
+  it("404s deleting a file that doesn't exist", async () => {
+    const root = await projectWithImage();
+    const res = asJson(
+      await handleStudioRequest({
+        method: "DELETE",
+        url: "/api/contact/images/missing.png",
+        body: Buffer.alloc(0),
+        projectRoot: root,
+      }),
+    );
+    expect(res.status).toBe(404);
+  });
+});

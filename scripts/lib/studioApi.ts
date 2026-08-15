@@ -70,6 +70,11 @@ import {
   writeCategoryMeta,
   type CategoryMetaInput,
 } from "./studioCategories";
+import {
+  deleteContactImage,
+  isValidContactImageFilename,
+  resolveContactDir,
+} from "./studioContact";
 
 export type { ImageEntry };
 
@@ -340,6 +345,60 @@ async function handleCategoryMetaPut(req: StudioRequest, slug: string): Promise<
       sortOrder: updated.sort_order,
     },
   };
+}
+
+const contactUploadBodySchema = z.object({
+  filename: z.string().min(1),
+  contentBase64: z.string().min(1),
+});
+
+async function handleContactImageUpload(req: StudioRequest): Promise<StudioResponse> {
+  const { filename, contentBase64 } = parseJsonBody(req.body, contactUploadBodySchema);
+  const sanitized = sanitizeUploadFilename(filename);
+  if (!isValidContactImageFilename(sanitized)) {
+    throw new StudioError(400, `"${filename}" must be a .png file`);
+  }
+
+  const bytes = Buffer.from(contentBase64, "base64");
+  if (bytes.length === 0) throw new StudioError(400, "uploaded file is empty");
+
+  // The extension is whatever the browser sent; the header bytes are what
+  // decide, exactly like item photo uploads.
+  if (sniffImageType(bytes) !== "png") {
+    throw new StudioError(400, `"${filename}" is not a valid PNG`);
+  }
+
+  const dir = resolveContactDir(req.projectRoot);
+  const written = await writeImage(dir, sanitized, bytes);
+  return { status: 201, body: { file: written, path: `/contact/${written}` } };
+}
+
+async function handleContactImageGet(req: StudioRequest, filename: string): Promise<StudioResponse> {
+  if (!isValidContactImageFilename(filename)) {
+    throw new StudioError(400, `not a contact image filename: "${filename}"`);
+  }
+  const dir = resolveContactDir(req.projectRoot);
+  const filePath = path.join(dir, filename);
+  const rel = path.relative(dir, filePath);
+  if (rel !== filename || rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new StudioError(400, "resolved path escapes content/contact");
+  }
+  try {
+    await fsPromises.access(filePath);
+  } catch {
+    throw new StudioError(404, `no such contact image: ${filename}`);
+  }
+  return { status: 200, file: filePath, contentType: contentTypeFor(filename) };
+}
+
+async function handleContactImageDelete(req: StudioRequest, filename: string): Promise<StudioResponse> {
+  if (!isValidContactImageFilename(filename)) {
+    throw new StudioError(400, `not a contact image filename: "${filename}"`);
+  }
+  const dir = resolveContactDir(req.projectRoot);
+  const deleted = await deleteContactImage(dir, filename);
+  if (!deleted) throw new StudioError(404, `${filename} not found in content/contact`);
+  return { status: 200, body: { ok: true } };
 }
 
 // Input validation deliberately does NOT reuse itemJsonSchema's field schemas:
@@ -703,6 +762,7 @@ function handleSyncImages(): StudioResponse {
 // on $ so it can never swallow the /images routes above it.
 const ITEM_ROUTE_RE = /^\/api\/items\/([^/]+)\/([^/]+)$/;
 const CATEGORY_ROUTE_RE = /^\/api\/categories\/([^/]+)$/;
+const CONTACT_IMAGE_ROUTE_RE = /^\/api\/contact\/images\/([^/]+)$/;
 
 async function readItemJson(req: StudioRequest, category: string, item: string): Promise<{
   jsonPath: string;
@@ -1387,6 +1447,30 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
 
       if (req.method === "GET") return await handleItemGet(req, category, item);
       if (req.method === "PATCH") return await handleItemPatch(req, category, item);
+      return { status: 405, body: { error: `method not allowed: ${req.method}` } };
+    }
+
+    if (pathname === "/api/contact/images") {
+      if (req.method !== "POST") {
+        return { status: 405, body: { error: "POST only" } };
+      }
+      return await handleContactImageUpload(req);
+    }
+
+    const contactImageMatch = CONTACT_IMAGE_ROUTE_RE.exec(pathname);
+    if (contactImageMatch !== null) {
+      const [, filenameRaw] = contactImageMatch;
+      if (filenameRaw === undefined) {
+        return { status: 400, body: { error: "malformed contact image route" } };
+      }
+      let filename: string;
+      try {
+        filename = decodeURIComponent(filenameRaw);
+      } catch {
+        return { status: 400, body: { error: "malformed URL encoding" } };
+      }
+      if (req.method === "GET") return await handleContactImageGet(req, filename);
+      if (req.method === "DELETE") return await handleContactImageDelete(req, filename);
       return { status: 405, body: { error: `method not allowed: ${req.method}` } };
     }
 
