@@ -136,6 +136,9 @@ export const ZH: Partial<StudioStrings> = {
   "categoriesPane.saved": "已保存",
   "categoriesPane.close": "关闭",
 
+  "configPane.qr.remove": "删除",
+  "configPane.qr.uploading": "上传中…",
+
   "drawer.photos": "照片",
   "drawer.details": "详情",
   "drawer.close": "关闭",

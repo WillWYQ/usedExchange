@@ -104,4 +104,32 @@ describe("ConfigPane", () => {
     expect((within(matrix as HTMLElement).getByLabelText("i18n.translations.en.home") as HTMLInputElement).value).toBe("Home");
     expect((within(matrix as HTMLElement).getByLabelText("i18n.translations.zh.home") as HTMLInputElement).value).toBe("首页");
   });
+
+  it("renders an upload control for a qr_image field and writes the returned path into the draft", async () => {
+    const fields: ConfigField[] = [
+      makeField({ path: "contact.platforms.0.qr_image", value: "", section: "Contact" }),
+    ];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/config" && init?.method === undefined) return jsonResponse({ fields });
+      if (url === "/api/contact/images" && init?.method === "POST") {
+        return jsonResponse({ file: "wechat-qr.png", path: "/contact/wechat-qr.png" });
+      }
+      throw new Error(`unexpected fetch: ${url} ${init?.method ?? "GET"}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ConfigPane onClose={vi.fn()} />);
+    await screen.findByRole("tab", { name: "Contact" });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(fileInput).not.toBeNull();
+    const file = new File(["x"], "wechat-qr.png", { type: "image/png" });
+    await userEvent.upload(fileInput, file);
+
+    await vi.waitFor(() => {
+      const textInput = screen.getByDisplayValue("/contact/wechat-qr.png") as HTMLInputElement;
+      expect(textInput.value).toBe("/contact/wechat-qr.png");
+    });
+  });
 });

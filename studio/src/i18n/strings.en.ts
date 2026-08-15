@@ -155,6 +155,9 @@ export const EN = {
   "categoriesPane.saved": "Saved",
   "categoriesPane.close": "Close",
 
+  "configPane.qr.remove": "Remove",
+  "configPane.qr.uploading": "Uploading…",
+
   // ── Drawer ──────────────────────────────────────────────────────
   "drawer.photos": "Photos",
   "drawer.details": "Details",

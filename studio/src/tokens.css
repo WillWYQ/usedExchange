@@ -1447,6 +1447,13 @@ tr.failed td {
   font: inherit;
 }
 
+.qr-image-control {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  margin-top: 0.35rem;
+}
+
 .config-row-actions {
   display: flex;
   align-items: center;
