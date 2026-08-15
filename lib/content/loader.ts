@@ -20,7 +20,7 @@ const IMAGE_EXT = /\.(jpg|jpeg|png|webp|gif)$/i;
 // hints written by scripts/lib/itemTemplate.ts) and trailing commas are allowed.
 // Strict JSON parses with zero errors here too, so existing files are unaffected.
 // Any other syntax error → undefined, treated the same as the old JSON.parse throw.
-function readJsonc(text: string): unknown {
+export function readJsonc(text: string): unknown {
   const errors: ParseError[] = [];
   const value = parseJsonc(text, errors, { allowTrailingComma: true });
   return errors.length === 0 ? value : undefined;
