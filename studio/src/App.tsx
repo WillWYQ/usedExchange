@@ -407,6 +407,10 @@ function StudioChrome({
             void refresh().then(() => setOpenItemId(id));
             bumpChanges();
           }}
+          onCategoryCreated={() => {
+            setShowNewItem(false);
+            void refresh();
+          }}
         />
       )}
       {showDefaults && (

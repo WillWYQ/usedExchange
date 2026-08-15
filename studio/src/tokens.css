@@ -1430,6 +1430,23 @@ tr.failed td {
   font-weight: 600;
 }
 
+.new-item-mode {
+  display: flex;
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+
+.disclosure-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0.5rem 0;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
 .config-row-actions {
   display: flex;
   align-items: center;
