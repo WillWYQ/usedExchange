@@ -16,6 +16,7 @@ export const EN = {
   "header.config": "Config",
   "header.setup": "Setup",
   "header.defaults": "Defaults",
+  "header.categories": "Categories",
   "header.newItem": "New item",
   "header.exportPdf": "Export PDF",
 
@@ -136,6 +137,15 @@ export const EN = {
   "categoryMeta.sortOrder": "Sort order",
   "categoryMeta.sortOrderHint": "Lower numbers sort first. Leave blank to sort alphabetically after ordered categories.",
   "categoryMeta.sortOrderError": "Sort order must be a whole number.",
+
+  "categoriesPane.title": "Categories",
+  "categoriesPane.hint": "Edit how each category is labeled and ordered on the site.",
+  "categoriesPane.empty": "No categories yet. Use “New item” → “Category” to create one.",
+  "categoriesPane.itemCount": "{count} item{plural}",
+  "categoriesPane.save": "Save",
+  "categoriesPane.saving": "Saving…",
+  "categoriesPane.saved": "Saved",
+  "categoriesPane.close": "Close",
 
   // ── Drawer ──────────────────────────────────────────────────────
   "drawer.photos": "Photos",

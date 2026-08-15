@@ -9,6 +9,7 @@ export const ZH: Partial<StudioStrings> = {
   "header.config": "配置",
   "header.setup": "引导",
   "header.defaults": "默认值",
+  "header.categories": "分类",
   "header.newItem": "新建商品",
   "header.exportPdf": "导出 PDF",
 
@@ -117,6 +118,15 @@ export const ZH: Partial<StudioStrings> = {
   "categoryMeta.sortOrder": "排序",
   "categoryMeta.sortOrderHint": "数字越小越靠前。留空则按字母排序,排在有序分类之后。",
   "categoryMeta.sortOrderError": "排序必须是整数。",
+
+  "categoriesPane.title": "分类",
+  "categoriesPane.hint": "编辑每个分类在网站上的名称和排序。",
+  "categoriesPane.empty": "还没有分类。使用“新建商品”→“分类”创建一个。",
+  "categoriesPane.itemCount": "{count} 件商品",
+  "categoriesPane.save": "保存",
+  "categoriesPane.saving": "保存中…",
+  "categoriesPane.saved": "已保存",
+  "categoriesPane.close": "关闭",
 
   "drawer.photos": "照片",
   "drawer.details": "详情",

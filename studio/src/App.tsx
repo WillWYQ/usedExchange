@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { applyDefaultTiers, bulkStatus, fetchItems, type StudioItem } from "./api";
+import { applyDefaultTiers, bulkStatus, fetchCategories, fetchItems, type StudioItem } from "./api";
 import {
   applyFiltersWithExemptions,
   countByStatus,
@@ -11,6 +11,7 @@ import { LocaleSwitcher } from "./components/LocaleSwitcher";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { StudioI18nProvider, useStudioT } from "./i18n/StudioI18n";
 import { BulkToolbar } from "./panes/BulkToolbar";
+import { CategoriesPane } from "./panes/CategoriesPane";
 import { ConfigPane } from "./panes/ConfigPane";
 import { DefaultsPane } from "./panes/DefaultsPane";
 import { Drawer } from "./panes/Drawer";
@@ -45,6 +46,10 @@ export function App() {
   const [studioTranslations, setStudioTranslations] = useState<
     Record<string, Record<string, string>>
   >({});
+  // Sourced from the category folders themselves, not from items: a category
+  // created with zero items must still be selectable and filterable
+  // everywhere the seller can pick a category.
+  const [categorySlugs, setCategorySlugs] = useState<string[]>([]);
 
   // Studio keeps no local copy of item state: after any write it re-reads the
   // full list, so the table can never drift from what is on disk.
@@ -55,12 +60,13 @@ export function App() {
   // switch. The functional setDisplayLocale update below corrects an
   // invalidated locale without refresh needing to know the current one.
   const refresh = useCallback(async () => {
-    const { items, defaultLocale, availableLocales: al, studioTranslations: st } =
-      await fetchItems();
+    const [{ items, defaultLocale, availableLocales: al, studioTranslations: st }, categories] =
+      await Promise.all([fetchItems(), fetchCategories()]);
     setItems(items);
     setAvailableLocales(al);
     setStudioTranslations(st);
     setDisplayLocale((prev) => (al.includes(prev) ? prev : defaultLocale));
+    setCategorySlugs(categories.map((c) => c.slug).sort());
   }, []);
 
   useEffect(() => {
@@ -86,6 +92,7 @@ export function App() {
         displayLocale={displayLocale}
         setDisplayLocale={setDisplayLocale}
         refresh={refresh}
+        categorySlugs={categorySlugs}
       />
     </StudioI18nProvider>
   );
@@ -99,6 +106,7 @@ function StudioChrome({
   displayLocale,
   setDisplayLocale,
   refresh,
+  categorySlugs,
 }: {
   items: StudioItem[];
   error: string | null;
@@ -107,6 +115,7 @@ function StudioChrome({
   displayLocale: string;
   setDisplayLocale: (locale: string) => void;
   refresh: () => Promise<void>;
+  categorySlugs: string[];
 }) {
   const { t } = useStudioT();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -117,6 +126,7 @@ function StudioChrome({
   const [showNewItem, setShowNewItem] = useState(false);
   const [showDefaults, setShowDefaults] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
+  const [showCategories, setShowCategories] = useState(false);
   const [showExportPdf, setShowExportPdf] = useState(false);
   // The checklist opens itself once, the first time a site reports as not
   // ready; after that it is the seller's to open and close from the header.
@@ -141,10 +151,7 @@ function StudioChrome({
 
   const counts = useMemo(() => countByStatus(items), [items]);
 
-  const categories = useMemo(
-    () => [...new Set(items.map((i) => i.categorySlug))].sort(),
-    [items],
-  );
+  const categories = categorySlugs;
 
   const visibleItems = useMemo(
     () => applyFiltersWithExemptions(items, filters, exemptIds),
@@ -282,6 +289,9 @@ function StudioChrome({
           <Button onClick={() => setShowDefaults(true)}>
             {t("header.defaults")}
           </Button>
+          <Button onClick={() => setShowCategories(true)}>
+            {t("header.categories")}
+          </Button>
           <Button onClick={() => setShowExportPdf(true)}>
             {t("header.exportPdf")}
           </Button>
@@ -407,6 +417,14 @@ function StudioChrome({
         />
       )}
       {showConfig && <ConfigPane onClose={() => setShowConfig(false)} />}
+      {showCategories && (
+        <CategoriesPane
+          onClose={() => setShowCategories(false)}
+          onSaved={() => {
+            void refresh();
+          }}
+        />
+      )}
       {showExportPdf && <ExportPdfDialog items={items} onClose={() => setShowExportPdf(false)} />}
     </>
   );
