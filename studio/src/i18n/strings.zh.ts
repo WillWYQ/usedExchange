@@ -125,7 +125,7 @@ export const ZH: Partial<StudioStrings> = {
   "categoryMeta.description": "描述",
   "categoryMeta.sortOrder": "排序",
   "categoryMeta.sortOrderHint": "数字越小越靠前。留空则按字母排序,排在有序分类之后。",
-  "categoryMeta.sortOrderError": "排序必须是整数。",
+  "categoryMeta.sortOrderError": "排序必须是大于等于 0 的整数。",
 
   "categoriesPane.title": "分类",
   "categoriesPane.hint": "编辑每个分类在网站上的名称和排序。",

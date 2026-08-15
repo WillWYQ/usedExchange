@@ -78,4 +78,18 @@ describe("NewItemDialog", () => {
     fireEvent.click(getByText("Create"));
     expect(await findByRole("alert")).toBeTruthy();
   });
+
+  it("clears a validation error from one mode when switching to the other", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const { getByText, getByLabelText, getByRole, queryByRole } = renderWithStudioI18n(
+      <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+    );
+    // Item mode: trigger the slug-format error.
+    fireEvent.change(getByLabelText(/^Item name/), { target: { value: "Not Kebab" } });
+    fireEvent.click(getByText("Create"));
+    expect(queryByRole("alert")).not.toBeNull();
+
+    fireEvent.click(getByRole("tab", { name: "Category" }));
+    expect(queryByRole("alert")).toBeNull();
+  });
 });

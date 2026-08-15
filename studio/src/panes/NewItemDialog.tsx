@@ -101,7 +101,10 @@ export function NewItemDialog({
             role="tab"
             aria-selected={mode === "item"}
             className={mode === "item" ? "tab tab-active" : "tab"}
-            onClick={() => setMode("item")}
+            onClick={() => {
+              setMode("item");
+              setError(null);
+            }}
           >
             {t("newItem.mode.item")}
           </button>
@@ -110,7 +113,10 @@ export function NewItemDialog({
             role="tab"
             aria-selected={mode === "category"}
             className={mode === "category" ? "tab tab-active" : "tab"}
-            onClick={() => setMode("category")}
+            onClick={() => {
+              setMode("category");
+              setError(null);
+            }}
           >
             {t("newItem.mode.category")}
           </button>

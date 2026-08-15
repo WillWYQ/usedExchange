@@ -259,7 +259,15 @@ export async function uploadContactImage(file: File): Promise<{ file: string; pa
   if (!res.ok) {
     throw new Error(errorMessage(body, `uploading QR image failed with ${res.status} ${res.statusText}`));
   }
-  return { file: body?.file as string, path: body?.path as string };
+  // A 200 with an unreadable `file`/`path` must not fall through as if it
+  // succeeded: the caller writes `path` straight into the qr_image draft, so
+  // a silent `undefined` there would look like nothing happened while the
+  // PNG had, in fact, already landed in content/contact/ on disk — the same
+  // "looks identical to success" trap fetchItems's own comment describes.
+  if (typeof body?.file !== "string" || typeof body?.path !== "string") {
+    throw new Error(`POST /api/contact/images returned an unreadable response (${res.status} ${res.statusText})`);
+  }
+  return { file: body.file, path: body.path };
 }
 
 export async function deleteContactImage(filename: string): Promise<void> {

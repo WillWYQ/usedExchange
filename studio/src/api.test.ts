@@ -174,6 +174,21 @@ describe("uploadContactImage", () => {
     expect(result).toEqual({ file: "qr.png", path: "/contact/qr.png" });
     vi.unstubAllGlobals();
   });
+
+  it("throws on a 2xx response missing file/path, rather than returning undefined values", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 201,
+        statusText: "Created",
+        json: async () => ({}),
+      })) as unknown as typeof fetch,
+    );
+    const file = new File(["hello"], "qr.png", { type: "image/png" });
+    await expect(uploadContactImage(file)).rejects.toThrow(/unreadable/);
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("deleteContactImage", () => {

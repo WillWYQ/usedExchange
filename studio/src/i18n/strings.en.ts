@@ -144,7 +144,7 @@ export const EN = {
   "categoryMeta.description": "Description",
   "categoryMeta.sortOrder": "Sort order",
   "categoryMeta.sortOrderHint": "Lower numbers sort first. Leave blank to sort alphabetically after ordered categories.",
-  "categoryMeta.sortOrderError": "Sort order must be a whole number.",
+  "categoryMeta.sortOrderError": "Sort order must be a whole number, 0 or greater.",
 
   "categoriesPane.title": "Categories",
   "categoriesPane.hint": "Edit how each category is labeled and ordered on the site.",

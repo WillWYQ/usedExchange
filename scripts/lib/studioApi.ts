@@ -291,7 +291,11 @@ const categoryMetaInputSchema = z.object({
   display_name: z.string().optional(),
   description: z.string().optional(),
   icon: z.string().optional(),
-  sort_order: z.number().int().nullable().optional(),
+  // .min(0): categoryJsonSchema's nullableNumber (lib/content/schema.ts) silently
+  // reads any negative sort_order back as null, so a negative value here would
+  // write successfully and then vanish on the very next read. Rejecting it at
+  // the door is clearer than a value that appears to save and then disappears.
+  sort_order: z.number().int().min(0).nullable().optional(),
 });
 
 const createCategoryBodySchema = z.object({

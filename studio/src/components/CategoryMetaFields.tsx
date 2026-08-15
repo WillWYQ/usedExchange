@@ -26,7 +26,11 @@ export function draftToMetaInput(draft: CategoryMetaDraft): CategoryMetaInput | 
   let sortOrder: number | null = null;
   if (trimmed !== "") {
     const n = Number(trimmed);
-    if (!Number.isInteger(n)) return { error: "categoryMeta.sortOrderError" };
+    // Negative values round-trip through the server as if the field were
+    // never set — categoryJsonSchema's nullableNumber reads any negative
+    // sort_order back as null on the next load — so they're rejected here
+    // rather than appearing to save and then silently reverting to blank.
+    if (!Number.isInteger(n) || n < 0) return { error: "categoryMeta.sortOrderError" };
     sortOrder = n;
   }
   return {
@@ -55,7 +59,10 @@ export function CategoryMetaFields({
           type="text"
           value={value.icon}
           disabled={busy}
-          maxLength={8}
+          // No maxLength: a single-glyph emoji can still be a long UTF-16
+          // sequence (ZWJ-joined families, flags with modifiers), and the
+          // server places no length limit on this field either — a hard cap
+          // here would only risk truncating a legitimate emoji mid-sequence.
           onChange={(e) => onChange({ ...value, icon: e.target.value })}
         />
         <span className="field-hint">{t("categoryMeta.iconHint")}</span>

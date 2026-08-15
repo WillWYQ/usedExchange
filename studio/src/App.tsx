@@ -60,8 +60,15 @@ export function App() {
   // switch. The functional setDisplayLocale update below corrects an
   // invalidated locale without refresh needing to know the current one.
   const refresh = useCallback(async () => {
+    // fetchCategories() is caught on its own: before this feature, the item
+    // table depended on nothing but fetchItems(), and a plain Promise.all
+    // would make a categories-endpoint failure block even a fully successful
+    // item load. Falling back to [] keeps that independence — the seller
+    // loses the category list (New item's dropdown, the Categories pane)
+    // but still sees their items and the real error surfaces from wherever
+    // triggered it, not as a blanket page error.
     const [{ items, defaultLocale, availableLocales: al, studioTranslations: st }, categories] =
-      await Promise.all([fetchItems(), fetchCategories()]);
+      await Promise.all([fetchItems(), fetchCategories().catch(() => [])]);
     setItems(items);
     setAvailableLocales(al);
     setStudioTranslations(st);

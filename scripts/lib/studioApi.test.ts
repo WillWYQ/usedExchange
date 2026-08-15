@@ -2386,6 +2386,15 @@ describe("PUT /api/categories/:slug", () => {
     const res = asJson(await put(root, "electronics", { sort_order: 1.5 }));
     expect(res.status).toBe(400);
   });
+
+  it("400s for a negative sort_order rather than silently dropping it", async () => {
+    // categoryJsonSchema's nullableNumber (lib/content/schema.ts) reads any
+    // negative sort_order back as null, so a negative value that "saved
+    // successfully" would vanish on the very next read. Reject it up front.
+    const root = await projectWithCategory();
+    const res = asJson(await put(root, "electronics", { sort_order: -1 }));
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("POST /api/contact/images", () => {

@@ -56,4 +56,12 @@ describe("draftToMetaInput", () => {
     const result = draftToMetaInput({ ...EMPTY_CATEGORY_META_DRAFT, sortOrder: "1.5" });
     expect(result).toEqual({ error: "categoryMeta.sortOrderError" });
   });
+
+  it("errors on a negative sort order", () => {
+    // A negative value would otherwise "save" and then silently revert to
+    // blank on the next load, since the server's read schema treats any
+    // negative sort_order the same as absent.
+    const result = draftToMetaInput({ ...EMPTY_CATEGORY_META_DRAFT, sortOrder: "-1" });
+    expect(result).toEqual({ error: "categoryMeta.sortOrderError" });
+  });
 });
