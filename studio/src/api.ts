@@ -300,32 +300,21 @@ export async function saveDefaults(scope: string, defaults: Record<string, unkno
   }
 }
 
-export async function fetchConfig(): Promise<ConfigField[]> {
+// One GET /api/config, both halves of the response: fetching `fields` and
+// `contactPlatforms` through two separate client calls (each hitting this
+// same endpoint on its own) would mean two HTTP round trips — and two
+// server-side config.ts reads/parses — for data the server already returns
+// together in one response.
+export async function fetchConfig(): Promise<{ fields: ConfigField[]; contactPlatforms: ContactPlatformSummary[] }> {
   const res = await fetch("/api/config");
   const body = await readJsonBody(res);
   if (!res.ok) {
     throw new Error(errorMessage(body, `loading site config failed with ${res.status} ${res.statusText}`));
   }
-  if (!Array.isArray(body?.fields)) {
+  if (!Array.isArray(body?.fields) || !Array.isArray(body?.contactPlatforms)) {
     throw new Error(`GET /api/config returned an unreadable response (${res.status} ${res.statusText})`);
   }
-  return body.fields as ConfigField[];
-}
-
-// Hits the same GET /api/config endpoint as fetchConfig() — the server
-// response carries both `fields` and `contactPlatforms` together — but reads
-// the other half of the body. Kept as a separate call (not a combined return
-// type on fetchConfig) so existing callers of fetchConfig() are unaffected.
-export async function fetchContactPlatforms(): Promise<ContactPlatformSummary[]> {
-  const res = await fetch("/api/config");
-  const body = await readJsonBody(res);
-  if (!res.ok) {
-    throw new Error(errorMessage(body, `loading contact platforms failed with ${res.status} ${res.statusText}`));
-  }
-  if (!Array.isArray(body?.contactPlatforms)) {
-    throw new Error(`GET /api/config returned an unreadable response (${res.status} ${res.statusText})`);
-  }
-  return body.contactPlatforms as ContactPlatformSummary[];
+  return { fields: body.fields as ConfigField[], contactPlatforms: body.contactPlatforms as ContactPlatformSummary[] };
 }
 
 export async function saveContactPlatformQrImage(index: number, qrImage: string): Promise<ContactPlatformSummary[]> {

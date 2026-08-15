@@ -8,7 +8,7 @@ import {
   saveCategoryMeta,
   uploadContactImage,
   deleteContactImage,
-  fetchContactPlatforms,
+  fetchConfig,
   saveContactPlatformQrImage,
 } from "./api";
 
@@ -210,8 +210,8 @@ describe("deleteContactImage", () => {
   });
 });
 
-describe("fetchContactPlatforms", () => {
-  it("returns the contactPlatforms array from GET /api/config", async () => {
+describe("fetchConfig", () => {
+  it("returns fields and contactPlatforms from one GET /api/config", async () => {
     const contactPlatforms = [{ index: 0, type: "zelle", value: undefined, label: "Zelle", qrImage: "/contact/zelle-qr.png" }];
     vi.stubGlobal(
       "fetch",
@@ -222,7 +222,21 @@ describe("fetchContactPlatforms", () => {
         json: async () => ({ fields: [], contactPlatforms }),
       })) as unknown as typeof fetch,
     );
-    expect(await fetchContactPlatforms()).toEqual(contactPlatforms);
+    expect(await fetchConfig()).toEqual({ fields: [], contactPlatforms });
+    vi.unstubAllGlobals();
+  });
+
+  it("throws on a response missing contactPlatforms", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({ fields: [] }),
+      })) as unknown as typeof fetch,
+    );
+    await expect(fetchConfig()).rejects.toThrow(/unreadable/);
     vi.unstubAllGlobals();
   });
 });

@@ -426,6 +426,7 @@ function StudioChrome({
           onCategoryCreated={() => {
             setShowNewItem(false);
             void refresh();
+            bumpChanges();
           }}
         />
       )}

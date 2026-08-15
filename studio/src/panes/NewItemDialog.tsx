@@ -104,6 +104,10 @@ export function NewItemDialog({
             onClick={() => {
               setMode("item");
               setError(null);
+              // `name` backs both this mode's "Item name" field and Category
+              // mode's "Category slug" field — clear it on every switch so a
+              // draft from one mode never carries into the other unnoticed.
+              setName("");
             }}
           >
             {t("newItem.mode.item")}
@@ -116,6 +120,9 @@ export function NewItemDialog({
             onClick={() => {
               setMode("category");
               setError(null);
+              setName("");
+              setShowCategoryMeta(false);
+              setCategoryMeta(EMPTY_CATEGORY_META_DRAFT);
             }}
           >
             {t("newItem.mode.category")}

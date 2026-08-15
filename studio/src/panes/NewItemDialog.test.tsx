@@ -92,4 +92,16 @@ describe("NewItemDialog", () => {
     fireEvent.click(getByRole("tab", { name: "Category" }));
     expect(queryByRole("alert")).toBeNull();
   });
+
+  it("does not carry the item-name draft over into the category-slug field", () => {
+    // `name` backs both the Item mode "Item name" input and the Category
+    // mode "Category slug" input — switching modes must clear it, or a
+    // leftover item-name draft becomes an unintended category slug.
+    const { getByLabelText, getByRole } = renderWithStudioI18n(
+      <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+    );
+    fireEvent.change(getByLabelText(/^Item name/), { target: { value: "old-couch" } });
+    fireEvent.click(getByRole("tab", { name: "Category" }));
+    expect((getByLabelText("Category slug", { exact: false }) as HTMLInputElement).value).toBe("");
+  });
 });
