@@ -1397,6 +1397,15 @@ tr.failed td {
   border-bottom: 0;
 }
 
+/* ── Category metadata fields (shared by CategoriesPane + NewItemDialog) ── */
+
+.category-meta-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  margin-top: var(--gap);
+}
+
 .config-row-actions {
   display: flex;
   align-items: center;

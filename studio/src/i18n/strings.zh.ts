@@ -109,6 +109,15 @@ export const ZH: Partial<StudioStrings> = {
   "newItem.cancel": "取消",
   "newItem.slugError": "分类和名称必须是小写字母、数字和连字符。",
 
+  "categoryMeta.icon": "图标",
+  "categoryMeta.iconHint": "显示在分类名称旁的表情符号,例如 📱。",
+  "categoryMeta.displayName": "显示名称",
+  "categoryMeta.displayNameHint": "代替文件夹名称显示。留空则使用 slug。",
+  "categoryMeta.description": "描述",
+  "categoryMeta.sortOrder": "排序",
+  "categoryMeta.sortOrderHint": "数字越小越靠前。留空则按字母排序,排在有序分类之后。",
+  "categoryMeta.sortOrderError": "排序必须是整数。",
+
   "drawer.photos": "照片",
   "drawer.details": "详情",
   "drawer.close": "关闭",

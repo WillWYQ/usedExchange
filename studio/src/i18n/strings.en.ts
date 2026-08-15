@@ -128,6 +128,15 @@ export const EN = {
   "newItem.cancel": "Cancel",
   "newItem.slugError": "Category and name must be kebab-case (lowercase letters, digits, hyphens).",
 
+  "categoryMeta.icon": "Icon",
+  "categoryMeta.iconHint": "An emoji shown next to the category name, e.g. 📱.",
+  "categoryMeta.displayName": "Display name",
+  "categoryMeta.displayNameHint": "Shown instead of the folder name. Leave blank to use the slug.",
+  "categoryMeta.description": "Description",
+  "categoryMeta.sortOrder": "Sort order",
+  "categoryMeta.sortOrderHint": "Lower numbers sort first. Leave blank to sort alphabetically after ordered categories.",
+  "categoryMeta.sortOrderError": "Sort order must be a whole number.",
+
   // ── Drawer ──────────────────────────────────────────────────────
   "drawer.photos": "Photos",
   "drawer.details": "Details",
