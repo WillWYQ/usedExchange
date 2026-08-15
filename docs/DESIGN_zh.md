@@ -453,6 +453,8 @@ Schema（`lib/content/schema.ts`）定义了 **36 个顶层字段**；若计入�
 
 ## 6. 可选分类元数据 — `_category.json`
 
+> Seller Studio 的"分类管理"面板可以读写此文件 —— 见 §22。
+
 ```jsonc
 {
   "display_name": "家居与厨房",
@@ -537,6 +539,8 @@ contact: {
 | 其他所有平台 | 不预填（平台不支持深链接预填） |
 
 预填在 `PlatformButton` 调用点应用（当提供了 `item` 和 `resolvedPrice` 时）。物品详情页的 `ContactSection` 总是同时传入两者——它独立调用 `useGeolocation()` + `useDistancePricing()` 解析价格（浏览器通过 `maximumAge: 300_000` 立即返回缓存位置，因此不会有第二次权限弹窗）。Footer 的 `ContactSection` 不接收物品上下文，从不预填。
+
+> Seller Studio 可以上传/替换/删除这些 PNG —— 见 §22。
 
 ---
 
@@ -2044,8 +2048,8 @@ shipping?: {
 一个**仅本地**的浏览器 GUI，无需编辑 JSON 即可管理 `content/`。运行 `pnpm studio`
 （可选 `--port <n>`，默认 `5174`）。
 - 仅绑定 **127.0.0.1** —— 绝不暴露到网络。
-- 只编辑 `content/items/**` 与 `lib/generated/image-manifest.json`。它从不读取、写入或
-  渲染私有的 `reserved_for` 字段（Iron Rule 1 与 4）。
+- 只编辑 `content/items/**`、`content/contact/*.png` 与 `lib/generated/image-manifest.json`。
+  它从不读取、写入或渲染私有的 `reserved_for` 字段（Iron Rule 1 与 4）。
 - 物品编辑使用保留注释的 JSONC 写入（`scripts/lib/itemEdit.ts`），因此卖家的格式与
   `// options:` 注释得以保留；严格字段语法由 `scripts/lib/itemFields.ts` 强制执行。
 - 其 git **发布**只暂存 `content/` + `lib/generated/image-manifest.json`（与 `pnpm push`
@@ -2064,6 +2068,42 @@ shipping?: {
 - 批量操作 **Apply default tiers**（选择工具栏，`POST /api/items/bulk-apply-tiers`）会把每个
   选中物品的 `price.tiers` 覆写为该物品所属分类合并后的默认值。无默认档位、或档位已一致的
   物品会被跳过并提示；失败按物品报告、不会中断整批；只写入 `price.tiers`。
+
+### 分类元数据、分类创建与联系方式二维码图片
+- **`GET /api/categories`** 返回 `CategorySummary[]`（`slug`、`displayName`、`description`、
+  `icon`、`sortOrder`、`itemCount`）—— `content/items/` 下每个通过 kebab-case slug 白名单的
+  文件夹都会列出，不论是否已有商品。`itemCount` 由一次直接的、按 `projectRoot` 限定的目录读取
+  计算（`countCategoryItems`），刻意不复用 `loadAllItemsRaw()`（该函数从 `process.cwd()`
+  而非请求的 `projectRoot` 解析 `content/`）。
+- **`PUT /api/categories/:slug`** 用 `{ display_name?, description?, icon?, sort_order? }`
+  写入 `content/items/<slug>/_category.json`。写入是稀疏的，与 `_defaults.json` 相同惯例：
+  字段值等于 `categoryJsonSchema` 的默认值（`""` / `null`）时省略；全部为默认值时保存会删除
+  该文件而不是写入 `{}`。分类文件夹不存在时返回 `404`。
+- **`POST /api/categories`** 携带 `{ slug, meta? }` 创建新分类文件夹（原子操作，通过非递归
+  `mkdir` 在目录已存在时抛出 `EEXIST` —— 这是目录版本的 `handleItemCreate` 用 `wx` 标志写
+  item.json 的等价手法），并且只有在提供了 `meta` 时才写入与单独 `PUT` 相同的稀疏
+  `_category.json`。文件夹已存在时返回 `409`。界面上体现为"新建物品"对话框里的一个模式切换
+  （"物品" / "分类"）；分类模式的 slug 输入复用与物品名称相同的客户端 kebab-case 校验，
+  一个"添加详情"展开项打开与分类管理面板相同的元数据表单。
+- 分类管理面板（顶栏按钮）列出 `GET /api/categories` 返回的全部分类，逐个独立编辑——
+  一行、一次保存、一次 PUT——而不是单次批量保存，与 `handleBulkStatus` 对物品已有的
+  逐项隔离原则一致。
+- **联系方式二维码图片**（`content/contact/*.png`，由 `contact.platforms[].qr_image`
+  引用 —— 见 §7）：`POST /api/contact/images` 携带 `{ filename, contentBase64 }`，直接复用
+  商品照片管线中未经修改的 `sanitizeUploadFilename` / `sniffImageType` / `writeImage`
+  （三者本就接受一个普通的 `dir` 参数），仅额外加上一道仅限 PNG 的文件名校验——扩展名**与**
+  魔数都必须是 PNG。返回 `{ file, path }`，其中 `path`（`/contact/<file>`）就是应存入
+  `qr_image` 的值。`GET /api/contact/images/:file` 会把文件流式返回——之所以需要这个接口，
+  是因为工作台自身的开发服务器并不会把 `content/contact/` 当作 `/contact/*` 提供服务；
+  只有站点独立的构建期复制步骤（`scripts/sync-images.ts` 的 `copyContactFiles`，与 CDN
+  同步路径无关）才会这样做，所以配置面板的实时预览改为通过这个路由读取。`DELETE
+  /api/contact/images/:file` 删除文件（不存在时返回 `404`），但不会修改 `content/config.ts`
+  ——卖家仍需在配置面板里点击保存才能持久化清空后的 `qr_image` 字段，这与配置面板其他
+  字段的"草稿直到保存"模型一致。这些上传从不进入 CDN/R2 同步路径或
+  `lib/generated/image-manifest.json`——该清单只服务于 `content/items/` 下的照片。
+- 以上功能都没有引入任何新的 `content/config.ts` 字段（Iron Rule 8 的检查清单未被触发）——
+  `Platform.qr_image` 早已是可选字段，分类元数据是基于文件而非基于配置的，因此
+  `scripts/lib/configDefaults.ts` 无需登记任何新条目。
 
 ### Seller Studio i18n —— 界面跟随语言切换器
 工作台的界面元素（按钮、标签、页签、状态、筛选栏、编辑表单、配置面板、就绪清单等）

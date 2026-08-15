@@ -468,6 +468,8 @@ in place, so these comments survive.
 
 ## 6. Optional Category Metadata — `_category.json`
 
+> Seller Studio's "Categories" pane can read and write this file — see §22.
+
 ```jsonc
 {
   "display_name": "Houseware & Kitchen",
@@ -587,6 +589,8 @@ When a visitor clicks a link-based contact button, the message is automatically 
 | All others | No pre-fill (platform doesn't support deep-link pre-fill) |
 
 Pre-filling is applied at the `PlatformButton` callsite when an `item` and `resolvedPrice` are provided. `ContactSection` on the item detail page always passes both — it independently calls `useGeolocation()` + `useDistancePricing()` to resolve the price (the browser returns the cached position instantly via `maximumAge: 300_000`, so there is no second permission prompt). The footer `ContactSection` receives no item context and never pre-fills.
+
+> Seller Studio can upload/replace/delete these PNGs — see §22.
 
 ---
 
@@ -2254,8 +2258,9 @@ Six new `UIStrings` keys (added to `currency`/pricing-table group):
 A **local-only** browser GUI for managing `content/` without editing JSON. Run `pnpm studio`
 (optionally `--port <n>`, default `5174`).
 - Binds to **127.0.0.1 only** — never exposed to the network.
-- Edits **only** `content/items/**` and `lib/generated/image-manifest.json`. It never reads,
-  writes, or renders the private `reserved_for` field (Iron Rules 1 & 4).
+- Edits **only** `content/items/**`, `content/contact/*.png`, and
+  `lib/generated/image-manifest.json`. It never reads, writes, or renders the private
+  `reserved_for` field (Iron Rules 1 & 4).
 - Item editing uses comment-preserving JSONC writes (`scripts/lib/itemEdit.ts`), so seller
   formatting and `// options:` comments survive; the strict field grammar is enforced by
   `scripts/lib/itemFields.ts`.
@@ -2278,6 +2283,47 @@ A **local-only** browser GUI for managing `content/` without editing JSON. Run `
   writes each selected item's `price.tiers` from its own category's merged defaults. Items
   with no default tiers, or tiers already matching, are skipped and reported; failures are
   per-item and never abort the batch; only `price.tiers` is written.
+
+### Category metadata, category creation & contact QR images
+- **`GET /api/categories`** returns `CategorySummary[]` (`slug`, `displayName`, `description`,
+  `icon`, `sortOrder`, `itemCount`) — every folder under `content/items/` that passes the
+  kebab-case slug allowlist, whether or not it has any items yet. `itemCount` is computed by
+  a direct, `projectRoot`-scoped directory read (`countCategoryItems`), deliberately not by
+  reusing `loadAllItemsRaw()` (which resolves `content/` from `process.cwd()`, not from the
+  request's `projectRoot`).
+- **`PUT /api/categories/:slug`** writes `content/items/<slug>/_category.json` from
+  `{ display_name?, description?, icon?, sort_order? }`. The write is sparse, mirroring
+  `_defaults.json`: a field is omitted when it equals `categoryJsonSchema`'s default (`""` /
+  `null`), and an all-default save deletes the file rather than writing `{}`. `404` if the
+  category folder doesn't exist.
+- **`POST /api/categories`** with `{ slug, meta? }` creates a new category folder (atomically,
+  via a non-recursive `mkdir` that fails `EEXIST` — the directory equivalent of
+  `handleItemCreate`'s `wx`-flag item.json write) and, only if `meta` was supplied, the same
+  sparse `_category.json` `PUT` would produce. `409` if the folder already exists. Surfaced in
+  the UI as a mode toggle in the "New item" dialog ("Item" / "Category"); category mode's slug
+  field reuses the same client-side kebab-case check as item names, and an "Add details"
+  disclosure opens the same metadata form the Categories pane uses.
+- The Categories pane (header button) lists every category from `GET /api/categories` and
+  edits each one independently — one row, one Save, one PUT — rather than a single batch save,
+  matching the per-item isolation `handleBulkStatus` already uses for items.
+- **Contact QR images** (`content/contact/*.png`, referenced by `contact.platforms[].qr_image`
+  — see §7): `POST /api/contact/images` with `{ filename, contentBase64 }` reuses
+  `sanitizeUploadFilename` / `sniffImageType` / `writeImage` from the item-photo pipeline
+  unmodified (all three already take a plain `dir` argument), adding only a PNG-only filename
+  gate — extension **and** magic bytes must both say PNG. Returns `{ file, path }`, where
+  `path` (`/contact/<file>`) is the value to store in `qr_image`. `GET /api/contact/images/:file`
+  streams the file back — needed because Studio's own dev server does not serve
+  `content/contact/` as `/contact/*`; only the site's separate build-time copy step
+  (`scripts/sync-images.ts`'s `copyContactFiles`, unrelated to the CDN sync path) does that, so
+  the Config pane's live preview reads through this route instead. `DELETE
+  /api/contact/images/:file` removes the file (`404` if missing) but does not edit
+  `content/config.ts` — the seller must still Save the Config pane to persist a cleared
+  `qr_image` field, consistent with every other Config field's dirty-draft-until-Save model.
+  These uploads never reach the CDN/R2 sync path or `lib/generated/image-manifest.json` — that
+  manifest is for `content/items/` photos only.
+- No new `content/config.ts` field was introduced for any of this — `Platform.qr_image` was
+  already optional, and category metadata is file-based, not config-based — so Iron Rule 8's
+  `scripts/lib/configDefaults.ts` checklist has nothing to register.
 
 ### Seller Studio i18n — the UI follows the language selector
 Studio's UI chrome (buttons, labels, tabs, statuses, filter bar, edit form, config pane,
