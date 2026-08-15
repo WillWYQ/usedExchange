@@ -7,9 +7,10 @@ import type {
   ReadinessItem,
   ReadinessReport,
 } from "../../scripts/lib/siteReadiness";
-import type { BulkStatusResult, BulkTiersResult, ImageEntry, StudioItem } from "../../scripts/lib/studioApi";
+import type { CategoryMetaInput } from "../../scripts/lib/studioCategories";
+import type { BulkStatusResult, BulkTiersResult, CategorySummary, ImageEntry, StudioItem } from "../../scripts/lib/studioApi";
 
-export type { BulkStatusResult, BulkTiersResult, ConfigField, ConfigFieldKind, ImageEntry, ReadinessAction, ReadinessItem, ReadinessReport, StudioItem };
+export type { BulkStatusResult, BulkTiersResult, CategoryMetaInput, CategorySummary, ConfigField, ConfigFieldKind, ImageEntry, ReadinessAction, ReadinessItem, ReadinessReport, StudioItem };
 
 // Every response body is read defensively rather than trusting res.json() to
 // succeed: the CSRF guard and Vite itself can answer a rejected request with
@@ -208,6 +209,65 @@ export async function createItem(
     throw new Error(errorMessage(body, `create failed with ${res.status} ${res.statusText}`));
   }
   return (body?.id as string | undefined) ?? `${category}/${name}`;
+}
+
+export async function fetchCategories(): Promise<CategorySummary[]> {
+  const res = await fetch("/api/categories");
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `GET /api/categories failed with ${res.status} ${res.statusText}`));
+  }
+  if (!Array.isArray(body?.categories)) {
+    throw new Error(`GET /api/categories returned an unreadable response (${res.status} ${res.statusText})`);
+  }
+  return body.categories as CategorySummary[];
+}
+
+export async function createCategory(slug: string, meta?: CategoryMetaInput): Promise<string> {
+  const res = await fetch("/api/categories", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ slug, meta }),
+  });
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `create category failed with ${res.status} ${res.statusText}`));
+  }
+  return (body?.slug as string | undefined) ?? slug;
+}
+
+export async function saveCategoryMeta(slug: string, meta: CategoryMetaInput): Promise<void> {
+  const res = await fetch(`/api/categories/${encodeURIComponent(slug)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(meta),
+  });
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `saving category "${slug}" failed with ${res.status} ${res.statusText}`));
+  }
+}
+
+export async function uploadContactImage(file: File): Promise<{ file: string; path: string }> {
+  const contentBase64 = await fileToBase64(file);
+  const res = await fetch("/api/contact/images", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ filename: file.name, contentBase64 }),
+  });
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `uploading QR image failed with ${res.status} ${res.statusText}`));
+  }
+  return { file: body?.file as string, path: body?.path as string };
+}
+
+export async function deleteContactImage(filename: string): Promise<void> {
+  const res = await fetch(`/api/contact/images/${encodeURIComponent(filename)}`, { method: "DELETE" });
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `deleting QR image failed with ${res.status} ${res.statusText}`));
+  }
 }
 
 export async function fetchDefaults(scope: string): Promise<Record<string, unknown>> {
