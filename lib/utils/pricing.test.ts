@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveItemPrice } from "./pricing";
+import { resolveItemPrice, resolvePriceByStrategy } from "./pricing";
 import type { Price, PriceTier } from "@/lib/content/types";
 
 const tier = (
@@ -138,5 +138,48 @@ describe("resolveItemPrice", () => {
         resolveItemPrice(price(singleTier), { source: "detected", miles: 50 }),
       ).toEqual(singleTier[0]);
     });
+  });
+});
+
+describe("resolvePriceByStrategy", () => {
+  it("returns null for empty tiers", () => {
+    expect(resolvePriceByStrategy([], "lowest")).toBeNull();
+    expect(resolvePriceByStrategy([], "average")).toBeNull();
+  });
+
+  it("lowest picks the minimum amount tier", () => {
+    const tiers = [tier("Pickup", 35), tier("Shipping", 20)];
+    expect(resolvePriceByStrategy(tiers, "lowest")).toEqual({ amount: 20, tier: tiers[1] });
+  });
+
+  it("highest picks the maximum amount tier", () => {
+    const tiers = [tier("Pickup", 35), tier("Shipping", 20)];
+    expect(resolvePriceByStrategy(tiers, "highest")).toEqual({ amount: 35, tier: tiers[0] });
+  });
+
+  it("pickup picks the lowest tier that has a miles_max, falling back to lowest overall", () => {
+    const withPickup = [tier("Pickup", 15, undefined, 10), tier("Shipping", 35)];
+    expect(resolvePriceByStrategy(withPickup, "pickup")).toEqual({ amount: 15, tier: withPickup[0] });
+
+    const noPickup = [tier("Shipping A", 20), tier("Shipping B", 35)];
+    expect(resolvePriceByStrategy(noPickup, "pickup")).toEqual({ amount: 20, tier: noPickup[0] });
+  });
+
+  it("shipping picks the lowest open-ended tier, falling back to highest overall", () => {
+    const withShipping = [tier("Pickup", 15, undefined, 10), tier("Shipping", 35)];
+    expect(resolvePriceByStrategy(withShipping, "shipping")).toEqual({ amount: 35, tier: withShipping[1] });
+
+    const noShipping = [tier("A", 15, undefined, 5), tier("B", 25, undefined, 10)];
+    expect(resolvePriceByStrategy(noShipping, "shipping")).toEqual({ amount: 25, tier: noShipping[1] });
+  });
+
+  it("average is the literal midpoint of the lowest and highest amounts, with no matching tier", () => {
+    const tiers = [tier("Pickup", 20), tier("Shipping", 40)];
+    expect(resolvePriceByStrategy(tiers, "average")).toEqual({ amount: 30, tier: null });
+  });
+
+  it("average can be fractional and still has no matching tier", () => {
+    const tiers = [tier("Pickup", 15), tier("Shipping", 40)];
+    expect(resolvePriceByStrategy(tiers, "average")).toEqual({ amount: 27.5, tier: null });
   });
 });

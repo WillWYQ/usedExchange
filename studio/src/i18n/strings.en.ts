@@ -22,8 +22,17 @@ export const EN = {
 
   // ── Export PDF dialog ────────────────────────────────────────────
   "exportPdf.title": "Export catalog PDF",
+  "exportPdf.language": "Language",
+  "exportPdf.priceStrategy": "Highlighted price",
+  "exportPdf.strategy.lowest": "Lowest price",
+  "exportPdf.strategy.highest": "Highest price",
+  "exportPdf.strategy.pickup": "Local pickup price",
+  "exportPdf.strategy.shipping": "Shipping price",
+  "exportPdf.strategy.average": "Average of lowest & highest",
+  "exportPdf.categories": "Categories",
+  "exportPdf.statuses": "Statuses",
   "exportPdf.summary": "{itemCount} items across {categoryCount} categories will be included.",
-  "exportPdf.summaryEmpty": "No public-visible items to export yet.",
+  "exportPdf.summaryEmpty": "No items to export for the selected filters.",
   "exportPdf.generate": "Generate & Download",
   "exportPdf.generating": "Generating…",
   "exportPdf.done": "Downloaded {filename}",

@@ -100,4 +100,14 @@ export const EN_FALLBACK: UIStrings = {
   newlyListedThisWeek: "This Week",
   newlyListedFirstVisit: "Welcome! Everything here is new to you.",
   newlyListedNoneInPeriod: "No new items in this period.",
+
+  pdfTocHeading: "Table of Contents",
+  pdfCoverHeading: "Full Listing Catalog",
+  pdfCoverMeta: "{itemCount} items across {categoryCount} categories",
+  pdfGeneratedOn: "Generated {date}",
+  pdfViewLiveListing: "View Live Listing",
+  pdfFooterPage: "Page",
+  pdfFooterOf: "of",
+  pdfAveragePriceLabel: "Highlighted price (average): {amount}",
+  condition: "Condition",
 };

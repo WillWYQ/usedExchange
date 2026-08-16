@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import * as loaderModule from "@/lib/content/loader";
 import type { Category, Item } from "@/lib/content/types";
-import { groupEligibleItems, generateCatalogPdf } from "./generate";
+import { groupEligibleItems, generateCatalogPdf, type PdfExportOptions } from "./generate";
 
 function makeItem(overrides: Partial<Item> = {}): Item {
   return {
@@ -62,8 +62,10 @@ function makeCategory(overrides: Partial<Category> = {}): Category {
   };
 }
 
+const ALL_STATUSES: Item["status"][] = ["available", "pending", "reserved", "sold", "draft"];
+
 describe("groupEligibleItems", () => {
-  it("excludes sold and draft items", () => {
+  it("filters to only the requested statuses", () => {
     const items = [
       makeItem({ itemSlug: "a", status: "available" }),
       makeItem({ itemSlug: "b", status: "sold" }),
@@ -71,9 +73,26 @@ describe("groupEligibleItems", () => {
       makeItem({ itemSlug: "d", status: "pending" }),
       makeItem({ itemSlug: "e", status: "reserved" }),
     ];
-    const groups = groupEligibleItems(items, [makeCategory()]);
+    const groups = groupEligibleItems(items, [makeCategory()], ["available", "pending", "reserved"], ["electronics"], "en");
     const slugs = groups.flatMap((g) => g.items.map((i) => i.itemSlug));
     expect(slugs.sort()).toEqual(["a", "d", "e"]);
+  });
+
+  it("includes sold and draft items when those statuses are requested", () => {
+    const items = [makeItem({ itemSlug: "a", status: "sold" }), makeItem({ itemSlug: "b", status: "draft" })];
+    const groups = groupEligibleItems(items, [makeCategory()], ["sold", "draft"], ["electronics"], "en");
+    const slugs = groups.flatMap((g) => g.items.map((i) => i.itemSlug));
+    expect(slugs.sort()).toEqual(["a", "b"]);
+  });
+
+  it("filters to only the requested categories", () => {
+    const items = [
+      makeItem({ categorySlug: "books", itemSlug: "novel" }),
+      makeItem({ categorySlug: "toys", itemSlug: "yo-yo" }),
+    ];
+    const categories = [makeCategory({ slug: "books" }), makeCategory({ slug: "toys" })];
+    const groups = groupEligibleItems(items, categories, ALL_STATUSES, ["toys"], "en");
+    expect(groups.map((g) => g.slug)).toEqual(["toys"]);
   });
 
   it("drops categories with zero eligible items and preserves the given category order otherwise", () => {
@@ -86,10 +105,7 @@ describe("groupEligibleItems", () => {
       makeCategory({ slug: "toys", displayName: "Toys" }),
       makeCategory({ slug: "books", displayName: "Books" }),
     ];
-    const groups = groupEligibleItems(items, categories);
-    // electronics has zero eligible items and is dropped; toys and books both
-    // have one each and must come back in the categories array's own order
-    // (toys before books), not sorted by anything derived from the items.
+    const groups = groupEligibleItems(items, categories, ALL_STATUSES, ["electronics", "toys", "books"], "en");
     expect(groups.map((g) => g.slug)).toEqual(["toys", "books"]);
   });
 
@@ -99,10 +115,30 @@ describe("groupEligibleItems", () => {
       makeItem({ itemSlug: "new", name: "Alpha", listedDate: "2026-06-01" }),
       makeItem({ itemSlug: "tie-b", name: "Bravo", listedDate: "2026-06-01" }),
     ];
-    const groups = groupEligibleItems(items, [makeCategory()]);
+    const groups = groupEligibleItems(items, [makeCategory()], ALL_STATUSES, ["electronics"], "en");
     expect(groups[0]?.items.map((i) => i.itemSlug)).toEqual(["new", "tie-b", "old"]);
   });
+
+  it("resolves item name/description through the requested locale", () => {
+    const items = [makeItem({ name: "Lamp", description: "English desc", nameZh: "灯", descriptionZh: "中文描述" })];
+    const zhGroups = groupEligibleItems(items, [makeCategory()], ALL_STATUSES, ["electronics"], "zh");
+    expect(zhGroups[0]?.items[0]?.name).toBe("灯");
+    expect(zhGroups[0]?.items[0]?.description).toBe("中文描述");
+
+    const enGroups = groupEligibleItems(items, [makeCategory()], ALL_STATUSES, ["electronics"], "en");
+    expect(enGroups[0]?.items[0]?.name).toBe("Lamp");
+  });
 });
+
+function baseOptions(overrides: Partial<PdfExportOptions> = {}): PdfExportOptions {
+  return {
+    locale: "en",
+    priceStrategy: "lowest",
+    categories: ["electronics"],
+    statuses: ["available", "pending", "reserved"],
+    ...overrides,
+  };
+}
 
 describe("generateCatalogPdf", () => {
   it("returns an error when there are no eligible items", async () => {
@@ -114,8 +150,23 @@ describe("generateCatalogPdf", () => {
     const mockLoadCategories = vi.spyOn(loaderModule, "loadCategories").mockResolvedValue([makeCategory()]);
 
     try {
-      const result = await generateCatalogPdf();
-      expect(result).toEqual({ error: "No public-visible items to export." });
+      const result = await generateCatalogPdf(baseOptions());
+      expect(result).toEqual({ error: "No items match the selected filters." });
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+      mockLoadCategories.mockRestore();
+    }
+  });
+
+  it("returns an error when the requested categories/statuses match nothing, even with eligible items elsewhere", async () => {
+    const mockLoadAllItemsRaw = vi
+      .spyOn(loaderModule, "loadAllItemsRaw")
+      .mockResolvedValue([makeItem({ status: "available" })]);
+    const mockLoadCategories = vi.spyOn(loaderModule, "loadCategories").mockResolvedValue([makeCategory()]);
+
+    try {
+      const result = await generateCatalogPdf(baseOptions({ statuses: [] }));
+      expect(result).toEqual({ error: "No items match the selected filters." });
     } finally {
       mockLoadAllItemsRaw.mockRestore();
       mockLoadCategories.mockRestore();
@@ -140,7 +191,7 @@ describe("generateCatalogPdf", () => {
         return;
       }
 
-      const result = await generateCatalogPdf();
+      const result = await generateCatalogPdf(baseOptions());
       expect("file" in result).toBe(true);
       if ("file" in result) {
         const fs = await import("fs/promises");

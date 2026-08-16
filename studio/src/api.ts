@@ -10,8 +10,9 @@ import type {
 import type { CategoryMetaInput } from "../../scripts/lib/studioCategories";
 import type { ContactPlatformSummary } from "../../scripts/lib/contactPlatforms";
 import type { BulkStatusResult, BulkTiersResult, CategorySummary, ImageEntry, StudioItem } from "../../scripts/lib/studioApi";
+import type { PdfExportOptions } from "../../scripts/lib/pdfCatalog/generate";
 
-export type { BulkStatusResult, BulkTiersResult, CategoryMetaInput, CategorySummary, ConfigField, ConfigFieldKind, ContactPlatformSummary, ImageEntry, ReadinessAction, ReadinessItem, ReadinessReport, StudioItem };
+export type { BulkStatusResult, BulkTiersResult, CategoryMetaInput, CategorySummary, ConfigField, ConfigFieldKind, ContactPlatformSummary, ImageEntry, PdfExportOptions, ReadinessAction, ReadinessItem, ReadinessReport, StudioItem };
 
 // Every response body is read defensively rather than trusting res.json() to
 // succeed: the CSRF guard and Vite itself can answer a rejected request with
@@ -402,11 +403,11 @@ export async function publish(message: string): Promise<{ commit: string; files:
   };
 }
 
-export async function exportCatalogPdf(): Promise<Blob> {
+export async function exportCatalogPdf(options: PdfExportOptions): Promise<Blob> {
   const res = await fetch("/api/export-pdf", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: "{}",
+    body: JSON.stringify(options),
   });
   if (!res.ok) {
     const body = await readJsonBody(res);

@@ -849,6 +849,8 @@ components/
 - 访客坐标**绝不传出浏览器**——所有距离计算在 `useDistancePricing.ts` 中运行
 - **`content/config.ts` 由客户端组件导入**（如 `AdaptiveImage`、`PricingSection`），因此不得使用任何仅 Node.js API（`fs`、`path`、模块级 `process.env`）。所有值必须是静态、可序列化的常量。
 - **本地化字段在客户端组件中渲染。** 所有面向访客的 `name` / `description` 渲染（`ItemCard`、`LocalizedItemContent`）都调用 `getLocalizedField(item, …, locale)`，`locale` 来自 `useLocale()`。所有 UI 标签（按钮、徽章、头部）在客户端组件中通过 `useT()`、在服务器组件中通过 `getTranslations()` 解析——两者都取自 `siteConfig.i18n.translations`。SSG 期间渲染 `siteConfig.i18n.defaultLocale`（`LocaleProvider` 的初始值），因此静态 HTML——以及爬虫、OG 标签、JSON-LD——始终携带默认语言；非默认语区只在 hydration 之后、由访客选择时才出现。仅服务器端的出口（`generateMetadata`、`<title>`、OG、JSON-LD、面包屑叶节点）调用 `getTranslations()`，有意保持 `defaultLocale`。见 TECH_REQUIREMENTS.md §22.8。
+
+- **批量／离线渲染使用 `getTranslationsForLocale(locale)`。** `lib/i18n/getTranslations.ts` 除了 `getTranslations()` 外，还导出第二个函数：`getTranslationsForLocale(locale)` 接受明确指定的语区，而非总是解析 `defaultLocale`，适用于调用端已预先知道要哪个语区的场景（例如卖家 Studio 的型录 PDF 导出，见 §22），而非"依访客当前选择的语区渲染"。它使用与 `useT()` 相同的合并顺序：`{...EN_FALLBACK, ...defaultDict, ...activeDict}`。新增的 `UIStrings` 字段仍以必填的 `string` 加入类型定义（不加 `?`）——类型本身从不是部分可选的——但 `siteConfig.i18n.translations` 的类型是 `Record<string, Partial<UIStrings>>`（第 127 行），因此下游站点的 `content/config.ts` 即使缺少新增字段仍可通过类型检查；运行时则由 `EN_FALLBACK` 补上缺口。另外，`pnpm build` 的 `check-config` 步骤会针对每个非默认语区强制检查一份**精选过**的字段子集（`REQUIRED_UI_STRING_KEYS`，`scripts/lib/i18nRequiredKeys.ts`）——新字段除非是每一页都会显示的内容，否则**不应**加入该清单，否则已启用第二语区的下游站点在升级后将会构建失败。
 - **跨文件夹依赖：** `components/filters/useFilters.ts` 从 `lib/utils/pricing.ts` 导入 `resolveItemPrice`。此跨包导入是有意为之且已记录在案。
 - **`resolveItemPrice` 性能：** 每次距离变化时对每件物品调用 `resolveItemPrice` 会重新渲染整个物品列表。该函数有意保持轻量（简单数组扫描）。典型收藏（< 100 件）无需 `useMemo`。若大型收藏出现性能问题，可在 `ItemGrid`/`RecentlyListedSection` 中用 `useMemo([items, resolvedDistance])` 缓存。
 - **`FilterBar` 回退 prop 类型：** 当 `resolved.source === "fallback"`（无位置）时，`ItemGrid` 向 `FilterBar` 传入 `resolvedDistanceMi={Infinity}`。滑块随后以回退（最高）价格初始化——这是保守的最大值。
@@ -2160,12 +2162,12 @@ shipping?: {
 
 #### 目录 PDF 导出
 
-顶部的 **导出 PDF** 按钮会打开一个对话框，生成一份合并的 PDF 目录，涵盖所有公开可见的商品（`available`/`pending`/`reserved`；不含 `sold`/`draft`）：封面页、按分类分组的可点击目录、每个分类的分隔页，以及每件商品单独一页（含已解析价格、照片、规格，以及指向该商品在线页面的链接）。通过 Headless Chromium（Playwright）基于独立的打印模板渲染，无需运行 `next dev` 服务器。目录中的条目是可点击的 PDF 内部跳转链接，条目旁不会显示具体页码（Chromium 的打印为 PDF 功能不支持 CSS 的 `target-counter()`），但每页页脚都会显示真实的"第 N 页，共 M 页"。首次使用需要执行一次 `npx playwright install chromium`。
+顶部的 **导出 PDF** 按钮会打开一个对话框，生成一份合并的 PDF 目录，涵盖所选的商品：封面页、按分类分组的可点击目录、每个分类的分隔页，以及每件商品单独一页（含已解析价格、照片、规格，以及指向该商品在线页面的链接）。通过 Headless Chromium（Playwright）基于独立的打印模板渲染，无需运行 `next dev` 服务器。目录中的条目是可点击的 PDF 内部跳转链接，条目旁不会显示具体页码（Chromium 的打印为 PDF 功能不支持 CSS 的 `target-counter()`），但每页页脚都会显示真实的"第 N 页，共 M 页"。首次使用需要执行一次 `npx playwright install chromium`。生成前有三项设置：**语言**（`siteConfig.i18n.availableLocales` 中的任一语言）同时驱动商品名称/描述（通过 `getLocalizedField`）以及整份 PDF 自身的界面文字（通过 `getTranslationsForLocale`，见 TECH_REQUIREMENTS.md §22.8）——分类的 `displayName`/`description` 在整个代码库中都没有对应语区字段，因此无论 PDF 语言为何，分类名称都会维持卖家原本填写的语言。**高亮价格**（`lowest`/`highest`/`pickup`/`shipping`，与 `pnpm fb-export` 共用，或新增的 `average` —— 该商品最低与最高价档位的字面中位数）决定哪个价格作为该商品的默认价格；`show_tiers: true` 的商品仍会显示完整价格档位表（v1 行为）——除 `average` 外的每种策略都会高亮对应的那一行，而 `average`（因为不对应任何真实档位）会在表格上方以一行横幅显示计算出的中位数。**分类**与**状态**（全部 5 种——`available`/`pending`/`reserved`/`sold`/`draft`，不再只是原本公开可见的 3 种）皆为卖家勾选的筛选条件；无论勾选哪些状态，`reserved_for` 都不会被读取（Iron Rule 4 在上游即已强制执行——`Item` 类型从未携带该字段）。
 
 ### Facebook Marketplace 导出（`pnpm fb-export`，第 17 阶段）
 交互式 CLI，将 available/pending/reserved 物品导出为 Facebook Marketplace 批量上传 CSV
 （每批 50 件、标题 ≤150 字符、≤10 个 photo 列、使用 CDN URL）。支持跳过上次已导出、
-按分类/手动选择，以及价格档位策略（最低 / 最高 / 自提 / 邮寄）。写入 `exports/`
+按分类/手动选择，以及价格档位策略（最低 / 最高 / 自提 / 邮寄 / 平均）。写入 `exports/`
 （gitignore），其中 `.export-history.json` 用于去重。
 
 ### 模板更新与配置迁移（`pnpm update-site`、`pnpm migrate-config`）

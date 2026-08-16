@@ -356,7 +356,7 @@ AI 按 8 个问题组提问：站点身份、部署（网址 + 托管方式）�
 | `pnpm create-item <cat>/<name>` | 创建新物品文件夹 + 预填全部 36 个模板字段（完整物品 schema；私有字段 `reserved_for` 有意不生成）的 `item.json`（参见 DESIGN.md §5），以 JSONC 格式写入，并为 `condition`、`status`、`dimensions.unit`、`weight.unit` 附上列出所有可选值的 `// options: ...` 提示 |
 | `pnpm new <cat>/<name>` | `create-item` 的简写 |
 | `pnpm create-template [cat]` | 为某分类（或全局）创建 `_template.json`——与 `create-item` 相同的 JSONC + `// options: ...` 提示 |
-| `pnpm fb-export` | 交互式将 `available` / `pending` / `reserved` 物品导出为 Facebook Marketplace 批量上传 CSV。引导式提示：选择全部 / 按分类 / 单独物品（支持逗号列表和 `1-4` 区间）；选择价格策略（最低价 / 最高价 / 本地自提档位 / 邮寄档位——后两项仅在存在匹配物品时出现）；超过 50 条自动分批（FB 上限），写入 `exports/facebook-marketplace.csv`（分批时为 `exports/facebook-marketplace-<N>.csv`）。强制 FB 限制：标题 ≤150 字符、描述 ≤5000 字符。智能分类映射根据物品标签、品牌和名称推断 FB 分类层级，无需手动配置。**导出历史：** 第二次运行时会出现步骤 0，提供跳过已导出物品的选项；历史记录保存于 `exports/.export-history.json`（已加入 gitignore）。**照片：** CSV 的 PHOTO 列保存 CDN `https://` 链接（每件物品最多 10 个——FB 上限；上传 CSV 时由 Facebook 自动抓取），因此请先运行 `pnpm upload-images`，否则这些列为空且脚本会发出警告。作为手动上传的备用方案（例如 CDN 链接变更时），本地照片还会复制到 `exports/facebook-marketplace-photos/NNN_category-item/`。 |
+| `pnpm fb-export` | 交互式将 `available` / `pending` / `reserved` 物品导出为 Facebook Marketplace 批量上传 CSV。引导式提示：选择全部 / 按分类 / 单独物品（支持逗号列表和 `1-4` 区间）；选择价格策略（最低价 / 最高价 / 平均价 / 本地自提档位 / 邮寄档位——后两项仅在存在匹配物品时出现）；超过 50 条自动分批（FB 上限），写入 `exports/facebook-marketplace.csv`（分批时为 `exports/facebook-marketplace-<N>.csv`）。强制 FB 限制：标题 ≤150 字符、描述 ≤5000 字符。智能分类映射根据物品标签、品牌和名称推断 FB 分类层级，无需手动配置。**导出历史：** 第二次运行时会出现步骤 0，提供跳过已导出物品的选项；历史记录保存于 `exports/.export-history.json`（已加入 gitignore）。**照片：** CSV 的 PHOTO 列保存 CDN `https://` 链接（每件物品最多 10 个——FB 上限；上传 CSV 时由 Facebook 自动抓取），因此请先运行 `pnpm upload-images`，否则这些列为空且脚本会发出警告。作为手动上传的备用方案（例如 CDN 链接变更时），本地照片还会复制到 `exports/facebook-marketplace-photos/NNN_category-item/`。 |
 
 ---
 
@@ -379,7 +379,7 @@ AI 按 8 个问题组提问：站点身份、部署（网址 + 托管方式）�
 | 批量应用默认档位 | 用各物品自身合并后的默认值（站点级 ← 分类级）覆盖所选物品的 `price.tiers`；无默认档位或已一致的物品会被跳过并提示 |
 | 编辑表单 | 用由 schema 驱动的两级分组表单编辑任意物品的字段：日常要动的组默认展开，其余一次点击可达；只写回你修改过的字段，并保留 JSONC 注释 |
 | 发布 | 查看未提交变更、填写提交信息，将 `content/` 和图片清单一并提交并推送 |
-| 目录 PDF 导出 | 直接在 Studio 中生成并下载一份合并的 PDF 目录，涵盖所有公开可见商品（封面页、目录、按分类分节、每件商品一页并附带在线链接） |
+| 目录 PDF 导出 | 直接在 Studio 中生成并下载一份合并的 PDF 目录（封面页、目录、按分类分节、每件商品一页并附带在线链接），可由卖家选择语言、高亮价格策略（最低价/最高价/自取价/邮寄价/平均价），以及分类与状态筛选（全部 5 种状态皆可勾选，不再只是原本公开可见的 3 种） |
 
 **默认视图不显示已售出商品。** Studio 打开时停在 **Active** 页签，显示除 `sold` 之外的全部商品 —— 也就是卖家日常真正要处理的那批。已售出的商品在自己的页签里，**All** 则显示全部。批量操作只作用于当前可见的行：带着筛选条件全选，选中的就只是筛选后的那些；切换任一筛选条件会清空选择，避免操作波及已经看不见的行。刚被改过状态的行会留在原位直到下次切换筛选，这样 SOLD 印章不会被它自己触发的筛选立刻扫走。表格视图的表头自带全选框；卡片视图没有共用的表头行，所以它的全选框改放在筛选栏里，只在卡片视图打开时出现。
 

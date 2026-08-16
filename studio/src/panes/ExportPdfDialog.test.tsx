@@ -32,19 +32,76 @@ function makeItem(overrides: Partial<StudioItem> = {}): StudioItem {
   };
 }
 
-// The dialog resolves its copy through useStudioT, so it must mount inside a
-// StudioI18nProvider — same pattern DefaultsPane.test.tsx uses.
-function renderDialog(items: StudioItem[], onClose = vi.fn()) {
-  return renderWithStudioI18n(<ExportPdfDialog items={items} onClose={onClose} />);
+const DEFAULT_PROPS = {
+  categorySlugs: ["electronics", "books"],
+  availableLocales: ["en", "zh"],
+  defaultLocale: "en",
+};
+
+function renderDialog(
+  items: StudioItem[],
+  overrides: Partial<typeof DEFAULT_PROPS> = {},
+  onClose = vi.fn(),
+) {
+  return renderWithStudioI18n(
+    <ExportPdfDialog items={items} onClose={onClose} {...DEFAULT_PROPS} {...overrides} />,
+  );
 }
 
 describe("ExportPdfDialog", () => {
-  it("shows the eligible item and category count", () => {
+  it("shows the eligible item and category count with the default status selection", () => {
     renderDialog([
       makeItem({ id: "a", categorySlug: "electronics", status: "available" }),
       makeItem({ id: "b", categorySlug: "books", status: "sold" }),
     ]);
+    // "sold" is unchecked by default, so only the electronics item counts.
     expect(screen.getByText(/1 items across 1 categories/)).toBeTruthy();
+  });
+
+  it("recomputes the summary when a status checkbox is toggled", async () => {
+    renderDialog([
+      makeItem({ id: "a", categorySlug: "electronics", status: "available" }),
+      makeItem({ id: "b", categorySlug: "books", status: "sold" }),
+    ]);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("checkbox", { name: /Sold/ }));
+    expect(screen.getByText(/2 items across 2 categories/)).toBeTruthy();
+  });
+
+  it("recomputes the summary when a category checkbox is unchecked", async () => {
+    renderDialog([
+      makeItem({ id: "a", categorySlug: "electronics", status: "available" }),
+      makeItem({ id: "b", categorySlug: "books", status: "available" }),
+    ]);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("checkbox", { name: "books" }));
+    expect(screen.getByText(/1 items across 1 categories/)).toBeTruthy();
+  });
+
+  it("defaults the language select to defaultLocale and the price strategy to average", () => {
+    renderDialog([makeItem()]);
+    expect((screen.getByLabelText("Language") as HTMLSelectElement).value).toBe("en");
+    expect((screen.getByLabelText("Highlighted price") as HTMLSelectElement).value).toBe("average");
+  });
+
+  it("sends the selected options as the request body", async () => {
+    const blob = new Blob(["%PDF"], { type: "application/pdf" });
+    const spy = vi.spyOn(api, "exportCatalogPdf").mockResolvedValue(blob);
+    vi.stubGlobal("URL", { ...URL, createObjectURL: vi.fn(() => "blob:fake"), revokeObjectURL: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    renderDialog([makeItem({ categorySlug: "electronics", status: "available" })]);
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Language"), "zh");
+    await user.selectOptions(screen.getByLabelText("Highlighted price"), "lowest");
+    await user.click(screen.getByRole("button", { name: /Generate & Download/ }));
+
+    expect(spy).toHaveBeenCalledWith({
+      locale: "zh",
+      priceStrategy: "lowest",
+      categories: ["electronics", "books"],
+      statuses: ["available", "pending", "reserved"],
+    });
   });
 
   it("disables the generate button while busy and re-enables after success", async () => {
@@ -69,10 +126,10 @@ describe("ExportPdfDialog", () => {
   });
 
   it("shows the server's error message on failure", async () => {
-    vi.spyOn(api, "exportCatalogPdf").mockRejectedValue(new Error("No public-visible items to export."));
+    vi.spyOn(api, "exportCatalogPdf").mockRejectedValue(new Error("No items match the selected filters."));
     renderDialog([makeItem()]);
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /Generate & Download/ }));
-    expect((await screen.findByRole("alert")).textContent).toContain("No public-visible items to export.");
+    expect((await screen.findByRole("alert")).textContent).toContain("No items match the selected filters.");
   });
 });
