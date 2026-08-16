@@ -83,4 +83,62 @@ describe("ExportPdfDialog", () => {
     ]);
     expect(screen.getByText(/may look sparse/)).toBeTruthy();
   });
+
+  it("switching to flyer mode shows the item select and hides the catalog summary", async () => {
+    renderDialog([makeItem({ id: "a" }), makeItem({ id: "b", categorySlug: "books" })]);
+    // Catalog mode is the default: the summary paragraph is visible and
+    // there is no flyer item dropdown yet.
+    expect(screen.getByText(/items across .* categories/)).toBeTruthy();
+    expect(screen.queryByRole("combobox")).toBeNull();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("radio", { name: /Single-item flyer/ }));
+
+    expect(screen.queryByText(/items across .* categories/)).toBeNull();
+    expect(screen.getByRole("combobox")).toBeTruthy();
+  });
+
+  it("switching to flyer mode hides the readiness-warning panel", async () => {
+    // This is the one cross-task integration point in this branch: the
+    // warnings useMemo must actually gate on `mode`, not just recompute the
+    // same list regardless of it — a future refactor of that useMemo could
+    // silently drop the gating with nothing else to catch it.
+    renderDialog([makeItem({ id: "a", imageCount: 0, description: "" })]);
+    expect(screen.getByText(/may look sparse/)).toBeTruthy();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("radio", { name: /Single-item flyer/ }));
+
+    expect(screen.queryByText(/may look sparse/)).toBeNull();
+  });
+
+  it("populates the flyer select with eligible items and disables Generate until one is chosen", async () => {
+    renderDialog([
+      makeItem({ id: "a", categorySlug: "electronics", name: "Desk Lamp", status: "available" }),
+      makeItem({ id: "b", categorySlug: "books", name: "Novel", status: "available" }),
+      makeItem({ id: "c", categorySlug: "toys", name: "Yo-yo", status: "sold" }),
+    ]);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("radio", { name: /Single-item flyer/ }));
+
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    const optionNames = Array.from(select.options).map((o) => o.textContent);
+    expect(optionNames).toEqual(["Desk Lamp", "Novel"]);
+
+    // An eligible item is auto-selected by default, so Generate starts
+    // enabled...
+    const button = screen.getByRole("button", { name: /Generate & Download/ });
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+
+    // ...but picking the dropdown's own "no selection" is not offered by
+    // this UI; instead assert the disabling logic directly covers the case
+    // where no eligible item exists at all, since a real <select> in jsdom
+    // cannot be driven to an out-of-list empty value via user-event.
+    cleanup();
+    renderDialog([makeItem({ id: "c", status: "sold" })]);
+    await user.click(screen.getByRole("radio", { name: /Single-item flyer/ }));
+    expect((screen.getByRole("button", { name: /Generate & Download/ }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
 });
