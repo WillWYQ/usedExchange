@@ -522,6 +522,12 @@ tr.failed td {
   font-weight: 600;
 }
 
+.drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+}
+
 .drawer-tabs {
   display: flex;
   gap: var(--gap);
@@ -910,6 +916,12 @@ tr.failed td {
   justify-content: flex-end;
   gap: var(--gap);
   margin-top: 1rem;
+}
+
+.export-pdf-mode {
+  display: flex;
+  gap: var(--gap);
+  margin-bottom: 0.75rem;
 }
 
 /* ── Publish pane ───────────────────────────────────────────────────── */

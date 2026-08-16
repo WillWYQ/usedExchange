@@ -33,6 +33,10 @@ export const EN = {
   "exportPdf.readiness.photos": "no photos",
   "exportPdf.readiness.description": "no description",
   "exportPdf.readiness.price": "no price",
+  "exportPdf.modeLabel": "Export mode",
+  "exportPdf.mode.catalog": "Full catalog",
+  "exportPdf.mode.flyer": "Single-item flyer",
+  "exportPdf.flyer.item": "Item",
 
   // ── Sync bar ────────────────────────────────────────────────────
   "sync.push": "Push photos to CDN",
@@ -172,6 +176,8 @@ export const EN = {
   "drawer.close": "Close",
   "drawer.unsavedChanges": " (unsaved changes)",
   "drawer.editor": "{name} — item editor",
+  "drawer.exportFlyer": "Export flyer",
+  "drawer.exportFlyerBusy": "Exporting…",
 
   // ── Edit form ───────────────────────────────────────────────────
   "editForm.saveChanges": "Save changes",

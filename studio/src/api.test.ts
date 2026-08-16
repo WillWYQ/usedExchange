@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   fetchItems,
   exportCatalogPdf,
+  exportItemFlyerPdf,
   fetchCategories,
   createCategory,
   saveCategoryMeta,
@@ -91,6 +92,45 @@ describe("exportCatalogPdf", () => {
       })) as unknown as typeof fetch,
     );
     await expect(exportCatalogPdf()).rejects.toThrow("No public-visible items to export.");
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("exportItemFlyerPdf", () => {
+  it("posts the item id and returns the response body as a Blob on success", async () => {
+    const fakeBlob = new Blob(["%PDF-fake"], { type: "application/pdf" });
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      blob: async () => fakeBlob,
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await exportItemFlyerPdf("electronics/desk-lamp");
+    expect(result).toBe(fakeBlob);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/export-pdf/flyer",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ id: "electronics/desk-lamp" }),
+      }),
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it("throws the server's error message on failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 400,
+        statusText: "Bad Request",
+        json: async () => ({ error: 'Item "electronics/desk-lamp" not found.' }),
+      })) as unknown as typeof fetch,
+    );
+    await expect(exportItemFlyerPdf("electronics/desk-lamp")).rejects.toThrow(
+      'Item "electronics/desk-lamp" not found.',
+    );
     vi.unstubAllGlobals();
   });
 });

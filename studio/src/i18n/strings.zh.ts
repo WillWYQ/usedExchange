@@ -25,6 +25,10 @@ export const ZH: Partial<StudioStrings> = {
   "exportPdf.readiness.photos": "无照片",
   "exportPdf.readiness.description": "无描述",
   "exportPdf.readiness.price": "无价格",
+  "exportPdf.modeLabel": "导出模式",
+  "exportPdf.mode.catalog": "完整目录",
+  "exportPdf.mode.flyer": "单页宣传单",
+  "exportPdf.flyer.item": "商品",
 
   "sync.push": "推送照片到 CDN",
   "sync.pushing": "正在推送到 CDN…",
@@ -152,6 +156,8 @@ export const ZH: Partial<StudioStrings> = {
   "drawer.close": "关闭",
   "drawer.unsavedChanges": " (有未保存的更改)",
   "drawer.editor": "{name} — 商品编辑",
+  "drawer.exportFlyer": "导出宣传单",
+  "drawer.exportFlyerBusy": "正在导出…",
 
   "editForm.saveChanges": "保存更改",
   "editForm.saving": "正在保存…",

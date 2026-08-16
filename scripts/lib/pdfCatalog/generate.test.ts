@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import * as loaderModule from "@/lib/content/loader";
 import type { Category, Item } from "@/lib/content/types";
-import { groupEligibleItems, generateCatalogPdf, prefetchImages } from "./generate";
+import { groupEligibleItems, generateCatalogPdf, generateFlyerPdf, prefetchImages } from "./generate";
 
 function makeItem(overrides: Partial<Item> = {}): Item {
   return {
@@ -186,6 +186,62 @@ describe("generateCatalogPdf", () => {
     } finally {
       mockLoadAllItemsRaw.mockRestore();
       mockLoadCategories.mockRestore();
+    }
+  });
+});
+
+describe("generateFlyerPdf", () => {
+  it("returns an error when the item id is not found", async () => {
+    const mockLoadAllItemsRaw = vi.spyOn(loaderModule, "loadAllItemsRaw").mockResolvedValue([makeItem()]);
+    try {
+      const result = await generateFlyerPdf("electronics/no-such-item");
+      expect(result).toEqual({ error: 'Item "electronics/no-such-item" not found.' });
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+    }
+  });
+
+  it("returns an error when the item is sold or draft", async () => {
+    const mockLoadAllItemsRaw = vi
+      .spyOn(loaderModule, "loadAllItemsRaw")
+      .mockResolvedValue([makeItem({ status: "sold" })]);
+    try {
+      const result = await generateFlyerPdf("electronics/desk-lamp");
+      expect(result).toEqual({
+        error: 'Item "electronics/desk-lamp" is not available, pending, or reserved.',
+      });
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+    }
+  });
+
+  it("renders a real single-item PDF file for a fixture item", async () => {
+    const mockLoadAllItemsRaw = vi.spyOn(loaderModule, "loadAllItemsRaw").mockResolvedValue([makeItem()]);
+
+    try {
+      let chromiumAvailable = true;
+      const { chromium } = await import("playwright");
+      try {
+        const browser = await chromium.launch();
+        await browser.close();
+      } catch {
+        chromiumAvailable = false;
+      }
+      if (!chromiumAvailable) {
+        console.warn("Skipping: Chromium not installed. Run `npx playwright install chromium`.");
+        return;
+      }
+
+      const result = await generateFlyerPdf("electronics/desk-lamp");
+      expect("file" in result).toBe(true);
+      if ("file" in result) {
+        const fs = await import("fs/promises");
+        const bytes = await fs.readFile(result.file);
+        expect(bytes.subarray(0, 4).toString("ascii")).toBe("%PDF");
+        await fs.unlink(result.file);
+      }
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
     }
   });
 });

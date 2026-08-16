@@ -242,6 +242,33 @@ h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; margin: 0 0 0.3em; 
 .live-url-text { color: var(--muted); font-size: 11px; }
 `;
 
+export function buildFlyerHtml(item: ItemPdfView, branding: SiteBranding): string {
+  const logoHtml = branding.logo
+    ? `<img class="flyer-logo" src="${escapeHtml(branding.logo)}" alt="" onerror="this.remove()" />`
+    : "";
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <style>${CATALOG_CSS}
+          .flyer-header { text-align: center; padding: 24px 8px 12px; border-bottom: 2px solid var(--accent); margin-bottom: 8px; }
+          .flyer-logo { max-height: 48px; margin-bottom: 8px; }
+          .flyer-header h1 { font-size: 20px; margin: 0; }
+          .flyer-tagline { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+        </style>
+      </head>
+      <body>
+        <div class="flyer-header">
+          ${logoHtml}
+          <h1>${escapeHtml(branding.name)}</h1>
+          <p class="flyer-tagline">${escapeHtml(branding.tagline)}</p>
+        </div>
+        ${buildItemHtml(item, branding.baseUrl)}
+      </body>
+    </html>`;
+}
+
 export function buildFullCatalogHtml(branding: SiteBranding, groups: CategoryGroup[], generatedAt: string): string {
   const itemCount = groups.reduce((sum, g) => sum + g.items.length, 0);
   const body = [

@@ -4,6 +4,7 @@ import {
   buildTocHtml,
   buildItemHtml,
   buildFullCatalogHtml,
+  buildFlyerHtml,
   buildPriceHtml,
   type ItemPdfView,
   type CategoryGroup,
@@ -111,6 +112,22 @@ describe("buildCoverHtml", () => {
     expect(html).toContain("12");
     expect(html).toContain("3");
     expect(html).toContain("2026-08-13");
+  });
+});
+
+describe("buildFlyerHtml", () => {
+  const branding: SiteBranding = { name: "My Shop", tagline: "Great stuff", logo: "", baseUrl: "https://example.com" };
+
+  it("contains the item name and site name", () => {
+    const html = buildFlyerHtml(makeItem(), branding);
+    expect(html).toContain("Desk Lamp");
+    expect(html).toContain("My Shop");
+  });
+
+  it("has no TOC or page-number footer", () => {
+    const html = buildFlyerHtml(makeItem(), branding);
+    expect(html).not.toContain("Table of Contents");
+    expect(html).not.toContain("pageNumber");
   });
 });
 
