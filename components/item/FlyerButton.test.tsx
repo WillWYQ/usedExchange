@@ -83,12 +83,35 @@ describe("FlyerButton", () => {
     expect(screen.getByRole("button").hasAttribute("disabled")).toBe(false);
   });
 
-  it("renders disabled with an explanatory alert when the browser lacks Blob object URL support", () => {
+  it("renders disabled with an explanatory message when the browser lacks Blob object URL support", async () => {
     vi.stubGlobal("URL", { ...URL, createObjectURL: undefined });
 
     render(<FlyerButton {...props} />);
+    // The support check runs in a useEffect (so SSR/hydration never mismatch —
+    // see FlyerButton.tsx) rather than during render, so it settles asynchronously.
     const button = screen.getByRole("button", { name: /Download Flyer/ });
-    expect(button.hasAttribute("disabled")).toBe(true);
-    expect(screen.getByRole("alert").textContent).toBe("Flyer download isn't supported in this browser.");
+    await waitFor(() => expect(button.hasAttribute("disabled")).toBe(true));
+    expect(screen.getByText("Flyer download isn't supported in this browser.")).toBeTruthy();
+  });
+
+  it("clears the success state's revert timer on unmount instead of leaking it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { generateItemFlyerPdf } = await import("@/lib/pdf/generateItemFlyer");
+    vi.mocked(generateItemFlyerPdf).mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }));
+    vi.stubGlobal("URL", { ...URL, createObjectURL: vi.fn(() => "blob:fake-url"), revokeObjectURL: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const clearTimeoutSpy = vi.spyOn(global, "clearTimeout");
+
+    const user = userEvent.setup({ delay: null });
+    const { unmount } = render(<FlyerButton {...props} />);
+    await user.click(screen.getByRole("button", { name: /Download Flyer/ }));
+    await vi.waitFor(() => expect(screen.getByRole("button").textContent).toContain("Flyer downloaded!"));
+
+    unmount();
+    // The pending "revert to idle" timeout must be cleared on unmount, not
+    // just left to fire a setState on an unmounted component.
+    expect(clearTimeoutSpy).toHaveBeenCalled();
+
+    vi.useRealTimers();
   });
 });

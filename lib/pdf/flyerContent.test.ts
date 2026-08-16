@@ -4,8 +4,10 @@ import {
   buildFlyerPriceLines,
   buildFlyerSpecs,
   buildLiveListingUrl,
+  normalizeForPdf,
   toFlyerItemView,
   type FlyerItemView,
+  type FlyerLabels,
 } from "./flyerContent";
 import type { Item } from "@/lib/content/types";
 
@@ -112,6 +114,50 @@ describe("buildFlyerPriceLines", () => {
     expect(result.headline).toBe("$35");
   });
 
+  it("formats large amounts with en-US grouping regardless of caller locale expectations", () => {
+    const result = buildFlyerPriceLines(
+      { currency: "USD", tiers: [{ label: "Pickup", amount: 1234567 }], negotiable: false, show_tiers: false },
+      { label: "Pickup", amount: 1234567 },
+    );
+    expect(result.headline).toBe("$1,234,567");
+  });
+
+  it("uses custom labels for the contact-for-price fallback when provided", () => {
+    const labels: FlyerLabels = {
+      contactForPrice: "Contactez le vendeur",
+      obo: "OBO",
+      brand: "Brand",
+      model: "Model",
+      color: "Color",
+      age: "Age",
+      dimensions: "Dimensions",
+      weight: "Weight",
+      conditionLabel: "Condition",
+      conditionNew: "New",
+      conditionLikeNew: "Like New",
+      conditionGood: "Good",
+      conditionFair: "Fair",
+      conditionForParts: "For Parts",
+      viewLiveListing: "View Live Listing",
+    };
+    const result = buildFlyerPriceLines({ currency: "USD", tiers: [], negotiable: false, show_tiers: false }, null, labels);
+    expect(result.headline).toBe("Contactez le vendeur");
+  });
+
+  it("normalizes typographic characters in tier labels", () => {
+    const price = {
+      currency: "USD",
+      tiers: [
+        { label: "Pickup — local", amount: 20, miles_max: 10 },
+        { label: "Shipping", amount: 35 },
+      ],
+      negotiable: false,
+      show_tiers: true,
+    };
+    const result = buildFlyerPriceLines(price, { label: "Shipping", amount: 35 });
+    expect(result.tierRows.find((r) => r.label === "Pickup - local")).toBeDefined();
+  });
+
   it("shows Contact for price when there are no tiers", () => {
     const result = buildFlyerPriceLines({ currency: "USD", tiers: [], negotiable: false, show_tiers: false }, null);
     expect(result.headline).toBe("Contact for price");
@@ -159,6 +205,33 @@ describe("buildFlyerSpecs", () => {
   it("pluralizes age correctly", () => {
     const specs = buildFlyerSpecs(makeFlyerItem({ ageYears: 3 }), "metric");
     expect(specs.find(([label]) => label === "Age")?.[1]).toBe("~3 years");
+  });
+
+  it("normalizes typographic characters in free-text field values", () => {
+    const specs = buildFlyerSpecs(makeFlyerItem({ brand: "IKEA — Sweden", color: "" }), "metric");
+    expect(specs.find(([label]) => label === "Brand")?.[1]).toBe("IKEA - Sweden");
+  });
+});
+
+describe("normalizeForPdf", () => {
+  it("replaces em and en dashes with a hyphen", () => {
+    expect(normalizeForPdf("A — B – C")).toBe("A - B - C");
+  });
+
+  it("replaces curly quotes with straight quotes", () => {
+    expect(normalizeForPdf("It’s a “great” lamp")).toBe('It\'s a "great" lamp');
+  });
+
+  it("replaces bullets and ellipses", () => {
+    expect(normalizeForPdf("• item one…")).toBe("- item one...");
+  });
+
+  it("collapses non-breaking and narrow no-break spaces to a regular space", () => {
+    expect(normalizeForPdf("10 cm wide")).toBe("10 cm wide");
+  });
+
+  it("leaves plain ASCII text untouched", () => {
+    expect(normalizeForPdf("Plain text, no surprises.")).toBe("Plain text, no surprises.");
   });
 });
 

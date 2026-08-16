@@ -54,17 +54,90 @@ export function toFlyerItemView(item: Item): FlyerItemView {
   };
 }
 
-const CONDITION_LABELS: Record<Condition, string> = {
-  new: "New",
-  "like-new": "Like New",
-  good: "Good",
-  fair: "Fair",
-  "for-parts": "For Parts",
+// jsPDF's built-in fonts are WinAnsi(Latin-1)-encoded — characters outside
+// that range are either dropped or mis-rendered (verified in code review:
+// em dash and curly quotes vanish silently). Item names/descriptions are
+// free-text sellers may paste from word processors, which commonly use
+// these "smart" typographic characters, so normalize the common ones to
+// ASCII before anything reaches jsPDF. This does not add full Unicode/CJK
+// support (that would need embedding a Unicode font — out of scope for this
+// feature); it only prevents silent corruption of ordinary Latin-script text.
+const PDF_UNSAFE_CHAR_MAP: Record<string, string> = {
+  "—": "-", // em dash
+  "–": "-", // en dash
+  "‘": "'", // left single quote
+  "’": "'", // right single quote
+  "“": '"', // left double quote
+  "”": '"', // right double quote
+  "•": "-", // bullet
+  "…": "...", // ellipsis
+  " ": " ", // non-breaking space
+  " ": " ", // narrow no-break space
+};
+
+const PDF_UNSAFE_CHAR_PATTERN = /[—–‘’“”•…  ]/g;
+
+export function normalizeForPdf(value: string): string {
+  return value.replace(PDF_UNSAFE_CHAR_PATTERN, (ch) => PDF_UNSAFE_CHAR_MAP[ch] ?? ch);
+}
+
+const CONDITION_LABEL_KEYS: Record<Condition, keyof FlyerLabels> = {
+  new: "conditionNew",
+  "like-new": "conditionLikeNew",
+  good: "conditionGood",
+  fair: "conditionFair",
+  "for-parts": "conditionForParts",
+};
+
+// English defaults for the flyer's own body text. Most of these mirror
+// existing UIStrings values (see components/item/FlyerButton.tsx, which
+// builds a FlyerLabels from useT() so the generated PDF matches the active
+// locale for everything that already has a UIStrings key). "conditionLabel"
+// and "viewLiveListing" have no existing UIStrings key — they're specific to
+// this flyer's layout, not the on-page UI — so they stay English-only for
+// now rather than growing the UIStrings surface further for a print-only label.
+export type FlyerLabels = {
+  contactForPrice: string;
+  obo: string;
+  brand: string;
+  model: string;
+  color: string;
+  age: string;
+  dimensions: string;
+  weight: string;
+  conditionLabel: string;
+  conditionNew: string;
+  conditionLikeNew: string;
+  conditionGood: string;
+  conditionFair: string;
+  conditionForParts: string;
+  viewLiveListing: string;
+};
+
+export const DEFAULT_FLYER_LABELS: FlyerLabels = {
+  contactForPrice: "Contact for price",
+  obo: "OBO",
+  brand: "Brand",
+  model: "Model",
+  color: "Color",
+  age: "Age",
+  dimensions: "Dimensions",
+  weight: "Weight",
+  conditionLabel: "Condition",
+  conditionNew: "New",
+  conditionLikeNew: "Like New",
+  conditionGood: "Good",
+  conditionFair: "Fair",
+  conditionForParts: "For Parts",
+  viewLiveListing: "View Live Listing",
 };
 
 function formatAmount(currency: string, amount: number): string {
   const symbol = currency === "USD" ? "$" : `${currency} `;
-  return `${symbol}${amount.toLocaleString()}`;
+  // Pinned to "en-US" rather than the visitor's locale: toLocaleString()
+  // without a locale arg can emit locale-specific separators (e.g. a French
+  // grouping space, U+202F) that jsPDF's WinAnsi fonts cannot render.
+  return `${symbol}${amount.toLocaleString("en-US")}`;
 }
 
 export type FlyerTierRow = { label: string; amount: string; isDefault: boolean };
@@ -76,9 +149,13 @@ export type FlyerPriceLines = {
 
 // Mirrors PricingSection's display rules but returns structured data for
 // jsPDF to draw, not HTML.
-export function buildFlyerPriceLines(price: Price, resolvedTier: PriceTier | null): FlyerPriceLines {
+export function buildFlyerPriceLines(
+  price: Price,
+  resolvedTier: PriceTier | null,
+  labels: FlyerLabels = DEFAULT_FLYER_LABELS,
+): FlyerPriceLines {
   if (price.tiers.length === 0) {
-    return { headline: "Contact for price", obo: false, tierRows: [] };
+    return { headline: labels.contactForPrice, obo: false, tierRows: [] };
   }
 
   const obo = price.negotiable;
@@ -86,29 +163,33 @@ export function buildFlyerPriceLines(price: Price, resolvedTier: PriceTier | nul
   if (!price.show_tiers || price.tiers.length === 1) {
     const headline = resolvedTier
       ? formatAmount(price.currency, resolvedTier.amount)
-      : "Contact for price";
+      : labels.contactForPrice;
     return { headline, obo, tierRows: [] };
   }
 
   const tierRows: FlyerTierRow[] = price.tiers.map((t) => ({
-    label: t.label,
+    label: normalizeForPdf(t.label),
     amount: formatAmount(price.currency, t.amount),
     isDefault: resolvedTier !== null && t.label === resolvedTier.label && t.amount === resolvedTier.amount,
   }));
 
-  const headline = resolvedTier ? formatAmount(price.currency, resolvedTier.amount) : "Contact for price";
+  const headline = resolvedTier ? formatAmount(price.currency, resolvedTier.amount) : labels.contactForPrice;
   return { headline, obo, tierRows };
 }
 
-export function buildFlyerSpecs(item: FlyerItemView, unitSystem: MeasurementUnit): Array<[string, string]> {
+export function buildFlyerSpecs(
+  item: FlyerItemView,
+  unitSystem: MeasurementUnit,
+  labels: FlyerLabels = DEFAULT_FLYER_LABELS,
+): Array<[string, string]> {
   const rows: Array<[string, string]> = [];
-  if (item.brand) rows.push(["Brand", item.brand]);
-  if (item.model) rows.push(["Model", item.model]);
-  if (item.color) rows.push(["Color", item.color]);
-  if (item.ageYears !== null) rows.push(["Age", `~${item.ageYears} year${item.ageYears === 1 ? "" : "s"}`]);
-  if (item.dimensions) rows.push(["Dimensions", formatDimensions(item.dimensions, unitSystem)]);
-  if (item.weight) rows.push(["Weight", formatWeight(item.weight, unitSystem)]);
-  rows.push(["Condition", CONDITION_LABELS[item.condition]]);
+  if (item.brand) rows.push([labels.brand, normalizeForPdf(item.brand)]);
+  if (item.model) rows.push([labels.model, normalizeForPdf(item.model)]);
+  if (item.color) rows.push([labels.color, normalizeForPdf(item.color)]);
+  if (item.ageYears !== null) rows.push([labels.age, `~${item.ageYears} year${item.ageYears === 1 ? "" : "s"}`]);
+  if (item.dimensions) rows.push([labels.dimensions, formatDimensions(item.dimensions, unitSystem)]);
+  if (item.weight) rows.push([labels.weight, formatWeight(item.weight, unitSystem)]);
+  rows.push([labels.conditionLabel, labels[CONDITION_LABEL_KEYS[item.condition]]]);
   return rows;
 }
 
