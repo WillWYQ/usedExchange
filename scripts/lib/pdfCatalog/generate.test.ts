@@ -151,7 +151,7 @@ describe("generateCatalogPdf", () => {
 
     try {
       const result = await generateCatalogPdf(baseOptions());
-      expect(result).toEqual({ error: "No public-visible items to export." });
+      expect(result).toEqual({ error: "No items match the selected filters." });
     } finally {
       mockLoadAllItemsRaw.mockRestore();
       mockLoadCategories.mockRestore();
@@ -166,7 +166,7 @@ describe("generateCatalogPdf", () => {
 
     try {
       const result = await generateCatalogPdf(baseOptions({ statuses: [] }));
-      expect(result).toEqual({ error: "No public-visible items to export." });
+      expect(result).toEqual({ error: "No items match the selected filters." });
     } finally {
       mockLoadAllItemsRaw.mockRestore();
       mockLoadCategories.mockRestore();

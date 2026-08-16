@@ -2280,7 +2280,7 @@ describe("POST /api/export-pdf", () => {
       });
 
       expect(res.status).toBe(400);
-      expect(asJson(res).body).toEqual({ error: "No public-visible items to export." });
+      expect(asJson(res).body).toEqual({ error: "No items match the selected filters." });
     } finally {
       mockLoadAllItemsRaw.mockRestore();
       mockLoadCategories.mockRestore();
@@ -2332,6 +2332,66 @@ describe("POST /api/export-pdf", () => {
       projectRoot: PROJECT_ROOT,
     });
     expect(res.status).toBe(405);
+  });
+
+  it("rejects an invalid priceStrategy with 400 instead of coercing to a default", async () => {
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/export-pdf",
+      body: Buffer.from(
+        JSON.stringify({
+          locale: "en",
+          priceStrategy: "bogus",
+          categories: ["electronics", "houseware"],
+          statuses: ["available"],
+        }),
+      ),
+      projectRoot: PROJECT_ROOT,
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an invalid status value with 400 instead of coercing to a default", async () => {
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/export-pdf",
+      body: Buffer.from(
+        JSON.stringify({
+          locale: "en",
+          priceStrategy: "average",
+          categories: ["electronics", "houseware"],
+          statuses: ["nope"],
+        }),
+      ),
+      projectRoot: PROJECT_ROOT,
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a locale outside siteConfig.i18n.availableLocales with 400 instead of coercing to a default", async () => {
+    // This repo's content/config.ts only lists "en" in i18n.availableLocales,
+    // so "fr" genuinely exercises the runtime
+    // `!siteConfig.i18n.availableLocales.includes(...)` check rather than
+    // accidentally passing a value that happens to be configured.
+    expect(siteConfig.i18n.availableLocales).not.toContain("fr");
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/export-pdf",
+      body: Buffer.from(
+        JSON.stringify({
+          locale: "fr",
+          priceStrategy: "average",
+          categories: ["electronics", "houseware"],
+          statuses: ["available"],
+        }),
+      ),
+      projectRoot: PROJECT_ROOT,
+    });
+
+    expect(res.status).toBe(400);
   });
 });
 

@@ -121,7 +121,7 @@
 - **流程：**
   - **第 0 步**（仅当 `exports/.export-history.json` 存在时）：`[s]` 跳过已导出物品（默认）· `[v]` 先查看历史导出记录再决定 · `[n]` 全部导出。
   - **第 1 步 —— 选择范围：** `[a]` 全部 · `[N]` 分类编号 · `[m]` 手动挑选（编号 / 区间 / `all`）。
-  - **第 2 步 —— 价格策略：** `[1]` 最低分级（默认）· `[2]` 最高 · `[3]` 自提（限里程分级；仅当存在时显示）· `[4]` 邮寄（开放式分级；仅当存在时显示）。
+  - **第 2 步 —— 价格策略：** `[1]` 最低分级（默认）· `[2]` 最高 · `[3]` 自提（限里程分级；仅当存在时显示）· `[4]` 邮寄（开放式分级；仅当存在时显示）· `[5]` 最低与最高的平均值。
   - 导出 `available` / `pending` / `reserved` 状态的物品，**每批 50 个**（标题 ≤150 字符，描述 ≤5000 字符，`PHOTO` 列 ≤10 个且为 CDN URL）。对无 CDN 照片的物品给出警告 —— 请先运行 `pnpm upload-images`。
 - **环境变量：** 无。
 - **触碰的文件：** 通过 `loadAllItemsRaw` 读取 `content/items`（含用于手动上传副本的本地照片目录）；写入 `exports/facebook-marketplace.csv` 或 `exports/facebook-marketplace-<N>.csv`、`exports/facebook-marketplace-photos/NNN_category-item/`、`exports/.export-history.json`（gitignore 的导出历史）。

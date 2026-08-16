@@ -96,10 +96,10 @@ describe("exportCatalogPdf", () => {
         ok: false,
         status: 400,
         statusText: "Bad Request",
-        json: async () => ({ error: "No public-visible items to export." }),
+        json: async () => ({ error: "No items match the selected filters." }),
       })) as unknown as typeof fetch,
     );
-    await expect(exportCatalogPdf(options)).rejects.toThrow("No public-visible items to export.");
+    await expect(exportCatalogPdf(options)).rejects.toThrow("No items match the selected filters.");
     vi.unstubAllGlobals();
   });
 });

@@ -452,6 +452,12 @@ function StudioChrome({
       )}
       {showExportPdf && (
         <ExportPdfDialog
+          // Forces a remount once App's own async refresh() resolves with real
+          // data: without this, a dialog opened before that resolves would
+          // seed its useState initializers from stale defaults (empty
+          // categorySlugs, pre-fetch defaultLocale) and never pick up the
+          // real values, since useState initializers only run once per mount.
+          key={`${siteDefaultLocale}-${categorySlugs.join(",")}`}
           items={items}
           categorySlugs={categorySlugs}
           availableLocales={availableLocales}

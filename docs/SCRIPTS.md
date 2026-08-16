@@ -122,7 +122,7 @@
 - **Flow:**
   - **Step 0** (only if `exports/.export-history.json` exists): `[s]` skip already-exported items (default) · `[v]` view previous runs then decide · `[n]` export everything.
   - **Step 1 — selection:** `[a]` all · `[N]` category number · `[m]` manual pick (numbers / ranges / `all`).
-  - **Step 2 — price strategy:** `[1]` lowest tier (default) · `[2]` highest · `[3]` pickup (miles-limited tiers; shown only if any exist) · `[4]` shipping (open-ended tiers; shown only if any exist).
+  - **Step 2 — price strategy:** `[1]` lowest tier (default) · `[2]` highest · `[3]` pickup (miles-limited tiers; shown only if any exist) · `[4]` shipping (open-ended tiers; shown only if any exist) · `[5]` average of lowest & highest.
   - Exports `available` / `pending` / `reserved` items in **50-item batches** (≤150-char titles, ≤5000-char descriptions, ≤10 `PHOTO` columns with CDN URLs). Warns about items with no CDN photos — run `pnpm upload-images` first.
 - **Env vars:** none.
 - **Touches:** reads `content/items` via `loadAllItemsRaw` (incl. local photo dirs for the manual-upload copy); writes `exports/facebook-marketplace.csv` or `exports/facebook-marketplace-<N>.csv`, `exports/facebook-marketplace-photos/NNN_category-item/`, `exports/.export-history.json` (gitignored run history).

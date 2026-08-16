@@ -32,7 +32,7 @@ export const EN = {
   "exportPdf.categories": "Categories",
   "exportPdf.statuses": "Statuses",
   "exportPdf.summary": "{itemCount} items across {categoryCount} categories will be included.",
-  "exportPdf.summaryEmpty": "No public-visible items to export yet.",
+  "exportPdf.summaryEmpty": "No items to export for the selected filters.",
   "exportPdf.generate": "Generate & Download",
   "exportPdf.generating": "Generating…",
   "exportPdf.done": "Downloaded {filename}",

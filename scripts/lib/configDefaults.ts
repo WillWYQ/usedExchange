@@ -57,7 +57,7 @@ export const CONFIG_DEFAULTS: ConfigDefault[] = [
   },
   {
     key: "pdfTocHeading",
-    afterKey: "newlyListedNoneInPeriod:",
+    afterKey: "filterPriceIncludesOutliers:",
     lines: [
       "",
       "        // ── Catalog PDF export chrome ────────────────────────────────────────",

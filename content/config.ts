@@ -380,7 +380,7 @@ export const siteConfig: SiteConfig = {
       //   pdfViewLiveListing: "查看線上頁面",
       //   pdfFooterPage: "第",
       //   pdfFooterOf: "/ 共",
-      //   pdfAveragePriceLabel: "最高顯示價格（平均）：{amount}",
+      //   pdfAveragePriceLabel: "高亮顯示價格（平均）：{amount}",
       //   condition: "商品狀況",
       // },
     },

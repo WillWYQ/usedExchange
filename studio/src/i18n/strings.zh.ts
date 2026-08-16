@@ -24,7 +24,7 @@ export const ZH: Partial<StudioStrings> = {
   "exportPdf.categories": "分类",
   "exportPdf.statuses": "状态",
   "exportPdf.summary": "共 {itemCount} 件商品、{categoryCount} 个分类将被包含。",
-  "exportPdf.summaryEmpty": "目前没有可导出的公开商品。",
+  "exportPdf.summaryEmpty": "目前没有符合所选筛选条件的商品。",
   "exportPdf.generate": "生成并下载",
   "exportPdf.generating": "正在生成…",
   "exportPdf.done": "已下载 {filename}",

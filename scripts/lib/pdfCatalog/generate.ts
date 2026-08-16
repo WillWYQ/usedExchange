@@ -109,7 +109,7 @@ export async function generateCatalogPdf(
   const [items, categories] = await Promise.all([loadAllItemsRaw(), loadCategories()]);
   const groups = groupEligibleItems(items, categories, options.statuses, options.categories, options.locale);
   if (groups.length === 0) {
-    return { error: "No public-visible items to export." };
+    return { error: "No items match the selected filters." };
   }
 
   const t = getTranslationsForLocale(options.locale);

@@ -126,10 +126,10 @@ describe("ExportPdfDialog", () => {
   });
 
   it("shows the server's error message on failure", async () => {
-    vi.spyOn(api, "exportCatalogPdf").mockRejectedValue(new Error("No public-visible items to export."));
+    vi.spyOn(api, "exportCatalogPdf").mockRejectedValue(new Error("No items match the selected filters."));
     renderDialog([makeItem()]);
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /Generate & Download/ }));
-    expect((await screen.findByRole("alert")).textContent).toContain("No public-visible items to export.");
+    expect((await screen.findByRole("alert")).textContent).toContain("No items match the selected filters.");
   });
 });
