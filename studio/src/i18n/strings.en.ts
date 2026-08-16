@@ -28,6 +28,11 @@ export const EN = {
   "exportPdf.generating": "Generating…",
   "exportPdf.done": "Downloaded {filename}",
   "exportPdf.close": "Close",
+  "exportPdf.readiness.summary": "{count} item may look sparse in the PDF",
+  "exportPdf.readiness.summaryPlural": "{count} items may look sparse in the PDF",
+  "exportPdf.readiness.photos": "no photos",
+  "exportPdf.readiness.description": "no description",
+  "exportPdf.readiness.price": "no price",
 
   // ── Sync bar ────────────────────────────────────────────────────
   "sync.push": "Push photos to CDN",

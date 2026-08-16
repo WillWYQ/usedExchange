@@ -20,6 +20,11 @@ export const ZH: Partial<StudioStrings> = {
   "exportPdf.generating": "正在生成…",
   "exportPdf.done": "已下载 {filename}",
   "exportPdf.close": "关闭",
+  "exportPdf.readiness.summary": "{count} 件商品在 PDF 中可能显示不完整",
+  "exportPdf.readiness.summaryPlural": "{count} 件商品在 PDF 中可能显示不完整",
+  "exportPdf.readiness.photos": "无照片",
+  "exportPdf.readiness.description": "无描述",
+  "exportPdf.readiness.price": "无价格",
 
   "sync.push": "推送照片到 CDN",
   "sync.pushing": "正在推送到 CDN…",

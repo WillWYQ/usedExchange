@@ -28,6 +28,7 @@ function makeItem(overrides: Partial<StudioItem> = {}): StudioItem {
     localizedNames: { en: "Desk Lamp" },
     tags: [],
     listedDate: "2026-01-01",
+    description: "A nice lamp",
     ...overrides,
   };
 }
@@ -74,5 +75,12 @@ describe("ExportPdfDialog", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /Generate & Download/ }));
     expect((await screen.findByRole("alert")).textContent).toContain("No public-visible items to export.");
+  });
+
+  it("shows a readiness warning for an item missing photos and description", () => {
+    renderDialog([
+      makeItem({ id: "a", imageCount: 0, description: "" }),
+    ]);
+    expect(screen.getByText(/may look sparse/)).toBeTruthy();
   });
 });

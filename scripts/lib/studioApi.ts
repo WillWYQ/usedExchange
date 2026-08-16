@@ -131,6 +131,7 @@ export type StudioItem = {
    * with the price sort, where null is genuinely reachable.
    */
   listedDate: string | null;
+  description: string;
 };
 
 export class StudioError extends Error {
@@ -250,6 +251,7 @@ export async function listStudioItems(projectRoot: string): Promise<StudioItem[]
         // file that parsed oddly must not hand the client a non-array to iterate.
         tags: Array.isArray(item.tags) ? item.tags : [],
         listedDate: typeof item.listedDate === "string" ? item.listedDate : null,
+        description: item.description,
       } satisfies StudioItem;
     }),
   );

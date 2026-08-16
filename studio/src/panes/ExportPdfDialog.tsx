@@ -1,6 +1,7 @@
 // studio/src/panes/ExportPdfDialog.tsx
 import { useState } from "react";
 import { exportCatalogPdf, type StudioItem } from "../api";
+import { checkPdfReadiness } from "../../../scripts/lib/pdfCatalog/checkPdfReadiness";
 import { Button } from "../components/Button";
 import { useDialogBehavior } from "../components/useDialogBehavior";
 import { useStudioT } from "../i18n/StudioI18n";
@@ -22,6 +23,7 @@ export function ExportPdfDialog({ items, onClose }: { items: StudioItem[]; onClo
 
   const eligible = items.filter((i) => EXPORTABLE_STATUSES.has(i.status));
   const categoryCount = new Set(eligible.map((i) => i.categorySlug)).size;
+  const warnings = checkPdfReadiness(eligible);
 
   async function generate() {
     setBusy(true);
@@ -65,6 +67,24 @@ export function ExportPdfDialog({ items, onClose }: { items: StudioItem[]; onClo
             : t("exportPdf.summary", { itemCount: eligible.length, categoryCount })}
         </p>
         {downloadedFilename !== null && <p>{t("exportPdf.done", { filename: downloadedFilename })}</p>}
+        {warnings.length > 0 && (
+          <details className="pdf-readiness-warnings">
+            <summary>
+              {t("exportPdf.readiness.summary", { count: warnings.length })}
+            </summary>
+            <ul>
+              {warnings.map((w) => (
+                <li key={w.id}>
+                  <strong>{w.name}</strong>
+                  {": "}
+                  {w.missing
+                    .map((flag) => t(`exportPdf.readiness.${flag}`))
+                    .join(", ")}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         <div className="dialog-actions">
           <Button
             variant="primary"
