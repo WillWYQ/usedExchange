@@ -2162,6 +2162,8 @@ shipping?: {
 
 顶部的 **导出 PDF** 按钮会打开一个对话框，生成一份合并的 PDF 目录，涵盖所有公开可见的商品（`available`/`pending`/`reserved`；不含 `sold`/`draft`）：封面页、按分类分组的可点击目录、每个分类的分隔页，以及每件商品单独一页（含已解析价格、照片、规格，以及指向该商品在线页面的链接）。通过 Headless Chromium（Playwright）基于独立的打印模板渲染，无需运行 `next dev` 服务器。目录中的条目是可点击的 PDF 内部跳转链接，条目旁不会显示具体页码（Chromium 的打印为 PDF 功能不支持 CSS 的 `target-counter()`），但每页页脚都会显示真实的"第 N 页，共 M 页"。首次使用需要执行一次 `npx playwright install chromium`。
 
+生成前，对话框会对每个符合条件的商品运行一次提示性就绪检查（`checkPdfReadiness()`，`scripts/lib/pdfCatalog/checkPdfReadiness.ts`），并显示一个可折叠的警告列表，列出缺少照片、描述或价格的商品——该检查从不阻止导出，卖家仍可选择直接生成。同一对话框里的模式切换可以改为生成单件商品的**宣传单**，而不是完整目录：使用与商品详情页相同的版式和样式（通过 `buildFlyerHtml()`），不含封面/目录/页码页脚，可以从对话框自带的商品下拉列表触发，也可以在商品抽屉里点击 **导出宣传单** 按钮触发（已售出/草稿状态时按钮禁用）。渲染前，每张引用到的照片都会先被预取到本地临时文件夹，渲染用的 HTML 也会被重写为从磁盘加载——Chromium 拒绝从一个没有自身来源（origin）的文档加载 `file://` 子资源，因此（可能已被重写的）HTML 会被写入同一个临时文件夹，并通过 `page.goto()` 导航到一个真实的 `file://` URL 来加载，而不是使用 `page.setContent()`。任何下载失败的单张照片（超时、网络错误、超出大小上限）都会保留其原始 CDN `src`，让 Chromium 照常实时拉取；只有整体预取彻底失败时，才会回退到渲染未经改动的原始 HTML。
+
 ### Facebook Marketplace 导出（`pnpm fb-export`，第 17 阶段）
 交互式 CLI，将 available/pending/reserved 物品导出为 Facebook Marketplace 批量上传 CSV
 （每批 50 件、标题 ≤150 字符、≤10 个 photo 列、使用 CDN URL）。支持跳过上次已导出、
