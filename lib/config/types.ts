@@ -172,6 +172,14 @@ export type UIStrings = {
   copied: string;
   linkCopied: string;
 
+  // Flyer button (components/item/FlyerButton.tsx)
+  downloadFlyer: string;
+  generatingFlyer: string;
+  flyerDownloaded: string;
+  flyerLoadError: string;
+  flyerGenerateError: string;
+  flyerUnsupported: string;
+
   // Item metadata table labels
   brand: string;
   model: string;
