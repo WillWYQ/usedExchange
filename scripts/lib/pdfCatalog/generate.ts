@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import crypto from "crypto";
+import { pathToFileURL } from "node:url";
 // Type-only: erased at compile time, so this does NOT make the `playwright`
 // package a runtime dependency of this module — see the "Dynamic import"
 // comment on renderHtmlToPdf below for why that matters.
@@ -58,10 +59,12 @@ function hashUrl(url: string): string {
   return crypto.createHash("sha256").update(url).digest("hex").slice(0, 24);
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
+// Returns the downloaded image's filename (relative to tempDir), not a full
+// path or URL: the HTML document is rendered from that same tempDir (see
+// renderHtmlToPdf below), so a bare filename is all a rewritten <img src>
+// needs — and it is what lets that document be loaded via a real file://
+// URL, which a bare setContent() document cannot do for local subresources
+// at all (see the "page.goto vs page.setContent" comment on renderHtmlToPdf).
 async function downloadOneImage(
   url: string,
   tempDir: string,
@@ -86,9 +89,8 @@ async function downloadOneImage(
     if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) return null;
 
     const filename = `usedexchange-pdf-${hashUrl(url)}${extensionFromUrl(url)}`;
-    const filePath = path.join(tempDir, filename);
-    await fs.writeFile(filePath, bytes);
-    return filePath;
+    await fs.writeFile(path.join(tempDir, filename), bytes);
+    return filename;
   } catch {
     return null;
   }
@@ -109,13 +111,26 @@ function combineSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
 }
 
 // Downloads every remote <img src> referenced by the catalog HTML into a
-// per-run temp dir and rewrites those srcs to file:// URLs so Chromium does
-// not have to hit the CDN during render. Two failure modes are tolerated:
-//   - per-image failure (network, 4xx/5xx, too large): the src attribute is
-//     stripped from that <img> so Chromium skips it (the template's
-//     onerror="this.remove()" cannot fire for a file:// miss).
+// per-run temp dir and rewrites those srcs to bare filenames (e.g.
+// "usedexchange-pdf-<hash>.jpg") relative to that same tempDir — not
+// file:// URLs. The HTML document itself is written into tempDir and loaded
+// via page.goto() on a real file:// URL by renderHtmlToPdf, and a document
+// with a file:// origin can load same-directory relative resources; a
+// document with no origin (page.setContent()) cannot load file:// resources
+// at all, however they are addressed, which is why the src is rewritten to a
+// relative path rather than an absolute file:// one — see renderHtmlToPdf's
+// own comment for why that distinction matters.
+//
+// Two failure modes are tolerated:
+//   - per-image failure (network, timeout, 4xx/5xx, too large): the src
+//     attribute is left exactly as it was, i.e. the original remote URL, so
+//     Chromium fetches it live exactly as it would have before this feature
+//     existed. It must NOT be stripped — an <img> with no src at all is a
+//     silently vanished photo, which is strictly worse than a live CDN
+//     fetch.
 //   - a wholesale prefetch failure (e.g. mkdtemp throws): callers catch and
-//     fall back to rendering the original HTML with remote URLs.
+//     fall back to rendering the original HTML with remote URLs via
+//     page.setContent(), which never touches tempDir at all.
 // The tempDir is returned to the caller, which is responsible for rm -rf-ing
 // it after the PDF has been rendered.
 export async function prefetchImages(html: string): Promise<PrefetchResult> {
@@ -135,37 +150,26 @@ export async function prefetchImages(html: string): Promise<PrefetchResult> {
         const perImageController = new AbortController();
         const perImageTimer = setTimeout(() => perImageController.abort(), PER_IMAGE_TIMEOUT_MS);
         try {
-          const file = await downloadOneImage(
+          const filename = await downloadOneImage(
             url,
             tempDir,
             combineSignals(controller.signal, perImageController.signal),
           );
-          return { url, file };
+          return { url, filename };
         } finally {
           clearTimeout(perImageTimer);
         }
       }),
     );
 
-    const urlToFile = new Map<string, string>();
-    const failedUrls: string[] = [];
-    for (const { url, file } of downloads) {
-      if (file) {
-        urlToFile.set(url, file);
-      } else {
-        failedUrls.push(url);
-      }
-    }
-
     let rewritten = html;
-    for (const [url, file] of urlToFile) {
-      rewritten = rewritten.split(url).join(`file://${file}`);
-    }
-    // Strip the src attribute from any <img> whose download failed, so
-    // Chromium neither refetches the remote URL nor renders a broken-image
-    // icon. The tag itself is preserved (alt text / layout hooks survive).
-    for (const url of failedUrls) {
-      rewritten = rewritten.replace(new RegExp(`\\ssrc="${escapeRegExp(url)}"`, "g"), "");
+    for (const { url, filename } of downloads) {
+      // Any download that failed (network error, timeout, 4xx/5xx, over the
+      // size cap, or a global-timeout abort) is simply not in this map, so
+      // its src is left untouched below — see the doc comment above.
+      if (filename !== null) {
+        rewritten = rewritten.split(url).join(filename);
+      }
     }
 
     return { html: rewritten, tempDir };
@@ -269,7 +273,8 @@ async function renderHtmlToPdf(
   // Pull every remote image to a local temp dir before Chromium sees the
   // HTML. Live CDN fetches from headless Chromium are slow and flaky —
   // pre-fetching turns render-time network stalls into local file reads.
-  // On total prefetch failure, fall back to rendering the original HTML.
+  // On total prefetch failure (e.g. mkdtemp throws), fall back to rendering
+  // the original HTML with its original remote URLs.
   let tempDir: string | undefined;
   let prefetchResult: Awaited<ReturnType<typeof prefetchImages>> | undefined;
   try {
@@ -278,7 +283,6 @@ async function renderHtmlToPdf(
   } catch {
     // Prefetch failed entirely — fall back to remote URLs.
   }
-  const htmlToRender = prefetchResult?.html ?? html;
 
   try {
     const file = path.join(os.tmpdir(), `${opts.filenamePrefix}-${Date.now()}.pdf`);
@@ -286,7 +290,32 @@ async function renderHtmlToPdf(
       const page = await browser.newPage();
       let pdfBytes: Buffer;
       try {
-        await page.setContent(htmlToRender, { waitUntil: "networkidle", timeout: RENDER_TIMEOUT_MS });
+        if (prefetchResult !== undefined) {
+          // Chromium refuses to load a file:// subresource (an <img
+          // src="file://...">) from a document that has no origin of its
+          // own — which is exactly what page.setContent() produces — and
+          // fails with "Not allowed to load local resource", silently
+          // dropping the photo via the template's onerror="this.remove()".
+          // A document navigated to its own file:// URL DOES have an
+          // origin and can load same-directory files without issue, so the
+          // (possibly prefetch-rewritten) HTML is written into the same
+          // tempDir the downloaded images already live in, and loaded via a
+          // real file:// URL instead. pathToFileURL handles the
+          // platform-specific escaping (spaces, backslashes on Windows,
+          // etc.) that hand-building `"file://" + path` would get wrong.
+          const htmlFilePath = path.join(prefetchResult.tempDir, "page.html");
+          await fs.writeFile(htmlFilePath, prefetchResult.html, "utf-8");
+          await page.goto(pathToFileURL(htmlFilePath).href, {
+            waitUntil: "networkidle",
+            timeout: RENDER_TIMEOUT_MS,
+          });
+        } else {
+          // Prefetch failed entirely, so there is no tempDir and nothing
+          // local for the HTML to reference — the original HTML (with its
+          // original remote <img src> URLs) is safe to render straight from
+          // memory via setContent(), exactly as before this feature existed.
+          await page.setContent(html, { waitUntil: "networkidle", timeout: RENDER_TIMEOUT_MS });
+        }
         pdfBytes = await withTimeout(
           page.pdf(opts.pdfOptions),
           RENDER_TIMEOUT_MS,

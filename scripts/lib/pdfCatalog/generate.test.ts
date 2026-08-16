@@ -1,7 +1,18 @@
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it, vi } from "vitest";
 import * as loaderModule from "@/lib/content/loader";
 import type { Category, Item } from "@/lib/content/types";
 import { groupEligibleItems, generateCatalogPdf, generateFlyerPdf, prefetchImages } from "./generate";
+
+// A minimal valid 1x1 transparent PNG — small enough to inline, but real
+// enough bytes for Chromium to decode and embed as an actual image XObject
+// in the rendered PDF (unlike the "imagebytes" placeholder the unit tests
+// below use, which is never actually rendered by Chromium).
+const ONE_PIXEL_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
 
 function makeItem(overrides: Partial<Item> = {}): Item {
   return {
@@ -63,13 +74,21 @@ function makeCategory(overrides: Partial<Category> = {}): Category {
 }
 
 describe("prefetchImages", () => {
-  it("rewrites a single image src to a local file path", async () => {
+  it("rewrites a single image src to a bare filename relative to tempDir", async () => {
+    // Not a file:// URL: the HTML document this src lives in is itself
+    // written into tempDir and loaded via page.goto() on a file:// URL (see
+    // renderHtmlToPdf), so a same-directory relative filename is both
+    // sufficient and — per Critical #1 of the 2026-08-15 final review —
+    // required. An absolute file:// src here would only work again if
+    // Chromium rendered via setContent(), which is exactly the path that
+    // silently dropped every photo.
     const html = `<html><body><img src="https://example.com/photo.jpg" /></body></html>`;
     vi.stubGlobal("fetch", vi.fn(async () => new Response(Buffer.from("imagebytes"))));
     try {
       const { html: rewritten, tempDir } = await prefetchImages(html);
-      expect(rewritten).toMatch(/file:\/\/.*\.jpg/);
+      expect(rewritten).not.toContain("file://");
       expect(rewritten).not.toContain("https://example.com/photo.jpg");
+      expect(rewritten).toMatch(/src="usedexchange-pdf-[0-9a-f]{24}\.jpg"/);
       const fs = await import("fs/promises");
       await fs.rm(tempDir, { recursive: true, force: true });
     } finally {
@@ -77,7 +96,11 @@ describe("prefetchImages", () => {
     }
   });
 
-  it("omits a failed download while keeping the img tag", async () => {
+  it("keeps the original remote src when a download fails, instead of stripping it", async () => {
+    // Important #3 of the 2026-08-15 final review: a failed download must
+    // fall back to the original (slower but working) remote URL, not strip
+    // the src entirely — an <img> with no src at all is a silently vanished
+    // photo, strictly worse than a live CDN fetch.
     const html = `<html><body><img src="https://example.com/missing.jpg" /></body></html>`;
     vi.stubGlobal(
       "fetch",
@@ -87,8 +110,7 @@ describe("prefetchImages", () => {
     );
     try {
       const { html: rewritten, tempDir } = await prefetchImages(html);
-      expect(rewritten).toContain("<img");
-      expect(rewritten).not.toContain("src=");
+      expect(rewritten).toContain('src="https://example.com/missing.jpg"');
       const fs = await import("fs/promises");
       await fs.rm(tempDir, { recursive: true, force: true });
     } finally {
@@ -242,6 +264,70 @@ describe("generateFlyerPdf", () => {
       }
     } finally {
       mockLoadAllItemsRaw.mockRestore();
+    }
+  });
+});
+
+// Regression test for the 2026-08-15 final review's Critical #1/#2: the
+// prefetch layer that exists to make photos MORE reliable was actually
+// deleting them from every catalog PDF. `%PDF` magic bytes (the only thing
+// the two tests above check) survive that bug completely unaffected — a PDF
+// with zero images still starts with `%PDF`. Only a real HTTP server, a real
+// image, and a scan for an actual image XObject in the rendered bytes can
+// catch this, which is exactly what caught it during review.
+describe("generateCatalogPdf embeds prefetched images", () => {
+  function startImageServer(): Promise<{ url: string; close: () => Promise<void> }> {
+    return new Promise((resolve, reject) => {
+      const server = http.createServer((_req, res) => {
+        res.writeHead(200, { "content-type": "image/png" });
+        res.end(ONE_PIXEL_PNG);
+      });
+      server.on("error", reject);
+      server.listen(0, "127.0.0.1", () => {
+        const { port } = server.address() as AddressInfo;
+        resolve({
+          url: `http://127.0.0.1:${port}/test.png`,
+          close: () => new Promise((res) => server.close(() => res())),
+        });
+      });
+    });
+  }
+
+  it("survives into the rendered PDF as a real image XObject", async () => {
+    const { url: imageUrl, close } = await startImageServer();
+    const mockLoadAllItemsRaw = vi
+      .spyOn(loaderModule, "loadAllItemsRaw")
+      .mockResolvedValue([makeItem({ images: [imageUrl], coverImage: imageUrl })]);
+    const mockLoadCategories = vi.spyOn(loaderModule, "loadCategories").mockResolvedValue([makeCategory()]);
+
+    try {
+      let chromiumAvailable = true;
+      const { chromium } = await import("playwright");
+      try {
+        const browser = await chromium.launch();
+        await browser.close();
+      } catch {
+        chromiumAvailable = false;
+      }
+      if (!chromiumAvailable) {
+        console.warn("Skipping: Chromium not installed. Run `npx playwright install chromium`.");
+        return;
+      }
+
+      const result = await generateCatalogPdf();
+      expect("file" in result).toBe(true);
+      if ("file" in result) {
+        const fs = await import("fs/promises");
+        const bytes = await fs.readFile(result.file);
+        // A raw PDF byte scan for an /Image XObject is blunt but reliable —
+        // this is literally the check the review used to catch the bug.
+        expect(bytes.toString("latin1")).toMatch(/\/Subtype\s*\/Image/);
+        await fs.unlink(result.file);
+      }
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+      mockLoadCategories.mockRestore();
+      await close();
     }
   });
 });
