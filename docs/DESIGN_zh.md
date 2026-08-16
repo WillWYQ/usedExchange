@@ -2162,7 +2162,7 @@ shipping?: {
 
 #### 目录 PDF 导出
 
-顶部的 **导出 PDF** 按钮会打开一个对话框，生成一份合并的 PDF 目录，涵盖所有公开可见的商品（`available`/`pending`/`reserved`；不含 `sold`/`draft`）：封面页、按分类分组的可点击目录、每个分类的分隔页，以及每件商品单独一页（含已解析价格、照片、规格，以及指向该商品在线页面的链接）。通过 Headless Chromium（Playwright）基于独立的打印模板渲染，无需运行 `next dev` 服务器。目录中的条目是可点击的 PDF 内部跳转链接，条目旁不会显示具体页码（Chromium 的打印为 PDF 功能不支持 CSS 的 `target-counter()`），但每页页脚都会显示真实的"第 N 页，共 M 页"。首次使用需要执行一次 `npx playwright install chromium`。
+顶部的 **导出 PDF** 按钮会打开一个对话框，生成一份合并的 PDF 目录，涵盖所选的公开可见商品：封面页、按分类分组的可点击目录、每个分类的分隔页，以及每件商品单独一页（含已解析价格、照片、规格，以及指向该商品在线页面的链接）。通过 Headless Chromium（Playwright）基于独立的打印模板渲染，无需运行 `next dev` 服务器。目录中的条目是可点击的 PDF 内部跳转链接，条目旁不会显示具体页码（Chromium 的打印为 PDF 功能不支持 CSS 的 `target-counter()`），但每页页脚都会显示真实的"第 N 页，共 M 页"。首次使用需要执行一次 `npx playwright install chromium`。生成前有三项设置：**语言**（`siteConfig.i18n.availableLocales` 中的任一语言）同时驱动商品名称/描述（通过 `getLocalizedField`）以及整份 PDF 自身的界面文字（通过 `getTranslationsForLocale`，见 TECH_REQUIREMENTS.md §22.8）——分类的 `displayName`/`description` 在整个代码库中都没有对应语区字段，因此无论 PDF 语言为何，分类名称都会维持卖家原本填写的语言。**高亮价格**（`lowest`/`highest`/`pickup`/`shipping`，与 `pnpm fb-export` 共用，或新增的 `average` —— 该商品最低与最高价档位的字面中位数）决定哪个价格作为该商品的默认价格；`show_tiers: true` 的商品仍会显示完整价格档位表（v1 行为）——除 `average` 外的每种策略都会高亮对应的那一行，而 `average`（因为不对应任何真实档位）会在表格上方以一行横幅显示计算出的中位数。**分类**与**状态**（全部 5 种——`available`/`pending`/`reserved`/`sold`/`draft`，不再只是原本公开可见的 3 种）皆为卖家勾选的筛选条件；无论勾选哪些状态，`reserved_for` 都不会被读取（Iron Rule 4 在上游即已强制执行——`Item` 类型从未携带该字段）。
 
 ### Facebook Marketplace 导出（`pnpm fb-export`，第 17 阶段）
 交互式 CLI，将 available/pending/reserved 物品导出为 Facebook Marketplace 批量上传 CSV

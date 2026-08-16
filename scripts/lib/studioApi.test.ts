@@ -2268,7 +2268,14 @@ describe("POST /api/export-pdf", () => {
       const res = await handleStudioRequest({
         method: "POST",
         url: "/api/export-pdf",
-        body: Buffer.from("{}"),
+        body: Buffer.from(
+          JSON.stringify({
+            locale: "en",
+            priceStrategy: "average",
+            categories: ["electronics", "houseware"],
+            statuses: ["available", "pending", "reserved"],
+          }),
+        ),
         projectRoot: PROJECT_ROOT,
       });
 
@@ -2297,7 +2304,14 @@ describe("POST /api/export-pdf", () => {
     const res = await handleStudioRequest({
       method: "POST",
       url: "/api/export-pdf",
-      body: Buffer.from("{}"),
+      body: Buffer.from(
+        JSON.stringify({
+          locale: "en",
+          priceStrategy: "average",
+          categories: ["electronics", "houseware"],
+          statuses: ["available"],
+        }),
+      ),
       projectRoot: PROJECT_ROOT,
     });
 

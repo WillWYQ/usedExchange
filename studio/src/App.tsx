@@ -40,6 +40,7 @@ export function App() {
   const [items, setItems] = useState<StudioItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [availableLocales, setAvailableLocales] = useState<string[]>(["en"]);
+  const [siteDefaultLocale, setSiteDefaultLocale] = useState<string>("en");
   const [displayLocale, setDisplayLocale] = useState<string>(() => readDisplayLocale("en"));
   // Seller overrides for the built-in Studio dictionaries, loaded with the
   // items. Empty = the built-in EN/… dictionaries stand unchanged.
@@ -71,6 +72,7 @@ export function App() {
       await Promise.all([fetchItems(), fetchCategories().catch(() => null)]);
     setItems(items);
     setAvailableLocales(al);
+    setSiteDefaultLocale(defaultLocale);
     setStudioTranslations(st);
     setDisplayLocale((prev) => (al.includes(prev) ? prev : defaultLocale));
     // On a categories-endpoint failure, fall back to what the pre-feature
@@ -105,6 +107,7 @@ export function App() {
         error={error}
         setError={setError}
         availableLocales={availableLocales}
+        siteDefaultLocale={siteDefaultLocale}
         displayLocale={displayLocale}
         setDisplayLocale={setDisplayLocale}
         refresh={refresh}
@@ -119,6 +122,7 @@ function StudioChrome({
   error,
   setError,
   availableLocales,
+  siteDefaultLocale,
   displayLocale,
   setDisplayLocale,
   refresh,
@@ -128,6 +132,7 @@ function StudioChrome({
   error: string | null;
   setError: (error: string | null) => void;
   availableLocales: string[];
+  siteDefaultLocale: string;
   displayLocale: string;
   setDisplayLocale: (locale: string) => void;
   refresh: () => Promise<void>;
@@ -445,7 +450,15 @@ function StudioChrome({
         // every single save.
         <CategoriesPane onClose={() => setShowCategories(false)} onSaved={bumpChanges} />
       )}
-      {showExportPdf && <ExportPdfDialog items={items} onClose={() => setShowExportPdf(false)} />}
+      {showExportPdf && (
+        <ExportPdfDialog
+          items={items}
+          categorySlugs={categorySlugs}
+          availableLocales={availableLocales}
+          defaultLocale={siteDefaultLocale}
+          onClose={() => setShowExportPdf(false)}
+        />
+      )}
     </>
   );
 }
