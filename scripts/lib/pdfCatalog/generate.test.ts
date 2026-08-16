@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import * as loaderModule from "@/lib/content/loader";
 import type { Category, Item } from "@/lib/content/types";
-import { groupEligibleItems, generateCatalogPdf } from "./generate";
+import { groupEligibleItems, generateCatalogPdf, prefetchImages } from "./generate";
 
 function makeItem(overrides: Partial<Item> = {}): Item {
   return {
@@ -61,6 +61,41 @@ function makeCategory(overrides: Partial<Category> = {}): Category {
     ...overrides,
   };
 }
+
+describe("prefetchImages", () => {
+  it("rewrites a single image src to a local file path", async () => {
+    const html = `<html><body><img src="https://example.com/photo.jpg" /></body></html>`;
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(Buffer.from("imagebytes"))));
+    try {
+      const { html: rewritten, tempDir } = await prefetchImages(html);
+      expect(rewritten).toMatch(/file:\/\/.*\.jpg/);
+      expect(rewritten).not.toContain("https://example.com/photo.jpg");
+      const fs = await import("fs/promises");
+      await fs.rm(tempDir, { recursive: true, force: true });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("omits a failed download while keeping the img tag", async () => {
+    const html = `<html><body><img src="https://example.com/missing.jpg" /></body></html>`;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network");
+      }),
+    );
+    try {
+      const { html: rewritten, tempDir } = await prefetchImages(html);
+      expect(rewritten).toContain("<img");
+      expect(rewritten).not.toContain("src=");
+      const fs = await import("fs/promises");
+      await fs.rm(tempDir, { recursive: true, force: true });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
 
 describe("groupEligibleItems", () => {
   it("excludes sold and draft items", () => {
