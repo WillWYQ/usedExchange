@@ -55,4 +55,21 @@ export const CONFIG_DEFAULTS: ConfigDefault[] = [
       '        filterPriceIncludesOutliers: "+ items outside range",',
     ],
   },
+  {
+    key: "pdfTocHeading",
+    afterKey: "newlyListedNoneInPeriod:",
+    lines: [
+      "",
+      "        // ── Catalog PDF export chrome ────────────────────────────────────────",
+      '        pdfTocHeading: "Table of Contents",',
+      '        pdfCoverHeading: "Full Listing Catalog",',
+      '        pdfCoverMeta: "{itemCount} items across {categoryCount} categories",',
+      '        pdfGeneratedOn: "Generated {date}",',
+      '        pdfViewLiveListing: "View Live Listing",',
+      '        pdfFooterPage: "Page",',
+      '        pdfFooterOf: "of",',
+      '        pdfAveragePriceLabel: "Highlighted price (average): {amount}",',
+      '        condition: "Condition",',
+    ],
+  },
 ];

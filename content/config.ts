@@ -277,6 +277,17 @@ export const siteConfig: SiteConfig = {
         newlyListedThisWeek: "This Week",
         newlyListedFirstVisit: "Welcome! Everything here is new to you.",
         newlyListedNoneInPeriod: "No new items in this period.",
+
+        // ── Catalog PDF export chrome ────────────────────────────────────────
+        pdfTocHeading: "Table of Contents",
+        pdfCoverHeading: "Full Listing Catalog",
+        pdfCoverMeta: "{itemCount} items across {categoryCount} categories",
+        pdfGeneratedOn: "Generated {date}",
+        pdfViewLiveListing: "View Live Listing",
+        pdfFooterPage: "Page",
+        pdfFooterOf: "of",
+        pdfAveragePriceLabel: "Highlighted price (average): {amount}",
+        condition: "Condition",
       },
 
       // ── Add other locales below ────────────────────────────────────────────
@@ -362,6 +373,15 @@ export const siteConfig: SiteConfig = {
       //   shippingEstimateSuffix: "運費",
       //   menuOpen: "開啟選單",
       //   menuClose: "關閉選單",
+      //   pdfTocHeading: "目錄",
+      //   pdfCoverHeading: "完整商品型錄",
+      //   pdfCoverMeta: "共 {itemCount} 件商品，{categoryCount} 個分類",
+      //   pdfGeneratedOn: "產生於 {date}",
+      //   pdfViewLiveListing: "查看線上頁面",
+      //   pdfFooterPage: "第",
+      //   pdfFooterOf: "/ 共",
+      //   pdfAveragePriceLabel: "最高顯示價格（平均）：{amount}",
+      //   condition: "商品狀況",
       // },
     },
   },
