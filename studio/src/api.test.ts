@@ -64,19 +64,28 @@ describe("fetchItems", () => {
 });
 
 describe("exportCatalogPdf", () => {
-  it("returns the response body as a Blob on success", async () => {
+  const options = {
+    locale: "en",
+    priceStrategy: "average" as const,
+    categories: ["electronics"],
+    statuses: ["available" as const],
+  };
+
+  it("returns the response body as a Blob on success and sends the options as the JSON body", async () => {
     const fakeBlob = new Blob(["%PDF-fake"], { type: "application/pdf" });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        blob: async () => fakeBlob,
-      })) as unknown as typeof fetch,
-    );
-    const result = await exportCatalogPdf();
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      blob: async () => fakeBlob,
+    }));
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    const result = await exportCatalogPdf(options);
     expect(result).toBe(fakeBlob);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/export-pdf",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(options) }),
+    );
     vi.unstubAllGlobals();
   });
 
@@ -90,7 +99,7 @@ describe("exportCatalogPdf", () => {
         json: async () => ({ error: "No public-visible items to export." }),
       })) as unknown as typeof fetch,
     );
-    await expect(exportCatalogPdf()).rejects.toThrow("No public-visible items to export.");
+    await expect(exportCatalogPdf(options)).rejects.toThrow("No public-visible items to export.");
     vi.unstubAllGlobals();
   });
 });
