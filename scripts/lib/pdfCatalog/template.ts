@@ -1,5 +1,6 @@
 import type { Condition, Price, Status } from "../../../lib/content/types";
-import { resolveItemPrice } from "../../../lib/utils/pricing";
+import type { UIStrings } from "../../../lib/config/types";
+import { resolvePriceByStrategy, type PriceStrategy } from "../../../lib/utils/pricing";
 
 export type ItemPdfView = {
   categorySlug: string;
@@ -35,14 +36,6 @@ export type SiteBranding = {
   baseUrl: string;
 };
 
-const CONDITION_LABELS: Record<Condition, string> = {
-  new: "New",
-  "like-new": "Like New",
-  good: "Good",
-  fair: "Fair",
-  "for-parts": "For Parts",
-};
-
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -50,6 +43,38 @@ export function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+// Minimal `{key}` substitution for the handful of UIStrings entries this
+// template composes with numbers/dates — not a general i18n mechanism (the
+// rest of the site has no such need yet), and deliberately does not attempt
+// locale-aware word order or pluralization: every composed PDF chrome
+// sentence uses fixed English word order with substituted values, same
+// limitation every other composed UIStrings sentence in this codebase has.
+function fmt(template: string, params: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => String(params[key] ?? ""));
+}
+
+function conditionLabel(condition: Condition, t: UIStrings): string {
+  const map: Record<Condition, string> = {
+    new: t.conditionNew,
+    "like-new": t.conditionLikeNew,
+    good: t.conditionGood,
+    fair: t.conditionFair,
+    "for-parts": t.conditionForParts,
+  };
+  return map[condition];
+}
+
+function statusLabel(status: Status, t: UIStrings): string {
+  const map: Record<Status, string> = {
+    available: t.statusAvailable,
+    pending: t.statusPending,
+    reserved: t.statusReserved,
+    sold: t.statusSold,
+    draft: t.statusDraft,
+  };
+  return map[status];
 }
 
 // Mirrors components/contact/PlatformButton.tsx's formatPrice and
@@ -71,48 +96,63 @@ function formatAmount(currency: string, amount: number): string {
   }
 }
 
-export function buildPriceHtml(price: Price): string {
+export function buildPriceHtml(price: Price, strategy: PriceStrategy, t: UIStrings): string {
   if (price.tiers.length === 0) {
-    return `<p class="price price-contact">Contact for price</p>`;
+    return `<p class="price price-contact">${escapeHtml(t.contactForPrice)}</p>`;
   }
-  const resolved = resolveItemPrice(price, { source: "fallback" });
-  const negotiable = price.negotiable ? `<span class="price-obo">OBO</span>` : "";
+  const resolved = resolvePriceByStrategy(price.tiers, strategy);
+  const negotiable = price.negotiable ? `<span class="price-obo">${escapeHtml(t.obo)}</span>` : "";
 
   if (!price.show_tiers || price.tiers.length === 1) {
     if (resolved === null) {
-      return `<p class="price price-contact">Contact for price</p>`;
+      return `<p class="price price-contact">${escapeHtml(t.contactForPrice)}</p>`;
     }
-    const label = resolved.label
-      ? `<span class="price-label">(${escapeHtml(resolved.label)})</span>`
+    const label = resolved.tier?.label
+      ? `<span class="price-label">(${escapeHtml(resolved.tier.label)})</span>`
       : "";
     return `<p class="price"><span class="price-amount">${formatAmount(price.currency, resolved.amount)}</span>${negotiable}${label}</p>`;
   }
 
+  // "average" resolves to no real tier — no row can be marked default, so a
+  // banner line carries the computed price instead. Every other strategy
+  // resolves to a real tier and needs no banner; the row highlight alone
+  // communicates the default, exactly as v1 did.
+  const highlightBanner =
+    resolved !== null && resolved.tier === null
+      ? `<p class="price-highlight">${escapeHtml(fmt(t.pdfAveragePriceLabel, { amount: formatAmount(price.currency, resolved.amount) }))}</p>`
+      : "";
+
   const rows = price.tiers
-    .map((t) => {
-      const isResolved = resolved !== null && t.label === resolved.label && t.amount === resolved.amount;
+    .map((tier) => {
+      const isResolved =
+        resolved !== null &&
+        resolved.tier !== null &&
+        tier.label === resolved.tier.label &&
+        tier.amount === resolved.tier.amount;
       const range =
-        t.miles_max === undefined ? `${t.miles_min ?? 0}+ mi` : `${t.miles_min ?? 0}–${t.miles_max} mi`;
-      return `<tr class="${isResolved ? "tier-default" : ""}"><td>${escapeHtml(t.label)}</td><td>${range}</td><td>${formatAmount(price.currency, t.amount)}</td></tr>`;
+        tier.miles_max === undefined
+          ? `${tier.miles_min ?? 0}+ ${escapeHtml(t.distanceUnit)}`
+          : `${tier.miles_min ?? 0}–${tier.miles_max} ${escapeHtml(t.distanceUnit)}`;
+      return `<tr class="${isResolved ? "tier-default" : ""}"><td>${escapeHtml(tier.label)}</td><td>${range}</td><td>${formatAmount(price.currency, tier.amount)}</td></tr>`;
     })
     .join("");
-  return `<div class="price">${negotiable}<table class="tier-table"><thead><tr><th>Option</th><th>Distance</th><th>Price</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="price">${negotiable}${highlightBanner}<table class="tier-table"><thead><tr><th>${escapeHtml(t.pricingLabelHeader)}</th><th>${escapeHtml(t.pricingDistanceHeader)}</th><th>${escapeHtml(t.pricingPriceHeader)}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
-function buildSpecsHtml(item: ItemPdfView): string {
+function buildSpecsHtml(item: ItemPdfView, t: UIStrings): string {
   const rows: Array<[string, string]> = [];
-  if (item.brand) rows.push(["Brand", item.brand]);
-  if (item.model) rows.push(["Model", item.model]);
-  if (item.color) rows.push(["Color", item.color]);
-  if (item.ageYears !== null) rows.push(["Age", `${item.ageYears} yr${item.ageYears === 1 ? "" : "s"}`]);
+  if (item.brand) rows.push([t.brand, item.brand]);
+  if (item.model) rows.push([t.model, item.model]);
+  if (item.color) rows.push([t.color, item.color]);
+  if (item.ageYears !== null) rows.push([t.age, `${item.ageYears} yr${item.ageYears === 1 ? "" : "s"}`]);
   if (item.dimensions) {
     const d = item.dimensions;
-    rows.push(["Dimensions", `${d.length} × ${d.width} × ${d.height} ${d.unit}`]);
+    rows.push([t.dimensions, `${d.length} × ${d.width} × ${d.height} ${d.unit}`]);
   }
   if (item.weight) {
-    rows.push(["Weight", `${item.weight.value} ${item.weight.unit}`]);
+    rows.push([t.weight, `${item.weight.value} ${item.weight.unit}`]);
   }
-  rows.push(["Condition", CONDITION_LABELS[item.condition]]);
+  rows.push([t.condition, conditionLabel(item.condition, t)]);
   const trs = rows
     .map(([label, value]) => `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`)
     .join("");
@@ -124,6 +164,7 @@ export function buildCoverHtml(
   itemCount: number,
   categoryCount: number,
   generatedAt: string,
+  t: UIStrings,
 ): string {
   const logoHtml = branding.logo
     ? `<img class="cover-logo" src="${escapeHtml(branding.logo)}" alt="" onerror="this.remove()" />`
@@ -133,13 +174,13 @@ export function buildCoverHtml(
       ${logoHtml}
       <h1>${escapeHtml(branding.name)}</h1>
       <p class="cover-tagline">${escapeHtml(branding.tagline)}</p>
-      <p class="cover-heading">Full Listing Catalog</p>
-      <p class="cover-meta">${itemCount} items across ${categoryCount} categories</p>
-      <p class="cover-meta">Generated ${escapeHtml(generatedAt)}</p>
+      <p class="cover-heading">${escapeHtml(t.pdfCoverHeading)}</p>
+      <p class="cover-meta">${escapeHtml(fmt(t.pdfCoverMeta, { itemCount, categoryCount }))}</p>
+      <p class="cover-meta">${escapeHtml(fmt(t.pdfGeneratedOn, { date: generatedAt }))}</p>
     </section>`;
 }
 
-export function buildTocHtml(groups: CategoryGroup[]): string {
+export function buildTocHtml(groups: CategoryGroup[], t: UIStrings): string {
   const sections = groups
     .map((group) => {
       const items = group.items
@@ -151,7 +192,7 @@ export function buildTocHtml(groups: CategoryGroup[]): string {
       return `<div class="toc-group"><h3>${escapeHtml(group.displayName)}</h3><ul>${items}</ul></div>`;
     })
     .join("");
-  return `<section class="toc"><h1>Table of Contents</h1>${sections}</section>`;
+  return `<section class="toc"><h1>${escapeHtml(t.pdfTocHeading)}</h1>${sections}</section>`;
 }
 
 export function buildCategorySectionHtml(group: CategoryGroup): string {
@@ -165,7 +206,12 @@ export function buildCategorySectionHtml(group: CategoryGroup): string {
     </section>`;
 }
 
-export function buildItemHtml(item: ItemPdfView, baseUrl: string): string {
+export function buildItemHtml(
+  item: ItemPdfView,
+  baseUrl: string,
+  strategy: PriceStrategy,
+  t: UIStrings,
+): string {
   const anchor = `item-${item.categorySlug}-${item.itemSlug}`;
   const liveUrl = `${baseUrl}/${item.categorySlug}/${item.itemSlug}`;
   const images = [item.coverImage, ...item.images.filter((src) => src !== item.coverImage)]
@@ -178,22 +224,24 @@ export function buildItemHtml(item: ItemPdfView, baseUrl: string): string {
           .map((src) => `<img src="${escapeHtml(src)}" alt="" onerror="this.remove()" />`)
           .join("")}</div>`;
   const statusBadge =
-    item.status === "available" ? "" : `<span class="status-badge status-${item.status}">${item.status}</span>`;
+    item.status === "available"
+      ? ""
+      : `<span class="status-badge status-${item.status}">${escapeHtml(statusLabel(item.status, t))}</span>`;
   const tagsHtml =
     item.tags.length === 0
       ? ""
-      : `<p class="item-tags">${item.tags.map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join("")}</p>`;
+      : `<p class="item-tags">${item.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</p>`;
 
   return `
     <section class="item-page" id="${escapeHtml(anchor)}">
       <h2 class="item-title">${escapeHtml(item.name)} ${statusBadge}</h2>
       ${imageGrid}
-      ${buildPriceHtml(item.price)}
+      ${buildPriceHtml(item.price, strategy, t)}
       <p class="item-description">${escapeHtml(item.description)}</p>
-      ${buildSpecsHtml(item)}
+      ${buildSpecsHtml(item, t)}
       ${tagsHtml}
       <p class="item-link">
-        <a class="live-link" href="${escapeHtml(liveUrl)}">View Live Listing ↗</a>
+        <a class="live-link" href="${escapeHtml(liveUrl)}">${escapeHtml(t.pdfViewLiveListing)} ↗</a>
         <br /><span class="live-url-text">${escapeHtml(liveUrl)}</span>
       </p>
     </section>`;
@@ -228,6 +276,7 @@ h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; margin: 0 0 0.3em; 
 .price-amount { font-size: 26px; font-weight: bold; }
 .price-obo, .price-label { font-size: 13px; color: var(--muted); margin-left: 6px; }
 .price-contact { color: var(--muted); font-style: italic; }
+.price-highlight { margin: 6px 0 10px; font-size: 13px; font-weight: bold; color: var(--accent); }
 .tier-table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 13px; }
 .tier-table th, .tier-table td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; }
 .tier-table tr.tier-default { background: #f1e6d3; font-weight: bold; }
@@ -242,14 +291,20 @@ h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; margin: 0 0 0.3em; 
 .live-url-text { color: var(--muted); font-size: 11px; }
 `;
 
-export function buildFullCatalogHtml(branding: SiteBranding, groups: CategoryGroup[], generatedAt: string): string {
+export function buildFullCatalogHtml(
+  branding: SiteBranding,
+  groups: CategoryGroup[],
+  generatedAt: string,
+  t: UIStrings,
+  strategy: PriceStrategy,
+): string {
   const itemCount = groups.reduce((sum, g) => sum + g.items.length, 0);
   const body = [
-    buildCoverHtml(branding, itemCount, groups.length, generatedAt),
-    buildTocHtml(groups),
+    buildCoverHtml(branding, itemCount, groups.length, generatedAt, t),
+    buildTocHtml(groups, t),
     ...groups.flatMap((group) => [
       buildCategorySectionHtml(group),
-      ...group.items.map((item) => buildItemHtml(item, branding.baseUrl)),
+      ...group.items.map((item) => buildItemHtml(item, branding.baseUrl, strategy, t)),
     ]),
   ].join("\n");
   return `<!doctype html><html><head><meta charset="utf-8" /><style>${CATALOG_CSS}</style></head><body>${body}</body></html>`;
