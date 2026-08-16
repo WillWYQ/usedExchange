@@ -2,6 +2,10 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import crypto from "crypto";
+// Type-only: erased at compile time, so this does NOT make the `playwright`
+// package a runtime dependency of this module — see the "Dynamic import"
+// comment on renderHtmlToPdf below for why that matters.
+import type { Page } from "playwright";
 import { loadAllItemsRaw, loadCategories } from "../../../lib/content/loader";
 import type { Category, Item } from "../../../lib/content/types";
 import { siteConfig } from "../../../content/config";
@@ -220,29 +224,31 @@ export function groupEligibleItems(items: Item[], categories: Category[]): Categ
     });
 }
 
-// Takes no parameters — unlike the design spec's original
-// `generateCatalogPdf(projectRoot: string)` sketch — because
-// loadAllItemsRaw()/loadCategories() always resolve content/ from
-// process.cwd(), and Studio's server process cwd and req.projectRoot
-// coincide (see the "Note:" comment on listStudioItems in studioApi.ts for
-// the established precedent of documenting this same fact).
-export async function generateCatalogPdf(): Promise<{ file: string } | { error: string }> {
-  const [items, categories] = await Promise.all([loadAllItemsRaw(), loadCategories()]);
-  const groups = groupEligibleItems(items, categories);
-  if (groups.length === 0) {
-    return { error: "No public-visible items to export." };
-  }
+// Generous timeout, well above Playwright's 30s default: a catalog with many
+// items (up to 4 CDN photos each) waiting for `networkidle`, followed by
+// full-document PDF layout, can plausibly exceed the default. Shared by both
+// callers of renderHtmlToPdf below.
+const RENDER_TIMEOUT_MS = 60_000;
 
-  // Logo is a public/ path (e.g. "/logo.svg") the live site serves at its own
-  // origin — page.setContent() has no origin of its own, so it must be made
-  // absolute here or the <img> in the cover page would 404 silently.
-  const logo = siteConfig.logo ? `${siteConfig.baseUrl}${siteConfig.logo}` : "";
-  const html = buildFullCatalogHtml(
-    { name: siteConfig.name, tagline: siteConfig.tagline, logo, baseUrl: siteConfig.baseUrl },
-    groups,
-    new Date().toISOString().slice(0, 10),
-  );
-
+/**
+ * Shared browser-lifecycle/render/cleanup pipeline behind both
+ * generateCatalogPdf and generateFlyerPdf: launch Chromium, prefetch images,
+ * render `html` to a PDF file with the given `pdfOptions`, and clean up the
+ * page/prefetch tempDir/browser — all in the same order and with the same
+ * failure handling for every caller, so a future fix to any of that (timeout
+ * behaviour, cleanup ordering, the Playwright API surface) only has to be
+ * made once. Callers own everything specific to *what* is being exported:
+ * item lookup/validation, HTML assembly, the PDF's own page options, the
+ * output filename, and the render-failure message shown to the seller.
+ */
+async function renderHtmlToPdf(
+  html: string,
+  opts: {
+    filenamePrefix: string;
+    pdfOptions: Parameters<Page["pdf"]>[0];
+    renderErrorMessage: string;
+  },
+): Promise<{ file: string } | { error: string }> {
   // Dynamic import, not a static one: studioApi.ts imports this module at
   // module scope, so every Studio boot would otherwise load the `playwright`
   // package eagerly — including on a downstream site that ran
@@ -260,12 +266,6 @@ export async function generateCatalogPdf(): Promise<{ file: string } | { error: 
     return { error: "PDF renderer not installed. Run: npx playwright install chromium" };
   }
 
-  // Generous timeout, well above Playwright's 30s default: a catalog with many
-  // items (up to 4 CDN photos each) waiting for `networkidle`, followed by
-  // full-document PDF layout, can plausibly exceed the default. Both calls
-  // below share this value.
-  const RENDER_TIMEOUT_MS = 60_000;
-
   // Pull every remote image to a local temp dir before Chromium sees the
   // HTML. Live CDN fetches from headless Chromium are slow and flaky —
   // pre-fetching turns render-time network stalls into local file reads.
@@ -281,21 +281,14 @@ export async function generateCatalogPdf(): Promise<{ file: string } | { error: 
   const htmlToRender = prefetchResult?.html ?? html;
 
   try {
-    const file = path.join(os.tmpdir(), `usedexchange-catalog-${Date.now()}.pdf`);
+    const file = path.join(os.tmpdir(), `${opts.filenamePrefix}-${Date.now()}.pdf`);
     try {
       const page = await browser.newPage();
       let pdfBytes: Buffer;
       try {
         await page.setContent(htmlToRender, { waitUntil: "networkidle", timeout: RENDER_TIMEOUT_MS });
         pdfBytes = await withTimeout(
-          page.pdf({
-            format: "Letter",
-            printBackground: true,
-            displayHeaderFooter: true,
-            headerTemplate: "<div></div>",
-            footerTemplate: `<div style="font-size:8px; width:100%; text-align:center; color:#888;">${escapeHtml(siteConfig.name)} · Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>`,
-            margin: { top: "20mm", bottom: "16mm", left: "14mm", right: "14mm" },
-          }),
+          page.pdf(opts.pdfOptions),
           RENDER_TIMEOUT_MS,
           `PDF generation exceeded ${RENDER_TIMEOUT_MS}ms`,
         );
@@ -305,10 +298,7 @@ export async function generateCatalogPdf(): Promise<{ file: string } | { error: 
         // instead of letting this reject and fall through to
         // handleStudioRequest's generic catch-all, which would otherwise turn
         // it into an opaque 500.
-        return {
-          error:
-            "PDF rendering timed out or failed — the catalog may be too large (many items or photos). Try again, or retry after trimming a few item photos.",
-        };
+        return { error: opts.renderErrorMessage };
       } finally {
         try {
           await page.close();
@@ -336,14 +326,51 @@ export async function generateCatalogPdf(): Promise<{ file: string } | { error: 
   }
 }
 
+// Takes no parameters — unlike the design spec's original
+// `generateCatalogPdf(projectRoot: string)` sketch — because
+// loadAllItemsRaw()/loadCategories() always resolve content/ from
+// process.cwd(), and Studio's server process cwd and req.projectRoot
+// coincide (see the "Note:" comment on listStudioItems in studioApi.ts for
+// the established precedent of documenting this same fact).
+export async function generateCatalogPdf(): Promise<{ file: string } | { error: string }> {
+  const [items, categories] = await Promise.all([loadAllItemsRaw(), loadCategories()]);
+  const groups = groupEligibleItems(items, categories);
+  if (groups.length === 0) {
+    return { error: "No public-visible items to export." };
+  }
+
+  // Logo is a public/ path (e.g. "/logo.svg") the live site serves at its own
+  // origin — page.setContent() has no origin of its own, so it must be made
+  // absolute here or the <img> in the cover page would 404 silently.
+  const logo = siteConfig.logo ? `${siteConfig.baseUrl}${siteConfig.logo}` : "";
+  const html = buildFullCatalogHtml(
+    { name: siteConfig.name, tagline: siteConfig.tagline, logo, baseUrl: siteConfig.baseUrl },
+    groups,
+    new Date().toISOString().slice(0, 10),
+  );
+
+  return renderHtmlToPdf(html, {
+    filenamePrefix: "usedexchange-catalog",
+    pdfOptions: {
+      format: "Letter",
+      printBackground: true,
+      displayHeaderFooter: true,
+      headerTemplate: "<div></div>",
+      footerTemplate: `<div style="font-size:8px; width:100%; text-align:center; color:#888;">${escapeHtml(siteConfig.name)} · Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>`,
+      margin: { top: "20mm", bottom: "16mm", left: "14mm", right: "14mm" },
+    },
+    renderErrorMessage:
+      "PDF rendering timed out or failed — the catalog may be too large (many items or photos). Try again, or retry after trimming a few item photos.",
+  });
+}
+
 // Renders a single item's page as a standalone "flyer" PDF: same item-page
 // markup and styling buildItemHtml/CATALOG_CSS already produce for the
 // catalog (via buildFlyerHtml), just with its own compact header instead of
-// the catalog's cover/TOC/page-number footer. Structure deliberately mirrors
-// generateCatalogPdf above (dynamic Playwright import, prefetchImages with a
-// fallback to remote URLs, shared RENDER_TIMEOUT_MS, cleanup in `finally`)
-// so the two exports fail and recover the same way; only loadCategories() is
-// dropped, since a single item's flyer never needs category grouping.
+// the catalog's cover/TOC/page-number footer. Shares renderHtmlToPdf with
+// generateCatalogPdf above, so the two exports fail and recover exactly the
+// same way; only loadCategories() is skipped here, since a single item's
+// flyer never needs category grouping.
 export async function generateFlyerPdf(itemId: string): Promise<{ file: string } | { error: string }> {
   const items = await loadAllItemsRaw();
   const item = items.find((i) => `${i.categorySlug}/${i.itemSlug}` === itemId);
@@ -365,81 +392,14 @@ export async function generateFlyerPdf(itemId: string): Promise<{ file: string }
     baseUrl: siteConfig.baseUrl,
   });
 
-  // Dynamic import for the same reason as generateCatalogPdf: studioApi.ts
-  // imports this module at load time, and a static `import "playwright"`
-  // here would make every Studio boot load the package eagerly.
-  let browser;
-  try {
-    const { chromium } = await import("playwright");
-    browser = await chromium.launch();
-  } catch {
-    return { error: "PDF renderer not installed. Run: npx playwright install chromium" };
-  }
-
-  const RENDER_TIMEOUT_MS = 60_000;
-
-  let tempDir: string | undefined;
-  let prefetchResult: Awaited<ReturnType<typeof prefetchImages>> | undefined;
-  try {
-    prefetchResult = await prefetchImages(html);
-    tempDir = prefetchResult.tempDir;
-  } catch {
-    // Prefetch failed entirely — fall back to remote URLs.
-  }
-  const htmlToRender = prefetchResult?.html ?? html;
-
-  try {
-    const file = path.join(
-      os.tmpdir(),
-      `usedexchange-flyer-${itemId.replace(/\//g, "-")}-${Date.now()}.pdf`,
-    );
-    try {
-      const page = await browser.newPage();
-      let pdfBytes: Buffer;
-      try {
-        await page.setContent(htmlToRender, { waitUntil: "networkidle", timeout: RENDER_TIMEOUT_MS });
-        pdfBytes = await withTimeout(
-          page.pdf({
-            format: "Letter",
-            printBackground: true,
-            displayHeaderFooter: false,
-            margin: { top: "14mm", bottom: "14mm", left: "14mm", right: "14mm" },
-          }),
-          RENDER_TIMEOUT_MS,
-          `PDF generation exceeded ${RENDER_TIMEOUT_MS}ms`,
-        );
-      } catch {
-        // Same rationale as generateCatalogPdf's own catch: a raw Playwright
-        // error is not actionable for a seller, so it is replaced with a
-        // typed, guidance-bearing error instead of falling through to
-        // handleStudioRequest's generic 500.
-        return {
-          error:
-            "PDF rendering timed out or failed. Try again, or retry after trimming a few item photos.",
-        };
-      } finally {
-        try {
-          await page.close();
-        } catch {
-          // A page.close() failure must not mask an earlier error (or a
-          // successful render) — swallow it.
-        }
-      }
-
-      await fs.writeFile(file, pdfBytes);
-      return { file };
-    } finally {
-      if (tempDir) {
-        await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-      }
-    }
-  } finally {
-    try {
-      await browser.close();
-    } catch {
-      // A close failure here must not mask whatever error caused this
-      // `finally` to run in the first place (or override a successful result
-      // already computed above) — swallow it.
-    }
-  }
+  return renderHtmlToPdf(html, {
+    filenamePrefix: `usedexchange-flyer-${itemId.replace(/\//g, "-")}`,
+    pdfOptions: {
+      format: "Letter",
+      printBackground: true,
+      displayHeaderFooter: false,
+      margin: { top: "14mm", bottom: "14mm", left: "14mm", right: "14mm" },
+    },
+    renderErrorMessage: "PDF rendering timed out or failed. Try again, or retry after trimming a few item photos.",
+  });
 }
