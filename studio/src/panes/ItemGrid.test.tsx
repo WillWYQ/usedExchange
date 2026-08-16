@@ -22,6 +22,7 @@ function makeItem(id: string, name: string, coverImage: string | null = null): S
     localizedNames: { en: name },
     tags: [],
     listedDate: "2026-01-01",
+    description: "A test item",
   };
 }
 

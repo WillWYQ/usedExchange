@@ -16,6 +16,7 @@ function item(over: Partial<StudioItem> = {}): StudioItem {
     localizedNames: { en: "Desk Lamp", zh: "台灯" },
     tags: [],
     listedDate: "2026-01-01",
+    description: "A nice desk lamp",
     ...over,
   };
 }

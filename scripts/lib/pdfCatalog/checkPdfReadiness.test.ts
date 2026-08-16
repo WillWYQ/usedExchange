@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { checkPdfReadiness } from "./checkPdfReadiness";
-import type { StudioItem } from "../../scripts/lib/studioApi";
+import type { StudioItem } from "../studioApi";
 
 function makeItem(overrides: Partial<StudioItem> = {}): StudioItem {
   return {
@@ -29,25 +29,25 @@ describe("checkPdfReadiness", () => {
   it("flags missing photos", () => {
     const warnings = checkPdfReadiness([makeItem({ imageCount: 0 })]);
     expect(warnings).toHaveLength(1);
-    expect(warnings[0].missing).toContain("photos");
+    expect(warnings[0]!.missing).toContain("photos");
   });
 
   it("flags missing description", () => {
     const warnings = checkPdfReadiness([makeItem({ description: "" })]);
     expect(warnings).toHaveLength(1);
-    expect(warnings[0].missing).toContain("description");
+    expect(warnings[0]!.missing).toContain("description");
   });
 
   it("flags missing price", () => {
     const warnings = checkPdfReadiness([makeItem({ lowestTierAmount: null })]);
     expect(warnings).toHaveLength(1);
-    expect(warnings[0].missing).toContain("price");
+    expect(warnings[0]!.missing).toContain("price");
   });
 
   it("combines flags for one item", () => {
     const warnings = checkPdfReadiness([
       makeItem({ imageCount: 0, description: "", lowestTierAmount: null }),
     ]);
-    expect(warnings[0].missing).toEqual(["photos", "description", "price"]);
+    expect(warnings[0]!.missing).toEqual(["photos", "description", "price"]);
   });
 });

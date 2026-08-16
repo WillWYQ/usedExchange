@@ -70,7 +70,10 @@ export function ExportPdfDialog({ items, onClose }: { items: StudioItem[]; onClo
         {warnings.length > 0 && (
           <details className="pdf-readiness-warnings">
             <summary>
-              {t("exportPdf.readiness.summary", { count: warnings.length })}
+              {t(
+                warnings.length === 1 ? "exportPdf.readiness.summary" : "exportPdf.readiness.summaryPlural",
+                { count: warnings.length }
+              )}
             </summary>
             <ul>
               {warnings.map((w) => (

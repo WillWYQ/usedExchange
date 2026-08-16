@@ -1,4 +1,4 @@
-import type { StudioItem } from "../../scripts/lib/studioApi";
+import type { StudioItem } from "../studioApi";
 
 export type PdfReadinessFlag = "photos" | "description" | "price";
 
