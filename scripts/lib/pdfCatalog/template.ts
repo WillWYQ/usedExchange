@@ -198,7 +198,7 @@ export function buildTocHtml(groups: CategoryGroup[], t: UIStrings, pageNumbers:
       return `<div class="toc-group"><h3><a href="#${escapeHtml(catAnchor)}">${escapeHtml(group.displayName)}</a>${tocPageNumHtml(pageNumbers, catAnchor)}</h3><ul>${items}</ul></div>`;
     })
     .join("");
-  return `<section class="toc"><h1>${escapeHtml(t.pdfTocHeading)}</h1>${sections}</section>`;
+  return `<section class="toc" id="toc"><h1>${escapeHtml(t.pdfTocHeading)}</h1>${sections}</section>`;
 }
 
 export function buildCategorySectionHtml(group: CategoryGroup, t: UIStrings): string {
@@ -208,6 +208,7 @@ export function buildCategorySectionHtml(group: CategoryGroup, t: UIStrings): st
   const anchor = `cat-${group.slug}`;
   return `
     <section class="category-divider" id="${escapeHtml(anchor)}">
+      <a class="back-to-toc" href="#toc">← ${escapeHtml(t.pdfTocHeading)}</a>
       <h1>${escapeHtml(group.displayName)}</h1>
       ${description}
       <p class="category-divider-count">${escapeHtml(fmt(t.pdfCategoryItemCount, { count: group.items.length }))}</p>
@@ -219,6 +220,7 @@ export function buildItemHtml(
   baseUrl: string,
   strategy: PriceStrategy,
   t: UIStrings,
+  showBackToToc: boolean,
 ): string {
   const anchor = `item-${item.categorySlug}-${item.itemSlug}`;
   const liveUrl = `${baseUrl}/${item.categorySlug}/${item.itemSlug}`;
@@ -239,9 +241,11 @@ export function buildItemHtml(
     item.tags.length === 0
       ? ""
       : `<p class="item-tags">${item.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</p>`;
+  const backToToc = showBackToToc ? `<a class="back-to-toc" href="#toc">← ${escapeHtml(t.pdfTocHeading)}</a>` : "";
 
   return `
     <section class="item-page" id="${escapeHtml(anchor)}">
+      ${backToToc}
       <h2 class="item-title">${escapeHtml(item.name)} ${statusBadge}</h2>
       ${imageGrid}
       ${buildPriceHtml(item.price, strategy, t)}
@@ -277,7 +281,8 @@ h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; margin: 0 0 0.3em; 
 .category-divider h1 { font-size: 42px; color: var(--accent); }
 .category-description { color: var(--muted); font-size: 16px; max-width: 32em; margin-top: 16px; }
 .category-divider-count { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 16px; }
-.item-page { page-break-before: always; padding: 24px 8px; }
+.item-page { page-break-before: always; padding: 24px 8px; position: relative; }
+.back-to-toc { position: absolute; top: 8px; left: 8px; font-size: 11px; color: var(--accent); text-decoration: none; }
 .item-title { font-size: 24px; display: flex; align-items: center; gap: 10px; }
 .status-badge { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 10px; background: var(--line); color: var(--ink); }
 .item-images { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
@@ -332,7 +337,7 @@ export function buildFlyerHtml(
           <h1>${escapeHtml(branding.name)}</h1>
           <p class="flyer-tagline">${escapeHtml(branding.tagline)}</p>
         </div>
-        ${buildItemHtml(item, branding.baseUrl, strategy, t)}
+        ${buildItemHtml(item, branding.baseUrl, strategy, t, false)}
       </body>
     </html>`;
 }
@@ -351,7 +356,7 @@ export function buildFullCatalogHtml(
     buildTocHtml(groups, t, pageNumbers),
     ...groups.flatMap((group) => [
       buildCategorySectionHtml(group, t),
-      ...group.items.map((item) => buildItemHtml(item, branding.baseUrl, strategy, t)),
+      ...group.items.map((item) => buildItemHtml(item, branding.baseUrl, strategy, t, true)),
     ]),
   ].join("\n");
   return `<!doctype html><html><head><meta charset="utf-8" /><style>${CATALOG_CSS}</style></head><body>${body}</body></html>`;

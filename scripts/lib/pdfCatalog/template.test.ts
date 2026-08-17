@@ -104,7 +104,7 @@ describe("buildPriceHtml", () => {
 
 describe("buildItemHtml", () => {
   it("includes the item name, anchor id, and live link", () => {
-    const html = buildItemHtml(makeItem(), "https://example.com", "lowest", T_EN);
+    const html = buildItemHtml(makeItem(), "https://example.com", "lowest", T_EN, true);
     expect(html).toContain('id="item-electronics-desk-lamp"');
     expect(html).toContain("Desk Lamp");
     expect(html).toContain("https://example.com/electronics/desk-lamp");
@@ -112,20 +112,28 @@ describe("buildItemHtml", () => {
 
   it("never renders a reserved_for value even if smuggled onto the object", () => {
     const poisoned = { ...makeItem(), reserved_for: "Jane Buyer" } as unknown as ItemPdfView;
-    const html = buildItemHtml(poisoned, "https://example.com", "lowest", T_EN);
+    const html = buildItemHtml(poisoned, "https://example.com", "lowest", T_EN, true);
     expect(html).not.toContain("Jane Buyer");
   });
 
   it("omits the image grid when there are no images", () => {
-    const html = buildItemHtml(makeItem({ images: [], coverImage: null }), "https://example.com", "lowest", T_EN);
+    const html = buildItemHtml(makeItem({ images: [], coverImage: null }), "https://example.com", "lowest", T_EN, true);
     expect(html).not.toContain("item-images");
   });
 
   it("localizes the status badge and the generic Condition specs label", () => {
-    const html = buildItemHtml(makeItem({ status: "sold" }), "https://example.com", "lowest", T_ZH);
+    const html = buildItemHtml(makeItem({ status: "sold" }), "https://example.com", "lowest", T_ZH, true);
     expect(html).toContain("已售出");
-    const enHtml = buildItemHtml(makeItem(), "https://example.com", "lowest", T_EN);
+    const enHtml = buildItemHtml(makeItem(), "https://example.com", "lowest", T_EN, true);
     expect(enHtml).toContain(">Condition<");
+  });
+
+  it("shows a back-to-TOC link when showBackToToc is true, and omits it when false", () => {
+    const withLink = buildItemHtml(makeItem(), "https://example.com", "lowest", T_EN, true);
+    expect(withLink).toContain('href="#toc"');
+
+    const withoutLink = buildItemHtml(makeItem(), "https://example.com", "lowest", T_EN, false);
+    expect(withoutLink).not.toContain('href="#toc"');
   });
 });
 
@@ -166,6 +174,11 @@ describe("buildTocHtml", () => {
     expect(toc).toContain('<span class="toc-page-num">3</span>');
     expect(toc).toContain('<span class="toc-page-num"></span>');
   });
+
+  it("has an id matching the back-to-TOC links' target", () => {
+    const toc = buildTocHtml(groups, T_EN, null);
+    expect(toc).toContain('<section class="toc" id="toc">');
+  });
 });
 
 describe("buildCategorySectionHtml", () => {
@@ -194,6 +207,11 @@ describe("buildCategorySectionHtml", () => {
     // pdfCategoryItemCount falls back to EN_FALLBACK's English wording, which
     // is still the correct assertion for an untranslated key.
     expect(html).toContain("2 items in this category");
+  });
+
+  it("includes a back-to-TOC link", () => {
+    const html = buildCategorySectionHtml(group, T_EN);
+    expect(html).toContain('href="#toc"');
   });
 });
 
@@ -228,6 +246,7 @@ describe("buildFlyerHtml", () => {
     expect(html).not.toContain("Table of Contents");
     expect(html).not.toContain('class="cover"');
     expect(html).not.toContain('class="toc"');
+    expect(html).not.toContain('href="#toc"');
   });
 });
 
