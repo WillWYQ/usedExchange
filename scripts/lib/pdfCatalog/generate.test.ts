@@ -1,15 +1,21 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { describe, expect, it, vi } from "vitest";
+import { PDFDocument } from "pdf-lib";
 import * as loaderModule from "@/lib/content/loader";
 import type { Category, Item } from "@/lib/content/types";
+import { getTranslationsForLocale } from "@/lib/i18n/getTranslations";
 import {
   groupEligibleItems,
   generateCatalogPdf,
   generateFlyerPdf,
   prefetchImages,
+  launchChromiumOrError,
+  renderHtmlToPdfBytes,
   type PdfExportOptions,
 } from "./generate";
+import { buildFullCatalogHtml } from "./template";
+import { resolveAnchorPageNumbers } from "./resolvePageNumbers";
 
 // A minimal valid 1x1 transparent PNG — small enough to inline, but real
 // enough bytes for Chromium to decode and embed as an actual image XObject
@@ -385,6 +391,132 @@ describe("generateCatalogPdf embeds prefetched images", () => {
       mockLoadAllItemsRaw.mockRestore();
       mockLoadCategories.mockRestore();
       await close();
+    }
+  });
+});
+
+describe("generateCatalogPdf renders real TOC page numbers", () => {
+  it("resolves every item and category anchor to a real page in the final PDF", async () => {
+    const mockLoadAllItemsRaw = vi.spyOn(loaderModule, "loadAllItemsRaw").mockResolvedValue([
+      makeItem({ itemSlug: "a", name: "Item A" }),
+      makeItem({ itemSlug: "b", name: "Item B", categorySlug: "toys" }),
+    ]);
+    const mockLoadCategories = vi
+      .spyOn(loaderModule, "loadCategories")
+      .mockResolvedValue([makeCategory(), makeCategory({ slug: "toys", displayName: "Toys" })]);
+
+    try {
+      let chromiumAvailable = true;
+      const { chromium } = await import("playwright");
+      try {
+        const browser = await chromium.launch();
+        await browser.close();
+      } catch {
+        chromiumAvailable = false;
+      }
+      if (!chromiumAvailable) {
+        console.warn("Skipping: Chromium not installed. Run `npx playwright install chromium`.");
+        return;
+      }
+
+      const result = await generateCatalogPdf(baseOptions({ categories: ["electronics", "toys"] }));
+      expect("file" in result).toBe(true);
+      if (!("file" in result)) return;
+
+      const fs = await import("fs/promises");
+      const bytes = await fs.readFile(result.file);
+      const pageNumbers = await resolveAnchorPageNumbers(bytes, [
+        "cat-electronics",
+        "item-electronics-a",
+        "cat-toys",
+        "item-toys-b",
+      ]);
+      expect(pageNumbers.get("cat-electronics")).toBeGreaterThan(0);
+      expect(pageNumbers.get("item-electronics-a")).toBeGreaterThan(pageNumbers.get("cat-electronics")!);
+      expect(pageNumbers.get("cat-toys")).toBeGreaterThan(pageNumbers.get("item-electronics-a")!);
+      expect(pageNumbers.get("item-toys-b")).toBeGreaterThan(pageNumbers.get("cat-toys")!);
+
+      await fs.unlink(result.file);
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+      mockLoadCategories.mockRestore();
+    }
+  });
+});
+
+// Regression guard for the width-reservation technique buildTocHtml relies
+// on (see the design spec, §4): pass-1 (empty TOC number slots) and pass-2
+// (real numbers) must lay out to the same total page count, or the numbers
+// baked into pass-2's TOC would point at the wrong pages.
+describe("generateCatalogPdf pass-1/pass-2 page count parity", () => {
+  it("produces the same total page count whether or not the TOC shows real numbers", async () => {
+    const item = makeItem();
+    const mockLoadAllItemsRaw = vi.spyOn(loaderModule, "loadAllItemsRaw").mockResolvedValue([item]);
+    const mockLoadCategories = vi.spyOn(loaderModule, "loadCategories").mockResolvedValue([makeCategory()]);
+
+    try {
+      let chromiumAvailable = true;
+      const { chromium } = await import("playwright");
+      try {
+        const browser = await chromium.launch();
+        await browser.close();
+      } catch {
+        chromiumAvailable = false;
+      }
+      if (!chromiumAvailable) {
+        console.warn("Skipping: Chromium not installed. Run `npx playwright install chromium`.");
+        return;
+      }
+
+      const result = await generateCatalogPdf(baseOptions());
+      expect("file" in result).toBe(true);
+      if (!("file" in result)) return;
+
+      const fs = await import("fs/promises");
+      const finalBytes = await fs.readFile(result.file);
+      const finalPageCount = (await PDFDocument.load(finalBytes)).getPageCount();
+
+      const groups = groupEligibleItems(
+        [item],
+        [makeCategory()],
+        baseOptions().statuses,
+        baseOptions().categories,
+        "en",
+      );
+      const pass1Html = buildFullCatalogHtml(
+        { name: "x", tagline: "", logo: "", baseUrl: "https://example.com" },
+        groups,
+        "2026-08-16",
+        getTranslationsForLocale("en"),
+        "lowest",
+        null,
+      );
+      const launch = await launchChromiumOrError();
+      expect("browser" in launch).toBe(true);
+      if (!("browser" in launch)) return;
+      try {
+        const pass1 = await renderHtmlToPdfBytes(launch.browser, pass1Html, {
+          pdfOptions: {
+            format: "Letter",
+            displayHeaderFooter: true,
+            headerTemplate: "<div></div>",
+            footerTemplate: "<div></div>",
+            margin: { top: "20mm", bottom: "16mm", left: "14mm", right: "14mm" },
+          },
+          renderErrorMessage: "test render failed",
+        });
+        expect("bytes" in pass1).toBe(true);
+        if (!("bytes" in pass1)) return;
+        const pass1PageCount = (await PDFDocument.load(pass1.bytes)).getPageCount();
+        expect(pass1PageCount).toBe(finalPageCount);
+      } finally {
+        await launch.browser.close().catch(() => {});
+      }
+
+      await fs.unlink(result.file);
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+      mockLoadCategories.mockRestore();
     }
   });
 });

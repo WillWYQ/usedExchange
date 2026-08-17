@@ -14,6 +14,7 @@ import { getLocalizedField } from "../../../lib/utils/i18n";
 import { getTranslationsForLocale } from "../../../lib/i18n/getTranslations";
 import type { PriceStrategy } from "../../../lib/utils/pricing";
 import { buildFlyerHtml, buildFullCatalogHtml, escapeHtml, type CategoryGroup, type ItemPdfView } from "./template";
+import { resolveAnchorPageNumbers } from "./resolvePageNumbers";
 
 export type PdfExportOptions = {
   locale: string;
@@ -392,31 +393,47 @@ export async function generateCatalogPdf(
   // origin — page.setContent() has no origin of its own, so it must be made
   // absolute here or the <img> in the cover page would 404 silently.
   const logo = siteConfig.logo ? `${siteConfig.baseUrl}${siteConfig.logo}` : "";
-  const html = buildFullCatalogHtml(
-    { name: siteConfig.name, tagline: siteConfig.tagline, logo, baseUrl: siteConfig.baseUrl },
-    groups,
-    new Date().toISOString().slice(0, 10),
-    t,
-    options.priceStrategy,
-    null,
-  );
+  const branding = { name: siteConfig.name, tagline: siteConfig.tagline, logo, baseUrl: siteConfig.baseUrl };
+  const generatedAt = new Date().toISOString().slice(0, 10);
+
+  // Shared between both passes — the width-reservation technique
+  // buildTocHtml uses to keep pass-1/pass-2 pagination identical (see
+  // resolvePageNumbers.ts and the design spec, §4) depends on the page box
+  // being laid out identically in both renders, so this object must not
+  // differ between them.
+  const pdfOptions = {
+    format: "Letter" as const,
+    printBackground: true,
+    displayHeaderFooter: true,
+    headerTemplate: "<div></div>",
+    footerTemplate: `<div style="font-size:8px; width:100%; text-align:center; color:#888;">${escapeHtml(siteConfig.name)} · ${escapeHtml(t.pdfFooterPage)} <span class="pageNumber"></span> ${escapeHtml(t.pdfFooterOf)} <span class="totalPages"></span></div>`,
+    margin: { top: "20mm", bottom: "16mm", left: "14mm", right: "14mm" },
+  };
+  const renderErrorMessage =
+    "PDF rendering timed out or failed — the catalog may be too large (many items or photos). Try again, or retry after trimming a few item photos.";
 
   const launch = await launchChromiumOrError();
   if ("error" in launch) return launch;
   const { browser } = launch;
   try {
-    return await renderHtmlToPdf(browser, html, {
+    // Pass 1: TOC renders empty (but width-reserved) page-number slots — this
+    // PDF exists only to discover real pagination, and is discarded.
+    const pass1Html = buildFullCatalogHtml(branding, groups, generatedAt, t, options.priceStrategy, null);
+    const pass1 = await renderHtmlToPdfBytes(browser, pass1Html, { pdfOptions, renderErrorMessage });
+    if ("error" in pass1) return pass1;
+
+    const anchorIds = groups.flatMap((group) => [
+      `cat-${group.slug}`,
+      ...group.items.map((item) => `item-${item.categorySlug}-${item.itemSlug}`),
+    ]);
+    const pageNumbers = await resolveAnchorPageNumbers(pass1.bytes, anchorIds);
+
+    // Pass 2: the real download, with resolved numbers baked into the TOC.
+    const pass2Html = buildFullCatalogHtml(branding, groups, generatedAt, t, options.priceStrategy, pageNumbers);
+    return await renderHtmlToPdf(browser, pass2Html, {
       filenamePrefix: "usedexchange-catalog",
-      pdfOptions: {
-        format: "Letter",
-        printBackground: true,
-        displayHeaderFooter: true,
-        headerTemplate: "<div></div>",
-        footerTemplate: `<div style="font-size:8px; width:100%; text-align:center; color:#888;">${escapeHtml(siteConfig.name)} · ${escapeHtml(t.pdfFooterPage)} <span class="pageNumber"></span> ${escapeHtml(t.pdfFooterOf)} <span class="totalPages"></span></div>`,
-        margin: { top: "20mm", bottom: "16mm", left: "14mm", right: "14mm" },
-      },
-      renderErrorMessage:
-        "PDF rendering timed out or failed — the catalog may be too large (many items or photos). Try again, or retry after trimming a few item photos.",
+      pdfOptions,
+      renderErrorMessage,
     });
   } finally {
     await browser.close().catch(() => {});
