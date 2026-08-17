@@ -109,5 +109,6 @@ export const EN_FALLBACK: UIStrings = {
   pdfFooterPage: "Page",
   pdfFooterOf: "of",
   pdfAveragePriceLabel: "Highlighted price (average): {amount}",
+  pdfCategoryItemCount: "{count} items in this category",
   condition: "Condition",
 };

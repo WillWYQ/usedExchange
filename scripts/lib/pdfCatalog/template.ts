@@ -201,14 +201,16 @@ export function buildTocHtml(groups: CategoryGroup[], t: UIStrings, pageNumbers:
   return `<section class="toc"><h1>${escapeHtml(t.pdfTocHeading)}</h1>${sections}</section>`;
 }
 
-export function buildCategorySectionHtml(group: CategoryGroup): string {
+export function buildCategorySectionHtml(group: CategoryGroup, t: UIStrings): string {
   const description = group.description
     ? `<p class="category-description">${escapeHtml(group.description)}</p>`
     : "";
+  const anchor = `cat-${group.slug}`;
   return `
-    <section class="category-divider">
+    <section class="category-divider" id="${escapeHtml(anchor)}">
       <h1>${escapeHtml(group.displayName)}</h1>
       ${description}
+      <p class="category-divider-count">${escapeHtml(fmt(t.pdfCategoryItemCount, { count: group.items.length }))}</p>
     </section>`;
 }
 
@@ -271,9 +273,10 @@ h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; margin: 0 0 0.3em; 
 .toc-group li { padding: 2px 0; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .toc-group a { color: var(--ink); text-decoration: none; }
 .toc-page-num { display: inline-block; min-width: 2.4em; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; flex-shrink: 0; }
-.category-divider { page-break-before: always; padding: 60px 8px 24px; border-bottom: 1px solid var(--line); }
-.category-divider h1 { font-size: 30px; color: var(--accent); }
-.category-description { color: var(--muted); }
+.category-divider { page-break-before: always; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 60px 40px; position: relative; }
+.category-divider h1 { font-size: 42px; color: var(--accent); }
+.category-description { color: var(--muted); font-size: 16px; max-width: 32em; margin-top: 16px; }
+.category-divider-count { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 16px; }
 .item-page { page-break-before: always; padding: 24px 8px; }
 .item-title { font-size: 24px; display: flex; align-items: center; gap: 10px; }
 .status-badge { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 10px; background: var(--line); color: var(--ink); }
@@ -347,7 +350,7 @@ export function buildFullCatalogHtml(
     buildCoverHtml(branding, itemCount, groups.length, generatedAt, t),
     buildTocHtml(groups, t, pageNumbers),
     ...groups.flatMap((group) => [
-      buildCategorySectionHtml(group),
+      buildCategorySectionHtml(group, t),
       ...group.items.map((item) => buildItemHtml(item, branding.baseUrl, strategy, t)),
     ]),
   ].join("\n");

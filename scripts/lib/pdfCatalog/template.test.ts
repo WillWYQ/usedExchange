@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCoverHtml,
   buildTocHtml,
+  buildCategorySectionHtml,
   buildItemHtml,
   buildFullCatalogHtml,
   buildFlyerHtml,
@@ -164,6 +165,35 @@ describe("buildTocHtml", () => {
     const toc = buildTocHtml(groups, T_EN, pageNumbers);
     expect(toc).toContain('<span class="toc-page-num">3</span>');
     expect(toc).toContain('<span class="toc-page-num"></span>');
+  });
+});
+
+describe("buildCategorySectionHtml", () => {
+  const group: CategoryGroup = {
+    slug: "electronics",
+    displayName: "Electronics",
+    description: "Gadgets and gear.",
+    items: [makeItem(), makeItem({ itemSlug: "second-item" })],
+  };
+
+  it("gets an id matching the TOC's category anchor", () => {
+    const html = buildCategorySectionHtml(group, T_EN);
+    expect(html).toContain('id="cat-electronics"');
+  });
+
+  it("shows the category name, description, and item count", () => {
+    const html = buildCategorySectionHtml(group, T_EN);
+    expect(html).toContain("Electronics");
+    expect(html).toContain("Gadgets and gear.");
+    expect(html).toContain("2 items in this category");
+  });
+
+  it("localizes the item-count line", () => {
+    const html = buildCategorySectionHtml(group, T_ZH);
+    // T_ZH in this file only overrides a few keys (see the top of this file);
+    // pdfCategoryItemCount falls back to EN_FALLBACK's English wording, which
+    // is still the correct assertion for an untranslated key.
+    expect(html).toContain("2 items in this category");
   });
 });
 
