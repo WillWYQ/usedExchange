@@ -407,6 +407,7 @@ export async function generateCatalogPdf(
     new Date().toISOString().slice(0, 10),
     t,
     options.priceStrategy,
+    null,
   );
 
   return renderHtmlToPdf(html, {

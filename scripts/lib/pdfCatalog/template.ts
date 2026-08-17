@@ -180,16 +180,22 @@ export function buildCoverHtml(
     </section>`;
 }
 
-export function buildTocHtml(groups: CategoryGroup[], t: UIStrings): string {
+function tocPageNumHtml(pageNumbers: Map<string, number> | null, anchorId: string): string {
+  const value = pageNumbers?.get(anchorId);
+  return `<span class="toc-page-num">${value !== undefined ? value : ""}</span>`;
+}
+
+export function buildTocHtml(groups: CategoryGroup[], t: UIStrings, pageNumbers: Map<string, number> | null): string {
   const sections = groups
     .map((group) => {
+      const catAnchor = `cat-${group.slug}`;
       const items = group.items
-        .map(
-          (item) =>
-            `<li><a href="#item-${escapeHtml(item.categorySlug)}-${escapeHtml(item.itemSlug)}">${escapeHtml(item.name)}</a></li>`,
-        )
+        .map((item) => {
+          const itemAnchor = `item-${item.categorySlug}-${item.itemSlug}`;
+          return `<li><a href="#${escapeHtml(itemAnchor)}">${escapeHtml(item.name)}</a>${tocPageNumHtml(pageNumbers, itemAnchor)}</li>`;
+        })
         .join("");
-      return `<div class="toc-group"><h3>${escapeHtml(group.displayName)}</h3><ul>${items}</ul></div>`;
+      return `<div class="toc-group"><h3><a href="#${escapeHtml(catAnchor)}">${escapeHtml(group.displayName)}</a>${tocPageNumHtml(pageNumbers, catAnchor)}</h3><ul>${items}</ul></div>`;
     })
     .join("");
   return `<section class="toc"><h1>${escapeHtml(t.pdfTocHeading)}</h1>${sections}</section>`;
@@ -260,10 +266,11 @@ h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; margin: 0 0 0.3em; 
 .cover-meta { color: var(--muted); font-size: 13px; }
 .toc { page-break-after: always; padding: 24px 8px; }
 .toc h1 { font-size: 26px; border-bottom: 2px solid var(--accent); padding-bottom: 8px; }
-.toc-group h3 { color: var(--accent); margin-top: 20px; font-size: 16px; }
+.toc-group h3 { color: var(--accent); margin-top: 20px; font-size: 16px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .toc-group ul { list-style: none; margin: 4px 0; padding: 0; }
-.toc-group li { padding: 2px 0; }
+.toc-group li { padding: 2px 0; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .toc-group a { color: var(--ink); text-decoration: none; }
+.toc-page-num { display: inline-block; min-width: 2.4em; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; flex-shrink: 0; }
 .category-divider { page-break-before: always; padding: 60px 8px 24px; border-bottom: 1px solid var(--line); }
 .category-divider h1 { font-size: 30px; color: var(--accent); }
 .category-description { color: var(--muted); }
@@ -333,11 +340,12 @@ export function buildFullCatalogHtml(
   generatedAt: string,
   t: UIStrings,
   strategy: PriceStrategy,
+  pageNumbers: Map<string, number> | null,
 ): string {
   const itemCount = groups.reduce((sum, g) => sum + g.items.length, 0);
   const body = [
     buildCoverHtml(branding, itemCount, groups.length, generatedAt, t),
-    buildTocHtml(groups, t),
+    buildTocHtml(groups, t, pageNumbers),
     ...groups.flatMap((group) => [
       buildCategorySectionHtml(group),
       ...group.items.map((item) => buildItemHtml(item, branding.baseUrl, strategy, t)),

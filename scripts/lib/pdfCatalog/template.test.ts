@@ -129,13 +129,41 @@ describe("buildItemHtml", () => {
 });
 
 describe("buildTocHtml", () => {
+  const groups: CategoryGroup[] = [
+    { slug: "electronics", displayName: "Electronics", description: "", items: [makeItem()] },
+  ];
+
   it("links each entry to its matching item anchor and localizes the heading", () => {
-    const groups: CategoryGroup[] = [
-      { slug: "electronics", displayName: "Electronics", description: "", items: [makeItem()] },
-    ];
-    const toc = buildTocHtml(groups, T_ZH);
+    const toc = buildTocHtml(groups, T_ZH, null);
     expect(toc).toContain('href="#item-electronics-desk-lamp"');
     expect(toc).toContain("目錄");
+  });
+
+  it("links the category header to its own anchor", () => {
+    const toc = buildTocHtml(groups, T_EN, null);
+    expect(toc).toContain('href="#cat-electronics"');
+  });
+
+  it("renders empty page-number placeholders when pageNumbers is null", () => {
+    const toc = buildTocHtml(groups, T_EN, null);
+    expect(toc).toContain('<span class="toc-page-num"></span>');
+  });
+
+  it("renders real page numbers for both items and category headers when provided", () => {
+    const pageNumbers = new Map([
+      ["cat-electronics", 3],
+      ["item-electronics-desk-lamp", 5],
+    ]);
+    const toc = buildTocHtml(groups, T_EN, pageNumbers);
+    expect(toc).toContain('<span class="toc-page-num">3</span>');
+    expect(toc).toContain('<span class="toc-page-num">5</span>');
+  });
+
+  it("renders an empty placeholder for an anchor missing from a non-null map", () => {
+    const pageNumbers = new Map([["cat-electronics", 3]]); // item entry deliberately omitted
+    const toc = buildTocHtml(groups, T_EN, pageNumbers);
+    expect(toc).toContain('<span class="toc-page-num">3</span>');
+    expect(toc).toContain('<span class="toc-page-num"></span>');
   });
 });
 
@@ -179,7 +207,7 @@ describe("buildFullCatalogHtml", () => {
     const groups: CategoryGroup[] = [
       { slug: "electronics", displayName: "Electronics", description: "", items: [makeItem()] },
     ];
-    const html = buildFullCatalogHtml(branding, groups, "2026-08-13", T_EN, "lowest");
+    const html = buildFullCatalogHtml(branding, groups, "2026-08-13", T_EN, "lowest", null);
     const coverIdx = html.indexOf("Full Listing Catalog");
     const tocIdx = html.indexOf("Table of Contents");
     const dividerIdx = html.indexOf('class="category-divider"');
