@@ -251,11 +251,12 @@ describe("buildFlyerHtml", () => {
 });
 
 describe("buildFullCatalogHtml", () => {
+  const branding: SiteBranding = { name: "UsedExchange", tagline: "", logo: "", baseUrl: "https://example.com" };
+  const groups: CategoryGroup[] = [
+    { slug: "electronics", displayName: "Electronics", description: "", items: [makeItem()] },
+  ];
+
   it("assembles cover, toc, category divider, and item sections in order", () => {
-    const branding: SiteBranding = { name: "UsedExchange", tagline: "", logo: "", baseUrl: "https://example.com" };
-    const groups: CategoryGroup[] = [
-      { slug: "electronics", displayName: "Electronics", description: "", items: [makeItem()] },
-    ];
     const html = buildFullCatalogHtml(branding, groups, "2026-08-13", T_EN, "lowest", null);
     const coverIdx = html.indexOf("Full Listing Catalog");
     const tocIdx = html.indexOf("Table of Contents");
@@ -265,5 +266,27 @@ describe("buildFullCatalogHtml", () => {
     expect(coverIdx).toBeLessThan(tocIdx);
     expect(tocIdx).toBeLessThan(dividerIdx);
     expect(dividerIdx).toBeLessThan(itemIdx);
+  });
+
+  it("embeds resolved page numbers into the TOC when a pageNumbers map is provided", () => {
+    const pageNumbers = new Map([
+      ["cat-electronics", 2],
+      ["item-electronics-desk-lamp", 3],
+    ]);
+    const html = buildFullCatalogHtml(branding, groups, "2026-08-13", T_EN, "lowest", pageNumbers);
+    expect(html).toContain('<span class="toc-page-num">2</span>');
+    expect(html).toContain('<span class="toc-page-num">3</span>');
+  });
+
+  it("gives every item page and category divider a back-to-TOC link, and the TOC section a matching id", () => {
+    const html = buildFullCatalogHtml(branding, groups, "2026-08-13", T_EN, "lowest", null);
+    expect(html).toContain('id="toc"');
+    const backLinkCount = html.split('href="#toc"').length - 1;
+    expect(backLinkCount).toBe(2); // one category divider + one item page
+  });
+
+  it("shows the category's item count on its divider", () => {
+    const html = buildFullCatalogHtml(branding, groups, "2026-08-13", T_EN, "lowest", null);
+    expect(html).toContain("1 items in this category");
   });
 });
