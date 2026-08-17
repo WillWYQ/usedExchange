@@ -41,7 +41,7 @@ import {
   readDefaultsFile,
   validateDefaults,
 } from "./itemDefaults";
-import { generateCatalogPdf, generateFlyerPdf } from "./pdfCatalog/generate";
+import { generateCatalogPdf, generateFlyerPdf, type PdfExportOptions } from "./pdfCatalog/generate";
 import { buildReadinessReport } from "./siteReadiness";
 // assertEditableValue, directly: handleItemPatch needs to validate a
 // COMPOSED tier object (built up from several leaf edits in the same batch)
@@ -1335,8 +1335,19 @@ async function handlePublish(req: StudioRequest): Promise<StudioResponse> {
   }
 }
 
-async function handleExportPdf(): Promise<StudioResponse> {
-  const result = await generateCatalogPdf();
+const exportPdfBodySchema = z.object({
+  locale: z.string(),
+  priceStrategy: z.enum(["lowest", "highest", "pickup", "shipping", "average"]),
+  categories: z.array(z.string()),
+  statuses: z.array(z.enum(["available", "pending", "reserved", "sold", "draft"])),
+});
+
+async function handleExportPdf(req: StudioRequest): Promise<StudioResponse> {
+  const options: PdfExportOptions = parseJsonBody(req.body, exportPdfBodySchema);
+  if (!siteConfig.i18n.availableLocales.includes(options.locale)) {
+    throw new StudioError(400, `locale "${options.locale}" is not in siteConfig.i18n.availableLocales`);
+  }
+  const result = await generateCatalogPdf(options);
   if ("error" in result) {
     return { status: 400, body: { error: result.error } };
   }
@@ -1569,7 +1580,7 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
       if (req.method !== "POST") {
         return { status: 405, body: { error: "POST only" } };
       }
-      return await handleExportPdf();
+      return await handleExportPdf(req);
     }
 
     if (pathname === "/api/export-pdf/flyer") {

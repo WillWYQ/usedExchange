@@ -13,7 +13,8 @@ import { existsSync, mkdirSync, readdirSync } from "fs";
 import path from "path";
 import * as readline from "readline";
 import { loadAllItemsRaw } from "@/lib/content/loader";
-import type { Item, PriceTier } from "@/lib/content/types";
+import type { Item } from "@/lib/content/types";
+import { resolvePriceByStrategy, type PriceStrategy } from "@/lib/utils/pricing";
 import { mapToFBCategory } from "./lib/fbCategoryMap";
 import {
   loadHistory,
@@ -58,38 +59,6 @@ const CONDITION_MAP: Record<string, string> = {
   fair: "Used - Fair",
   "for-parts": "Used - Fair", // FB has no "For Parts" option
 };
-
-// ── Price strategy ─────────────────────────────────────────────────────────────
-
-/**
- * Strategies:
- *   "lowest"   — cheapest tier across all tiers (good default, reflects pickup price)
- *   "highest"  — most expensive tier (reflects shipping price)
- *   "pickup"   — lowest-amount tier that has a miles_max (local-only tier); falls back to lowest
- *   "shipping" — lowest-amount tier that has NO miles_max (open-ended tier); falls back to highest
- */
-type PriceStrategy = "lowest" | "highest" | "pickup" | "shipping";
-
-function resolvePrice(tiers: PriceTier[], strategy: PriceStrategy): number | null {
-  if (!tiers.length) return null;
-  if (strategy === "lowest") return Math.min(...tiers.map((t) => t.amount));
-  if (strategy === "highest") return Math.max(...tiers.map((t) => t.amount));
-  if (strategy === "pickup") {
-    const pickupTiers = tiers.filter((t) => t.miles_max !== undefined);
-    return pickupTiers.length
-      ? Math.min(...pickupTiers.map((t) => t.amount))
-      : Math.min(...tiers.map((t) => t.amount));
-  }
-  // "shipping"
-  const shippingTiers = tiers.filter((t) => t.miles_max === undefined);
-  return shippingTiers.length
-    ? Math.min(...shippingTiers.map((t) => t.amount))
-    : Math.max(...tiers.map((t) => t.amount));
-}
-
-function priceStrategyLabel(strategy: PriceStrategy): string {
-  return strategy;
-}
 
 // ── Shipping helpers ───────────────────────────────────────────────────────────
 
@@ -137,7 +106,7 @@ function publicImages(item: Item): string[] {
 }
 
 function buildRow(item: Item, strategy: PriceStrategy, photoCount: number): string[] {
-  const price = resolvePrice(item.price.tiers, strategy);
+  const price = resolvePriceByStrategy(item.price.tiers, strategy)?.amount ?? null;
 
   let shippingWeight = "";
   if (item.weight && hasShippingTier(item)) {
@@ -393,7 +362,7 @@ async function stepSelectItems(items: Item[]): Promise<Item[]> {
       console.log(`  ${slug.toUpperCase()}`);
       for (const item of catItems) {
         flat.push(item);
-        const price = resolvePrice(item.price.tiers, "lowest");
+        const price = resolvePriceByStrategy(item.price.tiers, "lowest")?.amount ?? null;
         const priceStr = price !== null ? `$${price}` : "—  ";
         console.log(
           `  [${String(flat.length).padStart(2)}] ${item.name.slice(0, 44).padEnd(45)} ${priceStr}`,
@@ -438,6 +407,7 @@ async function stepPriceStrategy(items: Item[]): Promise<PriceStrategy> {
   console.log("  [2]  Highest price across all tiers");
   if (pickup)   console.log("  [3]  Local pickup price  (miles-limited tiers only)");
   if (shipping) console.log("  [4]  Shipping price  (open-ended tiers only)");
+  console.log("  [5]  Average of lowest & highest price across all tiers");
   console.log();
   console.log("  Items with no matching tier fall back to lowest / highest respectively.");
 
@@ -446,6 +416,7 @@ async function stepPriceStrategy(items: Item[]): Promise<PriceStrategy> {
   if (choice === "2") return "highest";
   if (choice === "3" && pickup)   return "pickup";
   if (choice === "4" && shipping) return "shipping";
+  if (choice === "5") return "average";
   return "lowest";
 }
 
@@ -565,13 +536,13 @@ async function main(): Promise<void> {
   // Persist this run to history
   const run: ExportRun = {
     exportedAt: new Date().toISOString(),
-    priceStrategy: priceStrategyLabel(priceStrategy),
+    priceStrategy,
     itemCount: selected.length,
     files: writtenFiles,
     items: selected.map((item) => ({
       slug: itemSlug(item),
       name: item.name,
-      price: resolvePrice(item.price.tiers, priceStrategy),
+      price: resolvePriceByStrategy(item.price.tiers, priceStrategy)?.amount ?? null,
     })),
   };
   await appendRun(run);

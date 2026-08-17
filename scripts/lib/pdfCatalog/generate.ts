@@ -8,10 +8,27 @@ import { pathToFileURL } from "node:url";
 // comment on renderHtmlToPdf below for why that matters.
 import type { Page } from "playwright";
 import { loadAllItemsRaw, loadCategories } from "../../../lib/content/loader";
-import type { Category, Item } from "../../../lib/content/types";
+import type { Category, Item, Status } from "../../../lib/content/types";
 import { siteConfig } from "../../../content/config";
+import { getLocalizedField } from "../../../lib/utils/i18n";
+import { getTranslationsForLocale } from "../../../lib/i18n/getTranslations";
+import type { PriceStrategy } from "../../../lib/utils/pricing";
 import { buildFlyerHtml, buildFullCatalogHtml, escapeHtml, type CategoryGroup, type ItemPdfView } from "./template";
 
+export type PdfExportOptions = {
+  locale: string;
+  priceStrategy: PriceStrategy;
+  /** Category slugs to include. */
+  categories: string[];
+  /** Statuses to include. */
+  statuses: Status[];
+};
+
+// generateFlyerPdf has no language selector in the UI (unlike the catalog
+// export dialog's PdfExportOptions.locale), so a single item's "is this
+// exportable at all" check stays independent of any locale/category/status
+// filter set — the same three statuses that were always eligible before
+// PdfExportOptions existed.
 const EXPORTABLE_STATUSES = new Set(["available", "pending", "reserved"]);
 
 // page.pdf() has no `timeout` option of its own (unlike setContent(), which
@@ -178,12 +195,12 @@ export async function prefetchImages(html: string): Promise<PrefetchResult> {
   }
 }
 
-function toItemPdfView(item: Item): ItemPdfView {
+function toItemPdfView(item: Item, locale: string): ItemPdfView {
   return {
     categorySlug: item.categorySlug,
     itemSlug: item.itemSlug,
-    name: item.name,
-    description: item.description,
+    name: getLocalizedField(item, "name", locale),
+    description: getLocalizedField(item, "description", locale),
     condition: item.condition,
     status: item.status,
     price: item.price,
@@ -200,8 +217,16 @@ function toItemPdfView(item: Item): ItemPdfView {
 }
 
 // Exported for unit testing without touching Playwright/Chromium at all.
-export function groupEligibleItems(items: Item[], categories: Category[]): CategoryGroup[] {
-  const eligible = items.filter((i) => EXPORTABLE_STATUSES.has(i.status));
+export function groupEligibleItems(
+  items: Item[],
+  categories: Category[],
+  statuses: Status[],
+  includedCategorySlugs: string[],
+  locale: string,
+): CategoryGroup[] {
+  const statusSet = new Set(statuses);
+  const categorySet = new Set(includedCategorySlugs);
+  const eligible = items.filter((i) => statusSet.has(i.status) && categorySet.has(i.categorySlug));
 
   const byCategory = new Map<string, Item[]>();
   for (const item of eligible) {
@@ -223,7 +248,7 @@ export function groupEligibleItems(items: Item[], categories: Category[]): Categ
         slug: c.slug,
         displayName: c.displayName,
         description: c.description,
-        items: catItems.map(toItemPdfView),
+        items: catItems.map((item) => toItemPdfView(item, locale)),
       };
     });
 }
@@ -355,18 +380,22 @@ async function renderHtmlToPdf(
   }
 }
 
-// Takes no parameters — unlike the design spec's original
+// Takes only `options` — unlike the design spec's original
 // `generateCatalogPdf(projectRoot: string)` sketch — because
 // loadAllItemsRaw()/loadCategories() always resolve content/ from
 // process.cwd(), and Studio's server process cwd and req.projectRoot
 // coincide (see the "Note:" comment on listStudioItems in studioApi.ts for
 // the established precedent of documenting this same fact).
-export async function generateCatalogPdf(): Promise<{ file: string } | { error: string }> {
+export async function generateCatalogPdf(
+  options: PdfExportOptions,
+): Promise<{ file: string } | { error: string }> {
   const [items, categories] = await Promise.all([loadAllItemsRaw(), loadCategories()]);
-  const groups = groupEligibleItems(items, categories);
+  const groups = groupEligibleItems(items, categories, options.statuses, options.categories, options.locale);
   if (groups.length === 0) {
-    return { error: "No public-visible items to export." };
+    return { error: "No items match the selected filters." };
   }
+
+  const t = getTranslationsForLocale(options.locale);
 
   // Logo is a public/ path (e.g. "/logo.svg") the live site serves at its own
   // origin — page.setContent() has no origin of its own, so it must be made
@@ -376,6 +405,8 @@ export async function generateCatalogPdf(): Promise<{ file: string } | { error: 
     { name: siteConfig.name, tagline: siteConfig.tagline, logo, baseUrl: siteConfig.baseUrl },
     groups,
     new Date().toISOString().slice(0, 10),
+    t,
+    options.priceStrategy,
   );
 
   return renderHtmlToPdf(html, {
@@ -385,7 +416,7 @@ export async function generateCatalogPdf(): Promise<{ file: string } | { error: 
       printBackground: true,
       displayHeaderFooter: true,
       headerTemplate: "<div></div>",
-      footerTemplate: `<div style="font-size:8px; width:100%; text-align:center; color:#888;">${escapeHtml(siteConfig.name)} · Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>`,
+      footerTemplate: `<div style="font-size:8px; width:100%; text-align:center; color:#888;">${escapeHtml(siteConfig.name)} · ${escapeHtml(t.pdfFooterPage)} <span class="pageNumber"></span> ${escapeHtml(t.pdfFooterOf)} <span class="totalPages"></span></div>`,
       margin: { top: "20mm", bottom: "16mm", left: "14mm", right: "14mm" },
     },
     renderErrorMessage:
@@ -414,12 +445,17 @@ export async function generateFlyerPdf(itemId: string): Promise<{ file: string }
   // origin — page.setContent() has no origin of its own, so it must be made
   // absolute here, exactly as generateCatalogPdf does above.
   const logo = siteConfig.logo ? `${siteConfig.baseUrl}${siteConfig.logo}` : "";
-  const html = buildFlyerHtml(toItemPdfView(item), {
-    name: siteConfig.name,
-    tagline: siteConfig.tagline,
-    logo,
-    baseUrl: siteConfig.baseUrl,
-  });
+  // No language or price-strategy selector for a single-item flyer (unlike
+  // the catalog export dialog's PdfExportOptions) — render it in the site's
+  // own default locale and "lowest" price, same as the live storefront's
+  // default rendering.
+  const locale = siteConfig.i18n.defaultLocale;
+  const html = buildFlyerHtml(
+    toItemPdfView(item, locale),
+    { name: siteConfig.name, tagline: siteConfig.tagline, logo, baseUrl: siteConfig.baseUrl },
+    "lowest",
+    getTranslationsForLocale(locale),
+  );
 
   return renderHtmlToPdf(html, {
     filenamePrefix: `usedexchange-flyer-${itemId.replace(/\//g, "-")}`,

@@ -2491,7 +2491,7 @@ Seller Studio（`pnpm studio`）是一个**仅本地**的浏览器仪表板，�
 | `POST /api/sync-images` | 启动 CDN 同步；返回 **SSE** 进度流（`progress`/`done`/`error`）。 |
 | `GET /api/changes` | 供发布面板使用的 git 状态（未提交更改）。 |
 | `POST /api/publish` | `git add content + manifest`、提交、推送。同步运行时被拒绝（409）。 |
-| `POST /api/export-pdf` | 通过 headless Chromium 生成合并目录 PDF 并以 `application/pdf` 形式返回；当没有可导出商品或未安装 Chromium 时返回 `400` 及 `{ error }`。 |
+| `POST /api/export-pdf` | 通过 headless Chromium 生成合并目录 PDF 并以 `application/pdf` 形式返回。请求体：`{ locale, priceStrategy, categories, statuses }` —— `priceStrategy` 为 `lowest`/`highest`/`pickup`/`shipping`/`average` 之一；`statuses` 可为 5 种 `Status` 值的任意子集；`categories` 为任意分类 slug 列表。当请求体校验失败（`priceStrategy`/`status` 非法或 `locale` 不在可用语言列表中）、过滤后没有可导出商品、或未安装 Chromium 时返回 `400` 及 `{ error }`。 |
 
 路由正则匹配原始百分号编码路径，并在匹配**之后**逐段解码（防遍历）。
 

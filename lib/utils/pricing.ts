@@ -55,3 +55,59 @@ function openEndedOrHighest(tiers: PriceTier[]): PriceTier | null {
   }
   return best;
 }
+
+export type PriceStrategy = "lowest" | "highest" | "pickup" | "shipping" | "average";
+export type ResolvedStrategyPrice = { amount: number; tier: PriceTier | null };
+
+// Shared by pnpm fb-export (scripts/export-facebook.ts) and Seller Studio's
+// PDF exporter (scripts/lib/pdfCatalog/) so "lowest"/"highest"/"pickup"/
+// "shipping" can never disagree between the two tools. "average" is the odd
+// one out: unlike the other four, it is a literal (min+max)/2 computed
+// number that generally matches no tier the seller actually authored — so it
+// returns `tier: null` rather than a real PriceTier.
+export function resolvePriceByStrategy(
+  tiers: PriceTier[],
+  strategy: PriceStrategy,
+): ResolvedStrategyPrice | null {
+  if (!tiers.length) return null;
+
+  if (strategy === "average") {
+    const amounts = tiers.map((t) => t.amount);
+    const amount = (Math.min(...amounts) + Math.max(...amounts)) / 2;
+    return { amount, tier: null };
+  }
+
+  const resolvedTier = resolveTierByStrategy(tiers, strategy);
+  return resolvedTier ? { amount: resolvedTier.amount, tier: resolvedTier } : null;
+}
+
+function resolveTierByStrategy(
+  tiers: PriceTier[],
+  strategy: "lowest" | "highest" | "pickup" | "shipping",
+): PriceTier | null {
+  if (strategy === "lowest") return minByAmount(tiers);
+  if (strategy === "highest") return maxByAmount(tiers);
+  if (strategy === "pickup") {
+    const pickupTiers = tiers.filter((t) => t.miles_max !== undefined);
+    return minByAmount(pickupTiers.length ? pickupTiers : tiers);
+  }
+  // "shipping"
+  const shippingTiers = tiers.filter((t) => t.miles_max === undefined);
+  return shippingTiers.length ? minByAmount(shippingTiers) : maxByAmount(tiers);
+}
+
+function minByAmount(tiers: PriceTier[]): PriceTier | null {
+  let best: PriceTier | null = null;
+  for (const t of tiers) {
+    if (!best || t.amount < best.amount) best = t;
+  }
+  return best;
+}
+
+function maxByAmount(tiers: PriceTier[]): PriceTier | null {
+  let best: PriceTier | null = null;
+  for (const t of tiers) {
+    if (!best || t.amount > best.amount) best = t;
+  }
+  return best;
+}

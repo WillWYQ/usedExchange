@@ -266,4 +266,15 @@ export type UIStrings = {
   newlyListedThisWeek: string;
   newlyListedFirstVisit: string;
   newlyListedNoneInPeriod: string;
+
+  // Catalog PDF export chrome (Seller Studio, scripts/lib/pdfCatalog/template.ts)
+  pdfTocHeading: string;
+  pdfCoverHeading: string;
+  pdfCoverMeta: string;
+  pdfGeneratedOn: string;
+  pdfViewLiveListing: string;
+  pdfFooterPage: string;
+  pdfFooterOf: string;
+  pdfAveragePriceLabel: string;
+  condition: string;
 };

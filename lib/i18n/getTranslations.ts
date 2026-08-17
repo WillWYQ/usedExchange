@@ -14,3 +14,14 @@ export function getTranslations(): UIStrings {
   const defaultDict = translations[defaultLocale] ?? {};
   return { ...EN_FALLBACK, ...defaultDict };
 }
+
+// Same merge order as useT() (components/i18n/useT.ts), parameterized by an
+// explicit locale instead of React context — for callers that know exactly
+// which locale they want (e.g. a batch PDF export) rather than rendering for
+// "whichever locale this visitor has selected."
+export function getTranslationsForLocale(locale: string): UIStrings {
+  const { defaultLocale, translations } = siteConfig.i18n;
+  const defaultDict = translations[defaultLocale] ?? {};
+  const activeDict = locale !== defaultLocale ? (translations[locale] ?? {}) : {};
+  return { ...EN_FALLBACK, ...defaultDict, ...activeDict };
+}
