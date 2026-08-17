@@ -21,6 +21,7 @@ function item(over: Partial<StudioItem> & { id: string }): StudioItem {
     localizedNames: { en: "Item" },
     tags: [],
     listedDate: "2026-01-01",
+    description: "A test item",
     ...over,
   };
 }

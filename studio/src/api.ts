@@ -416,6 +416,19 @@ export async function exportCatalogPdf(options: PdfExportOptions): Promise<Blob>
   return res.blob();
 }
 
+export async function exportItemFlyerPdf(id: string): Promise<Blob> {
+  const res = await fetch("/api/export-pdf/flyer", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) {
+    const body = await readJsonBody(res);
+    throw new Error(errorMessage(body, `Flyer export failed with ${res.status} ${res.statusText}`));
+  }
+  return res.blob();
+}
+
 export type SyncEvent =
   | { event: "progress"; data: { type: string; total?: number; completed?: number; manifestKey?: string } }
   | {

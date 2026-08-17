@@ -2395,6 +2395,83 @@ describe("POST /api/export-pdf", () => {
   });
 });
 
+describe("POST /api/export-pdf/flyer", () => {
+  it("returns 400 with a clear message when the item id is not found", async () => {
+    const mockLoadAllItemsRaw = vi.spyOn(loaderModule, "loadAllItemsRaw").mockResolvedValue([]);
+
+    try {
+      const res = await handleStudioRequest({
+        method: "POST",
+        url: "/api/export-pdf/flyer",
+        body: Buffer.from(JSON.stringify({ id: "electronics/no-such-item" })),
+        projectRoot: PROJECT_ROOT,
+      });
+
+      expect(res.status).toBe(400);
+      expect(asJson(res).body).toEqual({ error: 'Item "electronics/no-such-item" not found.' });
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+    }
+  });
+
+  it("400s a malformed body missing the item id", async () => {
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/export-pdf/flyer",
+      body: Buffer.from("{}"),
+      projectRoot: PROJECT_ROOT,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns a PDF file response for a real local item", async () => {
+    const { chromium } = await import("playwright");
+    let chromiumAvailable = true;
+    try {
+      const browser = await chromium.launch();
+      await browser.close();
+    } catch {
+      chromiumAvailable = false;
+    }
+    if (!chromiumAvailable) {
+      console.warn("Skipping: Chromium not installed. Run `npx playwright install chromium`.");
+      return;
+    }
+
+    const items = await loaderModule.loadAllItemsRaw();
+    const eligible = items.find((i) => ["available", "pending", "reserved"].includes(i.status));
+    if (eligible === undefined) {
+      console.warn("Skipping: no eligible local item to export as a flyer.");
+      return;
+    }
+
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/export-pdf/flyer",
+      body: Buffer.from(JSON.stringify({ id: `${eligible.categorySlug}/${eligible.itemSlug}` })),
+      projectRoot: PROJECT_ROOT,
+    });
+
+    expect(res.status).toBe(200);
+    expect(isFileResponse(res)).toBe(true);
+    if (isFileResponse(res)) {
+      expect(res.contentType).toBe("application/pdf");
+      expect(res.file.endsWith(".pdf")).toBe(true);
+      await fs.unlink(res.file);
+    }
+  });
+
+  it("rejects non-POST methods", async () => {
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/export-pdf/flyer",
+      body: Buffer.alloc(0),
+      projectRoot: PROJECT_ROOT,
+    });
+    expect(res.status).toBe(405);
+  });
+});
+
 describe("GET /api/categories", () => {
   let tempProjects: string[] = [];
   afterEach(async () => {

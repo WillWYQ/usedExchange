@@ -41,7 +41,7 @@ import {
   readDefaultsFile,
   validateDefaults,
 } from "./itemDefaults";
-import { generateCatalogPdf, type PdfExportOptions } from "./pdfCatalog/generate";
+import { generateCatalogPdf, generateFlyerPdf, type PdfExportOptions } from "./pdfCatalog/generate";
 import { buildReadinessReport } from "./siteReadiness";
 // assertEditableValue, directly: handleItemPatch needs to validate a
 // COMPOSED tier object (built up from several leaf edits in the same batch)
@@ -131,6 +131,7 @@ export type StudioItem = {
    * with the price sort, where null is genuinely reachable.
    */
   listedDate: string | null;
+  description: string;
 };
 
 export class StudioError extends Error {
@@ -250,6 +251,7 @@ export async function listStudioItems(projectRoot: string): Promise<StudioItem[]
         // file that parsed oddly must not hand the client a non-array to iterate.
         tags: Array.isArray(item.tags) ? item.tags : [],
         listedDate: typeof item.listedDate === "string" ? item.listedDate : null,
+        description: item.description,
       } satisfies StudioItem;
     }),
   );
@@ -1352,6 +1354,17 @@ async function handleExportPdf(req: StudioRequest): Promise<StudioResponse> {
   return { status: 200, file: result.file, contentType: "application/pdf" };
 }
 
+const exportFlyerBodySchema = z.object({ id: z.string().min(1) });
+
+async function handleExportFlyer(req: StudioRequest): Promise<StudioResponse> {
+  const { id } = parseJsonBody(req.body, exportFlyerBodySchema);
+  const result = await generateFlyerPdf(id);
+  if ("error" in result) {
+    return { status: 400, body: { error: result.error } };
+  }
+  return { status: 200, file: result.file, contentType: "application/pdf" };
+}
+
 export async function handleStudioRequest(req: StudioRequest): Promise<StudioResponse> {
   const pathname = req.url.split("?")[0] ?? "";
 
@@ -1568,6 +1581,13 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
         return { status: 405, body: { error: "POST only" } };
       }
       return await handleExportPdf(req);
+    }
+
+    if (pathname === "/api/export-pdf/flyer") {
+      if (req.method !== "POST") {
+        return { status: 405, body: { error: "POST only" } };
+      }
+      return await handleExportFlyer(req);
     }
 
     return { status: 404, body: { error: `no route for ${pathname}` } };

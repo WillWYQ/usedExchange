@@ -4,6 +4,7 @@ import {
   buildTocHtml,
   buildItemHtml,
   buildFullCatalogHtml,
+  buildFlyerHtml,
   buildPriceHtml,
   type ItemPdfView,
   type CategoryGroup,
@@ -145,6 +146,30 @@ describe("buildCoverHtml", () => {
     expect(html).toContain("UsedExchange");
     expect(html).toContain("12 items across 3 categories");
     expect(html).toContain("Generated 2026-08-13");
+  });
+});
+
+describe("buildFlyerHtml", () => {
+  const branding: SiteBranding = { name: "My Shop", tagline: "Great stuff", logo: "", baseUrl: "https://example.com" };
+
+  it("contains the item name and site name", () => {
+    const html = buildFlyerHtml(makeItem(), branding, "lowest", T_EN);
+    expect(html).toContain("Desk Lamp");
+    expect(html).toContain("My Shop");
+  });
+
+  it("has no TOC and does not reuse the catalog's cover/TOC markup", () => {
+    // The page-number footer itself is a Playwright pdf() option built
+    // directly in generate.ts, not part of any HTML string this module
+    // produces — asserting against it here would never be able to fail.
+    // What buildFlyerHtml can actually regress on is accidentally pulling in
+    // buildCoverHtml's/buildTocHtml's markup (e.g. via a refactor that routes
+    // it through buildFullCatalogHtml), so assert against their class names
+    // instead.
+    const html = buildFlyerHtml(makeItem(), branding, "lowest", T_EN);
+    expect(html).not.toContain("Table of Contents");
+    expect(html).not.toContain('class="cover"');
+    expect(html).not.toContain('class="toc"');
   });
 });
 
