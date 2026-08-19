@@ -5,7 +5,12 @@ import { PDFDocument } from "pdf-lib";
 import * as loaderModule from "@/lib/content/loader";
 import type { Category, Item } from "@/lib/content/types";
 import { getTranslationsForLocale } from "@/lib/i18n/getTranslations";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import type { Platform } from "@/lib/config/types";
 import {
+  buildContactPdfData,
   groupEligibleItems,
   generateCatalogPdf,
   generateFlyerPdf,
@@ -551,6 +556,11 @@ describe("generateCatalogPdf pass-1/pass-2 page count parity", () => {
         baseOptions().categories,
         "en",
       );
+      // generateCatalogPdf's real pass 1 also carries contact data (see
+      // generate.ts) — this manual reconstruction must match it exactly, or
+      // it is not actually re-deriving pass 1, just a differently-shaped PDF
+      // that happens to also render a TOC.
+      const { seed: contactSeed, entries: contactEntries } = await buildContactPdfData();
       const pass1Html = buildFullCatalogHtml(
         { name: "x", tagline: "", logo: "", baseUrl: "https://example.com" },
         groups,
@@ -558,6 +568,8 @@ describe("generateCatalogPdf pass-1/pass-2 page count parity", () => {
         getTranslationsForLocale("en"),
         "lowest",
         null,
+        contactSeed,
+        contactEntries,
       );
       const launch = await launchChromiumOrError();
       expect("browser" in launch).toBe(true);
@@ -586,5 +598,108 @@ describe("generateCatalogPdf pass-1/pass-2 page count parity", () => {
       mockLoadAllItemsRaw.mockRestore();
       mockLoadCategories.mockRestore();
     }
+  });
+});
+
+describe("buildContactPdfData", () => {
+  const ONE_PX_PNG = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    "base64",
+  );
+
+  it("returns a per-item seed and a QR entry per URL/handle platform, in order", async () => {
+    const platforms: Platform[] = [
+      { type: "email", value: "you@example.com" },
+      { type: "instagram", value: "your_handle" },
+      { type: "discord", value: "123456789012345678" },
+    ];
+    const { seed, entries } = await buildContactPdfData(platforms, os.tmpdir());
+    expect(seed).toEqual({
+      email: "you@example.com",
+      discordUrl: "https://discord.com/users/123456789012345678",
+    });
+    expect(entries.map((e) => e.kind)).toEqual(["qr", "qr", "qr"]);
+    expect(entries[0]).toMatchObject({ kind: "qr", label: "Email", target: "you@example.com" });
+    expect((entries[0] as { svg: string }).svg.startsWith("<svg")).toBe(true);
+    expect(entries[1]).toMatchObject({ label: "Instagram", target: "your_handle" });
+  });
+
+  it("embeds a present qr_image as a base64 data URI", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "contact-test-"));
+    try {
+      await fs.writeFile(path.join(dir, "wechat-qr.png"), ONE_PX_PNG);
+      const { entries } = await buildContactPdfData(
+        [{ type: "wechat", qr_image: "/contact/wechat-qr.png", label: "WeChat" }],
+        dir,
+      );
+      expect(entries[0]).toMatchObject({ kind: "image", label: "WeChat" });
+      expect((entries[0] as { dataUri: string }).dataUri.startsWith("data:image/png;base64,")).toBe(true);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("degrades a missing qr_image to a text entry rather than throwing", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "contact-test-"));
+    try {
+      const { entries } = await buildContactPdfData(
+        [{ type: "wechat", qr_image: "/contact/does-not-exist.png", label: "WeChat" }],
+        dir,
+      );
+      expect(entries[0]).toEqual({ kind: "text", label: "WeChat", value: "WeChat" });
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("strips a traversal attempt in qr_image down to its basename before reading", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "contact-test-"));
+    try {
+      // The file exists INSIDE the dir under its basename; a "../../" prefix in
+      // the config value must resolve to that in-dir file, never escape it.
+      await fs.writeFile(path.join(dir, "secret.png"), ONE_PX_PNG);
+      const { entries } = await buildContactPdfData(
+        [{ type: "wechat", qr_image: "/contact/../../secret.png", label: "WeChat" }],
+        dir,
+      );
+      expect(entries[0]?.kind).toBe("image");
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("renders a handle platform with no URL form (zelle) as text", async () => {
+    const { entries } = await buildContactPdfData(
+      [{ type: "zelle", value: "pay-me@bank.com" }],
+      os.tmpdir(),
+    );
+    expect(entries[0]).toEqual({ kind: "text", label: "Zelle", value: "pay-me@bank.com" });
+  });
+});
+
+describe("buildContactPdfData — failure isolation", () => {
+  it("degrades to a text entry when QR encoding throws, instead of failing the whole export", async () => {
+    // Far beyond QR byte-mode capacity (~2953 bytes) — QRCode.toString throws.
+    const huge = "x".repeat(5000);
+    const { entries } = await buildContactPdfData(
+      [
+        { type: "instagram", value: huge },
+        { type: "email", value: "still@works.com" },
+      ],
+      os.tmpdir(),
+    );
+    // The oversized platform degrades...
+    expect(entries[0]?.kind).toBe("text");
+    // ...and the healthy platform beside it still renders its QR.
+    expect(entries[1]?.kind).toBe("qr");
+  });
+
+  it("degrades rather than throwing on a value that breaks URI encoding", async () => {
+    const loneSurrogate = "\uD800"; // encodeURIComponent raises URIError
+    const { entries } = await buildContactPdfData(
+      [{ type: "instagram", value: loneSurrogate }],
+      os.tmpdir(),
+    );
+    expect(entries[0]?.kind).toBe("text");
   });
 });

@@ -1,6 +1,15 @@
 import type { Condition, Price, Status } from "../../../lib/content/types";
 import type { UIStrings } from "../../../lib/config/types";
 import { resolvePriceByStrategy, type PriceStrategy } from "../../../lib/utils/pricing";
+import { buildItemMailto, type ContactActionSeed } from "./contactLinks";
+
+// One contact platform, already resolved to its embeddable form by generate.ts
+// (QR SVG generated, or pre-made image inlined as a data URI) so these template
+// builders stay synchronous. See buildContactPdfData in generate.ts.
+export type ContactPdfEntry =
+  | { kind: "qr"; label: string; target: string; svg: string } // svg is trusted inline output of qrcode
+  | { kind: "image"; label: string; dataUri: string } // seller's pre-made qr_image, base64-inlined
+  | { kind: "text"; label: string; value: string }; // no scannable form — value shown as text
 
 export type ItemPdfView = {
   categorySlug: string;
@@ -215,12 +224,35 @@ export function buildCategorySectionHtml(group: CategoryGroup, t: UIStrings): st
     </section>`;
 }
 
+// Per-item quick-contact actions: a mailto pre-filled with this item's name and
+// live URL, and/or a Discord quick-link — both clickable link annotations in the
+// printed PDF. Rendered only when a seed with at least one channel is supplied,
+// so existing catalogs/flyers with no contact config are byte-for-byte unchanged.
+function buildItemContactHtml(
+  seed: ContactActionSeed | undefined,
+  itemName: string,
+  liveUrl: string,
+  t: UIStrings,
+): string {
+  if (!seed || (!seed.email && !seed.discordUrl)) return "";
+  const actions: string[] = [];
+  if (seed.email) {
+    const href = buildItemMailto(seed.email, itemName, liveUrl);
+    actions.push(`<a class="item-contact-link" href="${escapeHtml(href)}">${escapeHtml(t.pdfEmailAboutItem)} ↗</a>`);
+  }
+  if (seed.discordUrl) {
+    actions.push(`<a class="item-contact-link" href="${escapeHtml(seed.discordUrl)}">${escapeHtml(t.pdfMessageOnDiscord)} ↗</a>`);
+  }
+  return `<p class="item-contact"><span class="item-contact-label">${escapeHtml(t.pdfItemContactHeading)}:</span> ${actions.join(" ")}</p>`;
+}
+
 export function buildItemHtml(
   item: ItemPdfView,
   baseUrl: string,
   strategy: PriceStrategy,
   t: UIStrings,
   showBackToToc: boolean,
+  contact?: ContactActionSeed,
 ): string {
   const anchor = `item-${item.categorySlug}-${item.itemSlug}`;
   const liveUrl = `${baseUrl}/${item.categorySlug}/${item.itemSlug}`;
@@ -256,6 +288,61 @@ export function buildItemHtml(
         <a class="live-link" href="${escapeHtml(liveUrl)}">${escapeHtml(t.pdfViewLiveListing)} ↗</a>
         <br /><span class="live-url-text">${escapeHtml(liveUrl)}</span>
       </p>
+      ${buildItemContactHtml(contact, item.name, liveUrl, t)}
+    </section>`;
+}
+
+// One contact card — shared by the dedicated catalog contact page and the
+// flyer's compact strip. The QR `svg` is qrcode's own trusted output (the
+// encoded text becomes vector modules, never markup), so it is embedded inline
+// rather than escaped; every seller-derived string (label, target, value, the
+// image data URI) is escaped.
+function buildContactCardHtml(entry: ContactPdfEntry, t: UIStrings): string {
+  if (entry.kind === "qr") {
+    return `<div class="contact-card">
+      <div class="contact-qr">${entry.svg}</div>
+      <p class="contact-label">${escapeHtml(entry.label)}</p>
+      <p class="contact-target">${escapeHtml(entry.target)}</p>
+      <p class="contact-hint">${escapeHtml(t.pdfContactScanHint)}</p>
+    </div>`;
+  }
+  if (entry.kind === "image") {
+    return `<div class="contact-card">
+      <div class="contact-qr"><img src="${escapeHtml(entry.dataUri)}" alt="" /></div>
+      <p class="contact-label">${escapeHtml(entry.label)}</p>
+      <p class="contact-hint">${escapeHtml(t.pdfContactScanHint)}</p>
+    </div>`;
+  }
+  return `<div class="contact-card contact-card-text">
+      <p class="contact-label">${escapeHtml(entry.label)}</p>
+      <p class="contact-target">${escapeHtml(entry.value)}</p>
+    </div>`;
+}
+
+// Dedicated "Contact the Seller" page (catalog). Placed right after the cover
+// (see buildFullCatalogHtml) so it is page 2 — the most discoverable spot for a
+// print-first artifact — and given its own page break. Returns "" when the
+// seller has no reachable platforms, so the page is simply absent.
+export function buildContactPageHtml(entries: ContactPdfEntry[], t: UIStrings): string {
+  if (entries.length === 0) return "";
+  const cards = entries.map((entry) => buildContactCardHtml(entry, t)).join("");
+  return `
+    <section class="contact-page">
+      <h1>${escapeHtml(t.pdfContactHeading)}</h1>
+      <p class="contact-intro">${escapeHtml(t.pdfContactIntro)}</p>
+      <div class="contact-grid">${cards}</div>
+    </section>`;
+}
+
+// Compact contact strip for the single-item flyer's footer — makes the flyer a
+// self-sufficient one-sheet a buyer can act on without the catalog around it.
+export function buildFlyerContactStripHtml(entries: ContactPdfEntry[], t: UIStrings): string {
+  if (entries.length === 0) return "";
+  const cards = entries.map((entry) => buildContactCardHtml(entry, t)).join("");
+  return `
+    <section class="flyer-contact">
+      <h3>${escapeHtml(t.pdfContactHeading)}</h3>
+      <div class="contact-grid contact-grid-compact">${cards}</div>
     </section>`;
 }
 
@@ -305,6 +392,24 @@ h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; margin: 0 0 0.3em; 
 .item-link { margin-top: 16px; }
 .live-link { color: var(--accent); font-weight: bold; text-decoration: none; }
 .live-url-text { color: var(--muted); font-size: 11px; }
+.item-contact { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 13px; }
+.item-contact-label { color: var(--muted); margin-right: 6px; }
+.item-contact-link { color: var(--accent); font-weight: bold; text-decoration: none; margin-right: 14px; white-space: nowrap; }
+.contact-page { page-break-before: always; page-break-after: always; padding: 40px 8px 24px; }
+.contact-page h1 { font-size: 26px; color: var(--accent); border-bottom: 2px solid var(--accent); padding-bottom: 8px; }
+.contact-intro { color: var(--muted); margin: 8px 0 24px; }
+.contact-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.contact-grid-compact { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 12px; }
+.contact-card { border: 1px solid var(--line); border-radius: 6px; padding: 14px 10px; text-align: center; break-inside: avoid; page-break-inside: avoid; }
+.contact-card-text { display: flex; flex-direction: column; justify-content: center; }
+.contact-qr { width: 132px; height: 132px; margin: 0 auto 10px; }
+.contact-qr svg, .contact-qr img { display: block; width: 100%; height: 100%; }
+.contact-grid-compact .contact-qr { width: 88px; height: 88px; margin-bottom: 6px; }
+.contact-label { font-weight: bold; font-size: 13px; margin: 4px 0 2px; }
+.contact-target { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 11px; color: var(--muted); word-break: break-all; margin: 0; }
+.contact-hint { font-size: 10px; color: var(--muted); margin: 4px 0 0; }
+.flyer-contact { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 14px; }
+.flyer-contact h3 { font-size: 14px; color: var(--accent); text-align: center; margin-bottom: 10px; }
 `;
 
 // No language/price-strategy selector for a single-item flyer (unlike the
@@ -316,6 +421,8 @@ export function buildFlyerHtml(
   branding: SiteBranding,
   strategy: PriceStrategy,
   t: UIStrings,
+  contact?: ContactActionSeed,
+  contactEntries: ContactPdfEntry[] = [],
 ): string {
   const logoHtml = branding.logo
     ? `<img class="flyer-logo" src="${escapeHtml(branding.logo)}" alt="" onerror="this.remove()" />`
@@ -338,7 +445,8 @@ export function buildFlyerHtml(
           <h1>${escapeHtml(branding.name)}</h1>
           <p class="flyer-tagline">${escapeHtml(branding.tagline)}</p>
         </div>
-        ${buildItemHtml(item, branding.baseUrl, strategy, t, false)}
+        ${buildItemHtml(item, branding.baseUrl, strategy, t, false, contact)}
+        ${buildFlyerContactStripHtml(contactEntries, t)}
       </body>
     </html>`;
 }
@@ -350,14 +458,18 @@ export function buildFullCatalogHtml(
   t: UIStrings,
   strategy: PriceStrategy,
   pageNumbers: Map<string, number> | null,
+  contact?: ContactActionSeed,
+  contactEntries: ContactPdfEntry[] = [],
 ): string {
   const itemCount = groups.reduce((sum, g) => sum + g.items.length, 0);
   const body = [
     buildCoverHtml(branding, itemCount, groups.length, generatedAt, t),
+    // Contact page as front-matter: right after the cover, before the TOC.
+    buildContactPageHtml(contactEntries, t),
     buildTocHtml(groups, t, pageNumbers),
     ...groups.flatMap((group) => [
       buildCategorySectionHtml(group, t),
-      ...group.items.map((item) => buildItemHtml(item, branding.baseUrl, strategy, t, true)),
+      ...group.items.map((item) => buildItemHtml(item, branding.baseUrl, strategy, t, true, contact)),
     ]),
   ].join("\n");
   return `<!doctype html><html><head><meta charset="utf-8" /><style>${CATALOG_CSS}</style></head><body>${body}</body></html>`;

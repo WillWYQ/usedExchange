@@ -118,4 +118,11 @@ export const EN_FALLBACK: UIStrings = {
   pdfAveragePriceLabel: "Highlighted price (average): {amount}",
   pdfCategoryItemCount: "{count} items in this category",
   condition: "Condition",
+
+  pdfContactHeading: "Contact the Seller",
+  pdfContactIntro: "Scan a code or use a link below to reach the seller.",
+  pdfContactScanHint: "Scan to connect",
+  pdfItemContactHeading: "Contact seller about this item",
+  pdfEmailAboutItem: "Email about this item",
+  pdfMessageOnDiscord: "Message on Discord",
 };
