@@ -28,6 +28,18 @@ export type PdfExportOptions = {
   statuses: Status[];
 };
 
+// One entry per phase generateCatalogPdf actually goes through, in order.
+// "images-pass-N" repeats once per downloaded photo (completed/total let a
+// caller show "12 of 40"); the render stages are single black-box events —
+// page.pdf() exposes no sub-progress of its own — so they carry no payload.
+export type PdfExportProgress =
+  | { stage: "loading" }
+  | { stage: "images-pass-1"; completed: number; total: number }
+  | { stage: "render-pass-1" }
+  | { stage: "resolving-toc" }
+  | { stage: "images-pass-2"; completed: number; total: number }
+  | { stage: "render-pass-2" };
+
 // generateFlyerPdf has no language selector in the UI (unlike the catalog
 // export dialog's PdfExportOptions.locale), so a single item's "is this
 // exportable at all" check stays independent of any locale/category/status
@@ -155,7 +167,10 @@ function combineSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
 //     page.setContent(), which never touches tempDir at all.
 // The tempDir is returned to the caller, which is responsible for rm -rf-ing
 // it after the PDF has been rendered.
-export async function prefetchImages(html: string): Promise<PrefetchResult> {
+export async function prefetchImages(
+  html: string,
+  onProgress?: (completed: number, total: number) => void,
+): Promise<PrefetchResult> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "usedexchange-pdf-images-"));
   const controller = new AbortController();
   const globalTimer = setTimeout(() => controller.abort(), PREFETCH_TIMEOUT_MS);
@@ -167,6 +182,7 @@ export async function prefetchImages(html: string): Promise<PrefetchResult> {
       .filter((url): url is string => typeof url === "string" && url.startsWith("http"));
     const uniqueUrls = [...new Set(urls)];
 
+    let completed = 0;
     const downloads = await Promise.all(
       uniqueUrls.map(async (url) => {
         const perImageController = new AbortController();
@@ -180,6 +196,8 @@ export async function prefetchImages(html: string): Promise<PrefetchResult> {
           return { url, filename };
         } finally {
           clearTimeout(perImageTimer);
+          completed += 1;
+          onProgress?.(completed, uniqueUrls.length);
         }
       }),
     );
@@ -297,7 +315,15 @@ export async function launchChromiumOrError(): Promise<{ browser: Browser } | { 
 export async function renderHtmlToPdfBytes(
   browser: Browser,
   html: string,
-  opts: { pdfOptions: Parameters<Page["pdf"]>[0]; renderErrorMessage: string },
+  opts: {
+    pdfOptions: Parameters<Page["pdf"]>[0];
+    renderErrorMessage: string;
+    /** Fires once per downloaded photo, during the prefetch step below. */
+    onImageProgress?: (completed: number, total: number) => void;
+    /** Fires once, right before Chromium starts laying out the page — the
+     *  render itself is opaque (page.pdf() reports no sub-progress). */
+    onRenderStart?: () => void;
+  },
 ): Promise<{ bytes: Buffer } | { error: string }> {
   // Pull every remote image to a local temp dir before Chromium sees the
   // HTML. Live CDN fetches from headless Chromium are slow and flaky —
@@ -307,7 +333,7 @@ export async function renderHtmlToPdfBytes(
   let tempDir: string | undefined;
   let prefetchResult: Awaited<ReturnType<typeof prefetchImages>> | undefined;
   try {
-    prefetchResult = await prefetchImages(html);
+    prefetchResult = await prefetchImages(html, opts.onImageProgress);
     tempDir = prefetchResult.tempDir;
   } catch {
     // Prefetch failed entirely — fall back to remote URLs.
@@ -316,6 +342,7 @@ export async function renderHtmlToPdfBytes(
   try {
     const page = await browser.newPage();
     try {
+      opts.onRenderStart?.();
       if (prefetchResult !== undefined) {
         // Chromium refuses to load a file:// subresource from a document
         // that has no origin of its own — see the original comment history
@@ -371,6 +398,8 @@ async function renderHtmlToPdf(
     filenamePrefix: string;
     pdfOptions: Parameters<Page["pdf"]>[0];
     renderErrorMessage: string;
+    onImageProgress?: (completed: number, total: number) => void;
+    onRenderStart?: () => void;
   },
 ): Promise<{ file: string } | { error: string }> {
   const result = await renderHtmlToPdfBytes(browser, html, opts);
@@ -467,7 +496,9 @@ export async function buildContactPdfData(
 // the established precedent of documenting this same fact).
 export async function generateCatalogPdf(
   options: PdfExportOptions,
+  onProgress?: (progress: PdfExportProgress) => void,
 ): Promise<{ file: string } | { error: string }> {
+  onProgress?.({ stage: "loading" });
   const [items, categories] = await Promise.all([loadAllItemsRaw(), loadCategories()]);
   const groups = groupEligibleItems(items, categories, options.statuses, options.categories, options.locale);
   if (groups.length === 0) {
@@ -516,7 +547,12 @@ export async function generateCatalogPdf(
       contactSeed,
       contactEntries,
     );
-    const pass1 = await renderHtmlToPdfBytes(browser, pass1Html, { pdfOptions, renderErrorMessage });
+    const pass1 = await renderHtmlToPdfBytes(browser, pass1Html, {
+      pdfOptions,
+      renderErrorMessage,
+      onImageProgress: (completed, total) => onProgress?.({ stage: "images-pass-1", completed, total }),
+      onRenderStart: () => onProgress?.({ stage: "render-pass-1" }),
+    });
     if ("error" in pass1) return pass1;
 
     const anchorIds = groups.flatMap((group) => [
@@ -529,6 +565,7 @@ export async function generateCatalogPdf(
     // strictly better than no catalog at all (design spec §3, §5.2). Falling
     // back to null reproduces pass-1's own blank-slot appearance in the final
     // pass-2 TOC instead of surfacing an opaque error.
+    onProgress?.({ stage: "resolving-toc" });
     let pageNumbers: Map<string, number> | null = null;
     try {
       pageNumbers = await resolveAnchorPageNumbers(pass1.bytes, anchorIds);
@@ -552,6 +589,8 @@ export async function generateCatalogPdf(
       filenamePrefix: "usedexchange-catalog",
       pdfOptions,
       renderErrorMessage,
+      onImageProgress: (completed, total) => onProgress?.({ stage: "images-pass-2", completed, total }),
+      onRenderStart: () => onProgress?.({ stage: "render-pass-2" }),
     });
   } finally {
     await browser.close().catch(() => {});

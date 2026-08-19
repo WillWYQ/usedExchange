@@ -14,6 +14,7 @@ import {
   isFileResponse,
   isSseResponse,
   type JsonResponse,
+  type SseEvent,
 } from "./studioApi";
 import { listImageFiles } from "./studioImages";
 import { getSyncRunner, resetSyncStateForTests, setSyncRunner, streamImageSync } from "./studioSync";
@@ -2256,8 +2257,21 @@ describe("readiness route", () => {
   });
 });
 
+// Drains an SSE response into its progress events plus the final
+// done/error event, the same way studio/src/api.ts's client-side consumer
+// would — mirrors the "recognises an SSE response" / sync-images tests'
+// `for await (const evt of res.events)` pattern above.
+async function drainSse(res: Awaited<ReturnType<typeof handleStudioRequest>>) {
+  if (!isSseResponse(res)) throw new Error("expected an SSE response");
+  const events: SseEvent[] = [];
+  for await (const evt of res.events) {
+    events.push(evt);
+  }
+  return events;
+}
+
 describe("POST /api/export-pdf", () => {
-  it("returns 400 with a clear message when there are no eligible items", async () => {
+  it("streams an error event when there are no eligible items", async () => {
     // Each spy is captured and explicitly restored in `finally` — this file has
     // no global afterEach mock reset, so a leaked mock would leak into whichever
     // test runs next (see the existing loadAllItemsRaw spies above for the pattern).
@@ -2279,15 +2293,20 @@ describe("POST /api/export-pdf", () => {
         projectRoot: PROJECT_ROOT,
       });
 
-      expect(res.status).toBe(400);
-      expect(asJson(res).body).toEqual({ error: "No items match the selected filters." });
+      expect(res.status).toBe(200);
+      expect(isSseResponse(res)).toBe(true);
+      const events = await drainSse(res);
+      expect(events).toEqual([
+        { event: "progress", data: { stage: "loading" } },
+        { event: "error", data: { error: "No items match the selected filters." } },
+      ]);
     } finally {
       mockLoadAllItemsRaw.mockRestore();
       mockLoadCategories.mockRestore();
     }
   });
 
-  it("returns a PDF file response for the real local catalog", async () => {
+  it("streams progress then a done token that redeems for the real local catalog PDF", async () => {
     const { chromium } = await import("playwright");
     let chromiumAvailable = true;
     try {
@@ -2316,12 +2335,36 @@ describe("POST /api/export-pdf", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(isFileResponse(res)).toBe(true);
-    if (isFileResponse(res)) {
-      expect(res.contentType).toBe("application/pdf");
-      expect(res.file.endsWith(".pdf")).toBe(true);
-      await fs.unlink(res.file);
+    expect(isSseResponse(res)).toBe(true);
+    const events = await drainSse(res);
+
+    expect(events.some((e) => e.event === "progress")).toBe(true);
+    const done = events.at(-1);
+    expect(done?.event).toBe("done");
+    const token = (done?.data as { token?: string } | undefined)?.token;
+    expect(typeof token).toBe("string");
+
+    const downloadRes = await handleStudioRequest({
+      method: "GET",
+      url: `/api/export-pdf/download/${token}`,
+      body: Buffer.alloc(0),
+      projectRoot: PROJECT_ROOT,
+    });
+    expect(isFileResponse(downloadRes)).toBe(true);
+    if (isFileResponse(downloadRes)) {
+      expect(downloadRes.contentType).toBe("application/pdf");
+      expect(downloadRes.file.endsWith(".pdf")).toBe(true);
+      await fs.unlink(downloadRes.file);
     }
+
+    // The token is single-use: redeeming it twice 404s the second time.
+    const secondDownload = await handleStudioRequest({
+      method: "GET",
+      url: `/api/export-pdf/download/${token}`,
+      body: Buffer.alloc(0),
+      projectRoot: PROJECT_ROOT,
+    });
+    expect(secondDownload.status).toBe(404);
   });
 
   it("rejects non-POST methods", async () => {
