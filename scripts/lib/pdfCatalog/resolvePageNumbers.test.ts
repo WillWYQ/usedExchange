@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PDFDocument, PDFName } from "pdf-lib";
 import { resolveAnchorPageNumbers } from "./resolvePageNumbers";
 
 async function chromiumAvailable(): Promise<boolean> {
@@ -75,5 +76,33 @@ describe("resolveAnchorPageNumbers", () => {
     } finally {
       await browser.close();
     }
+  });
+
+  // Regression test for the 2026-08-16 final review's Important #1: pdf-lib's
+  // PDFArray.get() type signature declares a non-optional PDFObject return,
+  // but at runtime it's just `this.array[index]` (see pdf-lib's
+  // src/core/objects/PDFArray.ts), which is `undefined` for an
+  // out-of-range/empty array. A destination entry whose array is empty (a
+  // malformed/degenerate case, but one the PDF spec doesn't forbid) must not
+  // throw a TypeError out of `.toString()` on that undefined value — the
+  // function's documented contract is "never throws for a partial miss," so
+  // that one anchor id should simply be absent from the returned map. Built
+  // directly with pdf-lib (no Chromium/Playwright needed) since Chromium's
+  // own print-to-PDF never produces an empty destination array — this shape
+  // has to be constructed by hand to exercise the guard at all.
+  it("omits an anchor whose destination array is empty instead of throwing", async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage();
+
+    const destsDict = doc.context.obj({});
+    const emptyDestArray = doc.context.obj([]);
+    destsDict.set(PDFName.of("broken-anchor"), emptyDestArray);
+    doc.catalog.set(PDFName.of("Dests"), destsDict);
+
+    const pdfBytes = await doc.save();
+
+    await expect(
+      resolveAnchorPageNumbers(Buffer.from(pdfBytes), ["broken-anchor"]),
+    ).resolves.toEqual(new Map());
   });
 });

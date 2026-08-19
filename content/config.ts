@@ -287,6 +287,7 @@ export const siteConfig: SiteConfig = {
         pdfFooterPage: "Page",
         pdfFooterOf: "of",
         pdfAveragePriceLabel: "Highlighted price (average): {amount}",
+        pdfCategoryItemCount: "{count} items in this category",
         condition: "Condition",
       },
 
@@ -381,6 +382,7 @@ export const siteConfig: SiteConfig = {
       //   pdfFooterPage: "第",
       //   pdfFooterOf: "/ 共",
       //   pdfAveragePriceLabel: "高亮顯示價格（平均）：{amount}",
+      //   pdfCategoryItemCount: "此分類共 {count} 件商品",
       //   condition: "商品狀況",
       // },
     },

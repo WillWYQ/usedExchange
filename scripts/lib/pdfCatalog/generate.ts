@@ -257,8 +257,13 @@ export function groupEligibleItems(
 
 // Generous timeout, well above Playwright's 30s default: a catalog with many
 // items (up to 4 CDN photos each) waiting for `networkidle`, followed by
-// full-document PDF layout, can plausibly exceed the default. Shared by both
-// callers of renderHtmlToPdf below.
+// full-document PDF layout, can plausibly exceed the default. Consumed by
+// renderHtmlToPdfBytes (and transitively by renderHtmlToPdf) — every render
+// call gets its own full budget, not a shared/divided one. The catalog
+// export's two-pass render (pass 1 to discover TOC pagination, pass 2 for the
+// real download) means that path now spends up to two of these timeouts
+// before a seller sees a friendly error, roughly doubling the worst-case wait
+// versus before this feature.
 const RENDER_TIMEOUT_MS = 60_000;
 
 // Dynamic import, not a static one — see the module-level comment further up
@@ -426,7 +431,19 @@ export async function generateCatalogPdf(
       `cat-${group.slug}`,
       ...group.items.map((item) => `item-${item.categorySlug}-${item.itemSlug}`),
     ]);
-    const pageNumbers = await resolveAnchorPageNumbers(pass1.bytes, anchorIds);
+    // Page-number resolution failure (e.g. PDFDocument.load() throwing on a
+    // malformed PDF, or an unexpected /Dests structural variant) must not
+    // crash the whole export — a catalog without real TOC numbers is
+    // strictly better than no catalog at all (design spec §3, §5.2). Falling
+    // back to null reproduces pass-1's own blank-slot appearance in the final
+    // pass-2 TOC instead of surfacing an opaque error.
+    let pageNumbers: Map<string, number> | null = null;
+    try {
+      pageNumbers = await resolveAnchorPageNumbers(pass1.bytes, anchorIds);
+    } catch {
+      // Unresolvable pagination degrades to pass-1's blank slots — a catalog
+      // without TOC numbers still beats no catalog at all.
+    }
 
     // Pass 2: the real download, with resolved numbers baked into the TOC.
     const pass2Html = buildFullCatalogHtml(branding, groups, generatedAt, t, options.priceStrategy, pageNumbers);

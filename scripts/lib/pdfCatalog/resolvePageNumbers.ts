@@ -31,7 +31,13 @@ export async function resolveAnchorPageNumbers(
     const entry = doc.context.lookup(destsDict.get(pdfLib.PDFName.of(id)));
     const destArray = extractDestArray(pdfLib, doc, entry);
     if (destArray === undefined) continue;
+    // PDFArray.get() returns `undefined` on an out-of-range/empty array at
+    // runtime despite pdf-lib's type declaring it non-optional — a malformed
+    // or empty destination array must not throw here. Per this function's
+    // documented contract ("never throws for a partial miss"), that one
+    // anchor id is simply left out of the returned map.
     const pageRef = destArray.get(0);
+    if (pageRef === undefined) continue;
     const pageIndex = pageRefToIndex.get(pageRef.toString());
     if (pageIndex !== undefined) result.set(id, pageIndex + 1);
   }
