@@ -22,6 +22,13 @@ export const EN_FALLBACK: UIStrings = {
   share: "Share",
   copied: "Copied!",
   linkCopied: "Link copied!",
+
+  downloadFlyer: "Download Flyer",
+  generatingFlyer: "Generating…",
+  flyerDownloaded: "Flyer downloaded!",
+  flyerLoadError: "Could not load the flyer generator. Check your connection and try again.",
+  flyerGenerateError: "Could not generate the flyer. Please try again.",
+  flyerUnsupported: "Flyer download isn't supported in this browser.",
   brand: "Brand",
   model: "Model",
   age: "Age",

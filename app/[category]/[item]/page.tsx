@@ -23,6 +23,8 @@ import { GalleryAdapter } from "@/components/ui-adapters/GalleryAdapter";
 import { LocalizedItemContent } from "@/components/item/LocalizedItemContent";
 import { ContactSection } from "@/components/contact/ContactSection";
 import { ShareButton } from "@/components/common/ShareButton";
+import { FlyerButton } from "@/components/item/FlyerButton";
+import { toFlyerItemView } from "@/lib/pdf/flyerContent";
 import { RecentlyViewed } from "@/components/common/RecentlyViewed";
 import { JsonLd } from "@/components/common/JsonLd";
 
@@ -327,9 +329,15 @@ export default async function ItemDetailPage({
         />
       </div>
 
-      {/* Share + Recently Viewed */}
+      {/* Share + Flyer + Recently Viewed */}
       <div className="mt-8 flex items-center gap-3">
         <ShareButton title={itemData.name} />
+        <FlyerButton
+          item={toFlyerItemView(itemData)}
+          initialResolvedTier={initialResolvedTier}
+          siteName={siteConfig.name}
+          baseUrl={siteConfig.baseUrl}
+        />
       </div>
 
       {/* Records this item in sessionStorage; populates the strip on other pages */}
