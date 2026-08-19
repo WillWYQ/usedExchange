@@ -7,10 +7,14 @@ import {
   buildFullCatalogHtml,
   buildFlyerHtml,
   buildPriceHtml,
+  buildContactPageHtml,
+  buildFlyerContactStripHtml,
   type ItemPdfView,
   type CategoryGroup,
   type SiteBranding,
+  type ContactPdfEntry,
 } from "./template";
+import type { ContactActionSeed } from "./contactLinks";
 import type { UIStrings } from "../../../lib/config/types";
 import { EN_FALLBACK } from "../../../lib/i18n/translations";
 
@@ -134,6 +138,77 @@ describe("buildItemHtml", () => {
 
     const withoutLink = buildItemHtml(makeItem(), "https://example.com", "lowest", T_EN, false);
     expect(withoutLink).not.toContain('href="#toc"');
+  });
+});
+
+describe("buildItemHtml — per-item quick contact", () => {
+  const seed: ContactActionSeed = {
+    email: "you@example.com",
+    discordUrl: "https://discord.com/users/123456789012345678",
+  };
+
+  it("renders a pre-filled mailto and a discord link when a seed is given", () => {
+    const html = buildItemHtml(makeItem(), "https://shop.example", "lowest", T_EN, true, seed);
+    // mailto with the item name in the subject and the live URL in the body.
+    expect(html).toContain("mailto:you@example.com");
+    expect(html).toContain("Inquiry%3A%20Desk%20Lamp"); // subject encoded
+    expect(html).toContain("shop.example%2Felectronics%2Fdesk-lamp"); // live URL in body
+    expect(html).toContain("https://discord.com/users/123456789012345678");
+    expect(html).toContain("Contact seller about this item");
+  });
+
+  it("renders only the discord link when no email is configured", () => {
+    const html = buildItemHtml(makeItem(), "https://shop.example", "lowest", T_EN, true, {
+      discordUrl: "https://discord.com/users/9",
+    });
+    expect(html).toContain("https://discord.com/users/9");
+    expect(html).not.toContain("mailto:");
+  });
+
+  it("renders no contact block when the seed is absent or empty", () => {
+    expect(buildItemHtml(makeItem(), "https://shop.example", "lowest", T_EN, true)).not.toContain("item-contact");
+    expect(buildItemHtml(makeItem(), "https://shop.example", "lowest", T_EN, true, {})).not.toContain("item-contact");
+  });
+});
+
+describe("buildContactPageHtml", () => {
+  const entries: ContactPdfEntry[] = [
+    { kind: "qr", label: "Email", target: "you@example.com", svg: "<svg id='qr-email'></svg>" },
+    { kind: "image", label: "WeChat", dataUri: "data:image/png;base64,AAAA" },
+    { kind: "text", label: "Zelle", value: "pay-me@bank.com" },
+  ];
+
+  it("renders the heading, each label, the inline QR svg, the embedded image, and the text value", () => {
+    const html = buildContactPageHtml(entries, T_EN);
+    expect(html).toContain("Contact the Seller");
+    expect(html).toContain("Email");
+    expect(html).toContain("<svg id='qr-email'></svg>"); // inline, not escaped
+    expect(html).toContain("you@example.com");
+    expect(html).toContain("WeChat");
+    expect(html).toContain('src="data:image/png;base64,AAAA"');
+    expect(html).toContain("Zelle");
+    expect(html).toContain("pay-me@bank.com");
+    expect(html).toContain("contact-page");
+  });
+
+  it("returns an empty string when there are no entries", () => {
+    expect(buildContactPageHtml([], T_EN)).toBe("");
+  });
+});
+
+describe("buildFlyerContactStripHtml", () => {
+  it("renders a compact contact strip", () => {
+    const html = buildFlyerContactStripHtml(
+      [{ kind: "qr", label: "Email", target: "a@b.com", svg: "<svg></svg>" }],
+      T_EN,
+    );
+    expect(html).toContain("flyer-contact");
+    expect(html).toContain("Email");
+    expect(html).toContain("<svg></svg>");
+  });
+
+  it("returns an empty string when there are no entries", () => {
+    expect(buildFlyerContactStripHtml([], T_EN)).toBe("");
   });
 });
 
@@ -288,5 +363,36 @@ describe("buildFullCatalogHtml", () => {
   it("shows the category's item count on its divider", () => {
     const html = buildFullCatalogHtml(branding, groups, "2026-08-13", T_EN, "lowest", null);
     expect(html).toContain("1 items in this category");
+  });
+
+  it("inserts the contact page between the cover and the TOC when contact entries exist", () => {
+    const branding: SiteBranding = { name: "UsedExchange", tagline: "", logo: "", baseUrl: "https://example.com" };
+    const groups: CategoryGroup[] = [
+      { slug: "electronics", displayName: "Electronics", description: "", items: [makeItem()] },
+    ];
+    const seed: ContactActionSeed = { email: "you@example.com" };
+    const entries: ContactPdfEntry[] = [
+      { kind: "qr", label: "Email", target: "you@example.com", svg: "<svg id='qr'></svg>" },
+    ];
+    const html = buildFullCatalogHtml(branding, groups, "2026-08-13", T_EN, "lowest", null, seed, entries);
+    const coverIdx = html.indexOf("Full Listing Catalog");
+    const contactIdx = html.indexOf("Contact the Seller");
+    const tocIdx = html.indexOf("Table of Contents");
+    const itemIdx = html.indexOf('id="item-electronics-desk-lamp"');
+    expect(coverIdx).toBeLessThan(contactIdx);
+    expect(contactIdx).toBeLessThan(tocIdx);
+    // The per-item seed threads through to the item page too.
+    expect(html).toContain("mailto:you@example.com");
+    expect(itemIdx).toBeGreaterThan(tocIdx);
+  });
+
+  it("omits the contact page when no contact entries are supplied", () => {
+    const branding: SiteBranding = { name: "UsedExchange", tagline: "", logo: "", baseUrl: "https://example.com" };
+    const groups: CategoryGroup[] = [
+      { slug: "electronics", displayName: "Electronics", description: "", items: [makeItem()] },
+    ];
+    const html = buildFullCatalogHtml(branding, groups, "2026-08-13", T_EN, "lowest", null);
+    expect(html).not.toContain("Contact the Seller");
+    expect(html).not.toContain('class="contact-page"');
   });
 });

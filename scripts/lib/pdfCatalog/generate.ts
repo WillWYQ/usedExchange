@@ -13,8 +13,11 @@ import { siteConfig } from "../../../content/config";
 import { getLocalizedField } from "../../../lib/utils/i18n";
 import { getTranslationsForLocale } from "../../../lib/i18n/getTranslations";
 import type { PriceStrategy } from "../../../lib/utils/pricing";
-import { buildFlyerHtml, buildFullCatalogHtml, escapeHtml, type CategoryGroup, type ItemPdfView } from "./template";
+import { buildFlyerHtml, buildFullCatalogHtml, escapeHtml, type CategoryGroup, type ContactPdfEntry, type ItemPdfView } from "./template";
 import { resolveAnchorPageNumbers } from "./resolvePageNumbers";
+import type { Platform } from "../../../lib/config/types";
+import { resolveContactActionSeed, resolvePlatform, type ContactActionSeed } from "./contactLinks";
+import { renderQrSvg } from "./qr";
 
 export type PdfExportOptions = {
   locale: string;
@@ -377,6 +380,85 @@ async function renderHtmlToPdf(
   return { file };
 }
 
+const CONTACT_IMAGE_MIME: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+};
+
+// Reads a seller's pre-made qr_image (e.g. "/contact/wechat-qr.png") from
+// content/contact/ and returns it as a base64 data URI — fully offline, so the
+// PDF never has to fetch the seller's own site. path.basename() strips any
+// directory component from the seller-authored config value before the read, so
+// a stray "../" cannot escape content/contact/. Returns null (→ text fallback)
+// when the file is absent or unreadable, matching the graceful-degradation
+// posture the rest of this module takes toward missing images.
+async function readContactImageDataUri(qrImagePath: string, contactImageDir: string): Promise<string | null> {
+  try {
+    const base = path.basename(qrImagePath);
+    if (base === "" || base === "." || base === "..") return null;
+    const bytes = await fs.readFile(path.join(contactImageDir, base));
+    if (bytes.length === 0) return null;
+    const mime = CONTACT_IMAGE_MIME[path.extname(base).toLowerCase()] ?? "image/png";
+    return `data:${mime};base64,${bytes.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
+// Assembles everything the contact-accessibility features need, entirely
+// offline: the per-item quick-contact seed (first email + first discord), and
+// one embeddable ContactPdfEntry per configured platform — a generated QR SVG
+// for URL/handle platforms, the seller's inlined pre-made image for qr_image
+// platforms (wechat), or a plain-text entry for anything with no scannable form
+// (e.g. a zelle handle). Platform order is preserved. Parameterized on the
+// platform list and image directory so it is unit-testable without a real
+// content/config.ts or filesystem layout.
+export async function buildContactPdfData(
+  platforms: Platform[] = siteConfig.contact.platforms,
+  contactImageDir: string = path.join(process.cwd(), "content", "contact"),
+): Promise<{ seed: ContactActionSeed; entries: ContactPdfEntry[] }> {
+  const seed = resolveContactActionSeed(platforms);
+
+  const entries = await Promise.all(
+    platforms.map(async (platform): Promise<ContactPdfEntry> => {
+      // One bad platform must never take down the whole export. Both steps
+      // below can throw on a pathological seller-authored value:
+      // encodeURIComponent() raises URIError on a lone surrogate, and
+      // QRCode.toString() throws when the encoded text exceeds QR capacity
+      // (~2953 bytes). Without this guard the rejection escapes Promise.all,
+      // rejects generateCatalogPdf/generateFlyerPdf, and surfaces as an opaque
+      // 500 — so a QR failure degrades to a text entry here, matching the
+      // graceful fallback the missing-image branch and prefetchImages already
+      // use. `label` is derived from the platform type, not the bad value, so
+      // it is safe to compute in the catch.
+      const label = platform.label ?? platform.type;
+      try {
+        const resolved = resolvePlatform(platform);
+        if (resolved.target.kind === "url") {
+          const svg = await renderQrSvg(resolved.target.url);
+          return { kind: "qr", label: resolved.label, target: resolved.displayValue || resolved.target.url, svg };
+        }
+        if (resolved.target.kind === "image") {
+          const dataUri = await readContactImageDataUri(resolved.target.qrImagePath, contactImageDir);
+          if (dataUri !== null) {
+            return { kind: "image", label: resolved.label, dataUri };
+          }
+          // Pre-made image missing/unreadable — degrade to a labeled text entry.
+          return { kind: "text", label: resolved.label, value: resolved.displayValue || resolved.label };
+        }
+        return { kind: "text", label: resolved.label, value: resolved.displayValue };
+      } catch {
+        return { kind: "text", label, value: "" };
+      }
+    }),
+  );
+
+  return { seed, entries };
+}
+
 // Takes only `options` — unlike the design spec's original
 // `generateCatalogPdf(projectRoot: string)` sketch — because
 // loadAllItemsRaw()/loadCategories() always resolve content/ from
@@ -400,6 +482,7 @@ export async function generateCatalogPdf(
   const logo = siteConfig.logo ? `${siteConfig.baseUrl}${siteConfig.logo}` : "";
   const branding = { name: siteConfig.name, tagline: siteConfig.tagline, logo, baseUrl: siteConfig.baseUrl };
   const generatedAt = new Date().toISOString().slice(0, 10);
+  const { seed: contactSeed, entries: contactEntries } = await buildContactPdfData();
 
   // Shared between both passes — the width-reservation technique
   // buildTocHtml uses to keep pass-1/pass-2 pagination identical (see
@@ -423,7 +506,16 @@ export async function generateCatalogPdf(
   try {
     // Pass 1: TOC renders empty (but width-reserved) page-number slots — this
     // PDF exists only to discover real pagination, and is discarded.
-    const pass1Html = buildFullCatalogHtml(branding, groups, generatedAt, t, options.priceStrategy, null);
+    const pass1Html = buildFullCatalogHtml(
+      branding,
+      groups,
+      generatedAt,
+      t,
+      options.priceStrategy,
+      null,
+      contactSeed,
+      contactEntries,
+    );
     const pass1 = await renderHtmlToPdfBytes(browser, pass1Html, { pdfOptions, renderErrorMessage });
     if ("error" in pass1) return pass1;
 
@@ -446,7 +538,16 @@ export async function generateCatalogPdf(
     }
 
     // Pass 2: the real download, with resolved numbers baked into the TOC.
-    const pass2Html = buildFullCatalogHtml(branding, groups, generatedAt, t, options.priceStrategy, pageNumbers);
+    const pass2Html = buildFullCatalogHtml(
+      branding,
+      groups,
+      generatedAt,
+      t,
+      options.priceStrategy,
+      pageNumbers,
+      contactSeed,
+      contactEntries,
+    );
     return await renderHtmlToPdf(browser, pass2Html, {
       filenamePrefix: "usedexchange-catalog",
       pdfOptions,
@@ -483,11 +584,14 @@ export async function generateFlyerPdf(itemId: string): Promise<{ file: string }
   // own default locale and "lowest" price, same as the live storefront's
   // default rendering.
   const locale = siteConfig.i18n.defaultLocale;
+  const { seed: contactSeed, entries: contactEntries } = await buildContactPdfData();
   const html = buildFlyerHtml(
     toItemPdfView(item, locale),
     { name: siteConfig.name, tagline: siteConfig.tagline, logo, baseUrl: siteConfig.baseUrl },
     "lowest",
     getTranslationsForLocale(locale),
+    contactSeed,
+    contactEntries,
   );
 
   const launch = await launchChromiumOrError();

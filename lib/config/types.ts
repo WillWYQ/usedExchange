@@ -286,4 +286,12 @@ export type UIStrings = {
   pdfAveragePriceLabel: string;
   pdfCategoryItemCount: string;
   condition: string;
+
+  // Catalog PDF seller-contact accessibility (scripts/lib/pdfCatalog/contactLinks.ts)
+  pdfContactHeading: string;
+  pdfContactIntro: string;
+  pdfContactScanHint: string;
+  pdfItemContactHeading: string;
+  pdfEmailAboutItem: string;
+  pdfMessageOnDiscord: string;
 };

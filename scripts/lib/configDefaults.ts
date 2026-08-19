@@ -73,4 +73,34 @@ export const CONFIG_DEFAULTS: ConfigDefault[] = [
       '        condition: "Condition",',
     ],
   },
+  {
+    // Seller-contact accessibility strings — a separate entry (not merged into
+    // the pdfTocHeading block above) so it also backfills into downstream
+    // configs that already have the older PDF-chrome keys but not these.
+    //
+    // Anchor caveat: `condition:` is the last key of that PDF-chrome block, but
+    // it is NOT globally unique — a commented-out locale example (and any real
+    // second locale) also contains the substring. migrate-config takes the
+    // FIRST match, which on the standard config layout is the default locale's
+    // fallback block, i.e. the intended line. Two known limits, both benign:
+    // a config whose second locale defines `condition:` above the default
+    // block would anchor there, and a config carrying `pdfTocHeading` but an
+    // older block without a `condition:` line finds no anchor and is skipped
+    // with a warning. In every such case the keys simply stay absent and
+    // getTranslationsForLocale's EN_FALLBACK merge supplies the English
+    // defaults at runtime — the PDF renders correctly, the seller just has no
+    // config line to translate.
+    key: "pdfContactHeading",
+    afterKey: "condition:",
+    lines: [
+      "",
+      "        // ── Catalog PDF seller-contact accessibility ─────────────────────────",
+      '        pdfContactHeading: "Contact the Seller",',
+      '        pdfContactIntro: "Scan a code or use a link below to reach the seller.",',
+      '        pdfContactScanHint: "Scan to connect",',
+      '        pdfItemContactHeading: "Contact seller about this item",',
+      '        pdfEmailAboutItem: "Email about this item",',
+      '        pdfMessageOnDiscord: "Message on Discord",',
+    ],
+  },
 ];
