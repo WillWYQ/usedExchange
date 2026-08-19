@@ -233,6 +233,14 @@ describe("normalizeForPdf", () => {
   it("leaves plain ASCII text untouched", () => {
     expect(normalizeForPdf("Plain text, no surprises.")).toBe("Plain text, no surprises.");
   });
+
+  it("replaces <= and >= math symbols used by default distance-tier labels", () => {
+    // scripts/lib/itemTemplate.ts's built-in default tiers are literally
+    // "Pickup / ≤ 5 mi", so every item created via `pnpm create-item`
+    // carries this character into its price tier labels by default.
+    expect(normalizeForPdf("Pickup / ≤ 5 mi")).toBe("Pickup / <= 5 mi");
+    expect(normalizeForPdf("Delivery / ≥ 10 mi")).toBe("Delivery / >= 10 mi");
+  });
 });
 
 describe("buildLiveListingUrl / buildFlyerFilename", () => {
