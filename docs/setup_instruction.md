@@ -46,7 +46,15 @@ Photos need a public URL. **A custom domain is the recommended — and currently
 
 ### Step 3 — Configure CORS
 
-your bucket → **Settings** → **CORS Policy** → Add:
+> ℹ️ **Required if you want the item detail page's "Download Flyer" button to include photos.** Uploads run server-side from your machine via the S3 SDK, and everywhere else on the site photos are rendered with plain `<img>` tags — neither needs browser↔bucket CORS. The flyer button is the one exception: it fetches each photo's raw bytes from the visitor's browser to embed them in the generated PDF, which browsers block cross-origin without a CORS policy. Skip this step and flyers still generate — just without photos.
+
+Easiest path — run this once from your machine (reads `CF_R2_*` from `.env.local` and your site's `baseUrl` from `content/config.ts`, and only adds a rule — it never touches other CORS rules already on the bucket):
+
+```bash
+pnpm configure-image-cors
+```
+
+If your R2 API token isn't scoped for bucket settings, the command will fail with that reason and print the manual policy to add. To do it by hand instead: your bucket → **Settings** → **CORS Policy** → Add:
 
 ```json
 [
@@ -59,8 +67,6 @@ your bucket → **Settings** → **CORS Policy** → Add:
 ```
 
 Replace `https://your-domain.com` with your actual site URL.
-
-> ℹ️ **This step is optional for this site.** Uploads run server-side from your machine via the S3 SDK, and photos are rendered with plain `<img>` tags — no code path requires browser↔bucket CORS. Add the policy only if you later fetch CDN images from JavaScript (e.g. canvas/WebGL).
 
 ### Step 4 — Find Account ID and Create API Token
 

@@ -13,7 +13,7 @@
 ## Overview
 
 - All CLIs live in `scripts/`, are executed with **tsx** (Node.js — no browser APIs), and are production tooling, not dev-only helpers.
-- The root `package.json` defines **22 npm scripts**; `new` is an exact alias of `create-item`, and three scripts (`upload-images`, `dev`, `prebuild`) are thin wrappers over the three modes of `scripts/sync-images.ts`.
+- The root `package.json` defines **24 npm scripts**; `new` is an exact alias of `create-item`, and three scripts (`upload-images`, `dev`, `prebuild`) are thin wrappers over the three modes of `scripts/sync-images.ts`.
 - **Sellers only ever edit files under `content/` by hand.** The CLIs below read and write `content/` *on your behalf* — you never need to open `app/`, `lib/`, or `scripts/` yourself.
 - `workers/shipping-rate-proxy/` is an **independently deployed** Cloudflare Worker package with its own `package.json`; it is excluded from the root tsconfig / ESLint / Vitest scope.
 - `lib/generated/image-manifest.json` is **committed to git** (Iron Rule 5). Scripts write it; CI reads it and needs no CDN credentials.
@@ -27,6 +27,7 @@
 | Script | Runs | Purpose |
 |---|---|---|
 | `pnpm upload-images` | `tsx scripts/sync-images.ts --mode upload` | Upload new/changed photos to the CDN, strip EXIF/GPS, write the committed image manifest |
+| `pnpm configure-image-cors` | `tsx scripts/configure-image-cors.ts` | One-time: add a GET CORS rule for the site's `baseUrl` to the R2 bucket (`cloudflare-r2` provider only), needed for the item flyer button's photos. No-op for other providers; prints the manual dashboard steps if the R2 token lacks bucket-settings permission |
 | `pnpm create-item <category>/<name>` | `tsx scripts/create-item.ts` | Scaffold a 36-field draft `item.json`, applying site/category `_defaults.json` first |
 | `pnpm new <category>/<name>` | `tsx scripts/create-item.ts` | Exact alias of `create-item` |
 | `pnpm create-template [category]` | `tsx scripts/create-template.ts` | Write a fully-commented `_template.json` sellers can copy |
@@ -179,7 +180,7 @@
 
 ### Test files among the scripts
 
-`scripts/update-site.test.ts`, `scripts/studioFields.test.ts`, plus `scripts/lib/*.test.ts` (`imageSync`, `itemEdit`, `itemFields`, `itemTemplate`, `markSold`, `studioApi`, `studioGit`, `studioImages`, `studioSync`) — all executed by the root `test` / `test:watch` / `test:coverage` scripts.
+`scripts/update-site.test.ts`, `scripts/studioFields.test.ts`, plus `scripts/lib/*.test.ts` (`imageSync`, `itemEdit`, `itemFields`, `itemTemplate`, `markSold`, `r2Cors`, `studioApi`, `studioGit`, `studioImages`, `studioSync`) — all executed by the root `test` / `test:watch` / `test:coverage` scripts.
 
 ---
 
@@ -191,6 +192,7 @@ Not standalone runnables — imported by the CLIs above. Each has a colocated `*
 |---|---|
 | `loadEnv.ts` | `.env.local` parser (`loadDotEnvLocal`); existing `process.env` values always win. Shared by `sync-images` + `studio` (tsx does not auto-load `.env.local`). |
 | `imageSync.ts` ⭐ | Pure CDN pipeline: sha256 checksums, `scanImages` (skips `_`-prefixed dirs), `syncImagesToCdn` (`UPLOAD_CONCURRENCY=8`, per-file failure isolation, EXIF stripping, progress callbacks). Drives both `pnpm upload-images` and Seller Studio's sync. |
+| `r2Cors.ts` | Pure merge logic for `configure-image-cors`: `buildMergedCorsRules(existingRules, baseUrl)` appends a GET-only rule for `baseUrl` without touching unrelated existing rules, reporting `alreadyPresent` if one already covers it. Reuses the AWS SDK's own `CORSRule` type so it can't drift from what Get/PutBucketCorsCommand accept. |
 | `itemTemplate.ts` | 36-field `item.json` scaffold (`buildItemTemplate` / `renderItemTemplateJsonc`, injects `// options:` comments) shared by `create-item`, `create-template`, and Studio item creation. Excludes `reserved_for` (private — never rendered, Iron Rule 4). |
 | `itemEdit.ts` | Surgical JSONC field edits via `jsonc-parser` (`applyFieldEdits`, `readItemField`, `readItemForEdit`) — comments and `reserved_for` survive every write. Used by `mark-sold` and Studio. |
 | `itemFields.ts` | The strict Zod allowlist of browser-writable field paths (`resolveFieldSchema(path)` is the single authority — prototype-pollution-safe own-key lookup; plus `assertEditableValue`, `pickEditableFields`). No `.catch`/`.default`/`.preprocess`, so a `safeParse` failure is a hard rejection; drift tests assert key-set parity with `itemJsonSchema`. |
