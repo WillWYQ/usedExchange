@@ -5,8 +5,8 @@ import crypto from "crypto";
 import { pathToFileURL } from "node:url";
 // Type-only: erased at compile time, so this does NOT make the `playwright`
 // package a runtime dependency of this module — see the "Dynamic import"
-// comment on renderHtmlToPdf below for why that matters.
-import type { Page } from "playwright";
+// comment on launchChromiumOrError below for why that matters.
+import type { Page, Browser } from "playwright";
 import { loadAllItemsRaw, loadCategories } from "../../../lib/content/loader";
 import type { Category, Item, Status } from "../../../lib/content/types";
 import { siteConfig } from "../../../content/config";
@@ -14,6 +14,7 @@ import { getLocalizedField } from "../../../lib/utils/i18n";
 import { getTranslationsForLocale } from "../../../lib/i18n/getTranslations";
 import type { PriceStrategy } from "../../../lib/utils/pricing";
 import { buildFlyerHtml, buildFullCatalogHtml, escapeHtml, type CategoryGroup, type ItemPdfView } from "./template";
+import { resolveAnchorPageNumbers } from "./resolvePageNumbers";
 
 export type PdfExportOptions = {
   locale: string;
@@ -78,10 +79,11 @@ function hashUrl(url: string): string {
 
 // Returns the downloaded image's filename (relative to tempDir), not a full
 // path or URL: the HTML document is rendered from that same tempDir (see
-// renderHtmlToPdf below), so a bare filename is all a rewritten <img src>
-// needs — and it is what lets that document be loaded via a real file://
-// URL, which a bare setContent() document cannot do for local subresources
-// at all (see the "page.goto vs page.setContent" comment on renderHtmlToPdf).
+// renderHtmlToPdfBytes below), so a bare filename is all a rewritten <img
+// src> needs — and it is what lets that document be loaded via a real
+// file:// URL, which a bare setContent() document cannot do for local
+// subresources at all (see the "page.goto vs page.setContent" comment on
+// renderHtmlToPdfBytes).
 async function downloadOneImage(
   url: string,
   tempDir: string,
@@ -131,12 +133,12 @@ function combineSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
 // per-run temp dir and rewrites those srcs to bare filenames (e.g.
 // "usedexchange-pdf-<hash>.jpg") relative to that same tempDir — not
 // file:// URLs. The HTML document itself is written into tempDir and loaded
-// via page.goto() on a real file:// URL by renderHtmlToPdf, and a document
-// with a file:// origin can load same-directory relative resources; a
-// document with no origin (page.setContent()) cannot load file:// resources
+// via page.goto() on a real file:// URL by renderHtmlToPdfBytes, and a
+// document with a file:// origin can load same-directory relative resources;
+// a document with no origin (page.setContent()) cannot load file:// resources
 // at all, however they are addressed, which is why the src is rewritten to a
-// relative path rather than an absolute file:// one — see renderHtmlToPdf's
-// own comment for why that distinction matters.
+// relative path rather than an absolute file:// one — see
+// renderHtmlToPdfBytes's own comment for why that distinction matters.
 //
 // Two failure modes are tolerated:
 //   - per-image failure (network, timeout, 4xx/5xx, too large): the src
@@ -255,46 +257,45 @@ export function groupEligibleItems(
 
 // Generous timeout, well above Playwright's 30s default: a catalog with many
 // items (up to 4 CDN photos each) waiting for `networkidle`, followed by
-// full-document PDF layout, can plausibly exceed the default. Shared by both
-// callers of renderHtmlToPdf below.
+// full-document PDF layout, can plausibly exceed the default. Consumed by
+// renderHtmlToPdfBytes (and transitively by renderHtmlToPdf) — every render
+// call gets its own full budget, not a shared/divided one. The catalog
+// export's two-pass render (pass 1 to discover TOC pagination, pass 2 for the
+// real download) means that path now spends up to two of these timeouts
+// before a seller sees a friendly error, roughly doubling the worst-case wait
+// versus before this feature.
 const RENDER_TIMEOUT_MS = 60_000;
 
-/**
- * Shared browser-lifecycle/render/cleanup pipeline behind both
- * generateCatalogPdf and generateFlyerPdf: launch Chromium, prefetch images,
- * render `html` to a PDF file with the given `pdfOptions`, and clean up the
- * page/prefetch tempDir/browser — all in the same order and with the same
- * failure handling for every caller, so a future fix to any of that (timeout
- * behaviour, cleanup ordering, the Playwright API surface) only has to be
- * made once. Callers own everything specific to *what* is being exported:
- * item lookup/validation, HTML assembly, the PDF's own page options, the
- * output filename, and the render-failure message shown to the seller.
- */
-async function renderHtmlToPdf(
-  html: string,
-  opts: {
-    filenamePrefix: string;
-    pdfOptions: Parameters<Page["pdf"]>[0];
-    renderErrorMessage: string;
-  },
-): Promise<{ file: string } | { error: string }> {
-  // Dynamic import, not a static one: studioApi.ts imports this module at
-  // module scope, so every Studio boot would otherwise load the `playwright`
-  // package eagerly — including on a downstream site that ran
-  // `pnpm update-site --skip-verify` (which explicitly skips `pnpm install`)
-  // and never got the package installed at all. A missing *package* throws at
-  // import time, before this try/catch exists to catch it, crashing the whole
-  // Studio dev server with a raw "Cannot find module" error. Deferring the
-  // import to here means "playwright missing" and "Chromium binary missing"
-  // both land in the same catch and produce the same friendly typed error.
-  let browser;
+// Dynamic import, not a static one — see the module-level comment further up
+// this file (generate.ts is imported at Studio module-load time; a static
+// import of a devDependency would crash Studio boot on a site that skipped
+// `pnpm install`). Missing *package* and missing Chromium *binary* both land
+// in this same catch and produce the same friendly typed error. Exported so
+// a caller that needs to render multiple documents (e.g. the two-pass
+// catalog render in generateCatalogPdf) can launch once and reuse the
+// browser, instead of every render call launching (and closing) its own.
+export async function launchChromiumOrError(): Promise<{ browser: Browser } | { error: string }> {
   try {
     const { chromium } = await import("playwright");
-    browser = await chromium.launch();
+    return { browser: await chromium.launch() };
   } catch {
     return { error: "PDF renderer not installed. Run: npx playwright install chromium" };
   }
+}
 
+/**
+ * Renders `html` to PDF bytes on an already-launched `browser` — prefetch,
+ * render, and page cleanup, but no file write and no browser lifecycle (the
+ * caller owns both). Exported for the same multi-render-sharing reason as
+ * launchChromiumOrError, and so generate.test.ts can exercise it directly
+ * for the pass-1/pass-2 page-count parity check (see generateCatalogPdf's
+ * tests).
+ */
+export async function renderHtmlToPdfBytes(
+  browser: Browser,
+  html: string,
+  opts: { pdfOptions: Parameters<Page["pdf"]>[0]; renderErrorMessage: string },
+): Promise<{ bytes: Buffer } | { error: string }> {
   // Pull every remote image to a local temp dir before Chromium sees the
   // HTML. Live CDN fetches from headless Chromium are slow and flaky —
   // pre-fetching turns render-time network stalls into local file reads.
@@ -310,74 +311,70 @@ async function renderHtmlToPdf(
   }
 
   try {
-    const file = path.join(os.tmpdir(), `${opts.filenamePrefix}-${Date.now()}.pdf`);
+    const page = await browser.newPage();
     try {
-      const page = await browser.newPage();
-      let pdfBytes: Buffer;
-      try {
-        if (prefetchResult !== undefined) {
-          // Chromium refuses to load a file:// subresource (an <img
-          // src="file://...">) from a document that has no origin of its
-          // own — which is exactly what page.setContent() produces — and
-          // fails with "Not allowed to load local resource", silently
-          // dropping the photo via the template's onerror="this.remove()".
-          // A document navigated to its own file:// URL DOES have an
-          // origin and can load same-directory files without issue, so the
-          // (possibly prefetch-rewritten) HTML is written into the same
-          // tempDir the downloaded images already live in, and loaded via a
-          // real file:// URL instead. pathToFileURL handles the
-          // platform-specific escaping (spaces, backslashes on Windows,
-          // etc.) that hand-building `"file://" + path` would get wrong.
-          const htmlFilePath = path.join(prefetchResult.tempDir, "page.html");
-          await fs.writeFile(htmlFilePath, prefetchResult.html, "utf-8");
-          await page.goto(pathToFileURL(htmlFilePath).href, {
-            waitUntil: "networkidle",
-            timeout: RENDER_TIMEOUT_MS,
-          });
-        } else {
-          // Prefetch failed entirely, so there is no tempDir and nothing
-          // local for the HTML to reference — the original HTML (with its
-          // original remote <img src> URLs) is safe to render straight from
-          // memory via setContent(), exactly as before this feature existed.
-          await page.setContent(html, { waitUntil: "networkidle", timeout: RENDER_TIMEOUT_MS });
-        }
-        pdfBytes = await withTimeout(
-          page.pdf(opts.pdfOptions),
-          RENDER_TIMEOUT_MS,
-          `PDF generation exceeded ${RENDER_TIMEOUT_MS}ms`,
-        );
-      } catch {
-        // A raw Playwright error (e.g. "Timeout 60000ms exceeded") is not
-        // actionable for a seller. Surface a typed error with real guidance
-        // instead of letting this reject and fall through to
-        // handleStudioRequest's generic catch-all, which would otherwise turn
-        // it into an opaque 500.
-        return { error: opts.renderErrorMessage };
-      } finally {
-        try {
-          await page.close();
-        } catch {
-          // A page.close() failure must not mask an earlier error (or a
-          // successful render) — swallow it.
-        }
+      if (prefetchResult !== undefined) {
+        // Chromium refuses to load a file:// subresource from a document
+        // that has no origin of its own — see the original comment history
+        // on this file for the full explanation. The (possibly
+        // prefetch-rewritten) HTML is written into the same tempDir the
+        // downloaded images already live in, and loaded via a real file://
+        // URL instead.
+        const htmlFilePath = path.join(prefetchResult.tempDir, "page.html");
+        await fs.writeFile(htmlFilePath, prefetchResult.html, "utf-8");
+        await page.goto(pathToFileURL(htmlFilePath).href, {
+          waitUntil: "networkidle",
+          timeout: RENDER_TIMEOUT_MS,
+        });
+      } else {
+        await page.setContent(html, { waitUntil: "networkidle", timeout: RENDER_TIMEOUT_MS });
       }
-
-      await fs.writeFile(file, pdfBytes);
-      return { file };
+      const pdfBytes = await withTimeout(
+        page.pdf(opts.pdfOptions),
+        RENDER_TIMEOUT_MS,
+        `PDF generation exceeded ${RENDER_TIMEOUT_MS}ms`,
+      );
+      return { bytes: pdfBytes };
+    } catch {
+      // A raw Playwright error (e.g. "Timeout 60000ms exceeded") is not
+      // actionable for a seller. Surface a typed error with real guidance
+      // instead.
+      return { error: opts.renderErrorMessage };
     } finally {
-      if (tempDir) {
-        await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+      try {
+        await page.close();
+      } catch {
+        // A page.close() failure must not mask an earlier error (or a
+        // successful render) — swallow it.
       }
     }
   } finally {
-    try {
-      await browser.close();
-    } catch {
-      // A close failure here must not mask whatever error caused this
-      // `finally` to run in the first place (or override a successful result
-      // already computed above) — swallow it.
+    if (tempDir) {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
   }
+}
+
+/**
+ * Thin file-writing wrapper around renderHtmlToPdfBytes — the shape every
+ * existing caller (generateFlyerPdf, and the catalog's final pass-2 render)
+ * actually wants: a file on disk under os.tmpdir(), ready to hand back as a
+ * FileResponse.
+ */
+async function renderHtmlToPdf(
+  browser: Browser,
+  html: string,
+  opts: {
+    filenamePrefix: string;
+    pdfOptions: Parameters<Page["pdf"]>[0];
+    renderErrorMessage: string;
+  },
+): Promise<{ file: string } | { error: string }> {
+  const result = await renderHtmlToPdfBytes(browser, html, opts);
+  if ("error" in result) return result;
+  const file = path.join(os.tmpdir(), `${opts.filenamePrefix}-${Date.now()}.pdf`);
+  await fs.writeFile(file, result.bytes);
+  return { file };
 }
 
 // Takes only `options` — unlike the design spec's original
@@ -401,27 +398,63 @@ export async function generateCatalogPdf(
   // origin — page.setContent() has no origin of its own, so it must be made
   // absolute here or the <img> in the cover page would 404 silently.
   const logo = siteConfig.logo ? `${siteConfig.baseUrl}${siteConfig.logo}` : "";
-  const html = buildFullCatalogHtml(
-    { name: siteConfig.name, tagline: siteConfig.tagline, logo, baseUrl: siteConfig.baseUrl },
-    groups,
-    new Date().toISOString().slice(0, 10),
-    t,
-    options.priceStrategy,
-  );
+  const branding = { name: siteConfig.name, tagline: siteConfig.tagline, logo, baseUrl: siteConfig.baseUrl };
+  const generatedAt = new Date().toISOString().slice(0, 10);
 
-  return renderHtmlToPdf(html, {
-    filenamePrefix: "usedexchange-catalog",
-    pdfOptions: {
-      format: "Letter",
-      printBackground: true,
-      displayHeaderFooter: true,
-      headerTemplate: "<div></div>",
-      footerTemplate: `<div style="font-size:8px; width:100%; text-align:center; color:#888;">${escapeHtml(siteConfig.name)} · ${escapeHtml(t.pdfFooterPage)} <span class="pageNumber"></span> ${escapeHtml(t.pdfFooterOf)} <span class="totalPages"></span></div>`,
-      margin: { top: "20mm", bottom: "16mm", left: "14mm", right: "14mm" },
-    },
-    renderErrorMessage:
-      "PDF rendering timed out or failed — the catalog may be too large (many items or photos). Try again, or retry after trimming a few item photos.",
-  });
+  // Shared between both passes — the width-reservation technique
+  // buildTocHtml uses to keep pass-1/pass-2 pagination identical (see
+  // resolvePageNumbers.ts and the design spec, §4) depends on the page box
+  // being laid out identically in both renders, so this object must not
+  // differ between them.
+  const pdfOptions = {
+    format: "Letter" as const,
+    printBackground: true,
+    displayHeaderFooter: true,
+    headerTemplate: "<div></div>",
+    footerTemplate: `<div style="font-size:8px; width:100%; text-align:center; color:#888;">${escapeHtml(siteConfig.name)} · ${escapeHtml(t.pdfFooterPage)} <span class="pageNumber"></span> ${escapeHtml(t.pdfFooterOf)} <span class="totalPages"></span></div>`,
+    margin: { top: "20mm", bottom: "16mm", left: "14mm", right: "14mm" },
+  };
+  const renderErrorMessage =
+    "PDF rendering timed out or failed — the catalog may be too large (many items or photos). Try again, or retry after trimming a few item photos.";
+
+  const launch = await launchChromiumOrError();
+  if ("error" in launch) return launch;
+  const { browser } = launch;
+  try {
+    // Pass 1: TOC renders empty (but width-reserved) page-number slots — this
+    // PDF exists only to discover real pagination, and is discarded.
+    const pass1Html = buildFullCatalogHtml(branding, groups, generatedAt, t, options.priceStrategy, null);
+    const pass1 = await renderHtmlToPdfBytes(browser, pass1Html, { pdfOptions, renderErrorMessage });
+    if ("error" in pass1) return pass1;
+
+    const anchorIds = groups.flatMap((group) => [
+      `cat-${group.slug}`,
+      ...group.items.map((item) => `item-${item.categorySlug}-${item.itemSlug}`),
+    ]);
+    // Page-number resolution failure (e.g. PDFDocument.load() throwing on a
+    // malformed PDF, or an unexpected /Dests structural variant) must not
+    // crash the whole export — a catalog without real TOC numbers is
+    // strictly better than no catalog at all (design spec §3, §5.2). Falling
+    // back to null reproduces pass-1's own blank-slot appearance in the final
+    // pass-2 TOC instead of surfacing an opaque error.
+    let pageNumbers: Map<string, number> | null = null;
+    try {
+      pageNumbers = await resolveAnchorPageNumbers(pass1.bytes, anchorIds);
+    } catch {
+      // Unresolvable pagination degrades to pass-1's blank slots — a catalog
+      // without TOC numbers still beats no catalog at all.
+    }
+
+    // Pass 2: the real download, with resolved numbers baked into the TOC.
+    const pass2Html = buildFullCatalogHtml(branding, groups, generatedAt, t, options.priceStrategy, pageNumbers);
+    return await renderHtmlToPdf(browser, pass2Html, {
+      filenamePrefix: "usedexchange-catalog",
+      pdfOptions,
+      renderErrorMessage,
+    });
+  } finally {
+    await browser.close().catch(() => {});
+  }
 }
 
 // Renders a single item's page as a standalone "flyer" PDF: same item-page
@@ -457,14 +490,21 @@ export async function generateFlyerPdf(itemId: string): Promise<{ file: string }
     getTranslationsForLocale(locale),
   );
 
-  return renderHtmlToPdf(html, {
-    filenamePrefix: `usedexchange-flyer-${itemId.replace(/\//g, "-")}`,
-    pdfOptions: {
-      format: "Letter",
-      printBackground: true,
-      displayHeaderFooter: false,
-      margin: { top: "14mm", bottom: "14mm", left: "14mm", right: "14mm" },
-    },
-    renderErrorMessage: "PDF rendering timed out or failed. Try again, or retry after trimming a few item photos.",
-  });
+  const launch = await launchChromiumOrError();
+  if ("error" in launch) return launch;
+  const { browser } = launch;
+  try {
+    return await renderHtmlToPdf(browser, html, {
+      filenamePrefix: `usedexchange-flyer-${itemId.replace(/\//g, "-")}`,
+      pdfOptions: {
+        format: "Letter",
+        printBackground: true,
+        displayHeaderFooter: false,
+        margin: { top: "14mm", bottom: "14mm", left: "14mm", right: "14mm" },
+      },
+      renderErrorMessage: "PDF rendering timed out or failed. Try again, or retry after trimming a few item photos.",
+    });
+  } finally {
+    await browser.close().catch(() => {});
+  }
 }

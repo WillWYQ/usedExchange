@@ -276,5 +276,6 @@ export type UIStrings = {
   pdfFooterPage: string;
   pdfFooterOf: string;
   pdfAveragePriceLabel: string;
+  pdfCategoryItemCount: string;
   condition: string;
 };

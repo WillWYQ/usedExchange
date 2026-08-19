@@ -69,6 +69,7 @@ export const CONFIG_DEFAULTS: ConfigDefault[] = [
       '        pdfFooterPage: "Page",',
       '        pdfFooterOf: "of",',
       '        pdfAveragePriceLabel: "Highlighted price (average): {amount}",',
+      '        pdfCategoryItemCount: "{count} items in this category",',
       '        condition: "Condition",',
     ],
   },
