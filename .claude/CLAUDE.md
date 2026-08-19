@@ -106,6 +106,7 @@ Checklist for every new config field:
 | Create a new item | `pnpm create-item <category>/<name>` (alias: `pnpm new`) |
 | Scaffold a commented `_template.json` | `pnpm create-template [category]` |
 | Upload photos to CDN | `pnpm upload-images` |
+| Enable photos in the item flyer PDF | `pnpm configure-image-cors` (one-time, `cloudflare-r2` only; needed because the flyer button fetches image bytes cross-origin, unlike the `<img>` tags used elsewhere) |
 | Export listings to Facebook Marketplace | `pnpm fb-export` (interactive; outputs `exports/facebook-marketplace.csv` — numbered `-<N>` variants for 50+ item batches, plus `exports/facebook-marketplace-photos/` for manual photo upload) |
 | Update site to a new template version | `pnpm update-site [tag] [--list] [--skip-verify]` (`docs/UPDATE_GUIDE.md`; auto-runs the config migration) |
 | Splice missing config fields after an upgrade | `pnpm migrate-config` (also runs automatically during `pnpm update-site`) |

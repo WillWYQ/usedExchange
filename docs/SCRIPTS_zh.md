@@ -13,7 +13,7 @@
 ## 概述
 
 - 所有 CLI 均位于 `scripts/`，通过 **tsx** 执行（Node.js 环境——无浏览器 API），属于生产级工具，而非仅开发期辅助。
-- 根目录 `package.json` 共定义 **22 个 npm 脚本**；`new` 是 `create-item` 的完全别名，另有三个脚本（`upload-images`、`dev`、`prebuild`）是 `scripts/sync-images.ts` 三种模式的轻量封装。
+- 根目录 `package.json` 共定义 **24 个 npm 脚本**；`new` 是 `create-item` 的完全别名，另有三个脚本（`upload-images`、`dev`、`prebuild`）是 `scripts/sync-images.ts` 三种模式的轻量封装。
 - **卖家只需手动编辑 `content/` 内的文件。** 下文的 CLI 会*代你*读写 `content/`——你无需亲自打开 `app/`、`lib/` 或 `scripts/`。
 - `workers/shipping-rate-proxy/` 是一个**独立部署**的 Cloudflare Worker 包，拥有自己的 `package.json`；它不在根级 tsconfig / ESLint / Vitest 的作用域内。
 - `lib/generated/image-manifest.json` **提交到 git**（铁律 #5）。脚本负责写入它；CI 直接读取它，无需任何 CDN 凭据。
@@ -27,6 +27,7 @@
 | 脚本 | 实际执行 | 用途 |
 |---|---|---|
 | `pnpm upload-images` | `tsx scripts/sync-images.ts --mode upload` | 将新增/变更的照片上传至 CDN，去除 EXIF/GPS 信息，写入已提交的图片清单 |
+| `pnpm configure-image-cors` | `tsx scripts/configure-image-cors.ts` | 一次性操作：为 R2 存储桶添加一条针对站点 `baseUrl` 的 GET CORS 规则（仅 `cloudflare-r2` provider），物品 flyer 按钮的照片需要它。其他 provider 下为空操作；若 R2 token 没有存储桶设置权限，会打印手动配置步骤 |
 | `pnpm create-item <category>/<name>` | `tsx scripts/create-item.ts` | 先应用全站/分类 `_defaults.json`，再生成 36 字段的草稿 `item.json` |
 | `pnpm new <category>/<name>` | `tsx scripts/create-item.ts` | `create-item` 的完全别名 |
 | `pnpm create-template [category]` | `tsx scripts/create-template.ts` | 写入带完整注释的 `_template.json`，供卖家复制使用 |
@@ -178,7 +179,7 @@
 
 ### scripts 目录下的测试文件
 
-`scripts/update-site.test.ts`、`scripts/studioFields.test.ts`，以及 `scripts/lib/*.test.ts`（`imageSync`、`itemEdit`、`itemFields`、`itemTemplate`、`markSold`、`studioApi`、`studioGit`、`studioImages`、`studioSync`）—— 全部由根级 `test` / `test:watch` / `test:coverage` 脚本执行。
+`scripts/update-site.test.ts`、`scripts/studioFields.test.ts`，以及 `scripts/lib/*.test.ts`（`imageSync`、`itemEdit`、`itemFields`、`itemTemplate`、`markSold`、`r2Cors`、`studioApi`、`studioGit`、`studioImages`、`studioSync`）—— 全部由根级 `test` / `test:watch` / `test:coverage` 脚本执行。
 
 ---
 
@@ -190,6 +191,7 @@
 |---|---|
 | `loadEnv.ts` | `.env.local` 解析器（`loadDotEnvLocal`）；已存在的 `process.env` 值始终优先。由 `sync-images` + `studio` 共用（tsx 不会自动加载 `.env.local`）。 |
 | `imageSync.ts` ⭐ | 纯 CDN 流水线：sha256 校验和、`scanImages`（跳过 `_` 前缀目录）、`syncImagesToCdn`（`UPLOAD_CONCURRENCY=8`、单文件失败隔离、EXIF 去除、进度回调）。同时驱动 `pnpm upload-images` 与 Seller Studio 的同步。 |
+| `r2Cors.ts` | `configure-image-cors` 的纯合并逻辑：`buildMergedCorsRules(existingRules, baseUrl)` 为 `baseUrl` 追加一条仅 GET 的规则，不动其他已有规则；若已被覆盖则返回 `alreadyPresent`。直接复用 AWS SDK 自身的 `CORSRule` 类型，不会与 Get/PutBucketCorsCommand 实际接受的形状产生偏差。 |
 | `itemTemplate.ts` | 36 字段 `item.json` 脚手架（`buildItemTemplate` / `renderItemTemplateJsonc`，注入 `// options:` 注释），由 `create-item`、`create-template` 与 Studio 新建物品共用。排除 `reserved_for`（私密字段 —— 绝不渲染，铁律 #4）。 |
 | `itemEdit.ts` | 基于 `jsonc-parser` 的外科手术式 JSONC 字段编辑（`applyFieldEdits`、`readItemField`、`readItemForEdit`）—— 每次写入后注释与 `reserved_for` 均原样保留。由 `mark-sold` 与 Studio 使用。 |
 | `itemFields.ts` | 浏览器可写字段路径的严格 Zod 白名单（`resolveFieldSchema(path)` 是唯一权威 —— 防原型污染的自己键查找；另有 `assertEditableValue`、`pickEditableFields`）。不含 `.catch`/`.default`/`.preprocess`，因此 `safeParse` 失败即硬性拒绝；漂移测试断言其与 `itemJsonSchema` 在每一嵌套层级的键集合一致。 |

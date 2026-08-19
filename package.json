@@ -6,6 +6,7 @@
     "setup-ui": "bash scripts/setup-ui.sh",
     "studio": "tsx scripts/studio.ts",
     "upload-images": "tsx scripts/sync-images.ts --mode upload",
+    "configure-image-cors": "tsx scripts/configure-image-cors.ts",
     "create-item": "tsx scripts/create-item.ts",
     "create-template": "tsx scripts/create-template.ts",
     "new": "tsx scripts/create-item.ts",
