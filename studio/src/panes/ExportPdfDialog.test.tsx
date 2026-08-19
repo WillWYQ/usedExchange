@@ -39,6 +39,13 @@ const DEFAULT_PROPS = {
   defaultLocale: "en",
 };
 
+/** Wraps a fixed sequence of SSE-style events as the async generator streamExportCatalogPdf returns. */
+async function* fakeExportStream(events: api.PdfExportEvent[]): AsyncGenerator<api.PdfExportEvent> {
+  for (const evt of events) {
+    yield evt;
+  }
+}
+
 function renderDialog(
   items: StudioItem[],
   overrides: Partial<typeof DEFAULT_PROPS> = {},
@@ -87,7 +94,10 @@ describe("ExportPdfDialog", () => {
 
   it("sends the selected options as the request body", async () => {
     const blob = new Blob(["%PDF"], { type: "application/pdf" });
-    const spy = vi.spyOn(api, "exportCatalogPdf").mockResolvedValue(blob);
+    const streamSpy = vi
+      .spyOn(api, "streamExportCatalogPdf")
+      .mockImplementation(() => fakeExportStream([{ event: "done", data: { token: "tok-1" } }]));
+    vi.spyOn(api, "downloadExportedPdf").mockResolvedValue(blob);
     vi.stubGlobal("URL", { ...URL, createObjectURL: vi.fn(() => "blob:fake"), revokeObjectURL: vi.fn() });
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 
@@ -97,7 +107,8 @@ describe("ExportPdfDialog", () => {
     await user.selectOptions(screen.getByLabelText("Highlighted price"), "lowest");
     await user.click(screen.getByRole("button", { name: /Generate & Download/ }));
 
-    expect(spy).toHaveBeenCalledWith({
+    await screen.findByText(/Downloaded/);
+    expect(streamSpy).toHaveBeenCalledWith({
       locale: "zh",
       priceStrategy: "lowest",
       categories: ["electronics", "books"],
@@ -107,9 +118,12 @@ describe("ExportPdfDialog", () => {
 
   it("disables the generate button while busy and re-enables after success", async () => {
     const blob = new Blob(["%PDF"], { type: "application/pdf" });
-    vi.spyOn(api, "exportCatalogPdf").mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve(blob), 10)),
-    );
+    vi.spyOn(api, "streamExportCatalogPdf").mockImplementation(async function* () {
+      yield { event: "progress", data: { stage: "loading" } };
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      yield { event: "done", data: { token: "tok-1" } };
+    });
+    vi.spyOn(api, "downloadExportedPdf").mockResolvedValue(blob);
     // jsdom has no real download machinery; createObjectURL/revokeObjectURL are stubbed
     // so the click-triggered download path does not throw. jsdom also logs a
     // "Not implemented: navigation" error when an <a> with an unrecognized
@@ -126,8 +140,39 @@ describe("ExportPdfDialog", () => {
     await screen.findByText(/Downloaded/);
   });
 
+  it("shows a progress bar with the current stage while a catalog export streams", async () => {
+    // A property on a plain object, not a bare `let`: TS's control-flow
+    // narrowing on a `let` reassigned only from inside a nested closure can
+    // collapse it to `never` at the read site below, even though the
+    // reassignment does run before that read.
+    const step: { resolve: (() => void) | null } = { resolve: null };
+    vi.spyOn(api, "streamExportCatalogPdf").mockImplementation(async function* () {
+      yield { event: "progress", data: { stage: "images-pass-1", completed: 3, total: 10 } };
+      await new Promise<void>((resolve) => {
+        step.resolve = resolve;
+      });
+      yield { event: "done", data: { token: "tok-1" } };
+    });
+    vi.spyOn(api, "downloadExportedPdf").mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }));
+    vi.stubGlobal("URL", { ...URL, createObjectURL: vi.fn(() => "blob:fake"), revokeObjectURL: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    renderDialog([makeItem()]);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /Generate & Download/ }));
+
+    expect(await screen.findByText(/Preparing photos \(3\/10\)/)).toBeTruthy();
+    const bar = screen.getByRole("progressbar");
+    expect(bar.getAttribute("aria-valuenow")).toBe("13"); // 5 + 25*(3/10) = 12.5, rounds to 13
+
+    step.resolve?.();
+    await screen.findByText(/Downloaded/);
+  });
+
   it("shows the server's error message on failure", async () => {
-    vi.spyOn(api, "exportCatalogPdf").mockRejectedValue(new Error("No items match the selected filters."));
+    vi.spyOn(api, "streamExportCatalogPdf").mockImplementation(() =>
+      fakeExportStream([{ event: "error", data: { error: "No items match the selected filters." } }]),
+    );
     renderDialog([makeItem()]);
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /Generate & Download/ }));

@@ -2,7 +2,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   fetchItems,
-  exportCatalogPdf,
+  streamExportCatalogPdf,
+  downloadExportedPdf,
   exportItemFlyerPdf,
   fetchCategories,
   createCategory,
@@ -12,6 +13,20 @@ import {
   fetchConfig,
   saveContactPlatformQrImage,
 } from "./api";
+
+/** Builds a Response whose body streams the given SSE frames, one chunk each. */
+function sseResponse(frames: Array<{ event: string; data: unknown }>): Response {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const encoder = new TextEncoder();
+      for (const frame of frames) {
+        controller.enqueue(encoder.encode(`event: ${frame.event}\ndata: ${JSON.stringify(frame.data)}\n\n`));
+      }
+      controller.close();
+    },
+  });
+  return new Response(body, { status: 200 });
+}
 
 describe("fetchItems", () => {
   it("returns items and locale metadata for a valid response", async () => {
@@ -64,7 +79,7 @@ describe("fetchItems", () => {
   });
 });
 
-describe("exportCatalogPdf", () => {
+describe("streamExportCatalogPdf", () => {
   const options = {
     locale: "en",
     priceStrategy: "average" as const,
@@ -72,25 +87,37 @@ describe("exportCatalogPdf", () => {
     statuses: ["available" as const],
   };
 
-  it("returns the response body as a Blob on success and sends the options as the JSON body", async () => {
-    const fakeBlob = new Blob(["%PDF-fake"], { type: "application/pdf" });
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      blob: async () => fakeBlob,
-    }));
+  async function collect<T>(gen: AsyncGenerator<T>): Promise<T[]> {
+    const out: T[] = [];
+    for await (const item of gen) out.push(item);
+    return out;
+  }
+
+  it("sends the options as the JSON body and yields each SSE frame in order", async () => {
+    const fetchMock = vi.fn(async () =>
+      sseResponse([
+        { event: "progress", data: { stage: "loading" } },
+        { event: "progress", data: { stage: "images-pass-1", completed: 1, total: 2 } },
+        { event: "done", data: { token: "abc123" } },
+      ]),
+    );
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
-    const result = await exportCatalogPdf(options);
-    expect(result).toBe(fakeBlob);
+
+    const events = await collect(streamExportCatalogPdf(options));
+
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/export-pdf",
       expect.objectContaining({ method: "POST", body: JSON.stringify(options) }),
     );
+    expect(events).toEqual([
+      { event: "progress", data: { stage: "loading" } },
+      { event: "progress", data: { stage: "images-pass-1", completed: 1, total: 2 } },
+      { event: "done", data: { token: "abc123" } },
+    ]);
     vi.unstubAllGlobals();
   });
 
-  it("throws the server's error message on failure", async () => {
+  it("throws the server's error message when the initial request fails", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -100,7 +127,42 @@ describe("exportCatalogPdf", () => {
         json: async () => ({ error: "No items match the selected filters." }),
       })) as unknown as typeof fetch,
     );
-    await expect(exportCatalogPdf(options)).rejects.toThrow("No items match the selected filters.");
+    await expect(collect(streamExportCatalogPdf(options))).rejects.toThrow(
+      "No items match the selected filters.",
+    );
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("downloadExportedPdf", () => {
+  it("GETs the download route and returns the response body as a Blob", async () => {
+    const fakeBlob = new Blob(["%PDF-fake"], { type: "application/pdf" });
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      blob: async () => fakeBlob,
+    }));
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    const result = await downloadExportedPdf("abc123");
+    expect(result).toBe(fakeBlob);
+    expect(fetchMock).toHaveBeenCalledWith("/api/export-pdf/download/abc123");
+    vi.unstubAllGlobals();
+  });
+
+  it("throws the server's error message on failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+        json: async () => ({ error: "export not found or already downloaded" }),
+      })) as unknown as typeof fetch,
+    );
+    await expect(downloadExportedPdf("stale-token")).rejects.toThrow(
+      "export not found or already downloaded",
+    );
     vi.unstubAllGlobals();
   });
 });

@@ -1,11 +1,52 @@
 // studio/src/panes/ExportPdfDialog.tsx
 import { useMemo, useState } from "react";
-import { exportCatalogPdf, exportItemFlyerPdf, type PdfExportOptions, type StudioItem } from "../api";
+import {
+  streamExportCatalogPdf,
+  downloadExportedPdf,
+  exportItemFlyerPdf,
+  type PdfExportOptions,
+  type PdfExportProgress,
+  type StudioItem,
+} from "../api";
 import { checkPdfReadiness } from "../../../scripts/lib/pdfCatalog/checkPdfReadiness";
 import { Button } from "../components/Button";
+import { ProgressBar } from "../components/ProgressBar";
 import { useDialogBehavior } from "../components/useDialogBehavior";
 import { useStudioT } from "../i18n/StudioI18n";
 import type { StudioKey } from "../i18n/types";
+
+const STAGE_LABEL_KEY: Record<PdfExportProgress["stage"], StudioKey> = {
+  loading: "exportPdf.stage.loading",
+  "images-pass-1": "exportPdf.stage.imagesPass1",
+  "render-pass-1": "exportPdf.stage.renderPass1",
+  "resolving-toc": "exportPdf.stage.resolvingToc",
+  "images-pass-2": "exportPdf.stage.imagesPass2",
+  "render-pass-2": "exportPdf.stage.renderPass2",
+};
+
+// page.pdf() (the actual Chromium render) exposes no sub-progress of its own,
+// so the two render stages just jump to a fixed point rather than animating
+// within a range — see PdfExportProgress's own doc comment in generate.ts.
+function imageRatio(p: { completed: number; total: number }): number {
+  return p.total > 0 ? p.completed / p.total : 1;
+}
+
+function stagePercent(p: PdfExportProgress): number {
+  switch (p.stage) {
+    case "loading":
+      return 5;
+    case "images-pass-1":
+      return 5 + 25 * imageRatio(p);
+    case "render-pass-1":
+      return 35;
+    case "resolving-toc":
+      return 45;
+    case "images-pass-2":
+      return 45 + 30 * imageRatio(p);
+    case "render-pass-2":
+      return 80;
+  }
+}
 
 type PriceStrategyValue = PdfExportOptions["priceStrategy"];
 type StatusValue = PdfExportOptions["statuses"][number];
@@ -42,6 +83,7 @@ export function ExportPdfDialog({
 }) {
   const { t } = useStudioT();
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<PdfExportProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [downloadedFilename, setDownloadedFilename] = useState<string | null>(null);
   const [mode, setMode] = useState<"catalog" | "flyer">("catalog");
@@ -94,6 +136,7 @@ export function ExportPdfDialog({
   async function generate() {
     setBusy(true);
     setError(null);
+    setProgress(null);
     try {
       let blob: Blob;
       let filename: string;
@@ -104,7 +147,20 @@ export function ExportPdfDialog({
           categories: categorySlugs.filter((slug) => selectedCategories.has(slug)),
           statuses: STATUS_OPTIONS.map((s) => s.value).filter((status) => selectedStatuses.has(status)),
         };
-        blob = await exportCatalogPdf(options);
+        let token: string | null = null;
+        for await (const evt of streamExportCatalogPdf(options)) {
+          if (evt.event === "progress") {
+            setProgress(evt.data);
+          } else if (evt.event === "done") {
+            token = evt.data.token;
+          } else {
+            throw new Error(evt.data.error);
+          }
+        }
+        if (token === null) {
+          throw new Error("PDF export ended without a result.");
+        }
+        blob = await downloadExportedPdf(token);
         filename = `usedexchange-catalog-${new Date().toISOString().slice(0, 10)}.pdf`;
       } else {
         blob = await exportItemFlyerPdf(flyerId ?? "");
@@ -121,6 +177,7 @@ export function ExportPdfDialog({
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   }
 
@@ -242,6 +299,17 @@ export function ExportPdfDialog({
               ))}
             </select>
           </label>
+        )}
+        {mode === "catalog" && busy && progress !== null && (
+          <ProgressBar
+            percent={stagePercent(progress)}
+            label={t(
+              STAGE_LABEL_KEY[progress.stage],
+              progress.stage === "images-pass-1" || progress.stage === "images-pass-2"
+                ? { completed: progress.completed, total: progress.total }
+                : undefined,
+            )}
+          />
         )}
         {downloadedFilename !== null && <p>{t("exportPdf.done", { filename: downloadedFilename })}</p>}
         {warnings.length > 0 && (

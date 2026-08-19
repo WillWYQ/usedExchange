@@ -9,6 +9,7 @@
 // relaxed later.
 
 import { execFile } from "child_process";
+import crypto from "crypto";
 import fsPromises from "fs/promises";
 import path from "path";
 import { promisify } from "util";
@@ -41,7 +42,12 @@ import {
   readDefaultsFile,
   validateDefaults,
 } from "./itemDefaults";
-import { generateCatalogPdf, generateFlyerPdf, type PdfExportOptions } from "./pdfCatalog/generate";
+import {
+  generateCatalogPdf,
+  generateFlyerPdf,
+  type PdfExportOptions,
+  type PdfExportProgress,
+} from "./pdfCatalog/generate";
 import { buildReadinessReport } from "./siteReadiness";
 // assertEditableValue, directly: handleItemPatch needs to validate a
 // COMPOSED tier object (built up from several leaf edits in the same batch)
@@ -771,6 +777,7 @@ const ITEM_ROUTE_RE = /^\/api\/items\/([^/]+)\/([^/]+)$/;
 const CATEGORY_ROUTE_RE = /^\/api\/categories\/([^/]+)$/;
 const CONTACT_PLATFORM_ROUTE_RE = /^\/api\/contact-platforms\/(\d+)$/;
 const CONTACT_IMAGE_ROUTE_RE = /^\/api\/contact\/images\/([^/]+)$/;
+const EXPORT_PDF_DOWNLOAD_RE = /^\/api\/export-pdf\/download\/([^/]+)$/;
 
 async function readItemJson(req: StudioRequest, category: string, item: string): Promise<{
   jsonPath: string;
@@ -1342,16 +1349,96 @@ const exportPdfBodySchema = z.object({
   statuses: z.array(z.enum(["available", "pending", "reserved", "sold", "draft"])),
 });
 
-async function handleExportPdf(req: StudioRequest): Promise<StudioResponse> {
+// A catalog export's progress is streamed over SSE (see streamCatalogPdfExport
+// below), but the finished PDF is still a file on disk — binary bytes cannot
+// ride in the same event stream as JSON progress events. The token below is
+// the handoff: the stream's final "done" event carries it, and a follow-up
+// GET /api/export-pdf/download/:token redeems it for the file exactly once.
+// Studio is a single local seller in one browser tab, so a plain module-level
+// map is enough here — contrast with studioSync.ts's globalThis dance, which
+// exists only because that module's state is written from a second,
+// differently-bundled copy of the same file (see its own header comment).
+const PDF_EXPORT_TTL_MS = 5 * 60 * 1000;
+const pendingPdfExports = new Map<string, { file: string; timer: NodeJS.Timeout }>();
+
+function registerPdfExport(file: string): string {
+  const token = crypto.randomBytes(16).toString("hex");
+  const timer = setTimeout(() => pendingPdfExports.delete(token), PDF_EXPORT_TTL_MS);
+  pendingPdfExports.set(token, { file, timer });
+  return token;
+}
+
+function takePdfExport(token: string): string | null {
+  const entry = pendingPdfExports.get(token);
+  if (entry === undefined) return null;
+  clearTimeout(entry.timer);
+  pendingPdfExports.delete(token);
+  return entry.file;
+}
+
+// Split out so the "error"/"threw" narrowing works cleanly — same reason
+// studioSync.ts's toFinalEvent is its own function rather than inlined where
+// `settled` is reassigned (see that file's comment).
+function toPdfExportEvent(
+  state: { result: { file: string } | { error: string } } | { threw: string },
+): SseEvent {
+  if ("threw" in state) {
+    return { event: "error", data: { error: state.threw } };
+  }
+  if ("error" in state.result) {
+    return { event: "error", data: { error: state.result.error } };
+  }
+  return { event: "done", data: { token: registerPdfExport(state.result.file) } };
+}
+
+// Same buffer-and-poll shape as studioSync.ts's streamImageSync: progress
+// arrives through a callback while generateCatalogPdf is in flight, but a
+// generator can only yield when its consumer asks. No mutex here, unlike
+// image sync — two concurrent catalog exports each write to their own temp
+// dir and their own output file, so there is no shared state a second run
+// could corrupt, just extra CPU/RAM if a seller starts two at once.
+async function* streamCatalogPdfExport(options: PdfExportOptions): AsyncGenerator<SseEvent> {
+  const pending: PdfExportProgress[] = [];
+  let settled: { result: { file: string } | { error: string } } | { threw: string } | null = null;
+
+  const inFlight = generateCatalogPdf(options, (progress) => {
+    pending.push(progress);
+  }).then(
+    (result) => {
+      settled = { result };
+    },
+    (err: unknown) => {
+      settled = { threw: err instanceof Error ? err.message : String(err) };
+    },
+  );
+
+  for (;;) {
+    while (pending.length > 0) {
+      yield { event: "progress", data: pending.shift() };
+    }
+    if (settled !== null) break;
+    await Promise.race([inFlight, new Promise((r) => setTimeout(r, 50))]);
+  }
+  while (pending.length > 0) {
+    yield { event: "progress", data: pending.shift() };
+  }
+  yield toPdfExportEvent(settled);
+}
+
+function handleExportPdf(req: StudioRequest): StudioResponse {
   const options: PdfExportOptions = parseJsonBody(req.body, exportPdfBodySchema);
   if (!siteConfig.i18n.availableLocales.includes(options.locale)) {
     throw new StudioError(400, `locale "${options.locale}" is not in siteConfig.i18n.availableLocales`);
   }
-  const result = await generateCatalogPdf(options);
-  if ("error" in result) {
-    return { status: 400, body: { error: result.error } };
+  return { status: 200, events: streamCatalogPdfExport(options) };
+}
+
+function handleExportPdfDownload(token: string): StudioResponse {
+  const file = takePdfExport(token);
+  if (file === null) {
+    throw new StudioError(404, "export not found or already downloaded");
   }
-  return { status: 200, file: result.file, contentType: "application/pdf" };
+  return { status: 200, file, contentType: "application/pdf" };
 }
 
 const exportFlyerBodySchema = z.object({ id: z.string().min(1) });
@@ -1580,7 +1667,7 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
       if (req.method !== "POST") {
         return { status: 405, body: { error: "POST only" } };
       }
-      return await handleExportPdf(req);
+      return handleExportPdf(req);
     }
 
     if (pathname === "/api/export-pdf/flyer") {
@@ -1588,6 +1675,24 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
         return { status: 405, body: { error: "POST only" } };
       }
       return await handleExportFlyer(req);
+    }
+
+    const exportDownloadMatch = EXPORT_PDF_DOWNLOAD_RE.exec(pathname);
+    if (exportDownloadMatch !== null) {
+      const [, tokenRaw] = exportDownloadMatch;
+      if (tokenRaw === undefined) {
+        return { status: 400, body: { error: "malformed export-pdf download route" } };
+      }
+      let token: string;
+      try {
+        token = decodeURIComponent(tokenRaw);
+      } catch {
+        return { status: 400, body: { error: "malformed URL encoding" } };
+      }
+      if (req.method !== "GET") {
+        return { status: 405, body: { error: "GET only" } };
+      }
+      return handleExportPdfDownload(token);
     }
 
     return { status: 404, body: { error: `no route for ${pathname}` } };

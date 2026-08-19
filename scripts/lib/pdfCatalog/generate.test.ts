@@ -135,6 +135,28 @@ describe("prefetchImages", () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it("reports one onProgress call per image, each carrying the same total", async () => {
+    const html = `<html><body>
+      <img src="https://example.com/a.jpg" />
+      <img src="https://example.com/b.jpg" />
+    </body></html>`;
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(Buffer.from("imagebytes"))));
+    const onProgress = vi.fn();
+    try {
+      const { tempDir } = await prefetchImages(html, onProgress);
+      expect(onProgress).toHaveBeenCalledTimes(2);
+      const completedValues = onProgress.mock.calls.map(([completed]) => completed).sort();
+      expect(completedValues).toEqual([1, 2]);
+      for (const [, total] of onProgress.mock.calls) {
+        expect(total).toBe(2);
+      }
+      const fs = await import("fs/promises");
+      await fs.rm(tempDir, { recursive: true, force: true });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 const ALL_STATUSES: Item["status"][] = ["available", "pending", "reserved", "sold", "draft"];
@@ -272,6 +294,50 @@ describe("generateCatalogPdf", () => {
         const fs = await import("fs/promises");
         const bytes = await fs.readFile(result.file);
         expect(bytes.subarray(0, 4).toString("ascii")).toBe("%PDF");
+        await fs.unlink(result.file);
+      }
+    } finally {
+      mockLoadAllItemsRaw.mockRestore();
+      mockLoadCategories.mockRestore();
+    }
+  });
+
+  it("reports progress through loading, both render passes, and TOC resolution in order", async () => {
+    const mockLoadAllItemsRaw = vi.spyOn(loaderModule, "loadAllItemsRaw").mockResolvedValue([makeItem()]);
+    const mockLoadCategories = vi.spyOn(loaderModule, "loadCategories").mockResolvedValue([makeCategory()]);
+
+    try {
+      let chromiumAvailable = true;
+      const { chromium } = await import("playwright");
+      try {
+        const browser = await chromium.launch();
+        await browser.close();
+      } catch {
+        chromiumAvailable = false;
+      }
+      if (!chromiumAvailable) {
+        console.warn("Skipping: Chromium not installed. Run `npx playwright install chromium`.");
+        return;
+      }
+
+      const stages: string[] = [];
+      const result = await generateCatalogPdf(baseOptions(), (progress) => stages.push(progress.stage));
+
+      // The fixture item (makeItem()) has no photos of its own, but
+      // content/config.ts sets a logo, which the catalog template embeds as
+      // one absolute <img src="http…">, so images-pass-1/2 each fire exactly
+      // once (for that logo) per render pass, in between the other stages.
+      expect(stages).toEqual([
+        "loading",
+        "images-pass-1",
+        "render-pass-1",
+        "resolving-toc",
+        "images-pass-2",
+        "render-pass-2",
+      ]);
+
+      if ("file" in result) {
+        const fs = await import("fs/promises");
         await fs.unlink(result.file);
       }
     } finally {
