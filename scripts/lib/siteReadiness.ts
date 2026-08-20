@@ -13,6 +13,8 @@ import fsPromises from "fs/promises";
 import path from "path";
 import { promisify } from "util";
 import { REQUIRED_UI_STRING_KEYS } from "./i18nRequiredKeys";
+import { GetBucketCorsCommand, S3Client } from "@aws-sdk/client-s3";
+import { corsAlreadyAllowsOrigin, originFromBaseUrl, type R2CorsRule } from "./r2Cors";
 
 const run = promisify(execFile);
 
@@ -363,6 +365,86 @@ async function checkAceternity(projectRoot: string): Promise<ReadinessItem> {
   };
 }
 
+/**
+ * Live-checks the R2 bucket's own CORS policy so a green checklist can't hide
+ * photo-less flyers (the "Download Flyer" button fetches photo bytes
+ * cross-origin; see scripts/configure-image-cors.ts). Read-only: only ever
+ * sends GetBucketCorsCommand — configuring the policy stays that script's job.
+ *
+ * Gates on the same R2_VARS as checkImageStorage (not a narrower set) so the
+ * two rows can never disagree about whether R2 credentials are configured.
+ * This is the first check in this file that makes a live external API call —
+ * every branch below must resolve to an item, never throw, so one network
+ * blip or an over-scoped token can't take the rest of the checklist down.
+ */
+async function checkFlyerCors(config: ReadinessConfig, env: ReadinessEnv): Promise<ReadinessItem> {
+  const base = { id: "flyer-cors", tier: 2 as const, title: "Flyer photo CORS" };
+
+  if (config.imageStorage.provider !== "cloudflare-r2") {
+    return {
+      ...base,
+      detail: "Not using Cloudflare R2 — flyer photos don't need a CORS policy",
+      params: { variant: "not-applicable" },
+      done: true,
+    };
+  }
+
+  const present = (key: string): boolean => (env[key] ?? "") !== "";
+  if (R2_VARS.some((key) => !present(key))) {
+    return {
+      ...base,
+      detail: "Waiting on R2 credentials — see Image storage above",
+      params: { variant: "needs-credentials" },
+      done: false,
+    };
+  }
+
+  const accountId = env["CF_R2_ACCOUNT_ID"]!;
+  const accessKeyId = env["CF_R2_ACCESS_KEY_ID"]!;
+  const secretAccessKey = env["CF_R2_SECRET_ACCESS_KEY"]!;
+  const bucket = env["CF_R2_BUCKET"]!;
+  const origin = originFromBaseUrl(config.baseUrl);
+  const fixAction = { kind: "command", command: "pnpm configure-image-cors" } as const;
+
+  try {
+    const client = new S3Client({
+      region: "auto",
+      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      credentials: { accessKeyId, secretAccessKey },
+    });
+
+    let rules: R2CorsRule[] = [];
+    try {
+      const existing = await client.send(new GetBucketCorsCommand({ Bucket: bucket }));
+      rules = (existing.CORSRules ?? []) as R2CorsRule[];
+    } catch (err) {
+      // No CORS policy configured yet — the expected starting state, not an
+      // error. Mirrors configure-image-cors.ts's own handling of this.
+      if (!(err instanceof Error) || !err.name.includes("NoSuchCORSConfiguration")) throw err;
+    }
+
+    const allowed = corsAlreadyAllowsOrigin(rules, origin);
+    return {
+      ...base,
+      detail: allowed
+        ? "CORS is configured — flyer photos will embed"
+        : `Bucket does not yet allow ${origin} — flyer photos will download without images`,
+      params: allowed ? { variant: "ok" } : { variant: "missing", origin },
+      done: allowed,
+      action: fixAction,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ...base,
+      detail: `Could not check the bucket's CORS policy: ${message}`,
+      params: { variant: "unknown", message },
+      done: false,
+      action: fixAction,
+    };
+  }
+}
+
 // ── Assembly ─────────────────────────────────────────────────────────────────
 
 function summarise(items: ReadinessItem[]): ReadinessReport {
@@ -411,5 +493,6 @@ export async function buildReadinessReport(
     checkTranslations(config),
     checkShipping(config),
     await checkAceternity(projectRoot),
+    await checkFlyerCors(config, env),
   ]);
 }
