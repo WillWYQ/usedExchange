@@ -4,55 +4,23 @@
 // Interactive CLI that bumps package.json version, commits, tags, pushes,
 // and creates a GitHub release — matching the existing v{ver} — {title} format.
 // Waits for CI to pass on the bump commit before tagging and releasing.
+//
+// Piped input (e.g. `printf '2\ntitle\n...' | pnpm bump`) is read to EOF
+// before the first prompt is answered — see scripts/lib/cliPrompt.ts for why,
+// and for the constraint that follows from it: a feeder that writes answers
+// incrementally while holding the pipe open will hang instead of being
+// answered, until it closes stdin.
 
 import fs from "fs/promises";
 import path from "path";
-import * as readline from "readline";
 import { execSync } from "child_process";
+import { createPrompt } from "./lib/cliPrompt";
 
 const PKG_PATH = path.join(process.cwd(), "package.json");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Piping answers in (`printf '2\ntitle\n...' | pnpm bump`) used to crash with
-// ERR_USE_AFTER_CLOSE: readline drains a fully-buffered, non-TTY stdin and
-// auto-closes the instant it hits EOF — which can happen before `main()` ever
-// reaches its first `question()` call. Only attach readline for a real TTY;
-// otherwise answer prompts from a pre-read line queue.
-const rl = process.stdin.isTTY
-  ? readline.createInterface({ input: process.stdin, output: process.stdout })
-  : null;
-
-let pipedLines: string[] | null = null;
-let pipedIndex = 0;
-
-async function loadPipedInput(): Promise<string[]> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
-  const lines = Buffer.concat(chunks).toString("utf-8").split("\n");
-  if (lines[lines.length - 1] === "") lines.pop();
-  return lines;
-}
-
-async function ask(prompt: string): Promise<string> {
-  if (rl) {
-    return new Promise((resolve) => rl.question(prompt, (a) => resolve(a.trim())));
-  }
-  if (pipedLines === null) pipedLines = await loadPipedInput();
-  const raw = pipedLines[pipedIndex];
-  if (raw === undefined) {
-    console.error(`\n  ✗ Ran out of piped input at prompt: "${prompt.trim()}"`);
-    process.exit(1);
-  }
-  pipedIndex++;
-  const line = raw.trim();
-  console.log(`${prompt}${line}`);
-  return line;
-}
-
-function closeInput(): void {
-  rl?.close();
-}
+const { ask, closeInput } = createPrompt();
 
 function section(title: string): void {
   const pad = Math.max(0, 46 - title.length);

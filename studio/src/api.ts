@@ -414,11 +414,15 @@ export type PdfExportEvent =
  * can't share a frame with JSON progress events) — the final "done" event
  * instead carries a token to redeem via downloadExportedPdf below.
  */
-export async function* streamExportCatalogPdf(options: PdfExportOptions): AsyncGenerator<PdfExportEvent> {
+export async function* streamExportCatalogPdf(
+  options: PdfExportOptions,
+  signal?: AbortSignal,
+): AsyncGenerator<PdfExportEvent> {
   const res = await fetch("/api/export-pdf", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(options),
+    signal,
   });
   if (!res.ok) {
     const body = await readJsonBody(res);
@@ -428,8 +432,8 @@ export async function* streamExportCatalogPdf(options: PdfExportOptions): AsyncG
 }
 
 /** Redeems a token from streamExportCatalogPdf's "done" event for the actual PDF bytes. */
-export async function downloadExportedPdf(token: string): Promise<Blob> {
-  const res = await fetch(`/api/export-pdf/download/${encodeURIComponent(token)}`);
+export async function downloadExportedPdf(token: string, signal?: AbortSignal): Promise<Blob> {
+  const res = await fetch(`/api/export-pdf/download/${encodeURIComponent(token)}`, { signal });
   if (!res.ok) {
     const body = await readJsonBody(res);
     throw new Error(errorMessage(body, `PDF download failed with ${res.status} ${res.statusText}`));
@@ -437,11 +441,12 @@ export async function downloadExportedPdf(token: string): Promise<Blob> {
   return res.blob();
 }
 
-export async function exportItemFlyerPdf(id: string): Promise<Blob> {
+export async function exportItemFlyerPdf(id: string, signal?: AbortSignal): Promise<Blob> {
   const res = await fetch("/api/export-pdf/flyer", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ id }),
+    signal,
   });
   if (!res.ok) {
     const body = await readJsonBody(res);

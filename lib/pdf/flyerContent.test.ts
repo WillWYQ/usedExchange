@@ -241,6 +241,67 @@ describe("normalizeForPdf", () => {
     expect(normalizeForPdf("Pickup / ≤ 5 mi")).toBe("Pickup / <= 5 mi");
     expect(normalizeForPdf("Delivery / ≥ 10 mi")).toBe("Delivery / >= 10 mi");
   });
+
+  it("replaces the minus sign and trademark sign", () => {
+    expect(normalizeForPdf("−5 degrees")).toBe("-5 degrees");
+    expect(normalizeForPdf("Acme™ Widget")).toBe("Acme(TM) Widget");
+  });
+
+  // This normalizeForPdf character map has already needed extending twice in
+  // this codebase's history (em/en dash and curly quotes first, then <=/>=)
+  // after a "smart typography" character a seller pasted in silently
+  // corrupted a flyer PDF — jsPDF's built-in fonts are WinAnsi-encoded, and
+  // anything outside that range is dropped or mis-rendered rather than
+  // erroring loudly (see PDF_UNSAFE_CHAR_MAP's own comment). Rather than
+  // re-litigating that gap for one character at a time, this sweeps a
+  // broader sample of common "smart typography" characters through
+  // normalizeForPdf and structurally asserts every character that comes out
+  // the other side is WinAnsi-safe (ASCII, or true Latin-1 0xA0–0xFF) — so
+  // the *next* unmapped character fails a test here instead of shipping as a
+  // silently garbled PDF.
+  const WINANSI_SAFE_MIN = 0x20;
+  const WINANSI_SAFE_MAX_ASCII = 0x7e;
+  const WINANSI_LATIN1_MIN = 0xa0;
+  const WINANSI_LATIN1_MAX = 0xff;
+
+  function isWinAnsiSafe(codePoint: number): boolean {
+    return (
+      (codePoint >= WINANSI_SAFE_MIN && codePoint <= WINANSI_SAFE_MAX_ASCII) ||
+      (codePoint >= WINANSI_LATIN1_MIN && codePoint <= WINANSI_LATIN1_MAX)
+    );
+  }
+
+  const SMART_TYPOGRAPHY_SAMPLE: Array<[string, string]> = [
+    ["em dash", "—"],
+    ["en dash", "–"],
+    ["minus sign", "−"],
+    ["degree sign", "°"],
+    ["trademark sign", "™"],
+    ["left single quote", "‘"],
+    ["right single quote", "’"],
+    ["left double quote", "“"],
+    ["right double quote", "”"],
+    ["non-breaking space", " "],
+    ["narrow no-break space", " "],
+    ["ellipsis", "…"],
+    ["bullet", "•"],
+    ["less-than-or-equal", "≤"],
+    ["greater-than-or-equal", "≥"],
+  ];
+
+  it.each(SMART_TYPOGRAPHY_SAMPLE)(
+    "normalizes %s into the WinAnsi-safe range",
+    (_label, ch) => {
+      const normalized = normalizeForPdf(ch);
+      for (const outCh of normalized) {
+        const codePoint = outCh.codePointAt(0) ?? 0;
+        expect(
+          isWinAnsiSafe(codePoint),
+          `expected "${ch}" (U+${codePoint.toString(16)}) to normalize into the WinAnsi-safe range, got "${normalized}"`,
+        ).toBe(true);
+      }
+    },
+  );
 });
 
 describe("buildLiveListingUrl / buildFlyerFilename", () => {

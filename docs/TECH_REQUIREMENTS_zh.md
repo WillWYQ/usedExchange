@@ -2491,7 +2491,8 @@ Seller Studio（`pnpm studio`）是一个**仅本地**的浏览器仪表板，�
 | `POST /api/sync-images` | 启动 CDN 同步；返回 **SSE** 进度流（`progress`/`done`/`error`）。 |
 | `GET /api/changes` | 供发布面板使用的 git 状态（未提交更改）。 |
 | `POST /api/publish` | `git add content + manifest`、提交、推送。同步运行时被拒绝（409）。 |
-| `POST /api/export-pdf` | 通过 headless Chromium 生成合并目录 PDF 并以 `application/pdf` 形式返回。请求体：`{ locale, priceStrategy, categories, statuses }` —— `priceStrategy` 为 `lowest`/`highest`/`pickup`/`shipping`/`average` 之一；`statuses` 可为 5 种 `Status` 值的任意子集；`categories` 为任意分类 slug 列表。当请求体校验失败（`priceStrategy`/`status` 非法或 `locale` 不在可用语言列表中）、过滤后没有可导出商品、或未安装 Chromium 时返回 `400` 及 `{ error }`。 |
+| `POST /api/export-pdf` | 启动合并目录 PDF 渲染，并以 **SSE** 形式返回进度——恒为 `200`，PDF 的字节内容本身不会经由此响应传输。请求体：`{ locale, priceStrategy, categories, statuses }` —— `priceStrategy` 为 `lowest`/`highest`/`pickup`/`shipping`/`average` 之一；`statuses` 可为 5 种 `Status` 值的任意子集；`categories` 为任意分类 slug 列表。仅当请求体本身校验失败（`priceStrategy`/`status` 非法或 `locale` 不在可用语言列表中）时才返回 `400` 及 `{ error }`——该检查在流开始之前完成。开始流式传输后，每一帧均为携带 `PdfExportProgress` 数据的 `event: progress`（`{ stage }`，在两个 `images-pass-*` 阶段还附带 `completed`/`total`），最终以 `event: done`（携带 `{ token }`）或 `event: error`（携带 `{ error }`）结束——过滤后没有可导出商品、或 Chromium 渲染失败，均以后者形式呈现，而非 HTTP 错误状态码。需通过下方的下载接口兑换 `token` 才能取得实际文件。 |
+| `GET /api/export-pdf/download/<token>` | 用 `done` 事件中的 `token` 兑换已渲染的 PDF（`application/pdf`）。一旦该下载的字节被确认发送完毕，或在 5 分钟内未被兑换而过期（以先发生者为准），对应的映射条目与临时文件都会被删除。对未知、已被兑换或已过期的 token 返回 `404` 及 `{ error }`。 |
 
 路由正则匹配原始百分号编码路径，并在匹配**之后**逐段解码（防遍历）。
 

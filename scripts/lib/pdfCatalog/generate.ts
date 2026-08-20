@@ -304,6 +304,16 @@ export async function launchChromiumOrError(): Promise<{ browser: Browser } | { 
   }
 }
 
+// Both renderHtmlToPdfBytes and renderHtmlToPdf report the same two
+// moments — a downloaded photo during prefetch, and the point right before
+// Chromium starts laying out the page (page.pdf() itself reports no
+// sub-progress of its own) — through one callback instead of two separate
+// optional fields, so a caller can't supply one without the other by
+// accident and every call site has exactly one place to dispatch on.
+export type RenderProgressEvent =
+  | { phase: "image"; completed: number; total: number }
+  | { phase: "render-start" };
+
 /**
  * Renders `html` to PDF bytes on an already-launched `browser` — prefetch,
  * render, and page cleanup, but no file write and no browser lifecycle (the
@@ -318,11 +328,7 @@ export async function renderHtmlToPdfBytes(
   opts: {
     pdfOptions: Parameters<Page["pdf"]>[0];
     renderErrorMessage: string;
-    /** Fires once per downloaded photo, during the prefetch step below. */
-    onImageProgress?: (completed: number, total: number) => void;
-    /** Fires once, right before Chromium starts laying out the page — the
-     *  render itself is opaque (page.pdf() reports no sub-progress). */
-    onRenderStart?: () => void;
+    onProgress?: (event: RenderProgressEvent) => void;
   },
 ): Promise<{ bytes: Buffer } | { error: string }> {
   // Pull every remote image to a local temp dir before Chromium sees the
@@ -333,7 +339,10 @@ export async function renderHtmlToPdfBytes(
   let tempDir: string | undefined;
   let prefetchResult: Awaited<ReturnType<typeof prefetchImages>> | undefined;
   try {
-    prefetchResult = await prefetchImages(html, opts.onImageProgress);
+    prefetchResult = await prefetchImages(
+      html,
+      opts.onProgress && ((completed, total) => opts.onProgress?.({ phase: "image", completed, total })),
+    );
     tempDir = prefetchResult.tempDir;
   } catch {
     // Prefetch failed entirely — fall back to remote URLs.
@@ -342,7 +351,7 @@ export async function renderHtmlToPdfBytes(
   try {
     const page = await browser.newPage();
     try {
-      opts.onRenderStart?.();
+      opts.onProgress?.({ phase: "render-start" });
       if (prefetchResult !== undefined) {
         // Chromium refuses to load a file:// subresource from a document
         // that has no origin of its own — see the original comment history
@@ -398,8 +407,7 @@ async function renderHtmlToPdf(
     filenamePrefix: string;
     pdfOptions: Parameters<Page["pdf"]>[0];
     renderErrorMessage: string;
-    onImageProgress?: (completed: number, total: number) => void;
-    onRenderStart?: () => void;
+    onProgress?: (event: RenderProgressEvent) => void;
   },
 ): Promise<{ file: string } | { error: string }> {
   const result = await renderHtmlToPdfBytes(browser, html, opts);
@@ -550,8 +558,10 @@ export async function generateCatalogPdf(
     const pass1 = await renderHtmlToPdfBytes(browser, pass1Html, {
       pdfOptions,
       renderErrorMessage,
-      onImageProgress: (completed, total) => onProgress?.({ stage: "images-pass-1", completed, total }),
-      onRenderStart: () => onProgress?.({ stage: "render-pass-1" }),
+      onProgress: (event) =>
+        event.phase === "image"
+          ? onProgress?.({ stage: "images-pass-1", completed: event.completed, total: event.total })
+          : onProgress?.({ stage: "render-pass-1" }),
     });
     if ("error" in pass1) return pass1;
 
@@ -589,8 +599,10 @@ export async function generateCatalogPdf(
       filenamePrefix: "usedexchange-catalog",
       pdfOptions,
       renderErrorMessage,
-      onImageProgress: (completed, total) => onProgress?.({ stage: "images-pass-2", completed, total }),
-      onRenderStart: () => onProgress?.({ stage: "render-pass-2" }),
+      onProgress: (event) =>
+        event.phase === "image"
+          ? onProgress?.({ stage: "images-pass-2", completed: event.completed, total: event.total })
+          : onProgress?.({ stage: "render-pass-2" }),
     });
   } finally {
     await browser.close().catch(() => {});

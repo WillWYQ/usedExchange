@@ -16,6 +16,7 @@
 import type { ImageSyncProgress, ImageSyncResult } from "./imageSync";
 import type { SseEvent } from "./studioApi";
 import { resetManifestCache } from "../../lib/content/loader";
+import { streamProgressAsSse } from "./sseProgress";
 
 export type SyncRunner = (
   onProgress: (progress: ImageSyncProgress) => void,
@@ -99,62 +100,42 @@ function toFinalEvent(state: { result: ImageSyncResult } | { error: string }): S
 export async function* streamImageSync(run: SyncRunner): AsyncGenerator<SseEvent> {
   syncState().running = true;
 
-  // Progress arrives through a callback while the run is in flight, but a
-  // generator can only yield when its consumer asks. Buffer what the callback
-  // reports and drain the buffer between polls.
-  const pending: ImageSyncProgress[] = [];
-  let settled: { result: ImageSyncResult } | { error: string } | null = null;
-
-  // The release is bound to this promise settling, not to the generator's
-  // lifetime. It used to live in a `finally` around the loop below, which
-  // runs the instant the consumer abandons the stream (the middleware calls
-  // iterator.return() on client disconnect) — even while `run()` is still
-  // mid-flight writing lib/generated/image-manifest.json and
-  // .image-cache/checksums.json. That let a second sync start and overlap the
-  // orphaned one, exactly what the mutex exists to prevent (see the header
-  // comment). Attaching .finally() to the work itself means the lock is held
-  // until the writes are actually done, regardless of whether anyone is
-  // still listening.
-  const inFlight = run((progress) => {
-    pending.push(progress);
-  })
-    .then(
-      (result) => {
-        settled = { result };
-      },
-      (err: unknown) => {
-        settled = { error: err instanceof Error ? err.message : String(err) };
-      },
-    )
-    .finally(() => {
-      syncState().running = false;
-      // The manifest on disk has just changed. lib/content/loader.ts memoizes
-      // it for the process lifetime, and `pnpm studio` runs for hours — without
-      // this, every later GET /api/items reads the pre-upload manifest and any
-      // CDN URL studio surfaces is the old one.
-      //
-      // This call has to happen from THIS module, not from scripts/studio.ts.
-      // studio/vite.config.ts inlines every relative import, so studioApi.ts,
-      // this file, and loader.ts all end up in one bundle sharing one loader
-      // instance — while scripts/studio.ts resolves a second, independent copy
-      // through tsx. A reset called there would clear the copy nothing reads.
-      // Same module-instance split that put the mutex on globalThis above.
-      resetManifestCache();
-    });
-
-  for (;;) {
-    while (pending.length > 0) {
-      yield { event: "progress", data: pending.shift() };
-    }
-    if (settled !== null) break;
-    // Hand control back to the event loop so the sync can advance; without
-    // this the loop spins without ever letting the callback fire.
-    await Promise.race([inFlight, new Promise((r) => setTimeout(r, 50))]);
-  }
-
-  while (pending.length > 0) {
-    yield { event: "progress", data: pending.shift() };
-  }
-
-  yield toFinalEvent(settled);
+  yield* streamProgressAsSse<ImageSyncProgress, { result: ImageSyncResult } | { error: string }>(
+    (onProgress) =>
+      run(onProgress)
+        .then((result): { result: ImageSyncResult } | { error: string } => ({ result }))
+        // The release is bound to this promise settling, not to the
+        // generator's lifetime. It used to live in a `finally` around the
+        // poll loop itself, which runs the instant the consumer abandons the
+        // stream (the middleware calls iterator.return() on client
+        // disconnect) — even while `run()` is still mid-flight writing
+        // lib/generated/image-manifest.json and .image-cache/checksums.json.
+        // That let a second sync start and overlap the orphaned one, exactly
+        // what the mutex exists to prevent (see the header comment).
+        // Attaching .finally() here, to the work itself rather than to
+        // streamProgressAsSse's generic poll loop, means the lock is held
+        // until the writes are actually done, regardless of whether anyone
+        // is still listening.
+        .finally(() => {
+          syncState().running = false;
+          // The manifest on disk has just changed. lib/content/loader.ts
+          // memoizes it for the process lifetime, and `pnpm studio` runs for
+          // hours — without this, every later GET /api/items reads the
+          // pre-upload manifest and any CDN URL studio surfaces is the old
+          // one.
+          //
+          // This call has to happen from THIS module, not from
+          // scripts/studio.ts. studio/vite.config.ts inlines every relative
+          // import, so studioApi.ts, this file, and loader.ts all end up in
+          // one bundle sharing one loader instance — while scripts/studio.ts
+          // resolves a second, independent copy through tsx. A reset called
+          // there would clear the copy nothing reads. Same module-instance
+          // split that put the mutex on globalThis above.
+          resetManifestCache();
+        }),
+    (err): { result: ImageSyncResult } | { error: string } => ({
+      error: err instanceof Error ? err.message : String(err),
+    }),
+    toFinalEvent,
+  );
 }
