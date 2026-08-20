@@ -1,5 +1,5 @@
 // studio/src/panes/ExportPdfDialog.tsx
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   streamExportCatalogPdf,
   downloadExportedPdf,
@@ -31,21 +31,33 @@ function imageRatio(p: { completed: number; total: number }): number {
   return p.total > 0 ? p.completed / p.total : 1;
 }
 
+// Each SSE stage's [start, end] on the progress bar, declared once so
+// stagePercent doesn't repeat the same "start + width * ratio" shape with
+// different literals for each of the two images-pass branches. A fixed
+// (non-images) stage just lands on its range's `end`; an images-pass stage
+// animates across its own range as completed/total comes in.
+const STAGE_RANGE: Record<PdfExportProgress["stage"], readonly [number, number]> = {
+  loading: [0, 5],
+  "images-pass-1": [5, 30],
+  "render-pass-1": [30, 35],
+  "resolving-toc": [35, 45],
+  "images-pass-2": [45, 75],
+  "render-pass-2": [75, 80],
+};
+
+// The SSE stages above only ever report progress up to render-pass-2's 80 —
+// the downloadExportedPdf() round trip that follows the stream produces no
+// progress events of its own, so it gets two fixed points on the same scale
+// instead: one to show while that request is in flight, and one to show the
+// export has actually finished before the bar is cleared.
+const DOWNLOAD_PERCENT = 90;
+const DONE_PERCENT = 100;
+
 function stagePercent(p: PdfExportProgress): number {
-  switch (p.stage) {
-    case "loading":
-      return 5;
-    case "images-pass-1":
-      return 5 + 25 * imageRatio(p);
-    case "render-pass-1":
-      return 35;
-    case "resolving-toc":
-      return 45;
-    case "images-pass-2":
-      return 45 + 30 * imageRatio(p);
-    case "render-pass-2":
-      return 80;
-  }
+  const [start, end] = STAGE_RANGE[p.stage];
+  return p.stage === "images-pass-1" || p.stage === "images-pass-2"
+    ? start + (end - start) * imageRatio(p)
+    : end;
 }
 
 type PriceStrategyValue = PdfExportOptions["priceStrategy"];
@@ -84,9 +96,17 @@ export function ExportPdfDialog({
   const { t } = useStudioT();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<PdfExportProgress | null>(null);
+  // Set only for the post-stream download step (see DOWNLOAD_PERCENT/
+  // DONE_PERCENT above) — stagePercent(progress) alone covers everything
+  // before it.
+  const [percentOverride, setPercentOverride] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [downloadedFilename, setDownloadedFilename] = useState<string | null>(null);
   const [mode, setMode] = useState<"catalog" | "flyer">("catalog");
+  // Read by requestClose (via a ref, not state — closing must see whatever
+  // controller the in-flight generate() actually created, not a stale one
+  // captured by an earlier render).
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const [locale, setLocale] = useState(defaultLocale);
   const [priceStrategy, setPriceStrategy] = useState<PriceStrategyValue>("average");
@@ -97,7 +117,21 @@ export function ExportPdfDialog({
     () => new Set(DEFAULT_STATUSES),
   );
 
-  const dialogRef = useDialogBehavior(onClose);
+  // Every user-facing way to close the dialog (backdrop click, Escape, the
+  // ghost Close button) routes through here rather than calling onClose
+  // directly. Closing while a generate() is in flight used to unmount the
+  // dialog unconditionally, leaving the fetch/SSE loop running against
+  // orphaned closures — and, on completion, still saving a file the seller
+  // believed they'd cancelled. Aborting first means that promise chain hits
+  // its own AbortError branch and stops before the download/save step.
+  function requestClose() {
+    if (busy) {
+      abortControllerRef.current?.abort();
+    }
+    onClose();
+  }
+
+  const dialogRef = useDialogBehavior(requestClose);
 
   const eligible = useMemo(
     () =>
@@ -134,9 +168,12 @@ export function ExportPdfDialog({
   }
 
   async function generate() {
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setBusy(true);
     setError(null);
     setProgress(null);
+    setPercentOverride(null);
     try {
       let blob: Blob;
       let filename: string;
@@ -148,7 +185,7 @@ export function ExportPdfDialog({
           statuses: STATUS_OPTIONS.map((s) => s.value).filter((status) => selectedStatuses.has(status)),
         };
         let token: string | null = null;
-        for await (const evt of streamExportCatalogPdf(options)) {
+        for await (const evt of streamExportCatalogPdf(options, controller.signal)) {
           if (evt.event === "progress") {
             setProgress(evt.data);
           } else if (evt.event === "done") {
@@ -160,12 +197,29 @@ export function ExportPdfDialog({
         if (token === null) {
           throw new Error("PDF export ended without a result.");
         }
-        blob = await downloadExportedPdf(token);
+        // Closing the dialog while busy aborts `controller` (see
+        // requestClose) but does not stop the for-await loop above mid-
+        // iteration — a "done" event can still arrive right after that
+        // abort. Check explicitly rather than trusting downloadExportedPdf's
+        // own signal to fail fast: a token already in flight must not reach
+        // the download step at all once the seller has cancelled.
+        if (controller.signal.aborted) return;
+        // The SSE stream above never reports past render-pass-2's 80 — the
+        // download round trip that follows gets its own point on the scale
+        // so the bar doesn't stall there (see STAGE_RANGE's comment).
+        setPercentOverride(DOWNLOAD_PERCENT);
+        blob = await downloadExportedPdf(token, controller.signal);
         filename = `usedexchange-catalog-${new Date().toISOString().slice(0, 10)}.pdf`;
       } else {
-        blob = await exportItemFlyerPdf(flyerId ?? "");
+        blob = await exportItemFlyerPdf(flyerId ?? "", controller.signal);
         filename = `usedexchange-flyer-${flyerId}-${new Date().toISOString().slice(0, 10)}.pdf`;
       }
+      // Closing the dialog while busy aborts `controller` (see requestClose)
+      // but does not stop this async function's own continuation — without
+      // this check, a "done" token already in flight when the seller closed
+      // the dialog would still reach the save step below and silently
+      // download a file they believed they'd cancelled.
+      if (controller.signal.aborted) return;
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -173,16 +227,27 @@ export function ExportPdfDialog({
       link.click();
       URL.revokeObjectURL(url);
       setDownloadedFilename(filename);
+      if (mode === "catalog") {
+        // Hold at 100% for a beat before `finally` clears it — React 18
+        // batches synchronous state updates within one async continuation,
+        // so setting DONE_PERCENT with nothing awaited before the reset
+        // below would never actually get painted.
+        setPercentOverride(DONE_PERCENT);
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
     } catch (err: unknown) {
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      abortControllerRef.current = null;
       setBusy(false);
       setProgress(null);
+      setPercentOverride(null);
     }
   }
 
   return (
-    <div className="dialog-backdrop" role="presentation" onClick={onClose}>
+    <div className="dialog-backdrop" role="presentation" onClick={requestClose}>
       <div
         ref={dialogRef}
         className="dialog"
@@ -302,7 +367,7 @@ export function ExportPdfDialog({
         )}
         {mode === "catalog" && busy && progress !== null && (
           <ProgressBar
-            percent={stagePercent(progress)}
+            percent={percentOverride ?? stagePercent(progress)}
             label={t(
               STAGE_LABEL_KEY[progress.stage],
               progress.stage === "images-pass-1" || progress.stage === "images-pass-2"
@@ -341,7 +406,7 @@ export function ExportPdfDialog({
           >
             {busy ? t("exportPdf.generating") : t("exportPdf.generate")}
           </Button>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={requestClose}>
             {t("exportPdf.close")}
           </Button>
         </div>

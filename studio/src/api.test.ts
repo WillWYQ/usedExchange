@@ -132,6 +132,20 @@ describe("streamExportCatalogPdf", () => {
     );
     vi.unstubAllGlobals();
   });
+
+  it("passes an AbortSignal through to fetch when given one", async () => {
+    const fetchMock = vi.fn(async () => sseResponse([{ event: "done", data: { token: "abc123" } }]));
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    const controller = new AbortController();
+
+    await collect(streamExportCatalogPdf(options, controller.signal));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/export-pdf",
+      expect.objectContaining({ signal: controller.signal }),
+    );
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("downloadExportedPdf", () => {
@@ -146,7 +160,21 @@ describe("downloadExportedPdf", () => {
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
     const result = await downloadExportedPdf("abc123");
     expect(result).toBe(fakeBlob);
-    expect(fetchMock).toHaveBeenCalledWith("/api/export-pdf/download/abc123");
+    expect(fetchMock).toHaveBeenCalledWith("/api/export-pdf/download/abc123", { signal: undefined });
+    vi.unstubAllGlobals();
+  });
+
+  it("passes an AbortSignal through to fetch when given one", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      blob: async () => new Blob(["%PDF-fake"], { type: "application/pdf" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    const controller = new AbortController();
+    await downloadExportedPdf("abc123", controller.signal);
+    expect(fetchMock).toHaveBeenCalledWith("/api/export-pdf/download/abc123", { signal: controller.signal });
     vi.unstubAllGlobals();
   });
 

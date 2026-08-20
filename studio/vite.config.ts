@@ -90,6 +90,13 @@ function studioApiPlugin(): Plugin {
                 // Photos change whenever the seller re-uploads; never cache.
                 res.setHeader("cache-control", "no-store");
                 const fileStream = createReadStream(result.file);
+                // Only set once the readable genuinely reaches EOF — never on
+                // an error, so a failed/aborted read never looks like a
+                // successful delivery below.
+                let readOk = false;
+                fileStream.on("end", () => {
+                  readOk = true;
+                });
                 fileStream.on("error", (err: NodeJS.ErrnoException) => {
                   // A photo can be deleted between listing and this request
                   // (Task 2 serves thumbnails from disk), so ENOENT here is an
@@ -105,6 +112,19 @@ function studioApiPlugin(): Plugin {
                   res.statusCode = err.code === "ENOENT" ? 404 : 500;
                   res.setHeader("content-type", "application/json; charset=utf-8");
                   res.end(JSON.stringify({ error: err.message }));
+                });
+                // "finish" fires once res.end() (called automatically by
+                // pipe() when the readable ends) has handed every byte off —
+                // but it also fires for the JSON error response written
+                // above on a pre-flow ENOENT/500, which is not a successful
+                // delivery. Gating on `readOk` (only set by the readable's
+                // own "end") is what tells the two apart: a file-serving
+                // route that wants to know "were these bytes actually sent"
+                // (e.g. releasing a catalog-export's token — see
+                // studioApi.ts's FileResponse.onSent) needs exactly this
+                // signal, not "did res.end() get called for any reason."
+                res.on("finish", () => {
+                  if (readOk) result.onSent?.();
                 });
                 fileStream.pipe(res);
                 return;

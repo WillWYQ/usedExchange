@@ -13,6 +13,8 @@ import {
   listStudioItems,
   isFileResponse,
   isSseResponse,
+  PDF_EXPORT_TTL_MS,
+  registerPdfExportForTests,
   type JsonResponse,
   type SseEvent,
 } from "./studioApi";
@@ -2351,11 +2353,17 @@ describe("POST /api/export-pdf", () => {
       projectRoot: PROJECT_ROOT,
     });
     expect(isFileResponse(downloadRes)).toBe(true);
-    if (isFileResponse(downloadRes)) {
-      expect(downloadRes.contentType).toBe("application/pdf");
-      expect(downloadRes.file.endsWith(".pdf")).toBe(true);
-      await fs.unlink(downloadRes.file);
-    }
+    if (!isFileResponse(downloadRes)) return;
+    expect(downloadRes.contentType).toBe("application/pdf");
+    expect(downloadRes.file.endsWith(".pdf")).toBe(true);
+
+    // studio/vite.config.ts calls onSent once the file stream's bytes have
+    // actually been sent — simulated here since this test drives
+    // handleStudioRequest directly, with no real HTTP layer to send them.
+    downloadRes.onSent?.();
+    await vi.waitFor(async () => {
+      await expect(fs.access(downloadRes.file)).rejects.toThrow();
+    });
 
     // The token is single-use: redeeming it twice 404s the second time.
     const secondDownload = await handleStudioRequest({
@@ -2365,6 +2373,73 @@ describe("POST /api/export-pdf", () => {
       projectRoot: PROJECT_ROOT,
     });
     expect(secondDownload.status).toBe(404);
+  });
+
+  it("does not delete the exported file until the download route's stream is confirmed sent", async () => {
+    const file = path.join(os.tmpdir(), `studioApi-download-test-${Date.now()}.pdf`);
+    await fs.writeFile(file, "test");
+    const token = registerPdfExportForTests(file);
+
+    try {
+      const res = await handleStudioRequest({
+        method: "GET",
+        url: `/api/export-pdf/download/${token}`,
+        body: Buffer.alloc(0),
+        projectRoot: PROJECT_ROOT,
+      });
+      expect(isFileResponse(res)).toBe(true);
+      if (!isFileResponse(res)) return;
+      expect(res.file).toBe(file);
+      // Computing the response must not have deleted anything yet — the bug
+      // this fix closes was an interrupted download losing access to an
+      // already-finished PDF because the map entry vanished at
+      // request-routing time, before a single byte reached the client.
+      await expect(fs.access(file)).resolves.toBeUndefined();
+
+      res.onSent?.();
+      await vi.waitFor(async () => {
+        await expect(fs.access(file)).rejects.toThrow();
+      });
+
+      const secondDownload = await handleStudioRequest({
+        method: "GET",
+        url: `/api/export-pdf/download/${token}`,
+        body: Buffer.alloc(0),
+        projectRoot: PROJECT_ROOT,
+      });
+      expect(secondDownload.status).toBe(404);
+    } finally {
+      await fs.unlink(file).catch(() => {});
+    }
+  });
+
+  it("deletes the exported file when its TTL expires unredeemed", async () => {
+    vi.useFakeTimers();
+    const file = path.join(os.tmpdir(), `studioApi-ttl-test-${Date.now()}.pdf`);
+    try {
+      await fs.writeFile(file, "test");
+      const token = registerPdfExportForTests(file);
+
+      await vi.advanceTimersByTimeAsync(PDF_EXPORT_TTL_MS + 1);
+      // The timer callback kicks off a real (non-fake-timer) fs.unlink —
+      // switch back to real timers before polling for it so vi.waitFor's
+      // own retry interval can actually fire.
+      vi.useRealTimers();
+      await vi.waitFor(async () => {
+        await expect(fs.access(file)).rejects.toThrow();
+      });
+
+      const res = await handleStudioRequest({
+        method: "GET",
+        url: `/api/export-pdf/download/${token}`,
+        body: Buffer.alloc(0),
+        projectRoot: PROJECT_ROOT,
+      });
+      expect(res.status).toBe(404);
+    } finally {
+      vi.useRealTimers();
+      await fs.unlink(file).catch(() => {});
+    }
   });
 
   it("rejects non-POST methods", async () => {

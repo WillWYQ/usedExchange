@@ -74,11 +74,13 @@ const PDF_UNSAFE_CHAR_MAP: Record<string, string> = {
   "≤": "<=", // less-than-or-equal
   "≥": ">=", // greater-than-or-equal — scripts/lib/itemTemplate.ts's
   // default distance tiers use "≤" by default (e.g. "Pickup / ≤ 5 mi")
+  "−": "-", // minus sign (distinct from a hyphen — common in pasted specs)
+  "™": "(TM)", // trademark sign
   " ": " ", // non-breaking space
   " ": " ", // narrow no-break space
 };
 
-const PDF_UNSAFE_CHAR_PATTERN = /[—–‘’“”•…  ≤≥]/g;
+const PDF_UNSAFE_CHAR_PATTERN = /[—–‘’“”•…−™  ≤≥]/g;
 
 export function normalizeForPdf(value: string): string {
   return value.replace(PDF_UNSAFE_CHAR_PATTERN, (ch) => PDF_UNSAFE_CHAR_MAP[ch] ?? ch);

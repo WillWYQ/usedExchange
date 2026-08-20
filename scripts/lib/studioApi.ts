@@ -58,6 +58,7 @@ import { buildReadinessReport } from "./siteReadiness";
 import { assertEditableValue } from "./itemFields";
 import { GitError, publishChanges, readChanges } from "./studioGit";
 import { getSyncRunner, isSyncRunning, streamImageSync } from "./studioSync";
+import { streamProgressAsSse } from "./sseProgress";
 import {
   contentTypeFor,
   deleteImage,
@@ -96,7 +97,19 @@ export type StudioRequest = {
 export type SseEvent = { event: string; data: unknown };
 
 export type JsonResponse = { status: number; body: unknown };
-export type FileResponse = { status: number; file: string; contentType: string };
+export type FileResponse = {
+  status: number;
+  file: string;
+  contentType: string;
+  /**
+   * Called once this file's bytes have been fully sent to the client — e.g.
+   * to release a token-redeemed temp file exactly once, only after delivery
+   * is confirmed rather than at request-routing time. Omitted by routes that
+   * serve persistent content (photos, contact images, the flyer export) —
+   * those must never be deleted out from under the seller.
+   */
+  onSent?: () => void;
+};
 export type SseResponse = { status: number; events: AsyncIterable<SseEvent> };
 
 // Three variants rather than one JSON shape: studio has to serve image bytes
@@ -1353,76 +1366,98 @@ const exportPdfBodySchema = z.object({
 // below), but the finished PDF is still a file on disk — binary bytes cannot
 // ride in the same event stream as JSON progress events. The token below is
 // the handoff: the stream's final "done" event carries it, and a follow-up
-// GET /api/export-pdf/download/:token redeems it for the file exactly once.
-// Studio is a single local seller in one browser tab, so a plain module-level
-// map is enough here — contrast with studioSync.ts's globalThis dance, which
-// exists only because that module's state is written from a second,
-// differently-bundled copy of the same file (see its own header comment).
-const PDF_EXPORT_TTL_MS = 5 * 60 * 1000;
+// GET /api/export-pdf/download/:token redeems it for the file — released
+// (map entry + temp file both deleted) once that download's bytes are
+// confirmed sent, or by the TTL timer below if nothing ever redeems it; see
+// registerPdfExport/peekPdfExport/releasePdfExport. Studio is a single local
+// seller in one browser tab, so a plain module-level map is enough here —
+// contrast with studioSync.ts's globalThis dance, which exists only because
+// that module's state is written from a second, differently-bundled copy of
+// the same file (see its own header comment).
+export const PDF_EXPORT_TTL_MS = 5 * 60 * 1000;
 const pendingPdfExports = new Map<string, { file: string; timer: NodeJS.Timeout }>();
 
 function registerPdfExport(file: string): string {
   const token = crypto.randomBytes(16).toString("hex");
-  const timer = setTimeout(() => pendingPdfExports.delete(token), PDF_EXPORT_TTL_MS);
+  // The TTL timer is the backstop for a token nobody ever redeems: it clears
+  // the map entry AND unlinks the file, so an abandoned export doesn't leave
+  // a PDF in os.tmpdir() forever. releasePdfExport below is the other path
+  // to the same cleanup — every registered file is deleted exactly once, on
+  // whichever of the two paths happens first.
+  const timer = setTimeout(() => {
+    pendingPdfExports.delete(token);
+    fsPromises.unlink(file).catch(() => {});
+  }, PDF_EXPORT_TTL_MS);
   pendingPdfExports.set(token, { file, timer });
   return token;
 }
 
-function takePdfExport(token: string): string | null {
+// Looks up a registered export without consuming it. Deletion is
+// releasePdfExport's job alone, called only once the download route's
+// stream has actually finished sending bytes (see FileResponse's onSent) —
+// deleting eagerly here, at request-routing time, used to mean an
+// interrupted download lost access to an already-finished PDF: the map
+// entry vanished before a single byte reached the client.
+function peekPdfExport(token: string): string | null {
   const entry = pendingPdfExports.get(token);
-  if (entry === undefined) return null;
+  return entry === undefined ? null : entry.file;
+}
+
+// The other half of registerPdfExport's TTL timer: whichever of the two
+// runs first — a confirmed successful download, or the TTL expiring
+// unredeemed — clears the timer and the map entry and unlinks the file.
+// Safe to call more than once for the same token (e.g. the timer firing
+// after this already ran): the second call finds no entry and is a no-op.
+function releasePdfExport(token: string): void {
+  const entry = pendingPdfExports.get(token);
+  if (entry === undefined) return;
   clearTimeout(entry.timer);
   pendingPdfExports.delete(token);
-  return entry.file;
+  fsPromises.unlink(entry.file).catch(() => {});
 }
+
+type PdfExportSettled = { token: string } | { error: string } | { threw: string };
 
 // Split out so the "error"/"threw" narrowing works cleanly — same reason
 // studioSync.ts's toFinalEvent is its own function rather than inlined where
-// `settled` is reassigned (see that file's comment).
-function toPdfExportEvent(
-  state: { result: { file: string } | { error: string } } | { threw: string },
-): SseEvent {
+// `settled` is reassigned (see that file's comment). By the time this runs,
+// a successful render has already been registered (see streamCatalogPdfExport
+// below) — this only formats the outcome into an SSE event.
+function toPdfExportEvent(state: PdfExportSettled): SseEvent {
   if ("threw" in state) {
     return { event: "error", data: { error: state.threw } };
   }
-  if ("error" in state.result) {
-    return { event: "error", data: { error: state.result.error } };
+  if ("error" in state) {
+    return { event: "error", data: { error: state.error } };
   }
-  return { event: "done", data: { token: registerPdfExport(state.result.file) } };
+  return { event: "done", data: { token: state.token } };
 }
 
-// Same buffer-and-poll shape as studioSync.ts's streamImageSync: progress
-// arrives through a callback while generateCatalogPdf is in flight, but a
-// generator can only yield when its consumer asks. No mutex here, unlike
-// image sync — two concurrent catalog exports each write to their own temp
-// dir and their own output file, so there is no shared state a second run
-// could corrupt, just extra CPU/RAM if a seller starts two at once.
+// Same buffer-and-poll shape as studioSync.ts's streamImageSync (shared via
+// scripts/lib/sseProgress.ts's streamProgressAsSse) — progress arrives
+// through a callback while generateCatalogPdf is in flight, but a generator
+// can only yield when its consumer asks. No mutex here, unlike image sync —
+// two concurrent catalog exports each write to their own temp dir and their
+// own output file, so there is no shared state a second run could corrupt,
+// just extra CPU/RAM if a seller starts two at once.
 async function* streamCatalogPdfExport(options: PdfExportOptions): AsyncGenerator<SseEvent> {
-  const pending: PdfExportProgress[] = [];
-  let settled: { result: { file: string } | { error: string } } | { threw: string } | null = null;
-
-  const inFlight = generateCatalogPdf(options, (progress) => {
-    pending.push(progress);
-  }).then(
-    (result) => {
-      settled = { result };
-    },
-    (err: unknown) => {
-      settled = { threw: err instanceof Error ? err.message : String(err) };
-    },
+  yield* streamProgressAsSse<PdfExportProgress, PdfExportSettled>(
+    (onProgress) =>
+      generateCatalogPdf(options, onProgress).then((result): PdfExportSettled =>
+        // Registered here, as soon as the render settles, rather than in the
+        // trailing "done" event below: studio/vite.config.ts calls
+        // iterator.return?.() the instant the SSE consumer disconnects,
+        // which ends this generator before that yield would ever run — but
+        // generateCatalogPdf's own promise chain keeps rendering regardless
+        // of whether anyone is still listening. Registering at settle time
+        // means a PDF that finishes after the client gave up is still
+        // reachable (until the TTL expires) instead of being permanently
+        // orphaned on disk with no token.
+        "error" in result ? result : { token: registerPdfExport(result.file) },
+      ),
+    (err): PdfExportSettled => ({ threw: err instanceof Error ? err.message : String(err) }),
+    toPdfExportEvent,
   );
-
-  for (;;) {
-    while (pending.length > 0) {
-      yield { event: "progress", data: pending.shift() };
-    }
-    if (settled !== null) break;
-    await Promise.race([inFlight, new Promise((r) => setTimeout(r, 50))]);
-  }
-  while (pending.length > 0) {
-    yield { event: "progress", data: pending.shift() };
-  }
-  yield toPdfExportEvent(settled);
 }
 
 function handleExportPdf(req: StudioRequest): StudioResponse {
@@ -1434,11 +1469,26 @@ function handleExportPdf(req: StudioRequest): StudioResponse {
 }
 
 function handleExportPdfDownload(token: string): StudioResponse {
-  const file = takePdfExport(token);
+  const file = peekPdfExport(token);
   if (file === null) {
     throw new StudioError(404, "export not found or already downloaded");
   }
-  return { status: 200, file, contentType: "application/pdf" };
+  return {
+    status: 200,
+    file,
+    contentType: "application/pdf",
+    onSent: () => releasePdfExport(token),
+  };
+}
+
+/**
+ * Test-only: registers `file` under a fresh token via the same
+ * registerPdfExport path a real catalog export uses, so the download route's
+ * single-use/TTL/cleanup behavior can be exercised without a working
+ * Chromium install. Not used by production code.
+ */
+export function registerPdfExportForTests(file: string): string {
+  return registerPdfExport(file);
 }
 
 const exportFlyerBodySchema = z.object({ id: z.string().min(1) });

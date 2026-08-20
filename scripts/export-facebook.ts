@@ -11,7 +11,6 @@
 import fs from "fs/promises";
 import { existsSync, mkdirSync, readdirSync } from "fs";
 import path from "path";
-import * as readline from "readline";
 import { loadAllItemsRaw } from "@/lib/content/loader";
 import type { Item } from "@/lib/content/types";
 import { resolvePriceByStrategy, type PriceStrategy } from "@/lib/utils/pricing";
@@ -24,6 +23,7 @@ import {
   formatRunDate,
   type ExportRun,
 } from "./lib/exportHistory";
+import { createPrompt } from "./lib/cliPrompt";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -223,11 +223,7 @@ async function writeBatch(headers: string[], rows: string[][], suffix?: number):
 
 // ── Terminal UI helpers ────────────────────────────────────────────────────────
 
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-
-function ask(prompt: string): Promise<string> {
-  return new Promise((resolve) => rl.question(prompt, (a) => resolve(a.trim())));
-}
+const { ask, closeInput } = createPrompt();
 
 function section(title: string): void {
   const pad = Math.max(0, 46 - title.length);
@@ -432,7 +428,7 @@ async function main(): Promise<void> {
 
   if (!exportable.length) {
     console.log("\nNo available items to export. Add items with `pnpm create-item`.");
-    rl.close();
+    closeInput();
     return;
   }
 
@@ -456,7 +452,7 @@ async function main(): Promise<void> {
     console.log(
       "  Re-run and choose [n] at Step 0 to export everything again.\n",
     );
-    rl.close();
+    closeInput();
     return;
   }
 
@@ -465,13 +461,13 @@ async function main(): Promise<void> {
 
   if (!selected.length) {
     console.log("\nNo items selected. Exiting.");
-    rl.close();
+    closeInput();
     return;
   }
 
   // Step 2: price tier
   const priceStrategy = await stepPriceStrategy(selected);
-  rl.close();
+  closeInput();
 
   // Copy local photos into exports/ as a manual-upload fallback (in case CDN URLs change).
   await copyLocalPhotos(selected);
@@ -557,6 +553,6 @@ async function main(): Promise<void> {
 
 main().catch((err: unknown) => {
   console.error(err);
-  rl.close();
+  closeInput();
   process.exit(1);
 });
