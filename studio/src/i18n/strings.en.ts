@@ -400,6 +400,12 @@ export const EN = {
   "readiness.aceternity.title": "Aceternity UI",
   "readiness.aceternity.installed": "Components installed",
   "readiness.aceternity.missing": "components/ui/ not installed",
+  "readiness.flyerCors.title": "Flyer photo CORS",
+  "readiness.flyerCors.not-applicable": "Not using Cloudflare R2 — flyer photos don't need a CORS policy",
+  "readiness.flyerCors.needs-credentials": "Waiting on R2 credentials — see Image storage above",
+  "readiness.flyerCors.ok": "CORS is configured — flyer photos will embed",
+  "readiness.flyerCors.missing": "Bucket does not yet allow {origin} — flyer photos will download without images",
+  "readiness.flyerCors.unknown": "Could not check the bucket's CORS policy: {message}",
   "readiness.configParse.title": "Site config",
   "readiness.configParse.error": "content/config.ts could not be loaded — fix it before anything else",
 } as const;

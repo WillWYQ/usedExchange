@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
@@ -11,6 +11,12 @@ import {
   type ReadinessItem,
 } from "./siteReadiness";
 
+const { send } = vi.hoisted(() => ({ send: vi.fn() }));
+vi.mock("@aws-sdk/client-s3", () => ({
+  S3Client: vi.fn().mockImplementation(() => ({ send })),
+  GetBucketCorsCommand: vi.fn().mockImplementation((input: unknown) => ({ input })),
+}));
+
 const run = promisify(execFile);
 
 let sandboxes: string[] = [];
@@ -18,6 +24,7 @@ let sandboxes: string[] = [];
 afterEach(async () => {
   await Promise.all(sandboxes.map((d) => fs.rm(d, { recursive: true, force: true })));
   sandboxes = [];
+  send.mockReset();
 });
 
 async function sandbox(): Promise<string> {
@@ -75,6 +82,18 @@ const R2_ENV = {
   CF_R2_PUBLIC_URL: "https://cdn.example",
 };
 
+function r2Config(over: Partial<ReadinessConfig> = {}): ReadinessConfig {
+  return configuredConfig({
+    imageStorage: { provider: "cloudflare-r2" },
+    baseUrl: "https://shop.example.com",
+    ...over,
+  });
+}
+
+function errorNamed(name: string, message = name): Error {
+  return Object.assign(new Error(message), { name });
+}
+
 describe("a freshly-cloned template", () => {
   it("reports every tier-1 check as not done", async () => {
     const root = await sandbox();
@@ -103,6 +122,7 @@ describe("a freshly-cloned template", () => {
       "translations",
       "shipping",
       "aceternity",
+      "flyer-cors",
     ]);
   });
 
@@ -111,7 +131,7 @@ describe("a freshly-cloned template", () => {
     const report = await buildReadinessReport(root, templateConfig(), {});
     expect(report.tier1Total).toBe(6);
     expect(report.items.filter((i) => i.tier === 1)).toHaveLength(6);
-    expect(report.items.filter((i) => i.tier === 2)).toHaveLength(3);
+    expect(report.items.filter((i) => i.tier === 2)).toHaveLength(4);
   });
 });
 
@@ -338,6 +358,85 @@ describe("tier 2 optional checks", () => {
 
     const after = await buildReadinessReport(root, configuredConfig(), {});
     expect(byId(after.items, "aceternity").done).toBe(true);
+  });
+});
+
+describe("flyer CORS", () => {
+  it("is not applicable for the local provider", async () => {
+    const root = await sandbox();
+    const report = await buildReadinessReport(root, configuredConfig(), {});
+    const item = byId(report.items, "flyer-cors");
+    expect(item.tier).toBe(2);
+    expect(item.done).toBe(true);
+    expect(item.params).toEqual({ variant: "not-applicable" });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("is not applicable for the vercel-blob provider", async () => {
+    const root = await sandbox();
+    const report = await buildReadinessReport(
+      root,
+      configuredConfig({ imageStorage: { provider: "vercel-blob" } }),
+      {},
+    );
+    const item = byId(report.items, "flyer-cors");
+    expect(item.done).toBe(true);
+    expect(item.params).toEqual({ variant: "not-applicable" });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("reports needs-credentials without calling R2 when a variable is missing", async () => {
+    const root = await sandbox();
+    const { CF_R2_BUCKET: _omitted, ...partial } = R2_ENV;
+    const report = await buildReadinessReport(root, r2Config(), partial);
+    const item = byId(report.items, "flyer-cors");
+    expect(item.done).toBe(false);
+    expect(item.params).toEqual({ variant: "needs-credentials" });
+    expect(item.action).toBeUndefined();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("is done when the bucket already allows the site's origin", async () => {
+    const root = await sandbox();
+    send.mockResolvedValueOnce({
+      CORSRules: [{ AllowedOrigins: ["https://shop.example.com"], AllowedMethods: ["GET"] }],
+    });
+    const report = await buildReadinessReport(root, r2Config(), R2_ENV);
+    const item = byId(report.items, "flyer-cors");
+    expect(item.done).toBe(true);
+    expect(item.params).toEqual({ variant: "ok" });
+  });
+
+  it("is not done when the bucket's CORS rules don't cover the site's origin", async () => {
+    const root = await sandbox();
+    send.mockResolvedValueOnce({
+      CORSRules: [{ AllowedOrigins: ["https://other.example"], AllowedMethods: ["GET"] }],
+    });
+    const report = await buildReadinessReport(root, r2Config(), R2_ENV);
+    const item = byId(report.items, "flyer-cors");
+    expect(item.done).toBe(false);
+    expect(item.params).toEqual({ variant: "missing", origin: "https://shop.example.com" });
+    expect(item.action).toEqual({ kind: "command", command: "pnpm configure-image-cors" });
+  });
+
+  it("treats NoSuchCORSConfiguration as no rules yet, not a crash", async () => {
+    const root = await sandbox();
+    send.mockRejectedValueOnce(errorNamed("NoSuchCORSConfiguration"));
+    const report = await buildReadinessReport(root, r2Config(), R2_ENV);
+    const item = byId(report.items, "flyer-cors");
+    expect(item.done).toBe(false);
+    expect(item.params).toEqual({ variant: "missing", origin: "https://shop.example.com" });
+  });
+
+  it("reports unknown instead of throwing on an unrelated API error", async () => {
+    const root = await sandbox();
+    send.mockRejectedValueOnce(errorNamed("AccessDenied", "not authorized"));
+    const report = await buildReadinessReport(root, r2Config(), R2_ENV);
+    const item = byId(report.items, "flyer-cors");
+    expect(item.done).toBe(false);
+    expect(item.params).toEqual({ variant: "unknown", message: "not authorized" });
+    // one item's live-API failure must not take the rest of the report down
+    expect(byId(report.items, "identity").done).toBe(true);
   });
 });
 

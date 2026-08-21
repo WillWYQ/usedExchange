@@ -22,6 +22,7 @@ const READINESS_ID_TO_KEY: Readonly<Record<string, string>> = {
   shipping: "shipping",
   aceternity: "aceternity",
   "config-parse": "configParse",
+  "flyer-cors": "flyerCors",
 };
 
 function localizedTitle(t: (key: StudioKey, params?: Record<string, string | number>) => string, item: ReadinessItem): string {

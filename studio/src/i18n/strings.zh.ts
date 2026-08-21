@@ -362,6 +362,12 @@ export const ZH: Partial<StudioStrings> = {
   "readiness.aceternity.title": "Aceternity UI",
   "readiness.aceternity.installed": "组件已安装",
   "readiness.aceternity.missing": "components/ui/ 尚未安装",
+  "readiness.flyerCors.title": "宣传单图片 CORS",
+  "readiness.flyerCors.not-applicable": "未使用 Cloudflare R2,无需 CORS 策略",
+  "readiness.flyerCors.needs-credentials": "尚缺 R2 凭据 — 详见上方“图片存储”",
+  "readiness.flyerCors.ok": "CORS 已配置,宣传单图片可正常显示",
+  "readiness.flyerCors.missing": "存储桶尚未允许 {origin},宣传单图片将无法显示图片",
+  "readiness.flyerCors.unknown": "无法检查存储桶的 CORS 策略:{message}",
   "readiness.configParse.title": "站点配置",
   "readiness.configParse.error": "content/config.ts 无法加载",
 };
