@@ -320,6 +320,12 @@ function isUrlField(path: string): boolean {
   return /Url$/.test(last);
 }
 
+const MEASUREMENT_ID_RE = /^G-[A-Z0-9]+$/i;
+
+function isMeasurementIdField(path: string): boolean {
+  return path === "analytics.googleAnalyticsId";
+}
+
 const NONNEGATIVE_INTEGER_FIELDS = new Set(["recentlyListedCount", "soldArchiveDisplayLimit"]);
 
 export function validateConfigValue(field: ConfigField, newValue: unknown): void {
@@ -386,6 +392,14 @@ export function validateConfigValue(field: ConfigField, newValue: unknown): void
       }
     } catch {
       throw new Error(`Invalid value for ${path}: must be an http(s) URL (or empty)`);
+    }
+  }
+  if (isMeasurementIdField(path)) {
+    if (newValue === "") return; // empty means "not set"
+    if (!MEASUREMENT_ID_RE.test(newValue)) {
+      throw new Error(
+        `Invalid value for ${path}: expected a GA4 Measurement ID like "G-XXXXXXXXXX" (or empty to disable)`,
+      );
     }
   }
 }
