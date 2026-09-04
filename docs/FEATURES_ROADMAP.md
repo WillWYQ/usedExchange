@@ -232,7 +232,7 @@ layout only when that field is set. Chosen alongside/over Vercel Analytics
 (§1.9) specifically because it has **no hosting dependency** — it works on
 GitHub Pages, whereas Vercel Analytics requires Vercel hosting. Editable
 from Seller Studio's Config pane (Analytics tab) with inline format
-validation (must be empty or match `G-XXXXXXXXXX`).
+validation (must be empty or start with `G-`).
 
 ---
 

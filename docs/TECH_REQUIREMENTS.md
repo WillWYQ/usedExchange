@@ -35,7 +35,7 @@
 | `jsonc-parser` | `^3.3.1` | Parses `item.json`/`_category.json` as JSONC (`//` comments, trailing commas allowed); used by the loader and every JSONC-editing script — `lib/content/loader.ts`, `scripts/mark-sold.ts`, `scripts/lib/itemEdit.ts` (Studio PATCH path + `applyFieldEdits`) |
 | `@vercel/analytics` | `^1.3.0` | Vercel Analytics — no-op outside Vercel; enabled when `siteConfig.analytics.vercel: true` |
 | `@vercel/speed-insights` | `^1.0.0` | Vercel Speed Insights — no-op outside Vercel; enabled when `siteConfig.analytics.speedInsights: true` |
-| `@next/third-parties` | `^16.3.4` | Official Next.js package for third-party scripts; used for `<GoogleAnalytics />` (GA4) — no-op when `siteConfig.analytics.googleAnalyticsId` is unset |
+| `@next/third-parties` | `^15.5.25` | Official Next.js package for third-party scripts; used for `<GoogleAnalytics />` (GA4) — no-op when `siteConfig.analytics.googleAnalyticsId` is unset |
 | `motion` | `^12.40.0` | Animation library used by Aceternity components (imported as `motion/react`; the legacy `framer-motion` package is NOT used) |
 | `three` | `^0.184.0` | WebGL engine for the 3D Aceternity background components |
 | `@react-three/fiber` | `^9.6.1` | React renderer for `three`, used by the 3D background components |

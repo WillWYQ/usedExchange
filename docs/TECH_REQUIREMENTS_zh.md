@@ -35,7 +35,7 @@
 | `jsonc-parser` | `^3.3.1` | 将 `item.json`/`_category.json` 作为 JSONC 解析（允许 `//` 注释和尾随逗号）；用于加载器和所有 JSONC 编辑脚本——`lib/content/loader.ts`、`scripts/mark-sold.ts`、`scripts/lib/itemEdit.ts`（Studio PATCH 路径 + `applyFieldEdits`） |
 | `@vercel/analytics` | `^1.3.0` | Vercel Analytics——Vercel 之外为空操作 |
 | `@vercel/speed-insights` | `^1.0.0` | Vercel Speed Insights——同上 |
-| `@next/third-parties` | `^16.3.4` | Next.js 官方第三方脚本包；用于 `<GoogleAnalytics />`（GA4）——未设置 `siteConfig.analytics.googleAnalyticsId` 时为空操作 |
+| `@next/third-parties` | `^15.5.25` | Next.js 官方第三方脚本包；用于 `<GoogleAnalytics />`（GA4）——未设置 `siteConfig.analytics.googleAnalyticsId` 时为空操作 |
 | `motion` | `^12.40.0` | Aceternity 组件使用的动画库（以 `motion/react` 导入；**不**使用旧版 `framer-motion` 包） |
 | `three` | `^0.184.0` | 3D Aceternity 背景组件的 WebGL 引擎 |
 | `@react-three/fiber` | `^9.6.1` | `three` 的 React 渲染器，用于 3D 背景组件 |

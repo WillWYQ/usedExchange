@@ -210,7 +210,7 @@ pnpm semester-end
 在根布局中渲染。之所以选择它作为 Vercel Analytics（§1.9）的替代/补充方案，
 是因为它**不依赖任何托管方式**——可在 GitHub Pages 上运行，而 Vercel
 Analytics 需要 Vercel 托管。可在 Seller Studio 的配置面板（Analytics
-标签页）中编辑，并带有内联格式校验（必须为空或匹配 `G-XXXXXXXXXX`）。
+标签页）中编辑，并带有内联格式校验（必须为空或以 `G-` 开头）。
 
 ---
 

@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@next/third-parties':
-        specifier: ^16.3.4
-        version: 16.3.4(next@15.5.22(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
+        specifier: ^15.5.25
+        version: 15.5.25(next@15.5.22(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
       '@react-three/fiber':
         specifier: ^9.6.1
         version: 9.6.1(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.184.0)
@@ -1057,10 +1057,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@next/third-parties@16.3.4':
-    resolution: {integrity: sha512-DjyyOoBHPHYFgQ0l9VXJFWMeO5FvnFP+bXM9ZC0eGYluVwpNIvMjDPhDhM/VlhK+VK423G+8LMD+y/xwEKAi+w==}
+  '@next/third-parties@15.5.25':
+    resolution: {integrity: sha512-cOPrVyIJbkMfpRL1cTHi2sCEmLssscEcPRR31HVWv6hAbLFr+jzB8lUK81KKWcmgkS22hziVYpV2PjmlMMe14g==}
     peerDependencies:
-      next: ^13.0.0 || ^14.0.0 || ^15.0.0 || ^16.0.0-beta.0
+      next: ^13.0.0 || ^14.0.0 || ^15.0.0
       react: ^18.2.0 || 19.0.0-rc-de68d2f4-20241204 || ^19.0.0
 
   '@nodelib/fs.scandir@2.1.5':
@@ -5006,7 +5006,7 @@ snapshots:
   '@next/swc-win32-x64-msvc@15.5.22':
     optional: true
 
-  '@next/third-parties@16.3.4(next@15.5.22(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)':
+  '@next/third-parties@15.5.25(next@15.5.22(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)':
     dependencies:
       next: 15.5.22(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react: 19.2.8
