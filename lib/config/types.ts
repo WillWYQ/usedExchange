@@ -88,6 +88,8 @@ export type SiteConfig = {
   analytics: {
     vercel: boolean;
     speedInsights: boolean;
+    // GA4 Measurement ID (e.g. "G-XXXXXXXXXX"). Leave unset/empty to disable.
+    googleAnalyticsId?: string;
   };
 
   // Full-text search

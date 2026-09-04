@@ -7,6 +7,7 @@ import { BackgroundEffect } from "@/components/ui-adapters/BackgroundEffect";
 import { LocaleProvider } from "@/components/i18n/LocaleProvider";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { MeasurementUnitProvider } from "@/components/units/MeasurementUnitProvider";
+import { GoogleAnalytics } from "@next/third-parties/google";
 
 export const metadata: Metadata = {
   title: {
@@ -43,6 +44,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </MeasurementUnitProvider>
           </LocaleProvider>
         </ThemeProvider>
+        {siteConfig.analytics.googleAnalyticsId && (
+          <GoogleAnalytics gaId={siteConfig.analytics.googleAnalyticsId} />
+        )}
       </body>
     </html>
   );
