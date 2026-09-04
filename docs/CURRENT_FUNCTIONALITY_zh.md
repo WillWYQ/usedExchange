@@ -453,7 +453,7 @@ AI 按 8 个问题组提问：站点身份、部署（网址 + 托管方式）�
 | SEO | `meta.description`、`meta.twitterHandle` |
 | UI 槽位 | `ui.background`、`ui.itemGrid`、`ui.gallery`、`ui.itemCard`、`ui.priceFilterStrategy?`**（可选）**、`ui.priceFilterBuckets?`**（可选）** |
 | 深色模式 | 页头切换按钮（浅色/深色/跟随系统，由 `next-themes` 持久化） |
-| 分析 | `analytics.vercel`、`analytics.speedInsights` |
+| 分析 | `analytics.vercel`、`analytics.speedInsights`、`analytics.googleAnalyticsId` |
 | 搜索 | `search.enabled`、`search.placeholder` |
 | 站点地图 | `sitemap.enabled` |
 | 国际化 | `i18n.defaultLocale`、`i18n.availableLocales`、`i18n.showLocaleSwitcher`、`i18n.translations.{locale}.*`（共 87 个 UI 字符串键；任一已列语区缺少必需键时预构建失败，缺失键回退到默认语区）、`i18n.localeMeasurementUnits?`**（可选）**——按语区覆盖单位制 |
@@ -506,8 +506,9 @@ AI 按 8 个问题组提问：站点身份、部署（网址 + 托管方式）�
 
 - **Vercel Analytics** — 页面浏览量、流量来源、热门页面（免费、注重隐私）
 - **Vercel Speed Insights** — 每页 Core Web Vitals（免费）
+- **Google Analytics（GA4）** — 完整分析套件，可在 GitHub Pages 上运行（无需 Vercel 托管）；将 `siteConfig.analytics.googleAnalyticsId` 设置为 GA4 测量 ID 即可启用
 
-两者均通过 `siteConfig.analytics.*` 启用。在 Vercel 之外均为空操作。
+Vercel Analytics 与 Speed Insights 通过 `siteConfig.analytics.vercel` / `siteConfig.analytics.speedInsights` 启用，在 Vercel 之外均为空操作。Google Analytics 通过 `siteConfig.analytics.googleAnalyticsId` 启用，该字段为空时为空操作；与 Vercel 系集成不同，它在任何托管环境（包括 GitHub Pages）下行为一致。
 
 ---
 
@@ -549,7 +550,7 @@ AI 按 8 个问题组提问：站点身份、部署（网址 + 托管方式）�
 | Schema 验证 | Zod 3 |
 | Markdown | react-markdown + remark-gfm |
 | 搜索 | fuse.js（客户端，构建时索引） |
-| 分析 | @vercel/analytics + @vercel/speed-insights |
+| 分析 | @vercel/analytics + @vercel/speed-insights + @next/third-parties（Google Analytics） |
 | 站点地图 | next-sitemap |
 | 动画 | motion（framer-motion） |
 | 图标 | @tabler/icons-react |

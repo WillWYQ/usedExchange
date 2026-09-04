@@ -35,6 +35,7 @@
 | `jsonc-parser` | `^3.3.1` | Parses `item.json`/`_category.json` as JSONC (`//` comments, trailing commas allowed); used by the loader and every JSONC-editing script — `lib/content/loader.ts`, `scripts/mark-sold.ts`, `scripts/lib/itemEdit.ts` (Studio PATCH path + `applyFieldEdits`) |
 | `@vercel/analytics` | `^1.3.0` | Vercel Analytics — no-op outside Vercel; enabled when `siteConfig.analytics.vercel: true` |
 | `@vercel/speed-insights` | `^1.0.0` | Vercel Speed Insights — no-op outside Vercel; enabled when `siteConfig.analytics.speedInsights: true` |
+| `@next/third-parties` | `^16.3.4` | Official Next.js package for third-party scripts; used for `<GoogleAnalytics />` (GA4) — no-op when `siteConfig.analytics.googleAnalyticsId` is unset |
 | `motion` | `^12.40.0` | Animation library used by Aceternity components (imported as `motion/react`; the legacy `framer-motion` package is NOT used) |
 | `three` | `^0.184.0` | WebGL engine for the 3D Aceternity background components |
 | `@react-three/fiber` | `^9.6.1` | React renderer for `three`, used by the 3D background components |
@@ -1666,6 +1667,7 @@ All added in `generateMetadata` for item detail pages:
 - `<SpeedInsights />` from `@vercel/speed-insights/next`
 - Both are no-ops in non-Vercel environments (graceful degradation)
 - Free on Vercel Hobby plan
+- See §22.14 for Google Analytics (GA4) — a separate, optional integration.
 
 ---
 
@@ -1929,6 +1931,33 @@ unit the seller entered and converted for display. `MeasurementUnitProvider` / `
 > and `DEMO_DOMAIN` decide whether `/` renders the catalog or the `ProjectIntro` page. While `baseUrl`
 > still contains the placeholder, `isTemplateConfigured()` is false and the home page shows the
 > project-introduction view — `scripts/check-config.ts` (§28) fails the production build on the same signal.
+
+---
+
+### 22.14 Google Analytics (GA4)
+
+```tsx
+// app/layout.tsx — only rendered when the config field is set:
+{siteConfig.analytics.googleAnalyticsId && (
+  <GoogleAnalytics gaId={siteConfig.analytics.googleAnalyticsId} />
+)}
+```
+
+- `<GoogleAnalytics />` from `@next/third-parties/google` (official Next.js
+  package, same pattern as `@vercel/analytics` / `@vercel/speed-insights`)
+- Config field: `siteConfig.analytics.googleAnalyticsId?: string` — a GA4
+  Measurement ID (`G-XXXXXXXXXX`); optional, defaults to unset
+- A no-op when the field is empty/unset — no script is rendered at all
+- Works identically under both `deploymentMode: "static"` and `"vercel"`
+  (GA has no server dependency, unlike Vercel Analytics which requires
+  Vercel hosting — see §1.9 of FEATURES_ROADMAP.md for that constraint)
+- Editable from Seller Studio's Config pane (Analytics tab) via the existing
+  generic config-editing system (`scripts/lib/configEdit.ts`) — no
+  bespoke Studio UI was built for this field
+- `scripts/lib/configEdit.ts`'s `validateConfigValue` rejects a value that
+  isn't empty or a `G-`-prefixed measurement id, so a seller pasting garbage
+  into Studio gets a clear inline error instead of a silently-broken script
+  tag
 
 ---
 

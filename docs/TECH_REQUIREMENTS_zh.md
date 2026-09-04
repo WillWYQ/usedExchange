@@ -35,6 +35,7 @@
 | `jsonc-parser` | `^3.3.1` | 将 `item.json`/`_category.json` 作为 JSONC 解析（允许 `//` 注释和尾随逗号）；用于加载器和所有 JSONC 编辑脚本——`lib/content/loader.ts`、`scripts/mark-sold.ts`、`scripts/lib/itemEdit.ts`（Studio PATCH 路径 + `applyFieldEdits`） |
 | `@vercel/analytics` | `^1.3.0` | Vercel Analytics——Vercel 之外为空操作 |
 | `@vercel/speed-insights` | `^1.0.0` | Vercel Speed Insights——同上 |
+| `@next/third-parties` | `^16.3.4` | Next.js 官方第三方脚本包；用于 `<GoogleAnalytics />`（GA4）——未设置 `siteConfig.analytics.googleAnalyticsId` 时为空操作 |
 | `motion` | `^12.40.0` | Aceternity 组件使用的动画库（以 `motion/react` 导入；**不**使用旧版 `framer-motion` 包） |
 | `three` | `^0.184.0` | 3D Aceternity 背景组件的 WebGL 引擎 |
 | `@react-three/fiber` | `^9.6.1` | `three` 的 React 渲染器，用于 3D 背景组件 |
@@ -1488,6 +1489,8 @@ export function buildBreadcrumbJsonLd(crumbs: { name: string; href: string }[]):
 
 两者在非 Vercel 环境中均为空操作（优雅降级）。Vercel Hobby 计划免费。
 
+- Google Analytics（GA4）见 §22.14——一个独立的可选集成。
+
 ### 22.7 站点地图
 
 `next-sitemap.config.js` 在项目根目录：
@@ -1716,6 +1719,32 @@ export function formatRelativeDate(isoDate: string | null, now?: Date): string
 | `soldArchiveDisplayLimit?` | 可选 `number` | 限制 `/sold` 渲染的已售物品数量（0 = 无上限）。在 `app/sold/page.tsx` 中以 `?? 200` 读取（运行时默认值 200），并已登记在 `scripts/lib/configDefaults.ts` 中，因此 `pnpm migrate-config` / `update-site` 会自动将其注入早于此字段的下游配置。 |
 
 > **模板状态门控**（`lib/utils/templateStatus.ts`）：`PLACEHOLDER_DOMAIN`（`"your-domain.com"`）和 `DEMO_DOMAIN` 决定 `/` 渲染目录还是 `ProjectIntro` 页面。只要 `baseUrl` 仍含占位符，`isTemplateConfigured()` 为 false，首页显示项目介绍视图——`scripts/check-config.ts`（§28）在同一信号上使生产构建失败。
+
+---
+
+### 22.14 Google Analytics（GA4）
+
+```tsx
+// app/layout.tsx — only rendered when the config field is set:
+{siteConfig.analytics.googleAnalyticsId && (
+  <GoogleAnalytics gaId={siteConfig.analytics.googleAnalyticsId} />
+)}
+```
+
+- `<GoogleAnalytics />` 来自 `@next/third-parties/google`（Next.js 官方包，与
+  `@vercel/analytics` / `@vercel/speed-insights` 模式相同）
+- 配置字段：`siteConfig.analytics.googleAnalyticsId?: string`——GA4 测量 ID
+  （`G-XXXXXXXXXX`）；可选，默认未设置
+- 该字段为空/未设置时即为空操作——不渲染任何脚本
+- 在 `deploymentMode: "static"` 与 `"vercel"` 下行为一致（GA 不依赖服务端，
+  不同于需要 Vercel 托管的 Vercel Analytics——该约束见 FEATURES_ROADMAP.md
+  §1.9）
+- 可在 Seller Studio 的配置面板（Analytics 标签页）中编辑，通过现有的通用
+  配置编辑系统（`scripts/lib/configEdit.ts`）——未为此字段构建专门的
+  Studio UI
+- `scripts/lib/configEdit.ts` 的 `validateConfigValue` 会拒绝既非空又不是
+  `G-` 前缀测量 ID 的值，因此卖家在 Studio 中粘贴无效内容时会得到清晰的
+  内联报错，而不是一个静默失效的脚本标签
 
 ---
 

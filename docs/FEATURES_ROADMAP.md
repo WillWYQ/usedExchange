@@ -163,6 +163,9 @@ One script component in `app/layout.tsx`. Would show:
 
 **Status:** The `@vercel/analytics` and `@vercel/speed-insights` packages are already installed as dependencies but are not wired up — nothing in `app/` or `components/` imports or renders them. Note the site deploys to GitHub Pages; Vercel Analytics requires Vercel hosting, so enabling it means either migrating deployment or choosing an alternative analytics provider.
 
+**See also:** §1.13 Google Analytics (GA4) — shipped as an alternative that
+needs no Vercel hosting.
+
 ---
 
 ### 1.10 PWA Web App Manifest
@@ -217,6 +220,19 @@ This script:
 4. Runs `pnpm upload-images` and generates the git commit message: `"chore: end-of-semester listing cleanup"`
 
 A single command handles the entire end-of-semester workflow in under 5 minutes.
+
+---
+
+### 1.13 Google Analytics (GA4) ✅ Shipped
+**Effort:** XS · **Value:** ⭐⭐
+
+Seller pastes a GA4 Measurement ID into `siteConfig.analytics.googleAnalyticsId`;
+`<GoogleAnalytics />` (`@next/third-parties/google`) renders in the root
+layout only when that field is set. Chosen alongside/over Vercel Analytics
+(§1.9) specifically because it has **no hosting dependency** — it works on
+GitHub Pages, whereas Vercel Analytics requires Vercel hosting. Editable
+from Seller Studio's Config pane (Analytics tab) with inline format
+validation (must be empty or match `G-XXXXXXXXXX`).
 
 ---
 
@@ -596,6 +612,7 @@ Features shipped in v1 have been moved to the "Shipped in v1" section at the top
 | Offline caching (PWA service worker) | 🎓👤 | v2 |
 | Price drop tracking (history log) | 🎓👤 | v2 |
 | Vercel Analytics + Speed Insights | 🎓 | v2 (deps installed but unwired; needs Vercel hosting) |
+| Google Analytics (GA4) | 🎓👤 | ✅ Implemented |
 | **Seller Studio (`pnpm studio`)** | 👤 | ✅ Implemented |
 | Multi-seller support | 👤 | v3 / architecture redesign required |
 | Real-time inventory without rebuild | 👤 | v3 |

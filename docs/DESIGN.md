@@ -1052,8 +1052,9 @@ export const siteConfig: SiteConfig = {
 
   // ── Analytics ─────────────────────────────────────────────────────────────
   analytics: {
-    vercel:        false,  // Vercel Analytics — only active on Vercel deployments; no-op elsewhere
-    speedInsights: false,  // Vercel Speed Insights — same; enable if deploying to Vercel
+    vercel:            false,  // Vercel Analytics — only active on Vercel deployments; no-op elsewhere
+    speedInsights:     false,  // Vercel Speed Insights — same; enable if deploying to Vercel
+    googleAnalyticsId: "",     // GA4 Measurement ID, e.g. "G-XXXXXXXXXX" — leave empty to disable; see TECH_REQUIREMENTS.md §22.14
   },
 
   // ── Full-text search ──────────────────────────────────────────────────────

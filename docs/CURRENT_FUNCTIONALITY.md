@@ -453,7 +453,7 @@ Fields marked **(optional)** are TypeScript-optional with runtime defaults — o
 | SEO | `meta.description`, `meta.twitterHandle` |
 | UI slots | `ui.background`, `ui.itemGrid`, `ui.gallery`, `ui.itemCard`, `ui.priceFilterStrategy?` **(optional)**, `ui.priceFilterBuckets?` **(optional)** |
 | Dark mode | Header toggle (light/dark/system, persisted via `next-themes`) |
-| Analytics | `analytics.vercel`, `analytics.speedInsights` |
+| Analytics | `analytics.vercel`, `analytics.speedInsights`, `analytics.googleAnalyticsId` |
 | Search | `search.enabled`, `search.placeholder` |
 | Sitemap | `sitemap.enabled` |
 | i18n | `i18n.defaultLocale`, `i18n.availableLocales`, `i18n.showLocaleSwitcher`, `i18n.translations.{locale}.*` (87 UI string keys total; the prebuild check fails if any listed locale lacks the required keys, with the default locale as fallback), `i18n.localeMeasurementUnits?` **(optional)** — per-locale unit overrides |
@@ -506,8 +506,9 @@ A sun/moon toggle in the site header (`ThemeToggle`) lets visitors switch betwee
 
 - **Vercel Analytics** — page views, traffic sources, top pages (free, privacy-respecting)
 - **Vercel Speed Insights** — Core Web Vitals per page (free)
+- **Google Analytics (GA4)** — full analytics suite, works on GitHub Pages (no Vercel hosting required); enabled by setting `siteConfig.analytics.googleAnalyticsId` to a GA4 Measurement ID
 
-Both enabled via `siteConfig.analytics.*`. Both are no-ops outside Vercel.
+Vercel Analytics and Speed Insights are enabled via `siteConfig.analytics.vercel` / `siteConfig.analytics.speedInsights` and are no-ops outside Vercel. Google Analytics is enabled via `siteConfig.analytics.googleAnalyticsId` and is a no-op when that field is empty; unlike the Vercel integrations it works identically on any hosting, including GitHub Pages.
 
 ---
 
@@ -549,7 +550,7 @@ Both enabled via `siteConfig.analytics.*`. Both are no-ops outside Vercel.
 | Schema validation | Zod 3 |
 | Markdown | react-markdown + remark-gfm |
 | Search | fuse.js (client-side, build-time index) |
-| Analytics | @vercel/analytics + @vercel/speed-insights |
+| Analytics | @vercel/analytics + @vercel/speed-insights + @next/third-parties (Google Analytics) |
 | Sitemap | next-sitemap |
 | Animations | motion (framer-motion) |
 | Icons | @tabler/icons-react |
