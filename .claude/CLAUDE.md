@@ -83,11 +83,11 @@ Checklist for every new config field:
 | docs/DESIGN.md / docs/DESIGN_zh.md | v0.10.1 | 2026-09-04 |
 | docs/TECH_REQUIREMENTS.md / docs/TECH_REQUIREMENTS_zh.md | v0.10.1 | 2026-09-04 |
 | docs/IMPLEMENTATION_PLAN.md / docs/IMPLEMENTATION_PLAN_zh.md | **v1.7** | 2026-08-02 |
-| docs/FEATURES_ROADMAP.md / docs/FEATURES_ROADMAP_zh.md | v1.5 | 2026-09-05 |
+| docs/FEATURES_ROADMAP.md / docs/FEATURES_ROADMAP_zh.md | v1.6 | 2026-09-05 |
 | docs/CURRENT_FUNCTIONALITY.md / docs/CURRENT_FUNCTIONALITY_zh.md | v1.3 | 2026-09-05 |
 | docs/ARCHITECTURE.md / docs/ARCHITECTURE_zh.md | v1.2 | 2026-08-02 |
 | docs/setup_instruction.md / docs/setup_instruction_zh.md | v1.1 | 2026-08-02 |
-| docs/SCRIPTS.md / docs/SCRIPTS_zh.md | v1.0 | 2026-08-02 |
+| docs/SCRIPTS.md / docs/SCRIPTS_zh.md | v1.1 | 2026-09-05 |
 | docs/UPDATE_GUIDE.md / docs/UPDATE_GUIDE_zh.md | v1.1 | 2026-08-02 |
 
 ---
@@ -100,6 +100,7 @@ Checklist for every new config field:
 | Generate `item.json` from photos | `/update-items` (`.claude/commands/update-items.md`) |
 | Translate listings into another locale | `/translate-items` (`.claude/commands/translate-items.md`) |
 | Enable/configure shipping cost estimator | `/setup-shipping` (`.claude/commands/setup-shipping.md`) |
+| Enable/configure the item-page enquiry form (buyer contact relay) | `/setup-contact-form` (`.claude/commands/setup-contact-form.md`) |
 | Manage listings in a browser | `pnpm studio [--port <n>]` (local only; see docs/CURRENT_FUNCTIONALITY.md) |
 | Publish content changes | `pnpm push` (stages `content/` + `lib/generated/image-manifest.json`, commits, pushes; Studio's git publish mirrors exactly these paths) |
 | Mark an item sold | `pnpm mark-sold <category>/<name>` |

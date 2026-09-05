@@ -1,7 +1,7 @@
 # UsedExchange — 脚本与工具参考
 
-**版本：** 1.0
-**日期：** 2026-08-02
+**版本：** 1.1
+**日期：** 2026-09-05
 **包版本：** 1.4.2（见 `package.json`）
 
 > 本文档为仓库中所有 npm 脚本、独立 CLI 及支撑模块的完整参考。架构与数据流见 [ARCHITECTURE_zh.md](ARCHITECTURE_zh.md)；完整设计规范见 [DESIGN_zh.md](DESIGN_zh.md)；非技术卖家操作指南见 [../SETUP_GUIDE.md](../SETUP_GUIDE.md)。
@@ -13,7 +13,7 @@
 ## 概述
 
 - 所有 CLI 均位于 `scripts/`，通过 **tsx** 执行（Node.js 环境——无浏览器 API），属于生产级工具，而非仅开发期辅助。
-- 根目录 `package.json` 共定义 **24 个 npm 脚本**；`new` 是 `create-item` 的完全别名，另有三个脚本（`upload-images`、`dev`、`prebuild`）是 `scripts/sync-images.ts` 三种模式的轻量封装。
+- 根目录 `package.json` 共定义 **31 个 npm 脚本**；`new` 是 `create-item` 的完全别名，另有三个脚本（`upload-images`、`dev`、`prebuild`）是 `scripts/sync-images.ts` 三种模式的轻量封装。
 - **卖家只需手动编辑 `content/` 内的文件。** 下文的 CLI 会*代你*读写 `content/`——你无需亲自打开 `app/`、`lib/` 或 `scripts/`。
 - `workers/shipping-rate-proxy/` 是一个**独立部署**的 Cloudflare Worker 包，拥有自己的 `package.json`；它不在根级 tsconfig / ESLint / Vitest 的作用域内。
 - `lib/generated/image-manifest.json` **提交到 git**（铁律 #5）。脚本负责写入它；CI 直接读取它，无需任何 CDN 凭据。
@@ -32,6 +32,13 @@
 | `pnpm new <category>/<name>` | `tsx scripts/create-item.ts` | `create-item` 的完全别名 |
 | `pnpm create-template [category]` | `tsx scripts/create-template.ts` | 写入带完整注释的 `_template.json`，供卖家复制使用 |
 | `pnpm mark-sold <category>/<item>` | `tsx scripts/mark-sold.ts` | 设置 `status="sold"` + `sold_date=today`，并保留 JSONC 注释 |
+| `pnpm mark-available <category>/<item>` | `tsx scripts/mark-available.ts` | 重置 `status="available"` 并清空 `sold_date`，保留 JSONC 注释 |
+| `pnpm duplicate <category>/<item> <category>/<new-item>` | `tsx scripts/duplicate.ts` | 复制物品文件夹（item.json + 全部照片）为新物品，并重置为全新的 `draft` |
+| `pnpm inventory` | `tsx scripts/inventory.ts` | 打印全部物品（所有状态）的 Markdown 表格：名称、分类、状态、最低价格、已上架天数 |
+| `pnpm stale-check [--days <n>]` | `tsx scripts/stale-check.ts` | 列出已上架超过 N 天（默认 60）的 `available` 物品 |
+| `pnpm audit-listings` | `tsx scripts/audit-listings.ts` | 报告未售出物品中缺失推荐字段的项（照片、描述、标签、运费重量/尺寸、价格分级） |
+| `pnpm export-csv` | `tsx scripts/export-csv.ts` | 将全部物品（所有状态）导出为供卖家自用记账的扁平 CSV（覆盖已存在文件前会提示确认） |
+| `pnpm semester-end` | `tsx scripts/semester-end.ts` | 交互式学期末清理：逐项审阅滞销物品（标记已售 / 降价 / 保持不变）、同步照片、给出建议提交信息 |
 | `pnpm setup-check` | `tsx scripts/setup-check.ts` | 打印就绪清单：还缺什么，以及每一步对应的命令或面板。核心步骤未完成时以 1 退出 |
 | `pnpm fb-export` | `tsx scripts/export-facebook.ts` | 交互式导出 Facebook Marketplace CSV |
 | `pnpm push` | `git add content lib/generated/image-manifest.json && git commit -m 'chore: update listings' && git push` | 提交并推送卖家内容与图片清单 |
@@ -116,6 +123,58 @@
 - **环境变量：** 无。
 - **触碰的文件：** 读写 `content/items/<category>/<item>/item.json`。
 
+### `mark-available.ts` —— 标记为在售
+
+- **命令：** `pnpm mark-available <category>/<item>`。
+- **参数：** 恰好一个位置参数 `<category>/<item>`，在文件系统访问前校验 kebab-case。
+- **用途：** 通过与 `mark-sold` 相同的外科手术式 JSONC 编辑，设置 `status="available"` 并将 `sold_date` 清空为 `null`。可从**任意**其他状态（sold、pending、reserved、draft）重置为 available——不仅限于 sold——因为重新上架草稿或取消预留中的物品同样是合理用途。若状态已是 `available`，则不做任何操作并以退出码 0 结束。
+- **环境变量：** 无。
+- **触碰的文件：** 读写 `content/items/<category>/<item>/item.json`。
+
+### `duplicate.ts` —— 物品复制器
+
+- **命令：** `pnpm duplicate <category>/<item> <category>/<new-item>`。
+- **参数：** 两个位置参数 `<category>/<item>` slug（源、目标），四个部分均在文件系统访问前校验 kebab-case。目标分类必须已存在；目标物品必须不存在。
+- **用途：** 将源物品的整个文件夹（item.json + 全部照片文件）复制到目标位置，然后重置副本的上架生命周期字段：`status` → `"draft"`、`listed_date` → 当天、`sold_date` → `null`、`price_reduced` → `false`、`previous_lowest_price` / `min_acceptable_offer` → `null`（与 `scripts/lib/itemTemplate.ts` 的全新物品默认值保持一致）。若副本中存在私密的 `reserved_for` 字段（铁律 #4），会被直接剥离，而不是原样带过去。
+- **环境变量：** 无。
+- **触碰的文件：** 读取 `content/items/<category>/<item>/`；写入 `content/items/<category>/<new-item>/`（文件夹复制 + item.json 编辑）。
+
+### `inventory.ts` —— 库存报表
+
+- **命令：** `pnpm inventory`。
+- **用途：** 将全部物品（所有状态——不仅是 `available`）打印为 Markdown 表格：名称、分类、状态、最低解析价格（与 `fb-export` 默认使用的"最低分级"策略一致）、已上架天数（原始整数天数）。只读，不写文件。
+- **环境变量：** 无。
+- **触碰的文件：** 通过 `loadAllItemsRaw` 读取 `content/items`；不写入。
+
+### `stale-check.ts` —— 滞销物品报告
+
+- **命令：** `pnpm stale-check [--days <n>]`。
+- **参数：** 可选 `--days <n>`，非负数；默认 **60**。
+- **用途：** 列出已上架超过 N 天的 `available` 物品，按上架天数从长到短排序，并附带当前最低价格。与 `pnpm semester-end` 共用同一个 `findStaleItems()`（`scripts/lib/staleItems.ts`），因此两个命令永远不会在"哪些物品算滞销"这件事上产生分歧。只读，不写文件。
+- **环境变量：** 无。
+- **触碰的文件：** 通过 `loadAllItemsRaw` 读取 `content/items`；不写入。
+
+### `audit-listings.ts` —— 推荐字段审计
+
+- **命令：** `pnpm audit-listings`。
+- **用途：** 报告未售出物品中缺失"推荐"（schema 中可选但有价值）字段的项：完全没有照片、描述为空、没有标签、存在开放式邮寄价格分级却未设置重量/尺寸，或完全没有价格分级。具体且可调整的判定标准见 `scripts/lib/auditListings.ts` 文件头注释。只读，不写文件。
+- **环境变量：** 无。
+- **触碰的文件：** 通过 `loadAllItemsRaw` 读取 `content/items`；不写入。
+
+### `export-csv.ts` —— 记账用 CSV 导出
+
+- **命令：** `pnpm export-csv`。
+- **用途：** 将全部物品（所有状态）导出为供卖家自用记账的扁平 CSV——名称、分类、状态、成色、最低价格、货币、是否可议价、品牌、型号、数量、上架/售出日期，以及分号连接的标签。**并非** Facebook Marketplace 格式（那是另一个工具 `pnpm fb-export` 的输出）。写入前若目标文件已存在，会通过 `scripts/lib/cliPrompt.ts` 提示确认是否覆盖。
+- **环境变量：** 无。
+- **触碰的文件：** 通过 `loadAllItemsRaw` 读取 `content/items`；写入 `exports/listings.csv`。
+
+### `semester-end.ts` —— 学期末批量清理
+
+- **命令：** `pnpm semester-end`（完全交互式）。
+- **流程：** 打印所有已上架超过 60 天的 `available` 物品（复用与 `stale-check` 相同的 `findStaleItems()`，阈值与排序完全一致）；针对每一项，提示 **[s] 标记已售 / [r] 降价 / [l] 保持不变**（默认）。"标记已售"调用 `applyMarkSold`；"降价"会提示输入新价格，并通过与本仓库其他脚本相同的、保留注释的 `applyFieldEdits` 路径改写最低价格分级（`scripts/lib/reducePrice.ts`）。若有任何变更，则运行 `pnpm upload-images`（安全操作——只是内容同步，不涉及 git），并打印建议的提交信息（`"chore: end-of-semester listing cleanup"`）及用于发布的具体 `git`/`pnpm push` 命令。**绝不**自行执行 `git commit`/`git push`——发布始终是卖家主动触发的动作。
+- **环境变量：** 无。
+- **触碰的文件：** 针对卖家操作过的物品，读写 `content/items/**/item.json`；若有变更则以子进程方式调用 `pnpm upload-images`。
+
 ### `export-facebook.ts` —— Facebook Marketplace 导出
 
 - **命令：** `pnpm fb-export`（完全交互式）。
@@ -179,7 +238,7 @@
 
 ### scripts 目录下的测试文件
 
-`scripts/update-site.test.ts`、`scripts/studioFields.test.ts`，以及 `scripts/lib/*.test.ts`（`imageSync`、`itemEdit`、`itemFields`、`itemTemplate`、`markSold`、`r2Cors`、`studioApi`、`studioGit`、`studioImages`、`studioSync`）—— 全部由根级 `test` / `test:watch` / `test:coverage` 脚本执行。
+`scripts/update-site.test.ts`、`scripts/studioFields.test.ts`，以及 `scripts/lib/*.test.ts`（`imageSync`、`itemEdit`、`itemFields`、`itemTemplate`、`markSold`、`markAvailable`、`duplicateItem`、`itemAge`、`staleItems`、`inventory`、`auditListings`、`csv`、`exportCsv`、`reducePrice`、`r2Cors`、`studioApi`、`studioGit`、`studioImages`、`studioSync`）—— 全部由根级 `test` / `test:watch` / `test:coverage` 脚本执行。
 
 ---
 
@@ -196,6 +255,15 @@
 | `itemEdit.ts` | 基于 `jsonc-parser` 的外科手术式 JSONC 字段编辑（`applyFieldEdits`、`readItemField`、`readItemForEdit`）—— 每次写入后注释与 `reserved_for` 均原样保留。由 `mark-sold` 与 Studio 使用。 |
 | `itemFields.ts` | 浏览器可写字段路径的严格 Zod 白名单（`resolveFieldSchema(path)` 是唯一权威 —— 防原型污染的自己键查找；另有 `assertEditableValue`、`pickEditableFields`）。不含 `.catch`/`.default`/`.preprocess`，因此 `safeParse` 失败即硬性拒绝；漂移测试断言其与 `itemJsonSchema` 在每一嵌套层级的键集合一致。 |
 | `markSold.ts` | `applyMarkSold(text, today)`：status → `sold` + `sold_date`；若已售出则返回 `null`。 |
+| `markAvailable.ts` | `applyMarkAvailable(text)`：status → `available` + `sold_date` → `null`；若已是 available 则返回 `null`。供 `mark-available` 使用。 |
+| `duplicateItem.ts` | `applyDuplicateEdits(text, today)`：重置复制出的 item.json 的 `status`/`listed_date`/`sold_date`/`price_reduced`/`previous_lowest_price`/`min_acceptable_offer`，并剥离私密的 `reserved_for`（若存在）。供 `duplicate` 使用。 |
+| `itemAge.ts` | `daysListed(listedDate, now?)`：由 `inventory`、`stale-check`、`semester-end` 共用的整数天龄计算，确保"已上架天数"在各脚本间永不冲突。 |
+| `staleItems.ts` | `findStaleItems(items, thresholdDays?, now?)` / `DEFAULT_STALE_DAYS`（60）：超过阈值天数的 `available` 物品，按天数从长到短排序。由 `stale-check` 与 `semester-end` 共用。 |
+| `inventory.ts` | `buildInventoryTable(items, now?)`：`pnpm inventory` 的纯 Markdown 表格构建函数（名称/分类/状态/最低价格/已上架天数）。 |
+| `auditListings.ts` | `auditItem` / `auditListings` / `formatAuditReport`：`pnpm audit-listings` 的推荐字段判定标准与报告文本；判定标准记录在文件头注释中。 |
+| `csv.ts` | `csvCell` / `toCsvString`：共享的类 RFC-4180 CSV 转义逻辑，由 `fb-export` 与 `export-csv` 共用（从 `export-facebook.ts` 中抽取，避免两者各自实现一套引号转义规则）。 |
+| `exportCsv.ts` | `buildExportCsvRows(items)` / `EXPORT_CSV_HEADERS`：`pnpm export-csv` 的记账用 CSV 行构建函数（列与 `fb-export` 的 Facebook 专用列不同）。 |
+| `reducePrice.ts` | `findLowestTierIndex(tiers)` / `applyReducePrice(text, newAmount)`：通过 `applyFieldEdits` 改写物品最低价格分级；若没有可降价的分级则返回 `null`。供 `semester-end` 的"降价"操作使用。 |
 | `fbCategoryMap.ts` | 供 `fb-export` 使用的有序正则 → `"Top//Sub//Leaf"` Facebook 类目映射规则（49 条有序正则规则，另有 11 条 slug 级回退）。 |
 | `exportHistory.ts` | 读取/追加 `exports/.export-history.json`（gitignore），支撑 `fb-export` 第 0 步的跳过逻辑。 |
 | `configDefaults.ts` | 可注入配置字段的声明式注册表（`key` / `afterKey` / `lines`），供 `migrate-config` + `update-site` 使用 —— 当前为 `priceFilterStrategy` 块及 `filterPriceBucketAll` / `filterPriceIncludesOutliers` 两个 UIStrings 键。 |
@@ -285,7 +353,7 @@ Worker 的 npm 脚本（在 `workers/shipping-rate-proxy/` 目录下运行）：
 
 ## 安全说明
 
-- **防路径穿越：** `create-item` 与 `mark-sold` 在*任何*文件系统访问之前校验 kebab-case slug（`isValidSlug`，与 `generateStaticParams` 共用）。Studio 路由正则匹配原始百分号编码路径，匹配成功后才逐段解码；所有文件服务均针对 `content/items/` 做包容性校验。
+- **防路径穿越：** `create-item`、`mark-sold`、`mark-available` 与 `duplicate`（两个 slug 均校验）在*任何*文件系统访问之前校验 kebab-case slug（`isValidSlug`，与 `generateStaticParams` 共用）。Studio 路由正则匹配原始百分号编码路径，匹配成功后才逐段解码；所有文件服务均针对 `content/items/` 做包容性校验。
 - **防 shell 注入：** `create-item` 打开 `$EDITOR` 时使用 `spawnSync` 参数数组（绝不使用 shell 插值）；`studioGit` 仅使用 `execFile` 加参数数组。
 - **发布安全：** Studio 仅绑定 **127.0.0.1**，其 git 发布绝不使用 `git add -A` —— 只暂存 `content/` + `lib/generated/image-manifest.json`，因此 `.env.local`（含 CDN 凭据）绝不会被顺带提交。
 - **模板更新：** `update-site` 要求工作区干净，并在检出后恢复属于卖家的图片清单。

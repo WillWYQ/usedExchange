@@ -24,6 +24,7 @@ import {
   type ExportRun,
 } from "./lib/exportHistory";
 import { createPrompt } from "./lib/cliPrompt";
+import { toCsvString } from "./lib/csv";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -197,18 +198,7 @@ async function copyLocalPhotos(selected: Item[]): Promise<{ photoCount: number; 
 }
 
 // ── CSV serialisation ──────────────────────────────────────────────────────────
-
-function csvCell(value: string): string {
-  const s = String(value).replace(/"/g, '""');
-  return /[,"\n\r]/.test(s) ? `"${s}"` : s;
-}
-
-function toCsvString(headers: string[], rows: string[][]): string {
-  return [
-    headers.map(csvCell).join(","),
-    ...rows.map((r) => r.map(csvCell).join(",")),
-  ].join("\r\n");
-}
+// csvCell/toCsvString now live in ./lib/csv — shared with scripts/export-csv.ts.
 
 async function writeBatch(headers: string[], rows: string[][], suffix?: number): Promise<string> {
   if (!existsSync(EXPORTS_DIR)) mkdirSync(EXPORTS_DIR, { recursive: true });

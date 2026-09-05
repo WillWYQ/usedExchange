@@ -23,7 +23,8 @@ const mockSiteConfig = {
 };
 vi.mock("@/content/config", () => ({ siteConfig: mockSiteConfig }));
 
-const { loadItemsByCategory, loadSoldItems, loadItem } = await import("./loader");
+const { loadItemsByCategory, loadSoldItems, loadItem, loadTagIndex } =
+  await import("./loader");
 
 const CONTENT_ROOT = path.join(process.cwd(), "content", "items");
 const MANIFEST_PATH = path.join(
@@ -259,6 +260,112 @@ describe("loader — item.json is JSONC-tolerant", () => {
     const item = await loadItem("electronics", "commented-item");
     expect(item?.itemSlug).toBe("commented-item");
     expect(item?.name).toBe("Commented Item");
+  });
+});
+
+describe("loadTagIndex — single-pass tag index across categories", () => {
+  const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  beforeEach(() => {
+    warnSpy.mockClear();
+
+    mockReaddir.mockImplementation(async (dir: string) => {
+      if (dir === CONTENT_ROOT) {
+        return [dirent("electronics", true), dirent("textbooks", true)];
+      }
+      if (dir === path.join(CONTENT_ROOT, "electronics")) {
+        return [dirent("radio", true), dirent("draft-lamp", true), dirent("gadget", true)];
+      }
+      if (dir === path.join(CONTENT_ROOT, "textbooks")) {
+        return [dirent("algo", true), dirent("calc", true)];
+      }
+      // Per-item image directory listing — no images in this fixture.
+      return [];
+    });
+
+    const FILES: Record<string, unknown> = {
+      [path.join(CONTENT_ROOT, "electronics", "radio", "item.json")]: {
+        name: "Vintage Radio",
+        description: "d",
+        status: "available",
+        tags: ["Vintage", "electronics"],
+      },
+      // Draft item — its "hidden-tag" must never produce a route, since the
+      // item itself is never publicly visible.
+      [path.join(CONTENT_ROOT, "electronics", "draft-lamp", "item.json")]: {
+        name: "Draft Lamp",
+        description: "d",
+        status: "draft",
+        tags: ["hidden-tag"],
+      },
+      // A CJK-only tag slugifies to "" — isValidSlug rejects it, so this
+      // item's tag is dropped (with a warning) rather than routed.
+      [path.join(CONTENT_ROOT, "electronics", "gadget", "item.json")]: {
+        name: "Gadget",
+        description: "d",
+        status: "available",
+        tags: ["商品"],
+      },
+      // Two differently-spelled tags in DIFFERENT categories that both
+      // slugify to "cs-101" — a cross-category collision.
+      [path.join(CONTENT_ROOT, "textbooks", "algo", "item.json")]: {
+        name: "Algorithms Textbook",
+        description: "d",
+        status: "available",
+        tags: ["CS 101"],
+      },
+      [path.join(CONTENT_ROOT, "textbooks", "calc", "item.json")]: {
+        name: "Calculus Textbook",
+        description: "d",
+        status: "available",
+        tags: ["cs-101"],
+      },
+    };
+
+    mockReadFile.mockImplementation(async (file: string) => {
+      if (file === MANIFEST_PATH) {
+        const err = new Error("ENOENT") as NodeJS.ErrnoException;
+        err.code = "ENOENT";
+        throw err;
+      }
+      if (Object.prototype.hasOwnProperty.call(FILES, file)) {
+        return JSON.stringify(FILES[file]);
+      }
+      const err = new Error("ENOENT") as NodeJS.ErrnoException;
+      err.code = "ENOENT";
+      throw err;
+    });
+  });
+
+  it("groups items across categories by slugified tag", async () => {
+    const index = await loadTagIndex();
+
+    const vintage = index.get("vintage");
+    expect(vintage?.tag).toBe("Vintage");
+    expect(vintage?.items.map((i) => i.itemSlug)).toEqual(["radio"]);
+
+    const electronicsTag = index.get("electronics");
+    expect(electronicsTag?.items.map((i) => i.itemSlug)).toEqual(["radio"]);
+  });
+
+  it("excludes a tag that only appears on a non-visible (draft) item", async () => {
+    const index = await loadTagIndex();
+    expect(index.has("hidden-tag")).toBe(false);
+  });
+
+  it("drops a tag whose slug is unsafe (CJK-only → empty slug), with a warning", async () => {
+    const index = await loadTagIndex();
+    for (const slug of index.keys()) expect(slug.length).toBeGreaterThan(0);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("not a safe route segment"),
+    );
+  });
+
+  it("drops BOTH spellings when two distinct tags collide on the same slug", async () => {
+    const index = await loadTagIndex();
+    // Neither "CS 101" nor "cs-101" wins — both dropped rather than picking one.
+    expect(index.has("cs-101")).toBe(false);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("collide"));
   });
 });
 

@@ -81,9 +81,24 @@ export const siteConfig: SiteConfig = {
   //   },
   // },
 
+  // ── Contact-form enquiry relay (optional) ─────────────────────────────────
+  // Disabled by default — zero impact on the site until configured. To
+  // enable: deploy workers/contact-form-proxy (see its README), paste its
+  // URL below, and set enabled: true. Adds an enquiry form to the item
+  // detail page so buyers can message you (via Discord, Telegram, or email)
+  // without seeing your contact details directly. See
+  // docs/FEATURES_ROADMAP.md §3.1.
+  notifications: {
+    enabled: false,
+    proxyUrl: "https://contact-form-proxy.<your-subdomain>.workers.dev",
+  },
+
   // ── Contact ───────────────────────────────────────────────────────────────
   contact: {
     reveal_behavior: "click", // "click" | "always"
+    // Calendly/Cal.com/Google Calendar appointment link — shows a "Schedule
+    // Viewing" button on item pages when set. Leave "" to disable.
+    schedulingUrl: "", // e.g. "https://calendly.com/your-handle/viewing"
     platforms: [
       { type: "email", value: "you@example.com" },
       { type: "instagram", value: "your_handle" },
@@ -171,6 +186,7 @@ export const siteConfig: SiteConfig = {
         contactSeller: "Contact Seller",
         itemSold: "Item sold",
         preferredPayment: "Preferred payment",
+        scheduleViewing: "Schedule Viewing",
 
         // ── Make-offer form ─────────────────────────────────────────────────
         makeOffer: "Make an Offer",
@@ -178,6 +194,20 @@ export const siteConfig: SiteConfig = {
         send: "Send",
         belowMinimumOffer:
           "That offer is below the minimum we can accept. Please try a higher amount.",
+
+        // ── Enquiry form (item detail page, optional — see the contact-form
+        // enquiry relay setting above) ────────────────────────────────────────
+        enquiryFormHeading: "Send an Enquiry",
+        enquiryNameLabel: "Your name",
+        enquiryContactLabel: "How can we reach you?",
+        enquiryContactPlaceholder: "Email, phone, or messaging handle",
+        enquiryMessageLabel: "Message",
+        enquiryMessagePlaceholder: "Ask a question or make an offer…",
+        enquiryOfferLabel: "Offer amount (optional)",
+        enquirySubmit: "Send Enquiry",
+        enquirySubmitting: "Sending…",
+        enquirySuccess: "Thanks! Your message has been sent to the seller.",
+        enquiryError: "Something went wrong. Please try again, or use the contact options above.",
 
         // ── Share button ────────────────────────────────────────────────────
         share: "Share",
@@ -213,6 +243,8 @@ export const siteConfig: SiteConfig = {
         filterPrice: "Price",
         filterPriceBucketAll: "All prices",
         filterPriceIncludesOutliers: "+ items outside range",
+        filterCourse: "Course",
+        filterTags: "Tags",
         sortBy: "Sort by",
         sortNewestFirst: "Newest first",
         sortPriceLow: "Price: low → high",
@@ -225,6 +257,7 @@ export const siteConfig: SiteConfig = {
         // ── Page titles and banners ──────────────────────────────────────────
         soldBanner: "This item has been sold",
         soldArchiveTitle: "Sold Archive",
+        tagPageHeading: "Tagged: {tag}",
 
         // ── Condition guide panel ────────────────────────────────────────────
         conditionGuideTitle: "Condition Guide",
@@ -315,6 +348,17 @@ export const siteConfig: SiteConfig = {
       //   yourOffer: "您的出價",
       //   send: "送出",
       //   belowMinimumOffer: "出價低於最低可接受價格，請提高金額。",
+      //   enquiryFormHeading: "傳送詢問",
+      //   enquiryNameLabel: "您的姓名",
+      //   enquiryContactLabel: "我們該如何聯繫您？",
+      //   enquiryContactPlaceholder: "電子郵件、電話或通訊軟體帳號",
+      //   enquiryMessageLabel: "訊息",
+      //   enquiryMessagePlaceholder: "詢問問題或提出報價…",
+      //   enquiryOfferLabel: "出價金額（選填）",
+      //   enquirySubmit: "送出詢問",
+      //   enquirySubmitting: "傳送中…",
+      //   enquirySuccess: "謝謝！您的訊息已送出給賣家。",
+      //   enquiryError: "發生錯誤，請再試一次，或使用上方的聯繫方式。",
       //   share: "分享",
       //   copied: "已複製！",
       //   linkCopied: "連結已複製！",

@@ -55,11 +55,67 @@ export const CONFIG_DEFAULTS: ConfigDefault[] = [
     ],
   },
   {
+    // Anchor: the closing line of the commented-out `shipping` example block
+    // ("  // },", single space — the ONLY line in content/config.ts matching
+    // this exact text; the inner `origin` close is "  //   }," with extra
+    // indentation, and a later match inside the commented zh translations
+    // block is textually identical but comes after this one, so
+    // `lines.findIndex`'s first-match semantics still land here). Splicing
+    // right after it places the new block between the shipping example and
+    // the "── Contact ──" section, exactly where it ships upstream.
+    key: "notifications",
+    afterKey: "// },",
+    lines: [
+      "",
+      "  // ── Contact-form enquiry relay (optional) ─────────────────────────────────",
+      "  // Disabled by default — zero impact on the site until configured. To",
+      "  // enable: deploy workers/contact-form-proxy (see its README), paste its",
+      "  // URL below, and set enabled: true. Adds an enquiry form to the item",
+      "  // detail page so buyers can message you (via Discord, Telegram, or email)",
+      "  // without seeing your contact details directly. See",
+      "  // docs/FEATURES_ROADMAP.md §3.1.",
+      "  notifications: {",
+      "    enabled: false,",
+      '    proxyUrl: "https://contact-form-proxy.<your-subdomain>.workers.dev",',
+      "  },",
+    ],
+  },
+  {
+    key: "schedulingUrl",
+    afterKey: "reveal_behavior:",
+    lines: [
+      '    // Calendly/Cal.com/Google Calendar appointment link — shows a "Schedule',
+      '    // Viewing" button on item pages when set. Leave "" to disable.',
+      '    schedulingUrl: "", // e.g. "https://calendly.com/your-handle/viewing"',
+    ],
+  },
+  {
+    key: "scheduleViewing",
+    afterKey: "preferredPayment:",
+    lines: [
+      '        scheduleViewing: "Schedule Viewing",',
+    ],
+  },
+  {
     key: "filterPriceBucketAll",
     afterKey: "filterPrice:",
     lines: [
       '        filterPriceBucketAll: "All prices",',
       '        filterPriceIncludesOutliers: "+ items outside range",',
+    ],
+  },
+  {
+    // Shares its anchor with pdfTocHeading below. In the common case (only
+    // this key is missing) it lands right after filterPriceIncludesOutliers,
+    // matching the upstream layout. In the rare case a very old config is
+    // missing both this and the whole PDF-chrome block in the same
+    // migrate-config run, pdfTocHeading's later splice at the same anchor
+    // pushes this line below its 11-line block instead — harmless, since
+    // object key order carries no runtime meaning.
+    key: "filterCourse",
+    afterKey: "filterPriceIncludesOutliers:",
+    lines: [
+      '        filterCourse: "Course",',
     ],
   },
   {

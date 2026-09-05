@@ -1,7 +1,7 @@
 # UsedExchange — Scripts & Tooling Reference
 
-**Version:** 1.0
-**Date:** 2026-08-02
+**Version:** 1.1
+**Date:** 2026-09-05
 **Package version:** 1.4.2 (see `package.json`)
 
 > Complete reference for every npm script, standalone CLI, and support module in the repository. For architecture and data flow see [ARCHITECTURE.md](ARCHITECTURE.md); for the full design specification see [DESIGN.md](DESIGN.md); for non-technical seller operations see [../SETUP_GUIDE.md](../SETUP_GUIDE.md).
@@ -13,7 +13,7 @@
 ## Overview
 
 - All CLIs live in `scripts/`, are executed with **tsx** (Node.js — no browser APIs), and are production tooling, not dev-only helpers.
-- The root `package.json` defines **24 npm scripts**; `new` is an exact alias of `create-item`, and three scripts (`upload-images`, `dev`, `prebuild`) are thin wrappers over the three modes of `scripts/sync-images.ts`.
+- The root `package.json` defines **31 npm scripts**; `new` is an exact alias of `create-item`, and three scripts (`upload-images`, `dev`, `prebuild`) are thin wrappers over the three modes of `scripts/sync-images.ts`.
 - **Sellers only ever edit files under `content/` by hand.** The CLIs below read and write `content/` *on your behalf* — you never need to open `app/`, `lib/`, or `scripts/` yourself.
 - `workers/shipping-rate-proxy/` is an **independently deployed** Cloudflare Worker package with its own `package.json`; it is excluded from the root tsconfig / ESLint / Vitest scope.
 - `lib/generated/image-manifest.json` is **committed to git** (Iron Rule 5). Scripts write it; CI reads it and needs no CDN credentials.
@@ -32,6 +32,13 @@
 | `pnpm new <category>/<name>` | `tsx scripts/create-item.ts` | Exact alias of `create-item` |
 | `pnpm create-template [category]` | `tsx scripts/create-template.ts` | Write a fully-commented `_template.json` sellers can copy |
 | `pnpm mark-sold <category>/<item>` | `tsx scripts/mark-sold.ts` | Set `status="sold"` + `sold_date=today`, preserving JSONC comments |
+| `pnpm mark-available <category>/<item>` | `tsx scripts/mark-available.ts` | Reset `status="available"` and clear `sold_date`, preserving JSONC comments |
+| `pnpm duplicate <category>/<item> <category>/<new-item>` | `tsx scripts/duplicate.ts` | Copy an item folder (item.json + photos) to a new item, resetting it to a fresh `draft` |
+| `pnpm inventory` | `tsx scripts/inventory.ts` | Print a Markdown table of every item (all statuses): name, category, status, lowest price, days listed |
+| `pnpm stale-check [--days <n>]` | `tsx scripts/stale-check.ts` | List `available` items listed for more than N days (default 60) |
+| `pnpm audit-listings` | `tsx scripts/audit-listings.ts` | Report non-sold items missing recommended fields (photos, description, tags, shipping weight/dimensions, price tiers) |
+| `pnpm export-csv` | `tsx scripts/export-csv.ts` | Export every item (all statuses) as a flat CSV for the seller's own record-keeping (prompts before overwriting) |
+| `pnpm semester-end` | `tsx scripts/semester-end.ts` | Interactive end-of-semester cleanup: review stale listings (mark sold / reduce price / leave as-is), sync photos, suggest a commit message |
 | `pnpm setup-check` | `tsx scripts/setup-check.ts` | Print the setup checklist: what is still missing and the command or pane for each step. Exits 1 while core steps remain |
 | `pnpm fb-export` | `tsx scripts/export-facebook.ts` | Interactive Facebook Marketplace CSV export |
 | `pnpm push` | `git add content lib/generated/image-manifest.json && git commit -m 'chore: update listings' && git push` | Commit + push seller content and the image manifest |
@@ -117,6 +124,58 @@
 - **Env vars:** none.
 - **Touches:** reads/writes `content/items/<category>/<item>/item.json`.
 
+### `mark-available.ts` — available marker
+
+- **Command:** `pnpm mark-available <category>/<item>`.
+- **Args:** exactly one positional `<category>/<item>`, kebab-case validated before fs access.
+- **Purpose:** sets `status="available"` and clears `sold_date` to `null` via the same surgical JSONC edits `mark-sold` uses. Resets status from **any** other state (sold, pending, reserved, draft) — not only `sold` — since re-listing a draft or un-reserving a pending item are both legitimate uses. No-op with exit 0 if status is already `available`.
+- **Env vars:** none.
+- **Touches:** reads/writes `content/items/<category>/<item>/item.json`.
+
+### `duplicate.ts` — item duplicator
+
+- **Command:** `pnpm duplicate <category>/<item> <category>/<new-item>`.
+- **Args:** two positional `<category>/<item>` slugs (source, destination), all four parts kebab-case validated before fs access. Destination category must already exist; destination item must not.
+- **Purpose:** copies the source item's whole folder (item.json + every photo file) to the destination, then resets the copy's listing-lifecycle fields: `status` → `"draft"`, `listed_date` → today, `sold_date` → `null`, `price_reduced` → `false`, `previous_lowest_price` / `min_acceptable_offer` → `null` (matching `scripts/lib/itemTemplate.ts`'s fresh-item defaults). The private `reserved_for` field (Iron Rule 4) is stripped from the copy outright if present, rather than carried forward.
+- **Env vars:** none.
+- **Touches:** reads `content/items/<category>/<item>/`; writes `content/items/<category>/<new-item>/` (folder copy + item.json edit).
+
+### `inventory.ts` — inventory report
+
+- **Command:** `pnpm inventory`.
+- **Purpose:** prints a Markdown table of every item (all statuses — not just `available`) to stdout: name, category, status, lowest resolved price (same "lowest tier" strategy `fb-export` defaults to), and days listed (raw whole-day count). Read-only.
+- **Env vars:** none.
+- **Touches:** reads `content/items` via `loadAllItemsRaw`; no writes.
+
+### `stale-check.ts` — stale listing report
+
+- **Command:** `pnpm stale-check [--days <n>]`.
+- **Args:** optional `--days <n>`, a non-negative number; default **60**.
+- **Purpose:** lists `available` items listed for more than N days, longest-listed first, with their current lowest price. Shares `findStaleItems()` (`scripts/lib/staleItems.ts`) with `pnpm semester-end` so the two commands can never disagree about which items qualify. Read-only.
+- **Env vars:** none.
+- **Touches:** reads `content/items` via `loadAllItemsRaw`; no writes.
+
+### `audit-listings.ts` — recommended-field audit
+
+- **Command:** `pnpm audit-listings`.
+- **Purpose:** reports non-sold items missing "recommended" (schema-optional but valuable) fields: no photos at all, empty description, no tags, an open-ended shipping price tier with no weight/dimensions set, or no price tiers at all. See `scripts/lib/auditListings.ts`'s header comment for the exact, adjustable criteria list. Read-only.
+- **Env vars:** none.
+- **Touches:** reads `content/items` via `loadAllItemsRaw`; no writes.
+
+### `export-csv.ts` — record-keeping CSV export
+
+- **Command:** `pnpm export-csv`.
+- **Purpose:** exports every item (all statuses) as a flat CSV for the seller's own bookkeeping — name, category, status, condition, lowest price, currency, negotiable, brand, model, quantity, listed/sold dates, and semicolon-joined tags. **Not** the Facebook Marketplace format (that's `pnpm fb-export`, a different tool/output). Prompts (via `scripts/lib/cliPrompt.ts`) before overwriting an existing output file.
+- **Env vars:** none.
+- **Touches:** reads `content/items` via `loadAllItemsRaw`; writes `exports/listings.csv`.
+
+### `semester-end.ts` — end-of-semester batch cleanup
+
+- **Command:** `pnpm semester-end` (fully interactive).
+- **Flow:** prints every `available` item listed for more than 60 days (shared `findStaleItems()` — same threshold and ordering as `stale-check`); for each, prompts **[s]old / [r]educe price / [l]eave as-is** (default). "Sold" applies `applyMarkSold`; "reduce price" prompts for a new amount and rewrites the lowest-amount price tier via the same comment-preserving `applyFieldEdits` path every other script here uses (`scripts/lib/reducePrice.ts`). If anything changed, runs `pnpm upload-images` (safe — a content sync, not a git operation) and prints a suggested commit message (`"chore: end-of-semester listing cleanup"`) plus the exact `git`/`pnpm push` commands to publish it. **Never** runs `git commit`/`git push` itself — publishing stays a seller-triggered action.
+- **Env vars:** none.
+- **Touches:** reads/writes `content/items/**/item.json` for items the seller acts on; invokes `pnpm upload-images` as a subprocess when anything changed.
+
 ### `export-facebook.ts` — Facebook Marketplace export
 
 - **Command:** `pnpm fb-export` (fully interactive).
@@ -180,7 +239,7 @@
 
 ### Test files among the scripts
 
-`scripts/update-site.test.ts`, `scripts/studioFields.test.ts`, plus `scripts/lib/*.test.ts` (`imageSync`, `itemEdit`, `itemFields`, `itemTemplate`, `markSold`, `r2Cors`, `studioApi`, `studioGit`, `studioImages`, `studioSync`) — all executed by the root `test` / `test:watch` / `test:coverage` scripts.
+`scripts/update-site.test.ts`, `scripts/studioFields.test.ts`, plus `scripts/lib/*.test.ts` (`imageSync`, `itemEdit`, `itemFields`, `itemTemplate`, `markSold`, `markAvailable`, `duplicateItem`, `itemAge`, `staleItems`, `inventory`, `auditListings`, `csv`, `exportCsv`, `reducePrice`, `r2Cors`, `studioApi`, `studioGit`, `studioImages`, `studioSync`) — all executed by the root `test` / `test:watch` / `test:coverage` scripts.
 
 ---
 
@@ -197,6 +256,15 @@ Not standalone runnables — imported by the CLIs above. Each has a colocated `*
 | `itemEdit.ts` | Surgical JSONC field edits via `jsonc-parser` (`applyFieldEdits`, `readItemField`, `readItemForEdit`) — comments and `reserved_for` survive every write. Used by `mark-sold` and Studio. |
 | `itemFields.ts` | The strict Zod allowlist of browser-writable field paths (`resolveFieldSchema(path)` is the single authority — prototype-pollution-safe own-key lookup; plus `assertEditableValue`, `pickEditableFields`). No `.catch`/`.default`/`.preprocess`, so a `safeParse` failure is a hard rejection; drift tests assert key-set parity with `itemJsonSchema`. |
 | `markSold.ts` | `applyMarkSold(text, today)`: status → `sold` + `sold_date`; returns `null` if already sold. |
+| `markAvailable.ts` | `applyMarkAvailable(text)`: status → `available` + `sold_date` → `null`; returns `null` if already available. Used by `mark-available`. |
+| `duplicateItem.ts` | `applyDuplicateEdits(text, today)`: resets `status`/`listed_date`/`sold_date`/`price_reduced`/`previous_lowest_price`/`min_acceptable_offer` on a copied item.json and strips a private `reserved_for` if present. Used by `duplicate`. |
+| `itemAge.ts` | `daysListed(listedDate, now?)`: whole-day age math shared by `inventory`, `stale-check`, and `semester-end` so "days listed" never disagrees across scripts. |
+| `staleItems.ts` | `findStaleItems(items, thresholdDays?, now?)` / `DEFAULT_STALE_DAYS` (60): `available` items past the threshold, longest-listed first. Shared by `stale-check` and `semester-end`. |
+| `inventory.ts` | `buildInventoryTable(items, now?)`: pure Markdown-table builder for `pnpm inventory` (name/category/status/lowest price/days listed). |
+| `auditListings.ts` | `auditItem` / `auditListings` / `formatAuditReport`: the recommended-field criteria and report text for `pnpm audit-listings`; criteria list documented in the file's header comment. |
+| `csv.ts` | `csvCell` / `toCsvString`: shared RFC-4180-ish CSV escaping, used by both `fb-export` and `export-csv` (extracted from `export-facebook.ts` so neither reimplements quoting rules). |
+| `exportCsv.ts` | `buildExportCsvRows(items)` / `EXPORT_CSV_HEADERS`: the record-keeping CSV row builder for `pnpm export-csv` (distinct from `fb-export`'s Facebook-specific columns). |
+| `reducePrice.ts` | `findLowestTierIndex(tiers)` / `applyReducePrice(text, newAmount)`: rewrites an item's lowest-amount price tier via `applyFieldEdits`; returns `null` when there are no tiers to reduce. Used by `semester-end`'s "reduce price" action. |
 | `fbCategoryMap.ts` | Ordered regex → `"Top//Sub//Leaf"` Facebook category rules used by `fb-export` (49 ordered regex rules, plus 11 slug-level fallbacks). |
 | `exportHistory.ts` | Reads/appends `exports/.export-history.json` (gitignored) backing `fb-export`'s Step 0 skip logic. |
 | `configDefaults.ts` | Declarative registry (`key` / `afterKey` / `lines`) of injectable config fields used by `migrate-config` + `update-site` — currently the `priceFilterStrategy` block plus the `filterPriceBucketAll` / `filterPriceIncludesOutliers` UIStrings keys. |
@@ -286,7 +354,7 @@ Parsed into `process.env` by `scripts/lib/loadEnv.ts` (existing env values alway
 
 ## Security Notes
 
-- **Path traversal:** `create-item` and `mark-sold` validate kebab-case slugs (`isValidSlug`, shared with `generateStaticParams`) *before* any filesystem access. Studio route regexes match raw percent-encoded paths and decode segments individually only after the match; all file serving is containment-verified against `content/items/`.
+- **Path traversal:** `create-item`, `mark-sold`, `mark-available`, and `duplicate` (both slugs) validate kebab-case slugs (`isValidSlug`, shared with `generateStaticParams`) *before* any filesystem access. Studio route regexes match raw percent-encoded paths and decode segments individually only after the match; all file serving is containment-verified against `content/items/`.
 - **Shell safety:** `create-item` uses `spawnSync` argument arrays (never shell interpolation) for `$EDITOR`; `studioGit` uses `execFile`-only with argument arrays.
 - **Publish safety:** Studio binds **127.0.0.1 only** and its git publish never uses `git add -A` — it stages only `content/` + `lib/generated/image-manifest.json`, so `.env.local` (with CDN credentials) can never ride along.
 - **Template updates:** `update-site` requires a clean working tree and restores the seller-owned image manifest after checkout.

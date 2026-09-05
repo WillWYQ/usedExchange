@@ -14,11 +14,25 @@ export const EN_FALLBACK: UIStrings = {
   contactSeller: "Contact Seller",
   itemSold: "Item sold",
   preferredPayment: "Preferred payment",
+  scheduleViewing: "Schedule Viewing",
   makeOffer: "Make an Offer",
   yourOffer: "Your offer",
   send: "Send",
   belowMinimumOffer:
     "That offer is below the minimum we can accept. Please try a higher amount.",
+
+  enquiryFormHeading: "Send an Enquiry",
+  enquiryNameLabel: "Your name",
+  enquiryContactLabel: "How can we reach you?",
+  enquiryContactPlaceholder: "Email, phone, or messaging handle",
+  enquiryMessageLabel: "Message",
+  enquiryMessagePlaceholder: "Ask a question or make an offer…",
+  enquiryOfferLabel: "Offer amount (optional)",
+  enquirySubmit: "Send Enquiry",
+  enquirySubmitting: "Sending…",
+  enquirySuccess: "Thanks! Your message has been sent to the seller.",
+  enquiryError: "Something went wrong. Please try again, or use the contact options above.",
+
   share: "Share",
   copied: "Copied!",
   linkCopied: "Link copied!",
@@ -49,6 +63,8 @@ export const EN_FALLBACK: UIStrings = {
   statusDraft: "Draft",
   filterShowSold: "Show sold",
   filterPrice: "Price",
+  filterCourse: "Course",
+  filterTags: "Tags",
   filterPriceBucketAll: "All prices",
   filterPriceIncludesOutliers: "+ items outside range",
   sortBy: "Sort by",
@@ -60,6 +76,7 @@ export const EN_FALLBACK: UIStrings = {
 
   soldBanner: "This item has been sold",
   soldArchiveTitle: "Sold Archive",
+  tagPageHeading: "Tagged: {tag}",
 
   conditionGuideTitle: "Condition Guide",
   conditionNewDesc: "Unopened, unused. Original packaging intact.",

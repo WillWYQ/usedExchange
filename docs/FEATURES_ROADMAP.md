@@ -1,6 +1,6 @@
 # UsedExchange — Features Roadmap
 
-**Version:** v1.5 · **Date:** 2026-09-05  
+**Version:** v1.6 · **Date:** 2026-09-05  
 **Scope:** Features beyond v1. Not committed — prioritised for planning discussions.
 
 ---
@@ -168,16 +168,12 @@ needs no Vercel hosting.
 
 ---
 
-### 1.10 PWA Web App Manifest
+### 1.10 PWA Web App Manifest ✅ Shipped
 **Effort:** XS · **Value:** ⭐⭐
 
-A `public/manifest.json` file makes the site installable as a home screen app on iPhone and Android. Includes:
-- App name and short name
-- Theme colour (matches site branding)
-- Icon set (192×192 and 512×512)
-- `display: "standalone"` for full-screen feel
+`app/manifest.ts` (the Next.js file-convention route, not a static `public/manifest.json`) makes the site installable as a home screen app on iPhone and Android: name/short name from `siteConfig.name`, theme/background colour, `display: "standalone"`, and a 192×192/512×512 icon set rasterized from `app/icon.svg` via `sharp`. Requires `export const dynamic = "force-static"` under `output: "export"` — without it, `next build` fails to collect page data for the manifest route.
 
-No service worker needed for v1 — manifest alone enables installation.
+No service worker — manifest alone enables installation.
 
 ---
 
@@ -204,7 +200,7 @@ All optional, all default to empty/false.
 
 ---
 
-### 1.12 Semester-End Batch Actions 🎓
+### 1.12 Semester-End Batch Actions 🎓 ✅ Shipped
 **Effort:** S · **Value:** ⭐⭐⭐
 
 CS students do most of their selling at the end of each semester. A single command to prepare for a sell-off:
@@ -214,12 +210,12 @@ pnpm semester-end
 ```
 
 This script:
-1. Prints all `available` items that have been listed for > 60 days (likely stale listings)
-2. Prompts: "Mark these as sold, reduce price, or leave as-is?"
-3. Opens all `item.json` files flagged for editing simultaneously (using `$EDITOR`)
-4. Runs `pnpm upload-images` and generates the git commit message: `"chore: end-of-semester listing cleanup"`
+1. Prints all `available` items listed for > 60 days (shares its "stale" definition with `pnpm stale-check`, §2.4, so the two can never disagree)
+2. Prompts, per stale item (via the shared `scripts/lib/cliPrompt.ts`): mark sold, reduce the lowest price tier, or leave as-is
+3. Runs `pnpm upload-images` if anything changed
+4. Prints a suggested commit message (`"chore: end-of-semester listing cleanup"`) and the exact `git add`/`commit`/`push` sequence to use it — or the plain `pnpm push` alternative
 
-A single command handles the entire end-of-semester workflow in under 5 minutes.
+**Correction (2026-09-05):** the original spec above called for opening flagged `item.json` files in `$EDITOR` and for the script to generate the commit automatically. The shipped version instead prompts inline per item (simpler, no `$EDITOR` dependency) and deliberately does **not** run `git commit`/`git push` itself — publishing stays an explicit, seller-triggered step via `pnpm push` or the printed manual sequence, consistent with how every other content-mutating script in this project works.
 
 ---
 
@@ -268,12 +264,12 @@ Already in the Extensibility Register (DESIGN.md §19). Requires no backend. Bec
 
 ---
 
-### 2.2 Tag Filtering 🎓 👤
+### 2.2 Tag Filtering 🎓 👤 ✅ Shipped
 **Effort:** M · **Value:** ⭐⭐⭐
 
-Tags already exist on every item. Build a tag index at load time. Add a tag filter to the category page filter bar and a `/tags/{tag}` route listing all items with that tag across categories.
+`lib/content/loader.ts`'s `loadTagIndex()` builds a slug → items map in a single `loadAllItemsRaw()` pass; a multi-select (AND-matching) tag-chip row was added to `components/filters/FilterBar.tsx`/`useFilters.ts` (same shape as the course-filter chips in §2.15, but multi-select since an item usefully carries several tags at once); and `app/tags/[tag]/page.tsx` is a fully static `generateStaticParams()` route listing every visible item with that tag across categories. Item detail pages link each tag badge to its `/tags/{tag}` page. Two distinct tag spellings that would slugify to the same route (a rare edge case) are both dropped from the index with a build-time warning rather than one silently winning.
 
-Already in the Extensibility Register.
+Was already in the Extensibility Register.
 
 ---
 
@@ -286,25 +282,24 @@ All Aceternity components are dark-mode aware. The seller's chosen background ef
 
 ---
 
-### 2.4 Seller CLI Tools 🎓 👤
+### 2.4 Seller CLI Tools 🎓 👤 ✅ Shipped
 **Effort:** S–M · **Value:** ⭐⭐⭐
 
 Scripts that run on the seller's machine to reduce manual `item.json` editing. CS students will use these as power tools; non-technical users depend on them to avoid ever opening a JSON file.
 
 **Shipped in v1 (template v1.4.2):** `pnpm create-item` / `pnpm new` (scaffold a 36-field `item.json`), `pnpm create-template` (commented `_template.json`), `pnpm mark-sold` (JSONC-surgical status + `sold_date` update), `pnpm upload-images` (CDN sync), `pnpm configure-image-cors` (one-time R2 CORS setup so the item flyer PDF, §1.15, can fetch photo bytes cross-origin), `pnpm fb-export` (§3.4), `pnpm studio` (§3.8), plus template-management tools for downstream sites: `pnpm update-site` (pull a template release without touching `content/`), `pnpm migrate-config` (auto-inject new optional config fields), `pnpm push` (commit + push `content/` and `lib/generated/image-manifest.json`), and `pnpm bump` (interactive version bump + GitHub release).
 
-The scripts below remain **proposed future additions**:
+**Shipped 2026-09-05** (all follow the same pure-logic-in-`scripts/lib/`-plus-thin-CLI-wrapper pattern as `mark-sold.ts`, each with its own unit tests):
 
 | Script | What it does | User |
 |---|---|---|
-| `pnpm mark-sold houseware/ikea-lamp` | Sets `status: "sold"` and `sold_date: today` — **shipped in v1** (required by SETUP_GUIDE.md) | 🎓 👤 |
-| `pnpm mark-available houseware/ikea-lamp` | Resets status to `available` | 🎓 👤 |
-| `pnpm duplicate houseware/ikea-lamp houseware/ikea-lamp-2` | Copies folder + item.json, sets copy to `draft` | 🎓 |
-| `pnpm inventory` | Prints a Markdown table of all items: name, status, price, days listed | 🎓 👤 |
-| `pnpm stale-check` | Lists items that have been `available` for > N days | 🎓 |
-| `pnpm audit-listings` | Reports items missing recommended fields | 🎓 |
-| `pnpm export-csv` | Exports all items as a CSV for record-keeping | 🎓 👤 |
-| `pnpm semester-end` | Batch review + cleanup (see 1.12) | 🎓 |
+| `pnpm mark-available houseware/ikea-lamp` | Resets `status` to `available` from any prior state, clears `sold_date`; no-ops if already `available` | 🎓 👤 |
+| `pnpm duplicate houseware/ikea-lamp houseware/ikea-lamp-2` | Copies folder + photos, resets `status`/`listed_date`/`sold_date`/`price_reduced`/`previous_lowest_price`/`min_acceptable_offer` on the copy, strips `reserved_for` outright (Iron Rule 4 — a private note must never propagate to an unrelated new listing) | 🎓 |
+| `pnpm inventory` | Prints a Markdown table of every item (all statuses): name, category, status, lowest resolved price, days listed | 🎓 👤 |
+| `pnpm stale-check [--days N]` | Lists `available` items listed for more than N days (default 60) | 🎓 |
+| `pnpm audit-listings` | Reports items (excluding sold ones) missing recommended fields: no photos, empty description, no tags, an open-ended shipping tier with no weight/dimensions, or no price tiers at all — criteria documented in the script header | 🎓 |
+| `pnpm export-csv` | Exports every item as a flat CSV to `exports/listings.csv` for the seller's own record-keeping (distinct from `pnpm fb-export`'s Facebook-formatted CSV) | 🎓 👤 |
+| `pnpm semester-end` | Batch review + cleanup (see §1.12) | 🎓 |
 
 These are Node.js scripts in `scripts/` — no UI, no backend, no framework.
 
@@ -328,10 +323,10 @@ No backend. Stripe handles the payment; seller fulfils locally. Removes the fric
 
 ---
 
-### 2.7 Pickup Scheduling Link
+### 2.7 Pickup Scheduling Link ✅ Shipped
 **Effort:** XS (schema + UI only) · **Value:** ⭐⭐
 
-Add `scheduling_url` to site config or per-item `item.json`. A "Schedule Viewing" button on item detail pages opens the external scheduling link (Calendly, Cal.com, Google Calendar appointment page).
+`siteConfig.contact.schedulingUrl` (optional, site-level — not per-item) shows a "Schedule Viewing" button on item detail pages that opens the external scheduling link (Calendly, Cal.com, Google Calendar appointment page) in a new tab, following the same conditional-render pattern as the existing Stripe/Venmo payment buttons.
 
 No backend. Eliminates back-and-forth messages to agree on a viewing time.
 
@@ -411,7 +406,7 @@ CS students sell many textbooks. First-class textbook support makes the site sig
 **UI additions:**
 - On item detail pages where `isbn` is present, show a "Compare prices" button linking to `https://bookfinder.com/search/?isbn={isbn}` — ✅ shipped (`TextbookBadge.tsx`)
 - Show `course` prominently as a badge (e.g. "For CS101") — ✅ shipped
-- Filter on category page by `course` code — **not implemented.** `course` is read on the item detail page and indexed for search, but there is no course filter in `FilterBar` or anywhere on the category page. This remains an open Tier 2 gap, not something already shipped.
+- Filter on category page by `course` code — ✅ **shipped 2026-09-05.** Single-select course chips in `FilterBar`/`useFilters.ts`, rendered only when the current category has items with a non-empty `course` field (same conditional-render pattern as the condition chips). Single-select because a textbook belongs to exactly one course, unlike tags (§2.2), which are multi-select.
 
 **Implementation:** Additive — all new schema fields optional, all new UI conditional on field presence.
 
@@ -438,24 +433,23 @@ A clear, illustrated `SETUP_GUIDE.md` written for the non-CS user who had the pr
 >
 > | Category | Covers | Needs persistent storage? | Fits current architecture? |
 > |---|---|---|---|
-> | **Notification relay** | §3.1 Contact Form / Enquiry — forward a buyer's message or offer to the seller (email, Discord, Telegram) | No — stateless relay | ✅ Yes — same shape as `workers/shipping-rate-proxy/`: a small Cloudflare Worker holding secrets via `wrangler secret`, called from the client through an optional `siteConfig.*.proxyUrl`-style field |
+> | **Notification relay** | §3.1 Contact Form / Enquiry — forward a buyer's message or offer to the seller (email, Discord, Telegram) | No — stateless relay | ✅ Built 2026-09-05 — `workers/contact-form-proxy/`, same shape as `workers/shipping-rate-proxy/` |
 > | **Local pre-upload hardening** | Stripping EXIF/GPS metadata from photos (§1.14) | No | ✅ Yes — and turned out to already be shipped as a `pnpm upload-images` step; no server was ever needed |
 > | **Stateful engagement features** | §3.2 Item View Counter, §4.2 Real-Time Inventory Updates, §4.4 Buyer Reservation System | **Yes** — Cloudflare KV/D1 or similar | ⚠️ These are the only items that actually break the project's "zero database" principle. Each is its own sub-project with its own cost; a decision to accept persistent state should be made deliberately once, before starting any of the three — not implicitly by shipping the first one |
 > | **AI workflow hosting** | Running `/update-items` / `/translate-items` as a hosted function instead of a local Claude Code session | No | ❌ Not recommended today — Seller Studio plus the local skills already cover this well; only worth revisiting if a future seller can't or won't run Claude Code locally |
 >
-> **Current recommendation:** the Contact Form (§3.1) is the strongest next candidate if a backend is wanted — it reuses the already-proven Worker-proxy pattern, needs no persistent storage, and closes a real gap (the seller currently gets zero in-app notification when a buyer contacts them or makes an offer).
+> This was the strongest backend candidate identified in the exploration — it reused the already-proven Worker-proxy pattern, needed no persistent storage, and closed a real gap (the seller previously got zero in-app notification when a buyer contacted them or made an offer). It's now built — see §3.1 below.
 
-### 3.1 Contact Form / Enquiry System 👤
+### 3.1 Contact Form / Enquiry System 👤 ✅ Shipped
 **Effort:** L · **Value:** ⭐⭐⭐
 
-A serverless function that accepts a buyer's name, message, and item reference, then notifies the seller (email, Discord, or Telegram). Eliminates the need to expose any contact details publicly, and gives the seller an in-app notification instead of relying entirely on external chat apps.
+`workers/contact-form-proxy/` — a Cloudflare Worker matching `workers/shipping-rate-proxy/`'s architecture exactly (stateless relay, secrets via `wrangler secret`, `ALLOWED_ORIGIN`-restricted CORS, no persistent storage, no rate limiting/CAPTCHA — see "Not implemented" in its README for why and what a spammed seller could add later at the Cloudflare-dashboard level instead). A new `EnquiryForm.tsx` on the item detail page POSTs `{ itemCategory, itemSlug, itemName, buyerName, buyerContact, message, offerAmount?, honeypot }` to it; the Worker relays a formatted notification via a pluggable `NOTIFICATION_PROVIDER` (`"discord" | "telegram" | "email"`, mirroring `SHIPPING_PROVIDER`'s pattern), each behind its own secrets.
 
-**Architecture notes:**
-- Recommended shape: a Cloudflare Worker following the same pattern as `workers/shipping-rate-proxy/` (see the architecture note above) — a stateless relay, secrets held only via `wrangler secret`, called from the client through an optional `siteConfig.notifications.proxyUrl`-style field
-- The `ContactSection` component already has a reserved slot for this
-- Notification delivery: Resend/SendGrid for email, or a Discord/Telegram webhook (both have generous free tiers)
-- Rate limiting required to prevent spam
-- CAPTCHA (e.g. Cloudflare Turnstile) or honeypot field recommended
+**Anti-spam:** an off-screen (not `display:none`, which some bots specifically detect and skip) honeypot field. A filled honeypot gets the exact same `200 {ok:true}` response as a real submission — a bot that gets a different response for "honeypot filled" vs. "field missing" could learn which check tripped.
+
+**Config:** `siteConfig.notifications?: { enabled: boolean; proxyUrl: string }` — optional, disabled by default, registered in `scripts/lib/configDefaults.ts` per Iron Rule 8. Seller-facing setup walkthrough at `.claude/commands/setup-contact-form.md` (mirrors `/setup-shipping`).
+
+**Correction (2026-09-05):** the previous revision of this section claimed "the `ContactSection` component already has a reserved slot for this." That wasn't true — `ContactSection.tsx` had no placeholder or extension point of any kind. `EnquiryForm` was added as a sibling alongside it on the item detail page instead.
 
 ---
 
@@ -631,18 +625,19 @@ Features shipped in v1 have been moved to the "Shipped in v1" section at the top
 
 | Feature | Users | Status |
 |---|---|---|
-| PWA manifest (installable) | 🎓👤 | v1.1 |
+| PWA manifest (installable) | 🎓👤 | ✅ Implemented |
 | EXIF/GPS metadata stripping (`pnpm upload-images`) | 🎓👤 | ✅ Implemented |
-| Semester-end batch actions (`pnpm semester-end`) | 🎓 | v1.1 |
-| Pickup scheduling link (Calendly/Cal.com field) | 🎓👤 | v1.1 |
-| Tag filter page (`/tags/{tag}`) | 🎓👤 | v1.1 |
+| Semester-end batch actions (`pnpm semester-end`) | 🎓 | ✅ Implemented |
+| Pickup scheduling link (Calendly/Cal.com field) | 🎓👤 | ✅ Implemented |
+| Tag filter page (`/tags/{tag}`) | 🎓👤 | ✅ Implemented |
+| Seller CLI toolkit (mark-available/duplicate/inventory/stale-check/audit-listings/export-csv) | 🎓👤 | ✅ Implemented |
 | Distance unit toggle (mi ↔ km) | 🎓 | v1.1 |
 | Stripe payment link button ("Pay Deposit") | 🎓👤 | ✅ Implemented |
 | Item flyer PDF download (`FlyerButton`, §1.15) | 🎓👤 | ✅ Implemented |
 | Facebook Marketplace export (`pnpm fb-export`) | 🎓 | ✅ Implemented |
 | Cross-listing export (Craigslist / OfferUp / eBay) | 🎓 | v2 |
 | Bundle deal multi-item contact | 🎓👤 | v2 |
-| Contact form (serverless, hides contact info) | 👤 | v2 |
+| Contact form (Cloudflare Worker relay, hides contact info) | 👤 | ✅ Implemented |
 | Item view counter (GoatCounter) | 🎓 | v2 |
 | Offline caching (PWA service worker) | 🎓👤 | v2 |
 | Price drop tracking (history log) | 🎓👤 | v2 |

@@ -45,6 +45,12 @@ export function ItemGrid({ items, browseAll = false }: ItemGridProps) {
     availableConditions,
     activeConditions,
     toggleCondition,
+    availableCourses,
+    activeCourse,
+    setActiveCourse,
+    availableTags,
+    activeTags,
+    toggleTag,
     priceBounds,
     rawPriceBounds,
     priceRange,
@@ -77,6 +83,12 @@ export function ItemGrid({ items, browseAll = false }: ItemGridProps) {
         availableConditions={availableConditions}
         activeConditions={activeConditions}
         onToggleCondition={toggleCondition}
+        availableCourses={availableCourses}
+        activeCourse={activeCourse}
+        onCourseChange={setActiveCourse}
+        availableTags={availableTags}
+        activeTags={activeTags}
+        onToggleTag={toggleTag}
         priceBounds={priceBounds}
         rawPriceBounds={rawPriceBounds}
         priceRange={priceRange}

@@ -1,9 +1,10 @@
 import { cache } from "react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { siteConfig } from "@/content/config";
 import { loadCategories, loadItemsByCategory } from "@/lib/content/loader";
-import { isValidSlug } from "@/lib/utils/slug";
+import { isValidSlug, slugify } from "@/lib/utils/slug";
 import { resolveItemPrice } from "@/lib/utils/pricing";
 import { formatAbsoluteDate } from "@/lib/utils/date";
 import { DistancePricingProvider } from "@/components/pricing/DistancePricingContext";
@@ -22,6 +23,7 @@ import { MakeOfferButton } from "@/components/item/MakeOfferButton";
 import { GalleryAdapter } from "@/components/ui-adapters/GalleryAdapter";
 import { LocalizedItemContent } from "@/components/item/LocalizedItemContent";
 import { ContactSection } from "@/components/contact/ContactSection";
+import { EnquiryForm } from "@/components/contact/EnquiryForm";
 import { ShareButton } from "@/components/common/ShareButton";
 import { FlyerButton } from "@/components/item/FlyerButton";
 import { toFlyerItemView } from "@/lib/pdf/flyerContent";
@@ -131,6 +133,7 @@ export default async function ItemDetailPage({
 
   if (!itemData) notFound();
 
+  const t = getTranslations();
   const isSold = itemData.status === "sold";
 
   // Server-side fallback tier for SSG initial render — no blank before JS hydration.
@@ -166,7 +169,7 @@ export default async function ItemDetailPage({
           role="alert"
           className="mb-6 mt-2 rounded-xl border-0 bg-accent-soft/15 px-4 py-3 text-center text-sm font-semibold text-[#a8584a] dark:text-accent-soft"
         >
-          {getTranslations().soldBanner}
+          {t.soldBanner}
           {itemData.soldDate && (
             <span className="ml-2 font-normal text-[#a8584a]/70 dark:text-accent-soft/70">
               {/* This is a Server Component rendered once at export time —
@@ -262,6 +265,21 @@ export default async function ItemDetailPage({
             </div>
           )}
 
+          {/* Schedule Viewing button (optional site-level scheduling link —
+              Calendly/Cal.com/Google Calendar) */}
+          {siteConfig.contact.schedulingUrl && (
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={siteConfig.contact.schedulingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-foreground/20 px-5 py-2 text-sm font-medium text-foreground/80 transition-colors hover:border-foreground/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50"
+              >
+                {t.scheduleViewing}
+              </a>
+            </div>
+          )}
+
           {/* YouTube demo */}
           {itemData.youtubeLink && (
             <a
@@ -303,17 +321,32 @@ export default async function ItemDetailPage({
         <MetadataTable item={itemData} />
       </div>
 
-      {/* Tags */}
+      {/* Tags — linked to /tags/[tag] when the tag slugifies to a safe route
+          segment (see lib/utils/slug.ts's slugify); otherwise rendered as
+          plain text so a tag that /tags/[tag]'s generateStaticParams would
+          skip (e.g. CJK-only, or colliding with another tag's slug — see
+          loadTagIndex) never links to a page that doesn't exist in the
+          static export. */}
       {itemData.tags.length > 0 && (
         <div className="mt-6 flex flex-wrap gap-2">
-          {itemData.tags.map((tag) => (
-            <span
-              key={tag}
-              className="inline-flex items-center rounded-full bg-foreground/5 px-3 py-1 text-xs text-foreground/50 ring-1 ring-inset ring-foreground/10"
-            >
-              #{tag}
-            </span>
-          ))}
+          {itemData.tags.map((tag) => {
+            const tagSlug = slugify(tag);
+            const chipClassName =
+              "inline-flex items-center rounded-full bg-foreground/5 px-3 py-1 text-xs text-foreground/50 ring-1 ring-inset ring-foreground/10 transition-colors";
+            return isValidSlug(tagSlug) ? (
+              <Link
+                key={tag}
+                href={`/tags/${tagSlug}`}
+                className={`${chipClassName} hover:bg-foreground/10 hover:text-foreground/70`}
+              >
+                #{tag}
+              </Link>
+            ) : (
+              <span key={tag} className={chipClassName}>
+                #{tag}
+              </span>
+            );
+          })}
         </div>
       )}
 
@@ -327,6 +360,14 @@ export default async function ItemDetailPage({
           preferredPayment={itemData.preferredPayment}
           contactNote={itemData.contactNote}
         />
+
+        {/* Enquiry form — optional, Worker-backed buyer contact relay. See
+            docs/FEATURES_ROADMAP.md §3.1 and workers/contact-form-proxy/. */}
+        {siteConfig.notifications?.enabled && siteConfig.notifications?.proxyUrl && (
+          <div className="mt-4">
+            <EnquiryForm item={itemData} />
+          </div>
+        )}
       </div>
 
       {/* Share + Flyer + Recently Viewed */}

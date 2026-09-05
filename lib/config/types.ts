@@ -67,6 +67,13 @@ export type SiteConfig = {
   contact: {
     reveal_behavior: "click" | "always";
     platforms: Platform[];
+    // External scheduling link (Calendly/Cal.com/Google Calendar appointment
+    // page). When set, item detail pages show a "Schedule Viewing" button
+    // that opens it in a new tab. Optional per Iron Rule 8 — omit or leave
+    // "" to disable; no default is injected because there's no universally
+    // sensible URL (see scripts/lib/configDefaults.ts, which splices in an
+    // empty-string placeholder for downstream configs).
+    schedulingUrl?: string;
   };
 
   // Home page
@@ -117,6 +124,15 @@ export type SiteConfig = {
     };
   };
 
+  // Contact-form enquiry relay (optional — see docs/FEATURES_ROADMAP.md §3.1)
+  // Absent or enabled: false → EnquiryForm renders nothing; zero impact.
+  notifications?: {
+    enabled: boolean;
+    // Cloudflare Worker proxy URL (holds the Discord/Telegram/Resend secret
+    // server-side). See workers/contact-form-proxy/README.md.
+    proxyUrl: string;
+  };
+
   // Internationalisation
   i18n: {
     defaultLocale: string;
@@ -163,11 +179,29 @@ export type UIStrings = {
   itemSold: string;
   preferredPayment: string;
 
+  // Pickup scheduling link button (app/[category]/[item]/page.tsx) — shown
+  // only when siteConfig.contact.schedulingUrl is set.
+  scheduleViewing: string;
+
   // Make-offer form
   makeOffer: string;
   yourOffer: string;
   send: string;
   belowMinimumOffer: string;
+
+  // Enquiry form (components/contact/EnquiryForm.tsx) — item detail page
+  // only, shown when siteConfig.notifications is enabled with a proxyUrl
+  enquiryFormHeading: string;
+  enquiryNameLabel: string;
+  enquiryContactLabel: string;
+  enquiryContactPlaceholder: string;
+  enquiryMessageLabel: string;
+  enquiryMessagePlaceholder: string;
+  enquiryOfferLabel: string;
+  enquirySubmit: string;
+  enquirySubmitting: string;
+  enquirySuccess: string;
+  enquiryError: string;
 
   // Share button
   share: string;
@@ -209,6 +243,13 @@ export type UIStrings = {
   // Filter bar
   filterShowSold: string;
   filterPrice: string;
+  // Course filter chips on category pages — shown only when the category has
+  // items with a non-empty `course` field (textbooks).
+  filterCourse: string;
+  // Tag filter chips on category pages — shown only when the item set has at
+  // least one non-empty `tags` entry. Multi-select (AND matching); see
+  // components/filters/useFilters.ts.
+  filterTags: string;
   filterPriceBucketAll: string;
   filterPriceIncludesOutliers: string;
   sortBy: string;
@@ -223,6 +264,9 @@ export type UIStrings = {
   // Page titles and banners (used in server-rendered markup)
   soldBanner: string;
   soldArchiveTitle: string;
+  // Tag filter page (/tags/[tag]) heading — "{tag}" is replaced with the
+  // canonical (un-slugified) tag string, e.g. "Tagged: CS101".
+  tagPageHeading: string;
 
   // Condition guide panel
   conditionGuideTitle: string;

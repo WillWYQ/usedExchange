@@ -1,6 +1,6 @@
 # UsedExchange — 功能路线图
 
-**版本：** v1.5 · **日期：** 2026-09-05  
+**版本：** v1.6 · **日期：** 2026-09-05  
 **范围：** v1 之后的功能。尚未承诺——优先级供规划讨论参考。
 
 ---
@@ -153,10 +153,12 @@ Discord 是 CS 学生的主导通讯平台——校园社区、社团服务器�
 
 ---
 
-### 1.10 PWA Web App Manifest
+### 1.10 PWA Web App Manifest ✅ 已发布
 **工作量：** XS · **价值：** ⭐⭐
 
-`public/manifest.json` 文件使站点可作为主屏幕应用安装到 iPhone 和 Android。包含：应用名称、主题颜色、图标集（192×192 和 512×512）、`display: "standalone"` 实现全屏体验。v1 无需 Service Worker——仅清单即可启用安装。
+`app/manifest.ts`（Next.js 文件约定路由，不是静态的 `public/manifest.json`）使站点可作为主屏幕应用安装到 iPhone 和 Android：名称/短名称取自 `siteConfig.name`、主题/背景色、`display: "standalone"`，以及从 `app/icon.svg` 用 `sharp` 生成的 192×192/512×512 图标集。在 `output: "export"` 下需要显式加 `export const dynamic = "force-static"`——否则 `next build` 会在收集这个 manifest 路由的页面数据时失败。
+
+无 Service Worker——仅清单即可启用安装。
 
 ---
 
@@ -183,7 +185,7 @@ Discord 是 CS 学生的主导通讯平台——校园社区、社团服务器�
 
 ---
 
-### 1.12 学期末批量操作 🎓
+### 1.12 学期末批量操作 🎓 ✅ 已发布
 **工作量：** S · **价值：** ⭐⭐⭐
 
 CS 学生大多在每学期末出售物品。一条命令准备清仓：
@@ -193,12 +195,12 @@ pnpm semester-end
 ```
 
 此脚本：
-1. 打印所有已上架超过 60 天的 `available` 物品（可能是过时列表）
-2. 提示："将这些标记为已售、降价还是保持不变？"
-3. 同时打开所有标记需要编辑的 `item.json` 文件（使用 `$EDITOR`）
-4. 运行 `pnpm upload-images` 并生成 git 提交消息：`"chore: end-of-semester listing cleanup"`
+1. 打印所有已上架超过 60 天的 `available` 物品（与 `pnpm stale-check`，§2.4，共用同一套"过时"判定，两者不会互相矛盾）
+2. 对每件过时物品逐一提示（通过共用的 `scripts/lib/cliPrompt.ts`）：标记已售、降低最低档位价格，或保持不变
+3. 如有变更则运行 `pnpm upload-images`
+4. 打印建议的提交信息（`"chore: end-of-semester listing cleanup"`）以及使用该信息的完整 `git add`/`commit`/`push` 命令序列——或直接用 `pnpm push` 的替代方案
 
-一条命令即可在 5 分钟内完成整个学期末工作流。
+**更正（2026-09-05）：** 本文档之前的设想是打开 `$EDITOR` 编辑标记的 `item.json` 文件，且脚本会自动生成提交。实际上线版本改为逐项内联提示（更简单，不依赖 `$EDITOR`），并且刻意**不会**自己执行 `git commit`/`git push`——发布仍是一个由卖家主动触发的显式步骤（`pnpm push` 或打印出的手动命令序列），与项目里其他所有会修改内容的脚本保持一致。
 
 ---
 
@@ -246,12 +248,12 @@ Analytics 需要 Vercel 托管。可在 Seller Studio 的配置面板（Analytic
 
 ---
 
-### 2.2 标签筛选 🎓 👤
+### 2.2 标签筛选 🎓 👤 ✅ 已发布
 **工作量：** M · **价值：** ⭐⭐⭐
 
-标签已存在于每件物品上。在加载时构建标签索引。在分类页筛选栏添加标签筛选，并添加 `/tags/{tag}` 路由，列出跨分类的所有带该标签的物品。
+`lib/content/loader.ts` 的 `loadTagIndex()` 只用一次 `loadAllItemsRaw()` 遍历就建好"slug → 物品列表"映射；`FilterBar.tsx`/`useFilters.ts` 新增了多选（AND 匹配）标签筛选条（形态和 §2.15 的课程筛选一致，但因为一件物品可以同时有意义地带多个标签，所以是多选）；`app/tags/[tag]/page.tsx` 是完全静态的 `generateStaticParams()` 路由，列出跨所有分类中带该标签的每件可见物品。物品详情页上每个标签徽章都链接到对应的 `/tags/{tag}` 页面。两个不同拼写的标签如果 slug 化后撞车（极少见的边界情况），会连同警告一起从索引中一并丢弃，而不是让其中一个悄悄"胜出"。
 
-已列入可扩展性注册表。
+此前已列入可扩展性注册表。
 
 ---
 
@@ -262,25 +264,24 @@ Analytics 需要 Vercel 托管。可在 Seller Studio 的配置面板（Analytic
 
 ---
 
-### 2.4 卖家 CLI 工具 🎓 👤
+### 2.4 卖家 CLI 工具 🎓 👤 ✅ 已发布
 **工作量：** S–M · **价值：** ⭐⭐⭐
 
 减少手动编辑 `item.json` 的脚本。CS 学生将其作为高效工具使用；非技术用户依赖这些工具避免直接打开 JSON 文件。
 
 **v1 已包含（模板 v1.4.2）：** `pnpm create-item` / `pnpm new`（生成 36 字段的 `item.json` 脚手架）、`pnpm create-template`（带注释的 `_template.json`）、`pnpm mark-sold`（以 JSONC 精确编辑更新状态 + `sold_date`）、`pnpm upload-images`（CDN 同步）、`pnpm configure-image-cors`（一次性 R2 CORS 设置，让物品传单 PDF §1.15 能跨域抓取照片字节）、`pnpm fb-export`（§3.4）、`pnpm studio`（§3.8），以及下游站点的模板管理工具：`pnpm update-site`（拉取模板版本且不触碰 `content/`）、`pnpm migrate-config`（自动注入新的可选配置字段）、`pnpm push`（提交 + 推送 `content/` 和 `lib/generated/image-manifest.json`）、`pnpm bump`（交互式版本升级 + GitHub 发布）。
 
-下表中的脚本仍为**提议的未来新增功能**：
+**2026-09-05 发布**（均采用与 `mark-sold.ts` 相同的"`scripts/lib/` 纯逻辑 + 轻量 CLI 包装"模式，各自带单元测试）：
 
 | 脚本 | 功能 | 用户 |
 |---|---|---|
-| `pnpm mark-sold houseware/ikea-lamp` | 设置 `status: "sold"` 和 `sold_date: today`——**v1 已包含**（SETUP_GUIDE.md 依赖） | 🎓 👤 |
-| `pnpm mark-available houseware/ikea-lamp` | 将状态重置为 `available` | 🎓 👤 |
-| `pnpm duplicate houseware/ikea-lamp houseware/ikea-lamp-2` | 复制文件夹 + item.json，将副本设为 `draft` | 🎓 |
-| `pnpm inventory` | 打印所有物品的 Markdown 表格：名称、状态、价格、上架天数 | 🎓 👤 |
-| `pnpm stale-check` | 列出已 `available` 超过 N 天的物品 | 🎓 |
-| `pnpm audit-listings` | 报告缺少推荐字段的物品 | 🎓 |
-| `pnpm export-csv` | 将所有物品导出为 CSV 以备记录 | 🎓 👤 |
-| `pnpm semester-end` | 批量审阅 + 清理（见 1.12） | 🎓 |
+| `pnpm mark-available houseware/ikea-lamp` | 将 `status` 从任意状态重置为 `available`，清空 `sold_date`；若已是 `available` 则不做任何事 | 🎓 👤 |
+| `pnpm duplicate houseware/ikea-lamp houseware/ikea-lamp-2` | 复制文件夹 + 照片，副本上的 `status`/`listed_date`/`sold_date`/`price_reduced`/`previous_lowest_price`/`min_acceptable_offer` 均重置，并直接剥离 `reserved_for`（Iron Rule 4——私密备注不应流入无关的新商品） | 🎓 |
+| `pnpm inventory` | 打印所有物品（不分状态）的 Markdown 表格：名称、分类、状态、最低解析价格、上架天数 | 🎓 👤 |
+| `pnpm stale-check [--days N]` | 列出已 `available` 超过 N 天（默认 60）的物品 | 🎓 |
+| `pnpm audit-listings` | 报告（已售物品除外）缺少推荐字段的物品：无照片、描述为空、无标签、开放式运送档位但缺重量/尺寸，或没有任何价格档位——判定标准写在脚本文件头部 | 🎓 |
+| `pnpm export-csv` | 将所有物品导出为一份扁平 CSV 到 `exports/listings.csv`，供卖家自己记录用（与 Facebook 格式的 `pnpm fb-export` 不同） | 🎓 👤 |
+| `pnpm semester-end` | 批量审阅 + 清理（见 §1.12） | 🎓 |
 
 ---
 
@@ -302,10 +303,10 @@ Analytics 需要 Vercel 托管。可在 Seller Studio 的配置面板（Analytic
 
 ---
 
-### 2.7 取货预约链接
+### 2.7 取货预约链接 ✅ 已发布
 **工作量：** XS（仅 schema + UI）· **价值：** ⭐⭐
 
-在站点配置或物品 `item.json` 中添加 `scheduling_url`。物品详情页上的"预约查看"按钮打开外部预约链接（Calendly、Cal.com、Google 日历预约页面）。
+`siteConfig.contact.schedulingUrl`（可选，站点级别——不是按物品设置）会在物品详情页显示一个"预约查看"按钮，点击后在新标签页打开外部预约链接（Calendly、Cal.com、Google 日历预约页面），采用和现有 Stripe/Venmo 支付按钮一样的条件渲染方式。
 
 无需后端。省去反复沟通确定看货时间的麻烦。
 
@@ -377,7 +378,7 @@ CS 学生出售大量教材。教材的一流支持使站点对该用户群体�
 **UI 扩展：**
 - 存在 `isbn` 时显示"比价"按钮，链接到 `bookfinder.com/search/?isbn={isbn}`——✅ 已上线（`TextbookBadge.tsx`）
 - `course` 显示为徽章（如"适用于 CS101"）——✅ 已上线
-- 分类页按 `course` 代码筛选——**未实现**。`course` 目前只在物品详情页读取、并被收录进搜索索引，`FilterBar` 或分类页上并没有课程筛选功能。这仍是一个待补的 Tier 2 缺口，不是已上线的功能。
+- 分类页按 `course` 代码筛选——✅ **2026-09-05 发布**。`FilterBar`/`useFilters.ts` 中的单选课程筛选条，仅在当前分类存在带非空 `course` 字段的物品时才渲染（与成色筛选条一样的条件渲染方式）。之所以是单选，是因为一本教材只属于一门课程，跟多选的标签（§2.2）不同。
 
 **实现方式：** 纯增量——所有新 schema 字段均为可选，所有新 UI 均以字段存在为前提。
 
@@ -404,24 +405,23 @@ CS 学生出售大量教材。教材的一流支持使站点对该用户群体�
 >
 > | 类别 | 涉及 | 是否需要持久存储？ | 是否符合现有架构？ |
 > |---|---|---|---|
-> | **通知转发** | §3.1 联系表单/询问系统——将买家的消息或出价转发给卖家（邮件、Discord、Telegram） | 否——无状态转发 | ✅ 符合——与 `workers/shipping-rate-proxy/` 同构：一个通过 `wrangler secret` 持有密钥的小型 Cloudflare Worker，前端通过可选的 `siteConfig.*.proxyUrl` 风格字段调用 |
+> | **通知转发** | §3.1 联系表单/询问系统——将买家的消息或出价转发给卖家（邮件、Discord、Telegram） | 否——无状态转发 | ✅ 2026-09-05 已构建——`workers/contact-form-proxy/`，与 `workers/shipping-rate-proxy/` 同构 |
 > | **本地上传前加固** | 剥离照片 EXIF/GPS 元数据（§1.14） | 否 | ✅ 符合——而且发现它其实早已作为 `pnpm upload-images` 的一个步骤上线；从来就不需要服务器 |
 > | **需要状态的互动功能** | §3.2 物品浏览计数器、§4.2 无需重建的实时库存更新、§4.4 买家预订系统 | **是**——需要 Cloudflare KV/D1 之类 | ⚠️ 这是唯一真正打破本项目"零数据库"原则的类别。三项各自独立、各有代价；应该在开始其中任何一项之前，就是否接受持久状态做一次明确的、一次性的架构决策——而不是在实现第一项时被动地默认接受 |
 > | **AI 工作流上云** | 将 `/update-items`、`/translate-items` 做成托管函数，而不是本地 Claude Code 会话 | 否 | ❌ 目前不推荐——Seller Studio 加本地技能已经很好地覆盖了这个场景；只有在未来某个卖家无法/不愿在本地运行 Claude Code 时才值得重新考虑 |
 >
-> **当前建议：** 如果要引入后端，联系表单（§3.1）是最值得优先做的候选——它复用已验证过的 Worker 代理模式、不需要持久存储，并且填补了一个真实存在的缺口（卖家目前在买家联系或出价时完全收不到任何站内通知）。
+> 这是当初探讨中确认的最值得做的后端候选——它复用了已验证过的 Worker 代理模式、不需要持久存储，并且填补了一个真实存在的缺口（卖家此前在买家联系或出价时完全收不到任何站内通知）。现在它已经建好了——见下方 §3.1。
 
-### 3.1 联系表单/询问系统 👤
+### 3.1 联系表单/询问系统 👤 ✅ 已发布
 **工作量：** L · **价值：** ⭐⭐⭐
 
-接受买家姓名、消息和物品引用的无服务器函数，然后通知卖家（邮件、Discord 或 Telegram）。消除了公开暴露任何联系方式的需要，也让卖家获得站内通知，而不必完全依赖外部聊天 App。
+`workers/contact-form-proxy/`——一个与 `workers/shipping-rate-proxy/` 架构完全一致的 Cloudflare Worker（无状态转发、密钥通过 `wrangler secret` 持有、`ALLOWED_ORIGIN` 限制 CORS、不使用任何持久存储、不做限速/CAPTCHA——具体原因及卖家日后可在 Cloudflare 控制台层面自行添加的方案见其 README 的"未实现"一节）。物品详情页新增的 `EnquiryForm.tsx` 会把 `{ itemCategory, itemSlug, itemName, buyerName, buyerContact, message, offerAmount?, honeypot }` POST 给它；Worker 通过可插拔的 `NOTIFICATION_PROVIDER`（`"discord" | "telegram" | "email"`，模仿 `SHIPPING_PROVIDER` 的模式）转发一条格式化通知，每种方式各有自己的密钥。
 
-**架构要点：**
-- 推荐形态：采用与 `workers/shipping-rate-proxy/` 相同的模式（见上方架构说明）的 Cloudflare Worker——无状态转发，密钥仅通过 `wrangler secret` 持有，前端通过可选的 `siteConfig.notifications.proxyUrl` 风格字段调用
-- `ContactSection` 组件已为此预留了插槽
-- 通知投递：邮件用 Resend/SendGrid，或 Discord/Telegram webhook（均有慷慨的免费额度）
-- 需要限速（rate limiting）以防垃圾信息
-- 建议使用 CAPTCHA（如 Cloudflare Turnstile）或蜜罐字段
+**防垃圾信息：** 一个屏幕外的蜜罐字段（不用 `display:none`——部分机器人专门识别并跳过这种写法）。填了蜜罐字段的提交会收到和正常提交完全一样的 `200 {ok:true}` 响应——如果"蜜罐被填"和"字段缺失"这两种情况返回不同的响应，机器人就能学出是哪个检查被触发了。
+
+**配置：** `siteConfig.notifications?: { enabled: boolean; proxyUrl: string }`——可选，默认禁用，已按 Iron Rule 8 注册进 `scripts/lib/configDefaults.ts`。卖家配置指南见 `.claude/commands/setup-contact-form.md`（模仿 `/setup-shipping`）。
+
+**更正（2026-09-05）：** 本节之前称"`ContactSection` 组件已为此预留了插槽"——这不属实，`ContactSection.tsx` 里没有任何占位或扩展点。实际是在物品详情页给 `ContactSection` 加了一个平级的 `EnquiryForm` 组件。
 
 ---
 
@@ -589,18 +589,19 @@ v1 已发布的功能已移至本文档顶部的"v1 已包含"部分。
 
 | 功能 | 用户 | 状态 |
 |---|---|---|
-| PWA manifest（可安装） | 🎓👤 | v1.1 |
+| PWA manifest（可安装） | 🎓👤 | ✅ 已实现 |
 | 上传时剥离 EXIF/GPS 元数据（`pnpm upload-images`） | 🎓👤 | ✅ 已实现 |
-| 学期末批量操作（`pnpm semester-end`） | 🎓 | v1.1 |
-| 取货预约链接（Calendly/Cal.com 字段） | 🎓👤 | v1.1 |
-| 标签筛选页（`/tags/{tag}`） | 🎓👤 | v1.1 |
+| 学期末批量操作（`pnpm semester-end`） | 🎓 | ✅ 已实现 |
+| 取货预约链接（Calendly/Cal.com 字段） | 🎓👤 | ✅ 已实现 |
+| 标签筛选页（`/tags/{tag}`） | 🎓👤 | ✅ 已实现 |
+| 卖家 CLI 工具包（mark-available/duplicate/inventory/stale-check/audit-listings/export-csv） | 🎓👤 | ✅ 已实现 |
 | 距离单位切换（英里 ↔ 公里） | 🎓 | v1.1 |
 | Stripe 支付链接按钮（"支付定金"） | 🎓👤 | ✅ 已实现 |
 | 物品传单 PDF 下载（`FlyerButton`，§1.15） | 🎓👤 | ✅ 已实现 |
 | Facebook Marketplace 导出（`pnpm fb-export`） | 🎓 | ✅ 已实现 |
 | 跨平台导出（Craigslist / OfferUp / eBay） | 🎓 | v2 |
 | 捆绑优惠多物品联系 | 🎓👤 | v2 |
-| 联系表单（无服务器，隐藏联系信息） | 👤 | v2 |
+| 联系表单（Cloudflare Worker 转发，隐藏联系信息） | 👤 | ✅ 已实现 |
 | 物品浏览计数器（GoatCounter） | 🎓 | v2 |
 | 离线缓存（PWA Service Worker） | 🎓👤 | v2 |
 | 降价跟踪（历史记录） | 🎓👤 | v2 |

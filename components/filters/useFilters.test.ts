@@ -153,6 +153,142 @@ describe("useFilters", () => {
     });
   });
 
+  describe("course filter", () => {
+    const TEXTBOOK_CS = makeItem({
+      categorySlug: "textbooks",
+      itemSlug: "algo-book",
+      name: "Algorithms Textbook",
+      course: "CS101",
+      listedDate: "2026-06-01",
+    });
+    const TEXTBOOK_MATH = makeItem({
+      categorySlug: "textbooks",
+      itemSlug: "calc-book",
+      name: "Calculus Textbook",
+      course: "MATH201",
+      listedDate: "2026-05-01",
+    });
+    const NON_TEXTBOOK = makeItem({
+      categorySlug: "textbooks",
+      itemSlug: "notebook",
+      name: "Notebook",
+      course: "",
+      listedDate: "2026-04-01",
+    });
+    const COURSE_ITEMS = [TEXTBOOK_CS, TEXTBOOK_MATH, NON_TEXTBOOK];
+
+    it("availableCourses is empty when no item has a non-empty course", () => {
+      const { result } = renderHook(() => useFilters(ITEMS, Infinity));
+      expect(result.current.availableCourses).toEqual([]);
+    });
+
+    it("availableCourses lists distinct non-empty courses, alphabetically sorted", () => {
+      const { result } = renderHook(() => useFilters(COURSE_ITEMS, Infinity));
+      expect(result.current.availableCourses).toEqual(["CS101", "MATH201"]);
+    });
+
+    it("activeCourse defaults to null (no filter applied)", () => {
+      const { result } = renderHook(() => useFilters(COURSE_ITEMS, Infinity));
+      expect(result.current.activeCourse).toBeNull();
+      expect(result.current.filteredItems).toHaveLength(3);
+    });
+
+    it("filters to items matching the active course only", () => {
+      const { result } = renderHook(() => useFilters(COURSE_ITEMS, Infinity));
+      act(() => result.current.setActiveCourse("CS101"));
+      const slugs = result.current.filteredItems.map((i) => i.itemSlug);
+      expect(slugs).toEqual(["algo-book"]);
+    });
+
+    it("clearing activeCourse (null) restores all items", () => {
+      const { result } = renderHook(() => useFilters(COURSE_ITEMS, Infinity));
+      act(() => result.current.setActiveCourse("CS101"));
+      act(() => result.current.setActiveCourse(null));
+      expect(result.current.filteredItems).toHaveLength(3);
+    });
+
+    it("excludes items with no course when a course filter is active", () => {
+      const { result } = renderHook(() => useFilters(COURSE_ITEMS, Infinity));
+      act(() => result.current.setActiveCourse("CS101"));
+      const slugs = result.current.filteredItems.map((i) => i.itemSlug);
+      expect(slugs).not.toContain("notebook");
+    });
+  });
+
+  describe("tag filter", () => {
+    const ITEM_VINTAGE_ELECTRONICS = makeItem({
+      categorySlug: "electronics",
+      itemSlug: "radio",
+      name: "Vintage Radio",
+      tags: ["vintage", "electronics"],
+      listedDate: "2026-06-01",
+    });
+    const ITEM_VINTAGE_ONLY = makeItem({
+      categorySlug: "electronics",
+      itemSlug: "lamp",
+      name: "Vintage Lamp",
+      tags: ["vintage"],
+      listedDate: "2026-05-01",
+    });
+    const ITEM_NO_TAGS = makeItem({
+      categorySlug: "electronics",
+      itemSlug: "cable",
+      name: "Cable",
+      tags: [],
+      listedDate: "2026-04-01",
+    });
+    const TAG_ITEMS = [ITEM_VINTAGE_ELECTRONICS, ITEM_VINTAGE_ONLY, ITEM_NO_TAGS];
+
+    it("availableTags is empty when no item has any tags", () => {
+      const { result } = renderHook(() => useFilters(ITEMS, Infinity));
+      expect(result.current.availableTags).toEqual([]);
+    });
+
+    it("availableTags lists distinct tags across all items, alphabetically sorted", () => {
+      const { result } = renderHook(() => useFilters(TAG_ITEMS, Infinity));
+      expect(result.current.availableTags).toEqual(["electronics", "vintage"]);
+    });
+
+    it("activeTags defaults to an empty set (no filter applied)", () => {
+      const { result } = renderHook(() => useFilters(TAG_ITEMS, Infinity));
+      expect(result.current.activeTags.size).toBe(0);
+      expect(result.current.filteredItems).toHaveLength(3);
+    });
+
+    it("filters to items matching a single active tag", () => {
+      const { result } = renderHook(() => useFilters(TAG_ITEMS, Infinity));
+      act(() => result.current.toggleTag("vintage"));
+      const slugs = result.current.filteredItems.map((i) => i.itemSlug).sort();
+      expect(slugs).toEqual(["lamp", "radio"]);
+    });
+
+    it("is multi-select: toggling a second tag narrows to items with BOTH (AND, not OR)", () => {
+      const { result } = renderHook(() => useFilters(TAG_ITEMS, Infinity));
+      act(() => result.current.toggleTag("vintage"));
+      act(() => result.current.toggleTag("electronics"));
+      expect(result.current.activeTags.size).toBe(2);
+      const slugs = result.current.filteredItems.map((i) => i.itemSlug);
+      expect(slugs).toEqual(["radio"]);
+    });
+
+    it("toggling an already-active tag off removes it from the filter", () => {
+      const { result } = renderHook(() => useFilters(TAG_ITEMS, Infinity));
+      act(() => result.current.toggleTag("vintage"));
+      act(() => result.current.toggleTag("electronics"));
+      act(() => result.current.toggleTag("electronics"));
+      expect(result.current.activeTags.has("electronics")).toBe(false);
+      const slugs = result.current.filteredItems.map((i) => i.itemSlug).sort();
+      expect(slugs).toEqual(["lamp", "radio"]);
+    });
+
+    it("excludes untagged items whenever any tag filter is active", () => {
+      const { result } = renderHook(() => useFilters(TAG_ITEMS, Infinity));
+      act(() => result.current.toggleTag("vintage"));
+      const slugs = result.current.filteredItems.map((i) => i.itemSlug);
+      expect(slugs).not.toContain("cable");
+    });
+  });
+
   describe("price bounds", () => {
     it("computes correct bounds at fallback distance (Infinity → highest tier)", () => {
       const { result } = renderHook(() => useFilters(ITEMS, Infinity));

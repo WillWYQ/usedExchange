@@ -11,6 +11,7 @@ import { siteConfig } from "../../content/config";
 import { itemJsonSchema, categoryJsonSchema } from "./schema";
 import { mapWithConcurrency } from "../utils/concurrency";
 import { pickCoverFilename } from "../utils/coverImage";
+import { isValidSlug, slugify } from "../utils/slug";
 import type { Item, Category } from "./types";
 
 const CONTENT_ROOT = path.join(process.cwd(), "content", "items");
@@ -589,4 +590,83 @@ export async function loadHomePageData(): Promise<{
   ]);
 
   return { categories, recentItems };
+}
+
+// ── Tag index (/tags/[tag]) ──────────────────────────────────────────────────
+
+export type TagIndexEntry = {
+  // Canonical (original, un-slugified) tag string as written in item.json.
+  tag: string;
+  items: Item[];
+};
+
+/**
+ * Single-pass tag index across the whole catalogue, keyed by the URL-safe
+ * slug of each distinct `item.tags` value. Powers /tags/[tag]: the Map's
+ * keys are exactly the valid `/tags/{slug}` static routes, and each value
+ * carries the items to render for that route.
+ *
+ * Visibility matches loadBrowseAllPageData (draft excluded; sold items past
+ * retention excluded via isItemVisible) — a tag that only appears on a
+ * hidden item does not get a route, and a partially-visible tag only lists
+ * its visible items.
+ *
+ * Both enumerating valid tag routes (generateStaticParams) and resolving one
+ * slug back to its items (the page component) need this same slug→items
+ * mapping. Building it here in one loadAllItemsRaw() pass — rather than a
+ * "list distinct tags" loader plus a separate "items for this tag" loader —
+ * avoids composing two catalogue-parsing loaders in the same render pass;
+ * see the perf-invariant note near the top of this file.
+ *
+ * A tag is dropped, with a console.warn, when:
+ *   - its slug fails isValidSlug (e.g. a CJK-only or all-punctuation tag
+ *     slugifies to "") — a static-export route can't be safely emitted for it; or
+ *   - it collides with a *different* raw spelling that slugifies to the same
+ *     value (e.g. "CS 101" and "cs-101" both → "cs-101"). Both spellings are
+ *     dropped rather than picking a winner, since either choice would
+ *     silently misattribute the loser's items to the winner's page.
+ */
+export async function loadTagIndex(): Promise<Map<string, TagIndexEntry>> {
+  const all = await loadAllItemsRaw();
+  const visible = all.filter(isItemVisible);
+
+  // First pass: group items by slug, tracking every distinct raw spelling
+  // seen for that slug so collisions can be detected below.
+  const bySlug = new Map<string, { rawTags: Set<string>; items: Item[] }>();
+  for (const item of visible) {
+    // Dedupe an item's own tag list first so a repeated tag on one item
+    // (e.g. accidental ["vintage", "vintage"]) doesn't list that item twice.
+    const itemTags = new Set(item.tags.map((t) => t.trim()).filter(Boolean));
+    for (const tag of itemTags) {
+      const slug = slugify(tag);
+      if (!isValidSlug(slug)) {
+        console.warn(
+          `[loader] skipping tag "${tag}": slugified form "${slug}" is not a safe route segment`,
+        );
+        continue;
+      }
+      let bucket = bySlug.get(slug);
+      if (!bucket) {
+        bucket = { rawTags: new Set(), items: [] };
+        bySlug.set(slug, bucket);
+      }
+      bucket.rawTags.add(tag);
+      bucket.items.push(item);
+    }
+  }
+
+  // Second pass: drop any slug where more than one distinct spelling collided.
+  const index = new Map<string, TagIndexEntry>();
+  for (const [slug, { rawTags, items }] of bySlug) {
+    if (rawTags.size > 1) {
+      console.warn(
+        `[loader] skipping tag route "/tags/${slug}": distinct tag spellings collide on ` +
+          `this slug (${[...rawTags].map((t) => `"${t}"`).join(", ")})`,
+      );
+      continue;
+    }
+    index.set(slug, { tag: [...rawTags][0]!, items });
+  }
+
+  return index;
 }

@@ -1,0 +1,26 @@
+name = "contact-form-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+[vars]
+# "discord" | "telegram" | "email" — pick the notification channel.
+NOTIFICATION_PROVIDER = "discord"
+# Must match siteConfig.baseUrl exactly (no trailing slash) — the Worker
+# rejects requests from any other Origin.
+ALLOWED_ORIGIN = "https://your-domain.com"
+# siteConfig.baseUrl — used to build a link back to the live item page in the
+# notification message (the Worker can't import content/config.ts).
+SITE_BASE_URL = "https://your-domain.com"
+
+# Only used when NOTIFICATION_PROVIDER = "telegram" — your chat/channel id
+# (not secret, but harmless to leave blank when unused).
+TELEGRAM_CHAT_ID = ""
+
+# Only used when NOTIFICATION_PROVIDER = "email" (via Resend).
+NOTIFICATION_EMAIL_TO = ""
+NOTIFICATION_EMAIL_FROM = ""
+
+# Secrets — set with `wrangler secret put <NAME>`. Never put these here.
+#   DISCORD_WEBHOOK_URL   (required if NOTIFICATION_PROVIDER = "discord")
+#   TELEGRAM_BOT_TOKEN    (required if NOTIFICATION_PROVIDER = "telegram")
+#   RESEND_API_KEY        (required if NOTIFICATION_PROVIDER = "email")

@@ -29,6 +29,22 @@ export type UseFiltersResult = {
   activeConditions: Set<Condition>;
   toggleCondition: (c: Condition) => void;
 
+  // Course filter (textbooks) — availableCourses is empty when no item in
+  // the set has a non-empty `course` field. Single-select: null = show all.
+  availableCourses: string[];
+  activeCourse: string | null;
+  setActiveCourse: (course: string | null) => void;
+
+  // Tag chips — availableTags is empty when no item in the set has any
+  // `tags` entries. Multi-select (unlike course): an item can usefully carry
+  // several tags at once, so activeTags is a Set and a visible item must
+  // match ALL of them (AND) rather than any one (OR) — this is the more
+  // useful default for narrowing a large catalogue, matching how
+  // activeConditions/course narrow rather than broaden results.
+  availableTags: string[];
+  activeTags: Set<string>;
+  toggleTag: (tag: string) => void;
+
   // Price slider — null when no item in the set has price tiers
   priceBounds: [number, number] | null;
   rawPriceBounds: [number, number] | null;
@@ -62,6 +78,8 @@ export function useFilters(
   priceFilterConfig: PriceFilterConfig = DEFAULT_CONFIG,
 ): UseFiltersResult {
   const [activeConditions, setActiveConditions] = useState<Set<Condition>>(new Set());
+  const [activeCourse, setActiveCourse] = useState<string | null>(null);
+  const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
   const [showSold, setShowSold] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("date-desc");
@@ -127,6 +145,22 @@ export function useFilters(
     return [...seen].sort((a, b) => CONDITION_ORDER[a] - CONDITION_ORDER[b]);
   }, [items]);
 
+  // Distinct non-empty `course` values present in the item set (textbooks),
+  // alphabetically sorted. Empty when no item in the set has a course.
+  const availableCourses = useMemo<string[]>(() => {
+    const seen = new Set<string>();
+    for (const item of items) if (item.course) seen.add(item.course);
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  // Distinct non-empty `tags` values present in the item set, alphabetically
+  // sorted. Empty when no item in the set has any tags.
+  const availableTags = useMemo<string[]>(() => {
+    const seen = new Set<string>();
+    for (const item of items) for (const tag of item.tags) if (tag) seen.add(tag);
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
   const filteredItems = useMemo<Item[]>(() => {
     const getAmount = (item: Item, fallback: number): number => {
       const tier = resolvedPrices.get(`${item.categorySlug}/${item.itemSlug}`) ?? null;
@@ -137,6 +171,15 @@ export function useFilters(
       if (!showSold && item.status === "sold") return false;
 
       if (activeConditions.size > 0 && !activeConditions.has(item.condition)) return false;
+
+      if (activeCourse !== null && item.course !== activeCourse) return false;
+
+      // AND matching: the item must carry every active tag, not just one.
+      if (activeTags.size > 0) {
+        for (const tag of activeTags) {
+          if (!item.tags.includes(tag)) return false;
+        }
+      }
 
       if (priceRange !== null && priceBounds !== null) {
         const tier = resolvedPrices.get(`${item.categorySlug}/${item.itemSlug}`) ?? null;
@@ -166,7 +209,17 @@ export function useFilters(
           return b.listedDate.localeCompare(a.listedDate);
       }
     });
-  }, [items, showSold, activeConditions, priceRange, priceBounds, sortKey, resolvedPrices]);
+  }, [
+    items,
+    showSold,
+    activeConditions,
+    activeCourse,
+    activeTags,
+    priceRange,
+    priceBounds,
+    sortKey,
+    resolvedPrices,
+  ]);
 
   return {
     availableConditions,
@@ -176,6 +229,18 @@ export function useFilters(
         const next = new Set(prev);
         if (next.has(c)) next.delete(c);
         else next.add(c);
+        return next;
+      }),
+    availableCourses,
+    activeCourse,
+    setActiveCourse,
+    availableTags,
+    activeTags,
+    toggleTag: (tag) =>
+      setActiveTags((prev) => {
+        const next = new Set(prev);
+        if (next.has(tag)) next.delete(tag);
+        else next.add(tag);
         return next;
       }),
     priceBounds,

@@ -157,6 +157,12 @@ export type FilterBarProps = {
   availableConditions: Condition[];
   activeConditions: Set<Condition>;
   onToggleCondition: (c: Condition) => void;
+  availableCourses: string[];
+  activeCourse: string | null;
+  onCourseChange: (course: string | null) => void;
+  availableTags: string[];
+  activeTags: Set<string>;
+  onToggleTag: (tag: string) => void;
   priceBounds: [number, number] | null;
   rawPriceBounds: [number, number] | null;
   priceRange: [number, number] | null;
@@ -173,6 +179,12 @@ export function FilterBar({
   availableConditions,
   activeConditions,
   onToggleCondition,
+  availableCourses,
+  activeCourse,
+  onCourseChange,
+  availableTags,
+  activeTags,
+  onToggleTag,
   priceBounds,
   rawPriceBounds,
   priceRange,
@@ -239,6 +251,64 @@ export function FilterBar({
                 ].join(" ")}
               >
                 {conditionLabels[c]}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Course chips (textbooks) — single-select; clicking the active chip clears it */}
+      {availableCourses.length > 0 && (
+        <div
+          className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0"
+          role="group"
+          aria-label={t.filterCourse}
+        >
+          {availableCourses.map((course) => {
+            const active = activeCourse === course;
+            return (
+              <button
+                key={course}
+                type="button"
+                onClick={() => onCourseChange(active ? null : course)}
+                aria-pressed={active}
+                className={[
+                  "shrink-0 whitespace-nowrap rounded-full border px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50",
+                  active
+                    ? "border-foreground bg-foreground text-background"
+                    : "border-foreground/20 text-foreground/60 hover:border-foreground/40 hover:text-foreground",
+                ].join(" ")}
+              >
+                {course}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Tag chips — multi-select: an item must match every active tag (AND) */}
+      {availableTags.length > 0 && (
+        <div
+          className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0"
+          role="group"
+          aria-label={t.filterTags}
+        >
+          {availableTags.map((tag) => {
+            const active = activeTags.has(tag);
+            return (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => onToggleTag(tag)}
+                aria-pressed={active}
+                className={[
+                  "shrink-0 whitespace-nowrap rounded-full border px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50",
+                  active
+                    ? "border-foreground bg-foreground text-background"
+                    : "border-foreground/20 text-foreground/60 hover:border-foreground/40 hover:text-foreground",
+                ].join(" ")}
+              >
+                #{tag}
               </button>
             );
           })}

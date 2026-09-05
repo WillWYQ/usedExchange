@@ -1,0 +1,14 @@
+# Copy to .dev.vars for local development with `wrangler dev` (gitignored —
+# never committed). Production secrets are set separately with:
+#   wrangler secret put DISCORD_WEBHOOK_URL
+#   wrangler secret put TELEGRAM_BOT_TOKEN
+#   wrangler secret put RESEND_API_KEY
+
+# Required if NOTIFICATION_PROVIDER = "discord" (wrangler.toml)
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/xxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Required if NOTIFICATION_PROVIDER = "telegram" (wrangler.toml)
+# TELEGRAM_BOT_TOKEN=123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Required if NOTIFICATION_PROVIDER = "email" (wrangler.toml)
+# RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
