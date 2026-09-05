@@ -48,6 +48,13 @@ export const CONFIG_DEFAULTS: ConfigDefault[] = [
     ],
   },
   {
+    key: "googleAnalyticsId",
+    afterKey: "speedInsights:",
+    lines: [
+      '    googleAnalyticsId: "", // paste your GA4 Measurement ID, e.g. "G-XXXXXXXXXX" — leave empty to disable',
+    ],
+  },
+  {
     key: "filterPriceBucketAll",
     afterKey: "filterPrice:",
     lines: [

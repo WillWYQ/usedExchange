@@ -149,6 +149,8 @@ Discord 是 CS 学生的主导通讯平台——校园社区、社团服务器�
 
 **状态：** `@vercel/analytics` 和 `@vercel/speed-insights` 包已作为依赖安装，但尚未接入——`app/` 和 `components/` 中没有任何代码导入或渲染它们。注意：站点部署在 GitHub Pages，而 Vercel Analytics 需要 Vercel 托管，因此启用它意味着迁移部署方式或选择其他分析服务。
 
+**另见：** §1.13 Google Analytics（GA4）——已发布的替代方案，无需 Vercel 托管。
+
 ---
 
 ### 1.10 PWA Web App Manifest
@@ -197,6 +199,18 @@ pnpm semester-end
 4. 运行 `pnpm upload-images` 并生成 git 提交消息：`"chore: end-of-semester listing cleanup"`
 
 一条命令即可在 5 分钟内完成整个学期末工作流。
+
+---
+
+### 1.13 Google Analytics（GA4）✅ 已发布
+**工作量：** XS · **价值：** ⭐⭐
+
+卖家将 GA4 测量 ID 粘贴到 `siteConfig.analytics.googleAnalyticsId`；
+`<GoogleAnalytics />`（`@next/third-parties/google`）仅在该字段设置时才会
+在根布局中渲染。之所以选择它作为 Vercel Analytics（§1.9）的替代/补充方案，
+是因为它**不依赖任何托管方式**——可在 GitHub Pages 上运行，而 Vercel
+Analytics 需要 Vercel 托管。可在 Seller Studio 的配置面板（Analytics
+标签页）中编辑，并带有内联格式校验（必须为空或以 `G-` 开头）。
 
 ---
 
@@ -556,6 +570,7 @@ v1 已发布的功能已移至本文档顶部的"v1 已包含"部分。
 | 离线缓存（PWA Service Worker） | 🎓👤 | v2 |
 | 降价跟踪（历史记录） | 🎓👤 | v2 |
 | Vercel Analytics + Speed Insights | 🎓 | v2（依赖已安装但未接入；需要 Vercel 托管） |
+| Google Analytics（GA4） | 🎓👤 | ✅ 已实现 |
 | **卖家工作台（Seller Studio，`pnpm studio`）** | 👤 | ✅ 已实现 |
 | 多卖家支持 | 👤 | v3 / 需要架构重新设计 |
 | 无需重建的实时库存 | 👤 | v3 |

@@ -951,8 +951,9 @@ export const siteConfig: SiteConfig = {
   },
 
   analytics: {
-    vercel:        false,
-    speedInsights: false,
+    vercel:            false,
+    speedInsights:     false,
+    googleAnalyticsId: "", // GA4 测量 ID，例如 "G-XXXXXXXXXX"——留空以禁用；见 TECH_REQUIREMENTS_zh.md §22.14
   },
 
   search: {

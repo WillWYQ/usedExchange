@@ -36,6 +36,13 @@ export const siteConfig: SiteConfig = {
   search: {
     enabled: true,
   },
+
+  // ── Analytics ─────────────────────────────────────────────
+  analytics: {
+    vercel: false,
+    speedInsights: false,
+    googleAnalyticsId: "",
+  },
 };
 `;
 
@@ -52,6 +59,7 @@ export interface SiteConfig {
   soldItemRetentionDays: number;
   contact: { platforms: string[] };
   search: { enabled: boolean };
+  analytics: { vercel: boolean; speedInsights: boolean; googleAnalyticsId?: string };
 }
 `;
 
@@ -82,6 +90,12 @@ describe("readConfig — paths and kinds", () => {
 
   it("marks arrays unsupported", () => {
     expect(byPath("contact.platforms").kind).toBe("unsupported");
+  });
+
+  it("reads the GA4 measurement id field as a string in the Analytics section", () => {
+    const f = byPath("analytics.googleAnalyticsId");
+    expect(f.kind).toBe("string");
+    expect(f.section).toBe("Analytics");
   });
 });
 
@@ -222,6 +236,13 @@ describe("validateConfigValue", () => {
   it("rejects a value of the wrong type", () => {
     expect(() => validateConfigValue(byPath("recentlyListedCount"), "six")).toThrow();
     expect(() => validateConfigValue(byPath("search.enabled"), "yes")).toThrow();
+  });
+
+  it("validates the GA4 measurement id format", () => {
+    const f = byPath("analytics.googleAnalyticsId");
+    expect(() => validateConfigValue(f, "not-a-tag")).toThrow(/googleAnalyticsId/);
+    expect(() => validateConfigValue(f, "G-ABC123")).not.toThrow();
+    expect(() => validateConfigValue(f, "")).not.toThrow();
   });
 });
 
