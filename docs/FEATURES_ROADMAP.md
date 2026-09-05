@@ -1,6 +1,6 @@
 # UsedExchange — Features Roadmap
 
-**Version:** v1.1 · **Date:** 2026-08-02  
+**Version:** v1.5 · **Date:** 2026-09-05  
 **Scope:** Features beyond v1. Not committed — prioritised for planning discussions.
 
 ---
@@ -31,8 +31,8 @@ v1 is **fully implemented and in production** — template version 1.4.2, Phases
 | Sold items archive page 🎓👤 | `/sold` route; all sold items regardless of retention; the grid is capped at `siteConfig.soldArchiveDisplayLimit` (header shows the full count) |
 | Twitter/X + Pinterest rich cards 🎓👤 | `twitter:card: "summary_large_image"` + `product:price:amount` / `product:price:currency` meta tags (`og:type` stays `"website"`) |
 | Textbook-specific fields & category 🎓 | isbn, course, edition, semester_listed; Compare prices link |
-| Non-technical user setup guide 👤 | `SETUP_GUIDE.md` in plain English; only `content/` operations |
-| i18n — multi-language support 🎓👤 | Single-instance multi-locale (runtime LocaleSwitcher); `name_zh`/`description_zh` pattern; `defaultLocale` + `availableLocales` + `siteConfig.i18n.translations.{locale}` (87 UIStrings keys); `useT()` hook; `/translate-items` skill |
+| Non-technical user setup guide 👤 | `SETUP_GUIDE.md` in plain English; core sections cover `content/` item management, plus optional sections (Seller Studio, shipping Worker, Facebook export) that do involve terminal/slash commands |
+| i18n — multi-language support 🎓👤 | Single-instance multi-locale (runtime LocaleSwitcher); `name_zh`/`description_zh` pattern; `defaultLocale` + `availableLocales` + `siteConfig.i18n.translations.{locale}` (109 UIStrings keys); `useT()` hook; `/translate-items` skill |
 | Venmo + Zelle payment (QR or link) 🎓👤 | Venmo: link-based or QR; Zelle: QR-only |
 | Measurement-unit toggle 🎓👤 | `siteConfig.measurementUnit` + per-locale `i18n.localeMeasurementUnits` overrides; `MeasurementUnitToggle` in `SiteHeader` converts item weight/dimension display between metric and imperial |
 | Price filter strategies 🎓 | Optional `ui.priceFilterStrategy` (`"none"` \| `"percentile"` \| `"logarithmic"` \| `"preset-buckets"` \| `"iqr"`) + `ui.priceFilterBuckets`, consumed by FilterBar/ItemGrid with a `?? "none"` runtime default (backward-compatible per the config-compat rule) |
@@ -113,7 +113,7 @@ Client-side only, no rebuild. A dropdown in the filter bar.
 **Effort:** XS · **Value:** ⭐⭐
 
 Show how long an item has been listed on the item card and detail page. Derived from `listed_date`.  
-Examples: "Listed today" · "Listed 3 days ago" · "Listed 2 weeks ago"
+Examples: "Listed today" · "Listed 3 days ago" · "Listed 14 days ago" — `lib/utils/date.ts` only ever returns "Today" or "N days ago" (no week/month rollup), so a long-listed item just shows a larger day count rather than "2 weeks ago" style phrasing.
 
 Adds urgency and transparency without any schema changes.
 
@@ -138,9 +138,9 @@ Reduces buyer uncertainty. One shared `ConditionGuide` component.
 
 Embed `<script type="application/ld+json">` on item detail pages with `@type: "Product"`. Google uses this to show rich snippets in search results (price, availability, rating slot).
 
-Fields available from existing data: `name`, `description`, `image`, `offers.price`, `offers.availability`, `brand`, `color`.
+Fields available from existing data: `name`, `description`, `image`, `offers.price`, `offers.availability`, `brand`. (`color` was previously listed here too, but `buildProductJsonLd` doesn't actually emit it.)
 
-**Also add:** `BreadcrumbList` JSON-LD on category and item pages for breadcrumb rich snippets.
+**Also add:** `BreadcrumbList` JSON-LD on item detail pages for breadcrumb rich snippets. (This was previously described as running on category pages too — it doesn't; the category page has a visual `Breadcrumb` component with no matching JSON-LD.)
 
 **Implementation:** Server-side builders in `lib/utils/jsonld.ts` rendered in the page body via the `JsonLd` component (`components/common/JsonLd.tsx`). Zero new data required.
 
@@ -236,6 +236,26 @@ validation (must be empty or start with `G-`).
 
 ---
 
+### 1.14 EXIF/GPS Metadata Stripping on Upload ✅ Shipped
+**Effort:** XS · **Value:** ⭐⭐⭐
+
+Photos taken on a phone often embed GPS coordinates in EXIF metadata — for a single-seller marketplace where buyers meet the seller in person, an unstripped photo can leak the seller's home address to anyone who inspects the raw file. `pnpm upload-images` re-encodes every new/changed JPEG/PNG/WebP photo via `sharp` (`lib/images/stripMetadata.ts`) before it reaches the CDN, removing all EXIF/IPTC/XMP metadata — including GPS — while auto-rotating so orientation is preserved. GIFs pass through unchanged (no EXIF segment to begin with). The same stripping runs on Seller Studio's "Sync to CDN" path. See `docs/CURRENT_FUNCTIONALITY.md` ("Photo Privacy — EXIF/GPS Stripping").
+
+**Correction (2026-09-05):** the prior revision of this document mistakenly logged this as an unimplemented idea from a 2026-09-04 serverless/backend options exploration. It was already shipped (`50d257e`, 2026-06-11) well before that exploration — the "no backend needed" conclusion was right, but the "not yet built" premise wasn't.
+
+---
+
+### 1.15 Item Flyer PDF Download ✅ Shipped
+**Effort:** S · **Value:** ⭐⭐
+
+A "Download Flyer" button on the item detail page (`components/item/FlyerButton.tsx`) generates a printable, single-item PDF (`lib/pdf/generateItemFlyer.ts` / `flyerContent.ts`) with the item's photo, price, and a QR code linking back to the live listing — useful for posting on a physical bulletin board or handing to someone in person.
+
+On the `cloudflare-r2` provider this needs a one-time `pnpm configure-image-cors` run (see `docs/SCRIPTS.md`): the flyer button fetches image bytes cross-origin to embed them in the PDF, unlike the `<img>` tags used everywhere else on the site, so R2's CORS policy has to explicitly allow it.
+
+Found during the 2026-09-05 documentation audit — a real, shipped feature that had no entry anywhere in this roadmap.
+
+---
+
 ## Tier 2 — Medium-Term Features
 *Meaningful improvements. Each standalone and independently shippable.*
 
@@ -271,7 +291,7 @@ All Aceternity components are dark-mode aware. The seller's chosen background ef
 
 Scripts that run on the seller's machine to reduce manual `item.json` editing. CS students will use these as power tools; non-technical users depend on them to avoid ever opening a JSON file.
 
-**Shipped in v1 (template v1.4.2):** `pnpm create-item` / `pnpm new` (scaffold a 36-field `item.json`), `pnpm create-template` (commented `_template.json`), `pnpm mark-sold` (JSONC-surgical status + `sold_date` update), `pnpm upload-images` (CDN sync), `pnpm fb-export` (§3.4), `pnpm studio` (§3.8), plus template-management tools for downstream sites: `pnpm update-site` (pull a template release without touching `content/`), `pnpm migrate-config` (auto-inject new optional config fields), `pnpm push` (commit + push `content/` and `lib/generated/image-manifest.json`), and `pnpm bump` (interactive version bump + GitHub release).
+**Shipped in v1 (template v1.4.2):** `pnpm create-item` / `pnpm new` (scaffold a 36-field `item.json`), `pnpm create-template` (commented `_template.json`), `pnpm mark-sold` (JSONC-surgical status + `sold_date` update), `pnpm upload-images` (CDN sync), `pnpm configure-image-cors` (one-time R2 CORS setup so the item flyer PDF, §1.15, can fetch photo bytes cross-origin), `pnpm fb-export` (§3.4), `pnpm studio` (§3.8), plus template-management tools for downstream sites: `pnpm update-site` (pull a template release without touching `content/`), `pnpm migrate-config` (auto-inject new optional config fields), `pnpm push` (commit + push `content/` and `lib/generated/image-manifest.json`), and `pnpm bump` (interactive version bump + GitHub release).
 
 The scripts below remain **proposed future additions**:
 
@@ -320,7 +340,7 @@ No backend. Eliminates back-and-forth messages to agree on a viewing time.
 ### 2.8 "Make an Offer" Flow 🎓 👤 ✅ Shipped in v1
 **Effort:** S · **Value:** ⭐⭐
 
-When `price.negotiable: true`, show a "Send Offer" button on the item detail page. A small inline form asks for the buyer's offer amount, then opens the configured contact platform with a pre-filled message: `"I'd like to offer $X for {item.name}."`.
+When `price.negotiable: true` **and** `min_acceptable_offer` is set, show a "Make an Offer" button on the item detail page (this document previously said "Send Offer" and only mentioned the `negotiable` flag — the actual label and gate are as stated here). A small inline form asks for the buyer's offer amount, then opens the configured contact platform with a pre-filled message: `"I'd like to offer $X for {item.name}."`.
 
 No backend required — the form just constructs a deep-link message.
 
@@ -389,9 +409,9 @@ CS students sell many textbooks. First-class textbook support makes the site sig
 **Schema additions** (already proposed in 1.11): `isbn`, `course`, `edition`, `semester_listed`
 
 **UI additions:**
-- On item detail pages where `isbn` is present, show a "Compare prices" button linking to `https://bookfinder.com/search/?isbn={isbn}`
-- Show `course` prominently as a badge (e.g. "For CS101") — buyers search by course, not item name
-- Filter on category page: filter by `course` code when any items have that field
+- On item detail pages where `isbn` is present, show a "Compare prices" button linking to `https://bookfinder.com/search/?isbn={isbn}` — ✅ shipped (`TextbookBadge.tsx`)
+- Show `course` prominently as a badge (e.g. "For CS101") — ✅ shipped
+- Filter on category page by `course` code — **not implemented.** `course` is read on the item detail page and indexed for search, but there is no course filter in `FilterBar` or anywhere on the category page. This remains an open Tier 2 gap, not something already shipped.
 
 **Implementation:** Additive — all new schema fields optional, all new UI conditional on field presence.
 
@@ -400,30 +420,42 @@ CS students sell many textbooks. First-class textbook support makes the site sig
 ### 2.16 Non-Technical User Setup Guide 👤 ✅ Shipped in v1
 **Effort:** S · **Value:** ⭐⭐⭐
 
-A clear, illustrated `SETUP_GUIDE.md` written for the non-CS user who had the project set up by a friend. It covers only the `content/` folder and explains:
+A clear, illustrated `SETUP_GUIDE.md` written for the non-CS user who had the project set up by a friend. Its core sections cover the `content/` folder and explain:
 1. How to add a new item (create folder → add item.json → add photos → run `pnpm upload-images`)
 2. How to mark an item sold (`pnpm mark-sold category/item-name`)
 3. How to change prices (edit the `amount` field in `item.json`)
 4. How to take and name a good cover photo
 5. What to do when something goes wrong (who to call for technical help)
 
-Written with zero code/terminal jargon. Assumes the CS student friend handles any git or Vercel issues.
+**Correction (2026-09-05):** this document previously claimed the guide is "only `content/` operations" with "zero code/terminal jargon" throughout — that's true of the core sections above, but the guide also documents optional setup for site settings (`/setup`), Seller Studio (`pnpm studio`), the shipping Worker (`/setup-shipping`, a Cloudflare Worker deploy), and Facebook export (`pnpm fb-export`), all of which do involve running terminal or slash commands. Assumes the CS student friend handles any git issues.
 
 ---
 
 ## Tier 3 — Larger Features
 *Meaningful scope. Each requires careful architectural planning.*
 
+> **Backend architecture options (2026-09-04 exploration).** Several items below (and in Tier 4) call for some kind of serverless function or self-hosted service. They are not one project — each has a different justification and a different cost:
+>
+> | Category | Covers | Needs persistent storage? | Fits current architecture? |
+> |---|---|---|---|
+> | **Notification relay** | §3.1 Contact Form / Enquiry — forward a buyer's message or offer to the seller (email, Discord, Telegram) | No — stateless relay | ✅ Yes — same shape as `workers/shipping-rate-proxy/`: a small Cloudflare Worker holding secrets via `wrangler secret`, called from the client through an optional `siteConfig.*.proxyUrl`-style field |
+> | **Local pre-upload hardening** | Stripping EXIF/GPS metadata from photos (§1.14) | No | ✅ Yes — and turned out to already be shipped as a `pnpm upload-images` step; no server was ever needed |
+> | **Stateful engagement features** | §3.2 Item View Counter, §4.2 Real-Time Inventory Updates, §4.4 Buyer Reservation System | **Yes** — Cloudflare KV/D1 or similar | ⚠️ These are the only items that actually break the project's "zero database" principle. Each is its own sub-project with its own cost; a decision to accept persistent state should be made deliberately once, before starting any of the three — not implicitly by shipping the first one |
+> | **AI workflow hosting** | Running `/update-items` / `/translate-items` as a hosted function instead of a local Claude Code session | No | ❌ Not recommended today — Seller Studio plus the local skills already cover this well; only worth revisiting if a future seller can't or won't run Claude Code locally |
+>
+> **Current recommendation:** the Contact Form (§3.1) is the strongest next candidate if a backend is wanted — it reuses the already-proven Worker-proxy pattern, needs no persistent storage, and closes a real gap (the seller currently gets zero in-app notification when a buyer contacts them or makes an offer).
+
 ### 3.1 Contact Form / Enquiry System 👤
 **Effort:** L · **Value:** ⭐⭐⭐
 
-A serverless function (Vercel Function) that accepts a buyer's name, message, and item reference, then emails or notifies the seller. Eliminates the need to expose any contact details publicly.
+A serverless function that accepts a buyer's name, message, and item reference, then notifies the seller (email, Discord, or Telegram). Eliminates the need to expose any contact details publicly, and gives the seller an in-app notification instead of relying entirely on external chat apps.
 
 **Architecture notes:**
+- Recommended shape: a Cloudflare Worker following the same pattern as `workers/shipping-rate-proxy/` (see the architecture note above) — a stateless relay, secrets held only via `wrangler secret`, called from the client through an optional `siteConfig.notifications.proxyUrl`-style field
 - The `ContactSection` component already has a reserved slot for this
-- Email delivery: Resend or SendGrid (both have generous free tiers)
+- Notification delivery: Resend/SendGrid for email, or a Discord/Telegram webhook (both have generous free tiers)
 - Rate limiting required to prevent spam
-- CAPTCHA or honeypot field recommended
+- CAPTCHA (e.g. Cloudflare Turnstile) or honeypot field recommended
 
 ---
 
@@ -452,11 +484,11 @@ Builds on the PWA manifest (Tier 1.10).
 
 0. **Export history** *(runs 2+ only)* — skip already-exported items, view previous runs, or export everything (see Smart Export History below)
 1. **Item selection** — all items, a single category, or a manually picked subset (comma list or `1-4` range notation)
-2. **Price tier** — a 4-option menu: `[1]` lowest price across all tiers (default; recommended), `[2]` highest price across all tiers, `[3]` local pickup price (miles-limited tiers only), `[4]` shipping price (open-ended tiers only). Options 3 and 4 are shown only when such tiers exist in the selection; items with no matching tier fall back to lowest / highest.
+2. **Price tier** — a 5-option menu: `[1]` lowest price across all tiers (default; recommended), `[2]` highest price across all tiers, `[3]` average of lowest and highest, `[4]` local pickup price (miles-limited tiers only), `[5]` shipping price (open-ended tiers only). Options 4 and 5 are shown only when such tiers exist in the selection; items with no matching tier fall back to lowest / highest. (Corrected 2026-09-05 — this previously described only 4 options, missing the "average" choice in `scripts/export-facebook.ts`.)
 
 CSV writing and photo-folder copying then happen automatically (there is no interactive "Output" step): writes `exports/facebook-marketplace.csv` (numbered `facebook-marketplace-<N>.csv` files if > 50 items — FB's per-upload limit) and copies local photos to `exports/facebook-marketplace-photos/NNN_category-item/` (row-numbered) for manual upload. Before exporting, the CLI warns about items without CDN photos and suggests running `pnpm upload-images` first.
 
-**Smart category mapping** (`scripts/lib/fbCategoryMap.ts`): 40+ keyword rules (48 at present) match item tags, name, brand, and model to FB's `"Top Level//Sub Level//Leaf Level"` category format. Covers GPU/CPU/RAM, textbooks, furniture, audio, phones, gaming, clothing, and more. Falls back to the category slug when no rule matches (FB will prompt the seller to choose manually).
+**Smart category mapping** (`scripts/lib/fbCategoryMap.ts`): 40+ keyword rules (49 at present) match item tags, name, brand, and model to FB's `"Top Level//Sub Level//Leaf Level"` category format. Covers GPU/CPU/RAM, textbooks, furniture, audio, phones, gaming, clothing, and more. Falls back to the category slug when no rule matches (FB will prompt the seller to choose manually).
 
 **Field mapping:**
 
@@ -519,6 +551,7 @@ Already in the Extensibility Register.
 - **Edit form** — schema-driven grouped fields; sends changed fields only; comment-preserving JSONC writes so seller formatting and `// options:` comments survive (`reserved_for` is never read or written)
 - **Item-creation dialog** — category picker + kebab-case name, scaffolded from the 36-field template
 - **Git publish pane** — uncommitted-change count, commit-message input, and push. Stages **only** `content/` and `lib/generated/image-manifest.json` (never `git add -A`, so `.env.local` with CDN credentials can never ride along), mirroring `pnpm push`
+- **PDF catalog export** — `ExportPdfDialog` generates a multi-page PDF catalog of the current listing set: cover page, table of contents, per-category pricing summaries, and a per-item QR code linking to that item's contact info (`scripts/lib/pdfCatalog/`). Not previously documented anywhere in this roadmap — added during the 2026-09-05 audit. Distinct from the single-item flyer download in §1.15.
 
 The non-technical user's workflow is entirely GUI-driven: `pnpm studio` (the one terminal command), then fill in forms, drag photos, click Sync and Publish. No JSON, no git commands visible to them.
 
@@ -599,11 +632,13 @@ Features shipped in v1 have been moved to the "Shipped in v1" section at the top
 | Feature | Users | Status |
 |---|---|---|
 | PWA manifest (installable) | 🎓👤 | v1.1 |
+| EXIF/GPS metadata stripping (`pnpm upload-images`) | 🎓👤 | ✅ Implemented |
 | Semester-end batch actions (`pnpm semester-end`) | 🎓 | v1.1 |
 | Pickup scheduling link (Calendly/Cal.com field) | 🎓👤 | v1.1 |
 | Tag filter page (`/tags/{tag}`) | 🎓👤 | v1.1 |
 | Distance unit toggle (mi ↔ km) | 🎓 | v1.1 |
 | Stripe payment link button ("Pay Deposit") | 🎓👤 | ✅ Implemented |
+| Item flyer PDF download (`FlyerButton`, §1.15) | 🎓👤 | ✅ Implemented |
 | Facebook Marketplace export (`pnpm fb-export`) | 🎓 | ✅ Implemented |
 | Cross-listing export (Craigslist / OfferUp / eBay) | 🎓 | v2 |
 | Bundle deal multi-item contact | 🎓👤 | v2 |

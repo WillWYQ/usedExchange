@@ -83,8 +83,8 @@ Checklist for every new config field:
 | docs/DESIGN.md / docs/DESIGN_zh.md | v0.10.1 | 2026-09-04 |
 | docs/TECH_REQUIREMENTS.md / docs/TECH_REQUIREMENTS_zh.md | v0.10.1 | 2026-09-04 |
 | docs/IMPLEMENTATION_PLAN.md / docs/IMPLEMENTATION_PLAN_zh.md | **v1.7** | 2026-08-02 |
-| docs/FEATURES_ROADMAP.md / docs/FEATURES_ROADMAP_zh.md | v1.2 | 2026-09-04 |
-| docs/CURRENT_FUNCTIONALITY.md / docs/CURRENT_FUNCTIONALITY_zh.md | v1.2 | 2026-09-04 |
+| docs/FEATURES_ROADMAP.md / docs/FEATURES_ROADMAP_zh.md | v1.5 | 2026-09-05 |
+| docs/CURRENT_FUNCTIONALITY.md / docs/CURRENT_FUNCTIONALITY_zh.md | v1.3 | 2026-09-05 |
 | docs/ARCHITECTURE.md / docs/ARCHITECTURE_zh.md | v1.2 | 2026-08-02 |
 | docs/setup_instruction.md / docs/setup_instruction_zh.md | v1.1 | 2026-08-02 |
 | docs/SCRIPTS.md / docs/SCRIPTS_zh.md | v1.0 | 2026-08-02 |

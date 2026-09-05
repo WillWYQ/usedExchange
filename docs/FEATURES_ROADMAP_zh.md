@@ -1,6 +1,6 @@
 # UsedExchange — 功能路线图
 
-**版本：** v1.1 · **日期：** 2026-08-02  
+**版本：** v1.5 · **日期：** 2026-09-05  
 **范围：** v1 之后的功能。尚未承诺——优先级供规划讨论参考。
 
 ---
@@ -31,8 +31,8 @@ v1 已**全部实现并投入生产**——模板版本 1.4.2，Phase 0–18 全
 | 已售物品档案页 🎓👤 | `/sold` 路由；不受保留期限制的所有已售物品；网格以 `siteConfig.soldArchiveDisplayLimit` 为上限（页头显示完整数量） |
 | Twitter/X + Pinterest 富卡片 🎓👤 | `twitter:card: "summary_large_image"` + `product:price:amount` / `product:price:currency` 元标签（`og:type` 保持 `"website"`） |
 | 教材专属字段和分类 🎓 | isbn、course、edition、semester_listed；比价链接 |
-| 非技术用户设置指南 👤 | `SETUP_GUIDE.md`，纯英文；仅涉及 `content/` 操作 |
-| 国际化——多语言支持 🎓👤 | 单次部署多语区（运行时 LocaleSwitcher）；`name_zh`/`description_zh` 模式；`defaultLocale` + `availableLocales` + `siteConfig.i18n.translations.{locale}`（87 个 UIStrings 键）；`useT()` hook；`/translate-items` 技能 |
+| 非技术用户设置指南 👤 | `SETUP_GUIDE.md`，纯英文；核心章节涉及 `content/` 物品管理，另有涉及终端/斜杠命令的可选章节（Seller Studio、运费 Worker、Facebook 导出） |
+| 国际化——多语言支持 🎓👤 | 单次部署多语区（运行时 LocaleSwitcher）；`name_zh`/`description_zh` 模式；`defaultLocale` + `availableLocales` + `siteConfig.i18n.translations.{locale}`（109 个 UIStrings 键）；`useT()` hook；`/translate-items` 技能 |
 | Venmo + Zelle 支付（二维码或链接）🎓👤 | Venmo：链接式或二维码；Zelle：仅二维码 |
 | 计量单位切换 🎓👤 | `siteConfig.measurementUnit` + 按语区覆盖的 `i18n.localeMeasurementUnits`；`SiteHeader` 中的 `MeasurementUnitToggle` 将物品重量/尺寸显示在公制与英制之间转换 |
 | 价格筛选策略 🎓 | 可选的 `ui.priceFilterStrategy`（`"none"` \| `"percentile"` \| `"logarithmic"` \| `"preset-buckets"` \| `"iqr"`）+ `ui.priceFilterBuckets`，由 FilterBar/ItemGrid 以 `?? "none"` 运行时默认值消费（遵循配置向后兼容规则） |
@@ -106,7 +106,7 @@ Discord 是 CS 学生的主导通讯平台——校园社区、社团服务器�
 **工作量：** XS · **价值：** ⭐⭐
 
 在物品卡片和详情页显示物品已上架多久。从 `listed_date` 推算。  
-示例："今天上架" · "3 天前上架" · "2 周前上架"
+示例："今天上架" · "3 天前上架" · "14 天前上架"——`lib/utils/date.ts` 只会返回"今天"或"N 天前"（没有按周/月归并的逻辑），所以上架很久的物品只会显示更大的天数，不会出现"2 周前"这种措辞。
 
 无需任何 schema 变更即可增加紧迫感和透明度。
 
@@ -129,9 +129,9 @@ Discord 是 CS 学生的主导通讯平台——校园社区、社团服务器�
 ### 1.7 JSON-LD 结构化数据（Product Schema）✅ v1 已包含
 **工作量：** S · **价值：** ⭐⭐⭐
 
-在物品详情页嵌入 `<script type="application/ld+json">`，类型为 `@type: "Product"`。Google 使用此数据在搜索结果中显示富摘要。同时添加 BreadcrumbList JSON-LD。
+在物品详情页嵌入 `<script type="application/ld+json">`，类型为 `@type: "Product"`。Google 使用此数据在搜索结果中显示富摘要。同时**仅在物品详情页**添加 BreadcrumbList JSON-LD（分类页只有一个视觉上的 `Breadcrumb` 组件，没有对应的 JSON-LD；本文档之前的表述容易让人误以为分类页也有）。
 
-**实现方式：** 由 `lib/utils/jsonld.ts` 中的服务端构建器生成，通过 `JsonLd` 组件（`components/common/JsonLd.tsx`）在页面主体中渲染。无需任何新数据。
+**实现方式：** 由 `lib/utils/jsonld.ts` 中的服务端构建器生成，通过 `JsonLd` 组件（`components/common/JsonLd.tsx`）在页面主体中渲染。无需任何新数据。`buildProductJsonLd` 实际不会输出 `color` 字段。
 
 ---
 
@@ -214,6 +214,26 @@ Analytics 需要 Vercel 托管。可在 Seller Studio 的配置面板（Analytic
 
 ---
 
+### 1.14 上传时剥离 EXIF/GPS 元数据 ✅ 已发布
+**工作量：** XS · **价值：** ⭐⭐⭐
+
+手机拍摄的照片通常在 EXIF 元数据中嵌入 GPS 坐标——对于卖家需要与买家线下见面的单卖家平台来说，未剥离的照片可能会向任何检查原始文件的人泄露卖家的家庭住址。`pnpm upload-images` 会在每张新增/变更的 JPEG/PNG/WebP 照片上传到 CDN 前，通过 `sharp`（`lib/images/stripMetadata.ts`）重新编码，移除所有 EXIF/IPTC/XMP 元数据（包括 GPS），同时自动旋转以保留正确朝向。GIF 原样通过（本身就没有 EXIF 段）。Seller Studio 的"同步到 CDN"走的是同一套剥离逻辑。详见 `docs/CURRENT_FUNCTIONALITY_zh.md`（"照片隐私——EXIF/GPS 剥离"）。
+
+**更正（2026-09-05）：** 本文档上一版误将此功能记为 2026-09-04 那次 serverless/后端选项探讨中尚未实现的构想。实际上它早在那次探讨之前就已上线（`50d257e`，2026-06-11）——"不需要后端"这个结论是对的，但"尚未实现"这个前提是错的。
+
+---
+
+### 1.15 物品传单 PDF 下载 ✅ 已发布
+**工作量：** S · **价值：** ⭐⭐
+
+物品详情页上的"下载传单"按钮（`components/item/FlyerButton.tsx`）会生成一份可打印的单品 PDF（`lib/pdf/generateItemFlyer.ts` / `flyerContent.ts`），内含物品照片、价格，以及一个链回该商品实时页面的二维码——适合贴在实体布告栏上，或当面递给别人。
+
+在 `cloudflare-r2` provider 下，这需要先跑一次性的 `pnpm configure-image-cors`（见 `docs/SCRIPTS_zh.md`）：传单按钮要跨域抓取图片字节以嵌入 PDF，跟站点其他地方用的 `<img>` 标签不同，所以需要 R2 显式允许这种跨域请求。
+
+在 2026-09-05 的文档核查中发现——一个真实已上线、但此前完全没被写进路线图的功能。
+
+---
+
 ## Tier 2 — 中期功能
 *有意义的改进。每项独立且可独立发布。*
 
@@ -247,7 +267,7 @@ Analytics 需要 Vercel 托管。可在 Seller Studio 的配置面板（Analytic
 
 减少手动编辑 `item.json` 的脚本。CS 学生将其作为高效工具使用；非技术用户依赖这些工具避免直接打开 JSON 文件。
 
-**v1 已包含（模板 v1.4.2）：** `pnpm create-item` / `pnpm new`（生成 36 字段的 `item.json` 脚手架）、`pnpm create-template`（带注释的 `_template.json`）、`pnpm mark-sold`（以 JSONC 精确编辑更新状态 + `sold_date`）、`pnpm upload-images`（CDN 同步）、`pnpm fb-export`（§3.4）、`pnpm studio`（§3.8），以及下游站点的模板管理工具：`pnpm update-site`（拉取模板版本且不触碰 `content/`）、`pnpm migrate-config`（自动注入新的可选配置字段）、`pnpm push`（提交 + 推送 `content/` 和 `lib/generated/image-manifest.json`）、`pnpm bump`（交互式版本升级 + GitHub 发布）。
+**v1 已包含（模板 v1.4.2）：** `pnpm create-item` / `pnpm new`（生成 36 字段的 `item.json` 脚手架）、`pnpm create-template`（带注释的 `_template.json`）、`pnpm mark-sold`（以 JSONC 精确编辑更新状态 + `sold_date`）、`pnpm upload-images`（CDN 同步）、`pnpm configure-image-cors`（一次性 R2 CORS 设置，让物品传单 PDF §1.15 能跨域抓取照片字节）、`pnpm fb-export`（§3.4）、`pnpm studio`（§3.8），以及下游站点的模板管理工具：`pnpm update-site`（拉取模板版本且不触碰 `content/`）、`pnpm migrate-config`（自动注入新的可选配置字段）、`pnpm push`（提交 + 推送 `content/` 和 `lib/generated/image-manifest.json`）、`pnpm bump`（交互式版本升级 + GitHub 发布）。
 
 下表中的脚本仍为**提议的未来新增功能**：
 
@@ -294,7 +314,7 @@ Analytics 需要 Vercel 托管。可在 Seller Studio 的配置面板（Analytic
 ### 2.8 "出价"流程 🎓 👤 ✅ v1 已包含
 **工作量：** S · **价值：** ⭐⭐
 
-`price.negotiable: true` 时，在物品详情页显示"发送出价"按钮。小型内联表单询问买家出价金额，然后打开配置的联系平台并预填消息："我愿意出 $X 购买 {物品名称}。"
+`price.negotiable: true` **且** `min_acceptable_offer` 已设置时，在物品详情页显示"出价"（Make an Offer）按钮（本文档之前写的是"发送出价"按钮、且只提到 `negotiable` 这一个条件——实际按钮文案和门槛条件如此处所述）。小型内联表单询问买家出价金额，然后打开配置的联系平台并预填消息："我愿意出 $X 购买 {物品名称}。"
 
 无需后端——表单只是构造一条深链消息。
 
@@ -355,9 +375,9 @@ CS 学生出售大量教材。教材的一流支持使站点对该用户群体�
 **Schema 扩展：** `isbn`、`course`、`edition`、`semester_listed`
 
 **UI 扩展：**
-- 存在 `isbn` 时显示"比价"按钮，链接到 `bookfinder.com/search/?isbn={isbn}`
-- `course` 显示为徽章（如"适用于 CS101"）——买家按课程而非物品名称搜索
-- 分类页筛选：存在该字段时按 `course` 代码筛选
+- 存在 `isbn` 时显示"比价"按钮，链接到 `bookfinder.com/search/?isbn={isbn}`——✅ 已上线（`TextbookBadge.tsx`）
+- `course` 显示为徽章（如"适用于 CS101"）——✅ 已上线
+- 分类页按 `course` 代码筛选——**未实现**。`course` 目前只在物品详情页读取、并被收录进搜索索引，`FilterBar` 或分类页上并没有课程筛选功能。这仍是一个待补的 Tier 2 缺口，不是已上线的功能。
 
 **实现方式：** 纯增量——所有新 schema 字段均为可选，所有新 UI 均以字段存在为前提。
 
@@ -366,30 +386,42 @@ CS 学生出售大量教材。教材的一流支持使站点对该用户群体�
 ### 2.16 非技术用户设置指南 👤 ✅ v1 已包含
 **工作量：** S · **价值：** ⭐⭐⭐
 
-清晰、图文并茂的 `SETUP_GUIDE.md`，为由朋友帮助设置的非 CS 用户编写。仅涉及 `content/` 文件夹，内容包括：
+清晰、图文并茂的 `SETUP_GUIDE.md`，为由朋友帮助设置的非 CS 用户编写。核心章节涉及 `content/` 文件夹，内容包括：
 1. 如何添加新物品（创建文件夹 → 添加 item.json → 添加照片 → 运行 `pnpm upload-images`）
 2. 如何将物品标记为已售（`pnpm mark-sold category/item-name`）
 3. 如何修改价格（编辑 `item.json` 中的 `amount` 字段）
 4. 如何拍摄并命名一张好的封面照片
 5. 出问题时怎么办（技术问题该找谁）
 
-全文不使用任何代码/终端术语，假定 CS 学生朋友负责处理所有 git 或部署问题。
+**更正（2026-09-05）：** 本文档之前称该指南"仅涉及 `content/` 操作"、"全文不使用任何代码/终端术语"——这对上面的核心章节成立，但指南其实还包含站点设置（`/setup`）、Seller Studio（`pnpm studio`）、运费 Worker（`/setup-shipping`，需要部署一个 Cloudflare Worker）、Facebook 导出（`pnpm fb-export`）这几个可选章节，它们都涉及运行终端或斜杠命令。假定 CS 学生朋友负责处理 git 相关问题。
 
 ---
 
 ## Tier 3 — 较大功能
 *有意义的范围。每项需要仔细的架构规划。*
 
+> **后端架构选项（2026-09-04 探讨）。** 下面（及 Tier 4）的几项功能都需要某种无服务器函数或自建服务。它们不是同一个项目——每一项的动机和代价都不同：
+>
+> | 类别 | 涉及 | 是否需要持久存储？ | 是否符合现有架构？ |
+> |---|---|---|---|
+> | **通知转发** | §3.1 联系表单/询问系统——将买家的消息或出价转发给卖家（邮件、Discord、Telegram） | 否——无状态转发 | ✅ 符合——与 `workers/shipping-rate-proxy/` 同构：一个通过 `wrangler secret` 持有密钥的小型 Cloudflare Worker，前端通过可选的 `siteConfig.*.proxyUrl` 风格字段调用 |
+> | **本地上传前加固** | 剥离照片 EXIF/GPS 元数据（§1.14） | 否 | ✅ 符合——而且发现它其实早已作为 `pnpm upload-images` 的一个步骤上线；从来就不需要服务器 |
+> | **需要状态的互动功能** | §3.2 物品浏览计数器、§4.2 无需重建的实时库存更新、§4.4 买家预订系统 | **是**——需要 Cloudflare KV/D1 之类 | ⚠️ 这是唯一真正打破本项目"零数据库"原则的类别。三项各自独立、各有代价；应该在开始其中任何一项之前，就是否接受持久状态做一次明确的、一次性的架构决策——而不是在实现第一项时被动地默认接受 |
+> | **AI 工作流上云** | 将 `/update-items`、`/translate-items` 做成托管函数，而不是本地 Claude Code 会话 | 否 | ❌ 目前不推荐——Seller Studio 加本地技能已经很好地覆盖了这个场景；只有在未来某个卖家无法/不愿在本地运行 Claude Code 时才值得重新考虑 |
+>
+> **当前建议：** 如果要引入后端，联系表单（§3.1）是最值得优先做的候选——它复用已验证过的 Worker 代理模式、不需要持久存储，并且填补了一个真实存在的缺口（卖家目前在买家联系或出价时完全收不到任何站内通知）。
+
 ### 3.1 联系表单/询问系统 👤
 **工作量：** L · **价值：** ⭐⭐⭐
 
-接受买家姓名、消息和物品引用的无服务器函数，然后通过邮件或通知联系卖家。消除了公开暴露任何联系方式的需要。
+接受买家姓名、消息和物品引用的无服务器函数，然后通知卖家（邮件、Discord 或 Telegram）。消除了公开暴露任何联系方式的需要，也让卖家获得站内通知，而不必完全依赖外部聊天 App。
 
 **架构要点：**
+- 推荐形态：采用与 `workers/shipping-rate-proxy/` 相同的模式（见上方架构说明）的 Cloudflare Worker——无状态转发，密钥仅通过 `wrangler secret` 持有，前端通过可选的 `siteConfig.notifications.proxyUrl` 风格字段调用
 - `ContactSection` 组件已为此预留了插槽
-- 邮件投递：Resend 或 SendGrid（两者均有慷慨的免费额度）
+- 通知投递：邮件用 Resend/SendGrid，或 Discord/Telegram webhook（均有慷慨的免费额度）
 - 需要限速（rate limiting）以防垃圾信息
-- 建议使用 CAPTCHA 或蜜罐字段
+- 建议使用 CAPTCHA（如 Cloudflare Turnstile）或蜜罐字段
 
 ---
 
@@ -416,11 +448,11 @@ CS 学生出售大量教材。教材的一流支持使站点对该用户群体�
 
 0. **导出历史** *（仅第 2 次及以后运行时出现）* — 跳过已导出物品、查看历次运行记录，或全部导出（见下方"智能导出历史"）
 1. **物品选择** — 全部物品、单个分类，或手动挑选子集（逗号列表或 `1-4` 区间写法）
-2. **价格档位** — 4 选项菜单：`[1]` 所有档位中的最低价（默认；推荐）、`[2]` 所有档位中的最高价、`[3]` 本地自取价（仅限有里程限制的档位）、`[4]` 运送价（仅限开放式档位）。选项 3 和 4 仅当所选物品中存在相应档位时才显示；无匹配档位的物品分别回退到最低价/最高价。
+2. **价格档位** — 5 选项菜单：`[1]` 所有档位中的最低价（默认；推荐）、`[2]` 所有档位中的最高价、`[3]` 最低价与最高价的平均值、`[4]` 本地自取价（仅限有里程限制的档位）、`[5]` 运送价（仅限开放式档位）。选项 4 和 5 仅当所选物品中存在相应档位时才显示；无匹配档位的物品分别回退到最低价/最高价。（2026-09-05 更正——本文档之前只写了 4 个选项，漏掉了 `scripts/export-facebook.ts` 里的"平均值"选项。）
 
 随后 CSV 写入和照片文件夹复制自动完成（没有交互式的"输出"步骤）：写入 `exports/facebook-marketplace.csv`（超过 50 条时自动分批输出编号文件 `facebook-marketplace-<N>.csv`——FB 每次上传上限），并将本地照片复制到 `exports/facebook-marketplace-photos/NNN_category-item/`（按行号命名）供手动上传。导出前，CLI 会警告没有 CDN 照片的物品，并建议先运行 `pnpm upload-images`。
 
-**智能分类映射**（`scripts/lib/fbCategoryMap.ts`）：40+ 条关键词规则（目前 48 条）将物品标签、名称、品牌、型号匹配到 FB 的 `"顶级//子级//叶级"` 分类格式。覆盖 GPU/CPU/RAM、教材、家具、音频、手机、游戏、服装等品类。无匹配时回退到分类 slug（FB 将提示卖家手动选择）。
+**智能分类映射**（`scripts/lib/fbCategoryMap.ts`）：40+ 条关键词规则（目前 49 条）将物品标签、名称、品牌、型号匹配到 FB 的 `"顶级//子级//叶级"` 分类格式。覆盖 GPU/CPU/RAM、教材、家具、音频、手机、游戏、服装等品类。无匹配时回退到分类 slug（FB 将提示卖家手动选择）。
 
 **字段映射：**
 
@@ -483,6 +515,7 @@ CS 学生出售大量教材。教材的一流支持使站点对该用户群体�
 - **编辑表单** — schema 驱动的分组字段；仅发送变更字段；保留注释的 JSONC 写入，卖家格式和 `// options:` 注释不会丢失（`reserved_for` 从不被读取或写入）
 - **物品创建对话框** — 分类选择 + kebab-case 名称，基于 36 字段模板生成
 - **Git 发布面板** — 未提交变更计数、提交消息输入、推送。**仅**暂存 `content/` 和 `lib/generated/image-manifest.json`（绝不使用 `git add -A`，因此含 CDN 凭据的 `.env.local` 永远不会被误提交），与 `pnpm push` 一致
+- **PDF 商品目录导出** — `ExportPdfDialog` 生成当前全部在售商品的多页 PDF 目录：封面、目录页、按分类汇总的价格摘要，以及每件商品链接到联系方式的二维码（`scripts/lib/pdfCatalog/`）。此前完全没被写进路线图——2026-09-05 文档核查时补上。与 §1.15 的单品传单下载是两个不同的功能。
 
 非技术用户的工作流完全由 GUI 驱动：`pnpm studio`（唯一一条终端命令），然后填表单、拖照片、点击同步和发布。对他们而言，没有 JSON，也没有 git 命令。
 
@@ -557,11 +590,13 @@ v1 已发布的功能已移至本文档顶部的"v1 已包含"部分。
 | 功能 | 用户 | 状态 |
 |---|---|---|
 | PWA manifest（可安装） | 🎓👤 | v1.1 |
+| 上传时剥离 EXIF/GPS 元数据（`pnpm upload-images`） | 🎓👤 | ✅ 已实现 |
 | 学期末批量操作（`pnpm semester-end`） | 🎓 | v1.1 |
 | 取货预约链接（Calendly/Cal.com 字段） | 🎓👤 | v1.1 |
 | 标签筛选页（`/tags/{tag}`） | 🎓👤 | v1.1 |
 | 距离单位切换（英里 ↔ 公里） | 🎓 | v1.1 |
 | Stripe 支付链接按钮（"支付定金"） | 🎓👤 | ✅ 已实现 |
+| 物品传单 PDF 下载（`FlyerButton`，§1.15） | 🎓👤 | ✅ 已实现 |
 | Facebook Marketplace 导出（`pnpm fb-export`） | 🎓 | ✅ 已实现 |
 | 跨平台导出（Craigslist / OfferUp / eBay） | 🎓 | v2 |
 | 捆绑优惠多物品联系 | 🎓👤 | v2 |

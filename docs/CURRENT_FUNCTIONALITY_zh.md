@@ -1,7 +1,7 @@
-# UsedExchange — 当前功能（v1.1）
+# UsedExchange — 当前功能（v1.3）
 
-**基于：** DESIGN.md v0.10.0 · TECH_REQUIREMENTS.md v0.10.0 · IMPLEMENTATION_PLAN.md v1.7  
-**日期：** 2026-08-02  
+**基于：** DESIGN.md v0.10.1 · TECH_REQUIREMENTS.md v0.10.1 · IMPLEMENTATION_PLAN.md v1.7  
+**日期：** 2026-09-05  
 **状态：** 已实现——本文档描述全部线上功能：v1 核心 + Phase 16–18（运费估算、Facebook Marketplace 导出、卖家工作台）。
 
 ---
@@ -201,6 +201,9 @@ content/
 
 ### 关于页（`/about`）
 项目介绍（`ProjectIntro`）的固定页面，拥有独立的 SEO 元数据。卖家配置店铺之前，`/` 显示的就是这份介绍而非商品目录；配置完成后 `/` 变为目录，`/about` 让介绍仍可访问。只有店铺配置完成后，页头才会出现"关于"链接。
+
+### 发布历史页（`/releases`）
+从 `ProjectIntro` 底部的"发布历史"卡片链接过去（因此可从 `/about`，或店铺配置完成前的 `/` 到达）。`lib/github/releases.ts` 在构建时通过 GitHub REST API 拉取**上游模板仓库**（`WillWYQ/usedExchange`，硬编码——不是下游卖家自己的 fork）的公开发布列表，过滤掉草稿版本，按时间顺序渲染成时间线（`ReleaseTimeline`），每条记录链接到对应的 GitHub release 页面。由于它始终指向上游仓库而非当前部署的 fork，这个页面的作用是帮卖家判断是否值得运行 `pnpm update-site`（见 UPDATE_GUIDE.md），而不是展示自己的提交历史。如果 GitHub API 不可达或触发限流，拉取会静默失败——构建仍会成功，页面改为显示一条空状态提示。
 
 ### 404 页面
 站点头部 + "页面未找到" + 返回首页链接。

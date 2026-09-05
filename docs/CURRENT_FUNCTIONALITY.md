@@ -1,7 +1,7 @@
-# UsedExchange — Current Functionality (v1.1)
+# UsedExchange — Current Functionality (v1.3)
 
-**Based on:** DESIGN.md v0.10.0 · TECH_REQUIREMENTS.md v0.10.0 · IMPLEMENTATION_PLAN.md v1.7  
-**Date:** 2026-08-02  
+**Based on:** DESIGN.md v0.10.1 · TECH_REQUIREMENTS.md v0.10.1 · IMPLEMENTATION_PLAN.md v1.7  
+**Date:** 2026-09-05  
 **Status:** Implemented — this document describes all live functionality: core v1 plus Phases 16–18 (shipping estimator, Facebook Marketplace export, Seller Studio).
 
 ---
@@ -201,6 +201,9 @@ Active (non-sold) items grouped into three tabs: **since your last visit** (trac
 
 ### About Page (`/about`)
 Permanent home for the project introduction (`ProjectIntro`) with its own SEO metadata. Before the seller configures the store, `/` shows this same introduction instead of the catalog; once configured, `/` becomes the catalog and `/about` keeps the introduction reachable. The About link appears in the header only once the store is configured.
+
+### Release History Page (`/releases`)
+Linked from the "Release history" card at the bottom of `ProjectIntro` (so reachable from `/about`, or from `/` before the store is configured). `lib/github/releases.ts` fetches the public release list of the **upstream template repository** (`WillWYQ/usedExchange`, hardcoded — not the downstream seller's own fork) from the GitHub REST API at build time, filters out drafts, and renders them oldest-to-newest-reversed as a timeline (`ReleaseTimeline`) with each entry linking out to its GitHub release page. Since it always points at the upstream repo regardless of which fork is deployed, its purpose is to let a seller judge whether running `pnpm update-site` (see UPDATE_GUIDE.md) is worth doing, not to show their own commit history. If the GitHub API is unreachable or rate-limited, the fetch fails soft — the build still succeeds and the page shows an empty-state message instead.
 
 ### 404 Page
 Site header + "Page not found" + link home.
