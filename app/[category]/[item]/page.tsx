@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { siteConfig } from "@/content/config";
-import { loadCategories, loadItemsByCategory } from "@/lib/content/loader";
+import { loadCategories, loadItemsByCategory, loadTagIndex } from "@/lib/content/loader";
 import { isValidSlug, slugify } from "@/lib/utils/slug";
 import { resolveItemPrice } from "@/lib/utils/pricing";
 import { formatAbsoluteDate } from "@/lib/utils/date";
@@ -32,13 +32,18 @@ import { JsonLd } from "@/components/common/JsonLd";
 
 // Memoised per request so generateMetadata and the page share one parse pass.
 const getPageData = cache(async (category: string, item: string) => {
-  const [categories, items] = await Promise.all([
+  const [categories, items, tagIndex] = await Promise.all([
     loadCategories(),
     loadItemsByCategory(category),
+    // The authoritative set of tag slugs that actually got a /tags/[tag]
+    // route emitted (loadTagIndex drops a slug when two differently-spelled
+    // tags collide on it, in addition to the plain isValidSlug check) — see
+    // the tag-rendering block below for why isValidSlug alone isn't enough.
+    loadTagIndex(),
   ]);
   const categoryMeta = categories.find((c) => c.slug === category) ?? null;
   const itemData = items.find((i) => i.itemSlug === item) ?? null;
-  return { categoryMeta, itemData };
+  return { categoryMeta, itemData, tagIndex };
 });
 
 export async function generateStaticParams() {
@@ -129,7 +134,7 @@ export default async function ItemDetailPage({
   params: Promise<{ category: string; item: string }>;
 }) {
   const { category, item } = await params;
-  const { categoryMeta, itemData } = await getPageData(category, item);
+  const { categoryMeta, itemData, tagIndex } = await getPageData(category, item);
 
   if (!itemData) notFound();
 
@@ -333,7 +338,12 @@ export default async function ItemDetailPage({
             const tagSlug = slugify(tag);
             const chipClassName =
               "inline-flex items-center rounded-full bg-foreground/5 px-3 py-1 text-xs text-foreground/50 ring-1 ring-inset ring-foreground/10 transition-colors";
-            return isValidSlug(tagSlug) ? (
+            // Must check membership in the actual generated index, not just
+            // isValidSlug(tagSlug): loadTagIndex additionally drops a slug
+            // when two differently-spelled tags collide on it (e.g. "CS 101"
+            // and "cs-101"), so a slug can be syntactically valid yet still
+            // have no live /tags/[tag] route.
+            return tagIndex.has(tagSlug) ? (
               <Link
                 key={tag}
                 href={`/tags/${tagSlug}`}

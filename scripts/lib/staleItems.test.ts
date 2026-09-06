@@ -1,6 +1,34 @@
 import { describe, it, expect } from "vitest";
-import { findStaleItems, DEFAULT_STALE_DAYS } from "./staleItems";
+import { findStaleItems, DEFAULT_STALE_DAYS, parseStaleDaysArg } from "./staleItems";
 import type { Item } from "@/lib/content/types";
+
+describe("parseStaleDaysArg", () => {
+  it("returns null for an empty string rather than treating it as 0 days", () => {
+    // Number("") === 0 — an unset/empty $VAR interpolated into
+    // `--days "$VAR"` must not silently make every available item "stale".
+    expect(parseStaleDaysArg("")).toBeNull();
+  });
+
+  it("returns null for whitespace-only input", () => {
+    expect(parseStaleDaysArg("   ")).toBeNull();
+  });
+
+  it("returns null for non-numeric input", () => {
+    expect(parseStaleDaysArg("abc")).toBeNull();
+  });
+
+  it("returns null for a negative number", () => {
+    expect(parseStaleDaysArg("-1")).toBeNull();
+  });
+
+  it("accepts a genuine, explicit zero", () => {
+    expect(parseStaleDaysArg("0")).toBe(0);
+  });
+
+  it("accepts a normal positive number", () => {
+    expect(parseStaleDaysArg("90")).toBe(90);
+  });
+});
 
 // ── Fixture helper (same shape as lib/utils/jsonld.test.ts's makeItem) ────────
 function makeItem(overrides: Partial<Item> = {}): Item {

@@ -111,6 +111,19 @@ describe("EnquiryForm — submit state machine", () => {
     expect(body.offerAmount).toBe(45);
   });
 
+  it("includes the item's own currency code in the POST body", async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) });
+
+    render(<EnquiryForm item={makeItem({ price: { currency: "GBP", tiers: [], negotiable: false, show_tiers: false } })} />);
+    fillRequiredFields();
+    submit();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.currency).toBe("GBP");
+  });
+
   it("shows an inline error message and does not throw when the request fails", async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 502 });
 

@@ -148,8 +148,15 @@ persistent state (e.g. Cloudflare KV counters for rate limiting) would break
 that property for the whole project.
 
 The honeypot field plus the `ALLOWED_ORIGIN` restriction is the intended spam
-bar for v1. If a seller starts getting spammed in practice, the recommended
-next steps are **infra-level**, not changes to this Worker's code:
+bar for v1. Worth being precise about what `ALLOWED_ORIGIN` actually buys:
+the Worker checks the request's `Origin` header server-side (not just CORS
+response headers, which only constrain browsers reading the response), so it
+blocks a browser on another site and a casual script that doesn't bother
+setting headers — but `Origin` is just an HTTP header, so a determined
+attacker using `curl`/a script can still forge it. This is a basic access
+gate, not a cryptographic guarantee. If a seller starts getting spammed in
+practice, the recommended next steps are **infra-level**, not changes to
+this Worker's code:
 - Add [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/) in
   front of the form (a client-side widget + one server-side verification
   call — no storage required, so it doesn't conflict with the stateless

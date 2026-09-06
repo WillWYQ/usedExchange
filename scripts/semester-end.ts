@@ -26,7 +26,7 @@ import { loadAllItemsRaw } from "@/lib/content/loader";
 import { resolvePriceByStrategy } from "@/lib/utils/pricing";
 import { findStaleItems, DEFAULT_STALE_DAYS } from "./lib/staleItems";
 import { applyMarkSold } from "./lib/markSold";
-import { applyReducePrice } from "./lib/reducePrice";
+import { applyReducePrice, parseReduceAmount } from "./lib/reducePrice";
 import { createPrompt } from "./lib/cliPrompt";
 
 const SUGGESTED_COMMIT_MESSAGE = "chore: end-of-semester listing cleanup";
@@ -84,10 +84,10 @@ async function main() {
     }
 
     if (choice === "r" || choice === "reduce" || choice === "reduce price") {
-      const amountRaw = (await ask("  New lowest-tier price amount: ")).trim();
-      const amount = Number(amountRaw);
-      if (!Number.isFinite(amount) || amount < 0) {
-        console.log(`  Invalid amount "${amountRaw}" — leaving price as-is.`);
+      const amountRaw = await ask("  New lowest-tier price amount: ");
+      const amount = parseReduceAmount(amountRaw);
+      if (amount === null) {
+        console.log(`  Invalid amount "${amountRaw.trim()}" — leaving price as-is.`);
         continue;
       }
 

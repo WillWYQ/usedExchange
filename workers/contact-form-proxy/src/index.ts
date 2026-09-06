@@ -41,6 +41,10 @@ type EnquiryRequestBody = {
   buyerContact: string;
   message: string;
   offerAmount?: number;
+  // The item's own price.currency (e.g. "USD", "GBP") — required so
+  // formatOfferLine/sendDiscord can label an offer correctly instead of
+  // assuming USD.
+  currency: string;
   honeypot: string;
 };
 
@@ -53,6 +57,16 @@ export default {
     const cors = corsHeaders(env.ALLOWED_ORIGIN);
 
     if (request.method === "OPTIONS") return new Response(null, { headers: cors });
+
+    // CORS headers only stop a *browser* from reading a cross-origin
+    // response — they impose no server-side restriction on who can send the
+    // request. A non-browser caller (curl, a script, another server) can hit
+    // this endpoint directly with any or no Origin header, so the Origin
+    // must actually be checked here to have any enforcement at all.
+    if (request.headers.get("Origin") !== env.ALLOWED_ORIGIN) {
+      return json({ error: "Forbidden" }, 403, cors);
+    }
+
     if (request.method !== "POST") return json({ error: "Method Not Allowed" }, 405, cors);
 
     let body: unknown;
@@ -125,6 +139,7 @@ function isValidRequest(body: unknown): body is EnquiryRequestBody {
     "buyerName",
     "buyerContact",
     "message",
+    "currency",
   ] as const;
 
   for (const key of requiredStrings) {
@@ -147,8 +162,16 @@ function itemUrl(env: Env, body: EnquiryRequestBody): string {
   return `${env.SITE_BASE_URL.replace(/\/$/, "")}/${body.itemCategory}/${body.itemSlug}`;
 }
 
+// Mirrors the client's own display rule (EnquiryForm.tsx's `currencyPrefix`):
+// USD renders as a bare "$", every other ISO code renders as "<CODE> " —
+// so a GBP/CAD/etc. offer isn't silently mislabeled as US dollars.
+function formatOfferAmount(body: EnquiryRequestBody): string {
+  const prefix = body.currency === "USD" ? "$" : `${body.currency} `;
+  return `${prefix}${body.offerAmount}`;
+}
+
 function formatOfferLine(body: EnquiryRequestBody): string {
-  return body.offerAmount !== undefined ? `Offer: $${body.offerAmount}\n` : "";
+  return body.offerAmount !== undefined ? `Offer: ${formatOfferAmount(body)}\n` : "";
 }
 
 function formatPlainText(body: EnquiryRequestBody, env: Env): string {
@@ -179,7 +202,7 @@ async function sendDiscord(body: EnquiryRequestBody, env: Env): Promise<boolean>
             { name: "From", value: body.buyerName, inline: true },
             { name: "Contact", value: body.buyerContact, inline: true },
             ...(body.offerAmount !== undefined
-              ? [{ name: "Offer", value: `$${body.offerAmount}`, inline: true }]
+              ? [{ name: "Offer", value: formatOfferAmount(body), inline: true }]
               : []),
             { name: "Item", value: `${body.itemCategory}/${body.itemSlug}` },
           ],

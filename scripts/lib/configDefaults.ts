@@ -97,6 +97,39 @@ export const CONFIG_DEFAULTS: ConfigDefault[] = [
     ],
   },
   {
+    // key is the full key+English-value pair, not the bare key name: the
+    // commented-out zh translation example further down this file already
+    // contains the bare string "enquiryFormHeading" (as `//   enquiryFormHeading:
+    // "傳送詢問",`, documenting that it's translatable) — a bare-name existence
+    // check would always find that comment and wrongly report the real,
+    // active field as already present, even on a config missing it entirely.
+    // The English value only appears in the real declaration, not the zh one.
+    //
+    // afterKey is the tail of belowMinimumOffer's value, not `belowMinimumOffer:`
+    // itself — that key's string value lives on the following physical line
+    // (`belowMinimumOffer:\n  "...",`), so anchoring on the key would splice
+    // this block between the key and its own value and break the object
+    // literal. This one string is unique in the file.
+    key: 'enquiryFormHeading: "Send an Enquiry"',
+    afterKey: "Please try a higher amount.",
+    lines: [
+      "",
+      "        // ── Enquiry form (item detail page, optional — see the contact-form",
+      "        // enquiry relay setting above) ────────────────────────────────────────",
+      '        enquiryFormHeading: "Send an Enquiry",',
+      '        enquiryNameLabel: "Your name",',
+      '        enquiryContactLabel: "How can we reach you?",',
+      '        enquiryContactPlaceholder: "Email, phone, or messaging handle",',
+      '        enquiryMessageLabel: "Message",',
+      '        enquiryMessagePlaceholder: "Ask a question or make an offer…",',
+      '        enquiryOfferLabel: "Offer amount (optional)",',
+      '        enquirySubmit: "Send Enquiry",',
+      '        enquirySubmitting: "Sending…",',
+      '        enquirySuccess: "Thanks! Your message has been sent to the seller.",',
+      '        enquiryError: "Something went wrong. Please try again, or use the contact options above.",',
+    ],
+  },
+  {
     key: "filterPriceBucketAll",
     afterKey: "filterPrice:",
     lines: [
@@ -116,6 +149,24 @@ export const CONFIG_DEFAULTS: ConfigDefault[] = [
     afterKey: "filterPriceIncludesOutliers:",
     lines: [
       '        filterCourse: "Course",',
+    ],
+  },
+  {
+    key: "filterTags",
+    afterKey: "filterCourse:",
+    lines: [
+      '        filterTags: "Tags",',
+    ],
+  },
+  {
+    // "soldArchiveTitle:" also appears in a commented-out zh example further
+    // down the file; findIndex's first-match semantics land on the real
+    // (default-locale) line, same caveat already noted on pdfContactHeading
+    // below for "condition:".
+    key: "tagPageHeading",
+    afterKey: "soldArchiveTitle:",
+    lines: [
+      '        tagPageHeading: "Tagged: {tag}",',
     ],
   },
   {

@@ -4,7 +4,7 @@
 // findStaleItems() in scripts/lib/staleItems.ts). Read-only — no file writes.
 
 import { loadAllItemsRaw } from "@/lib/content/loader";
-import { findStaleItems, DEFAULT_STALE_DAYS } from "./lib/staleItems";
+import { findStaleItems, DEFAULT_STALE_DAYS, parseStaleDaysArg } from "./lib/staleItems";
 import { resolvePriceByStrategy } from "@/lib/utils/pricing";
 import type { PriceTier } from "@/lib/content/types";
 
@@ -13,8 +13,8 @@ function parseDaysFlag(argv: string[]): number {
   if (idx === -1) return DEFAULT_STALE_DAYS;
 
   const raw = argv[idx + 1];
-  const n = raw !== undefined ? Number(raw) : NaN;
-  if (!Number.isFinite(n) || n < 0) {
+  const n = raw !== undefined ? parseStaleDaysArg(raw) : null;
+  if (n === null) {
     console.error(`Error: --days must be a non-negative number. Got: "${raw ?? ""}"`);
     process.exit(1);
   }

@@ -47,10 +47,24 @@ export function EnquiryForm({ item }: EnquiryFormProps) {
       return;
     }
 
-    setStatus("submitting");
-
     const trimmedOffer = offerAmount.trim();
-    const parsedOffer = showOfferField && trimmedOffer !== "" ? Number(trimmedOffer) : null;
+    let parsedOffer: number | null = null;
+    if (showOfferField && trimmedOffer !== "") {
+      parsedOffer = Number(trimmedOffer);
+      if (!Number.isFinite(parsedOffer)) {
+        // input[type=number] already sanitizes anything that doesn't parse
+        // as a float back to "" (verified: this is why a plain typo can't
+        // reach here as literal garbage) — but it does NOT reject syntax
+        // that's valid-but-overflows, e.g. scientific notation like "1e400"
+        // parses to Infinity. Fail loudly rather than silently omitting the
+        // offer and showing a false "sent" confirmation, matching the same
+        // Number.isFinite guard the Worker already enforces server-side.
+        setStatus("error");
+        return;
+      }
+    }
+
+    setStatus("submitting");
 
     try {
       const res = await fetch(proxyUrl, {
@@ -63,9 +77,8 @@ export function EnquiryForm({ item }: EnquiryFormProps) {
           buyerName: name.trim(),
           buyerContact: contact.trim(),
           message: message.trim(),
-          ...(parsedOffer !== null && Number.isFinite(parsedOffer)
-            ? { offerAmount: parsedOffer }
-            : {}),
+          ...(parsedOffer !== null ? { offerAmount: parsedOffer } : {}),
+          currency: item.price.currency,
           honeypot,
         }),
       });
