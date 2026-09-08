@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   createCategory,
   createItem,
@@ -60,6 +60,16 @@ export function NewItemDialog({
   // which photos need a manual retry.
   const [createdIdPendingWarning, setCreatedIdPendingWarning] = useState<string | null>(null);
 
+  // fetchUrlPreview is async; if the seller switches to Item/Category mode
+  // while a fetch is still in flight, the closure that started it still has
+  // "url" baked in from the render where it was called. Reading `mode`
+  // through a ref (kept current on every render) instead of that stale
+  // closure value is what lets the resolution check the seller's CURRENT
+  // mode and bail rather than overwriting whatever they've since typed into
+  // the shared `name` field in another mode.
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+
   const dialogRef = useDialogBehavior(onCancel);
 
   async function createNewItem() {
@@ -111,6 +121,11 @@ export function NewItemDialog({
     setError(null);
     try {
       const preview = await previewImportUrl(trimmed);
+      // The seller may have switched to Item/Category mode while this was
+      // in flight — see modeRef's comment. Applying the result now would
+      // silently clobber whatever they've typed into that other mode's
+      // (shared) name field.
+      if (modeRef.current !== "url") return;
       // Detected name pre-fills the same `name` field item mode uses — the
       // seller edits it right there, exactly like the manual flow.
       setName(preview.name ?? "");
@@ -123,7 +138,9 @@ export function NewItemDialog({
       setBrokenImages(new Set());
       setPreviewFetched(true);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (modeRef.current === "url") {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
       setFetchingPreview(false);
     }
@@ -221,6 +238,12 @@ export function NewItemDialog({
               // mode's "Category slug" field) — clear it on every switch so a
               // draft from one mode never carries into another unnoticed.
               setName("");
+              // url mode's own leftover state — belt-and-braces alongside the
+              // mode === "url" guards on the submit handler and modeRef: a
+              // stale createdIdPendingWarning must never survive into another
+              // mode's Create button.
+              setWarning(null);
+              setCreatedIdPendingWarning(null);
             }}
           >
             {t("newItem.mode.item")}
@@ -236,6 +259,8 @@ export function NewItemDialog({
               setName("");
               setShowCategoryMeta(false);
               setCategoryMeta(EMPTY_CATEGORY_META_DRAFT);
+              setWarning(null);
+              setCreatedIdPendingWarning(null);
             }}
           >
             {t("newItem.mode.category")}
@@ -249,6 +274,8 @@ export function NewItemDialog({
               setMode("url");
               setError(null);
               setName("");
+              setWarning(null);
+              setCreatedIdPendingWarning(null);
             }}
           >
             {t("newItem.mode.url")}
@@ -272,7 +299,14 @@ export function NewItemDialog({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (createdIdPendingWarning !== null) {
+            // Gated on mode === "url" too, not just the pending-id itself:
+            // this state is only meaningful mid-way through the url-mode
+            // flow. Checking the id alone meant switching to Item/Category
+            // mode after a partial photo-import warning and submitting
+            // there silently re-navigated to the OLD item instead of
+            // creating the new one — the seller's real submission was
+            // dropped with no error shown.
+            if (mode === "url" && createdIdPendingWarning !== null) {
               onCreated(createdIdPendingWarning);
               return;
             }
