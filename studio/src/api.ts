@@ -9,10 +9,17 @@ import type {
 } from "../../scripts/lib/siteReadiness";
 import type { CategoryMetaInput } from "../../scripts/lib/studioCategories";
 import type { ContactPlatformSummary } from "../../scripts/lib/contactPlatforms";
-import type { BulkStatusResult, BulkTiersResult, CategorySummary, ImageEntry, StudioItem } from "../../scripts/lib/studioApi";
+import type {
+  BulkStatusResult,
+  BulkTiersResult,
+  CategorySummary,
+  ImageEntry,
+  ImportImagesResult,
+  StudioItem,
+} from "../../scripts/lib/studioApi";
 import type { PdfExportOptions, PdfExportProgress } from "../../scripts/lib/pdfCatalog/generate";
 
-export type { BulkStatusResult, BulkTiersResult, CategoryMetaInput, CategorySummary, ConfigField, ConfigFieldKind, ContactPlatformSummary, ImageEntry, PdfExportOptions, PdfExportProgress, ReadinessAction, ReadinessItem, ReadinessReport, StudioItem };
+export type { BulkStatusResult, BulkTiersResult, CategoryMetaInput, CategorySummary, ConfigField, ConfigFieldKind, ContactPlatformSummary, ImageEntry, ImportImagesResult, PdfExportOptions, PdfExportProgress, ReadinessAction, ReadinessItem, ReadinessReport, StudioItem };
 
 // Every response body is read defensively rather than trusting res.json() to
 // succeed: the CSRF guard and Vite itself can answer a rejected request with
@@ -149,6 +156,31 @@ export async function reorderImages(id: string, order: string[]): Promise<ImageE
   return (body?.files as ImageEntry[] | undefined) ?? [];
 }
 
+/**
+ * Downloads server-side and writes into the item's folder, going through the
+ * same sniff/sanitize/write pipeline as a manual upload — see
+ * scripts/lib/studioApi.ts's handleImageImport. Never rejects on a per-URL
+ * failure (a dead link, a non-image response): those come back in `failed`
+ * so the seller sees exactly which photos didn't make it rather than losing
+ * the whole batch to one bad URL.
+ */
+export async function importImagesFromUrls(id: string, urls: string[]): Promise<ImportImagesResult> {
+  const res = await fetch(`/api/items/${id}/images/import`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ urls }),
+  });
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `importing photos failed with ${res.status} ${res.statusText}`));
+  }
+  return {
+    files: (body?.files as ImageEntry[] | undefined) ?? [],
+    imported: typeof body?.imported === "number" ? body.imported : 0,
+    failed: Array.isArray(body?.failed) ? (body.failed as Array<{ url: string; error: string }>) : [],
+  };
+}
+
 // DELETE and reorder both send content-type: application/json even though
 // DELETE has no body — studio/csrfGuard.ts requires it on every non-GET method.
 
@@ -211,6 +243,32 @@ export async function createItem(
     throw new Error(errorMessage(body, `create failed with ${res.status} ${res.statusText}`));
   }
   return (body?.id as string | undefined) ?? `${category}/${name}`;
+}
+
+export type ImportUrlPreview = { name: string | null; images: string[] };
+
+/**
+ * Fetches a seller-supplied product page server-side (scripts/lib/ssrfGuard.ts
+ * guards that fetch against internal/cloud-metadata addresses) and extracts a
+ * candidate name and photo URLs (scripts/lib/urlImport.ts). Nothing is
+ * downloaded or written yet — `images` are the REMOTE page's own URLs, which
+ * this browser tab may load directly for the picker preview; only the URLs
+ * the seller actually selects are later downloaded by importImagesFromUrls.
+ */
+export async function previewImportUrl(url: string): Promise<ImportUrlPreview> {
+  const res = await fetch("/api/import-url/preview", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  const body = await readJsonBody(res);
+  if (!res.ok) {
+    throw new Error(errorMessage(body, `fetching that page failed with ${res.status} ${res.statusText}`));
+  }
+  return {
+    name: typeof body?.name === "string" ? body.name : null,
+    images: Array.isArray(body?.images) ? (body.images as string[]) : [],
+  };
 }
 
 export async function fetchCategories(): Promise<CategorySummary[]> {

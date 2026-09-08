@@ -84,7 +84,8 @@
 - **用途：** 校验前置条件（若未安装 `vite` 则快速失败并提示运行 `pnpm install`；若缺少 `studio/vite.config.ts` 则提示运行 `pnpm update-site`），加载 `.env.local`，注册 CDN 同步执行器，并启动仅绑定 **127.0.0.1** 的 Studio Vite 开发服务器。
 - **环境变量：** `.env.local`（自动加载）；`CF_R2_*` 或 `BLOB_READ_WRITE_TOKEN` —— 仅在触发 CDN 同步时需要。图片适配器在*每次同步运行时*才构建，因此缺少 CDN 凭据只会表现为 SSE 错误事件，不会导致启动失败。
 - **触碰的文件：** 读取 `studio/vite.config.ts`；读写 `content/items/**/item.json` 及物品照片目录（经由 `scripts/lib/studioApi.ts`、`itemEdit.ts`、`itemFields.ts`、`studioImages.ts`）；git status/add/commit/push 仅限 `content/` + `lib/generated/image-manifest.json`（`studioGit.ts` —— 与 `pnpm push` 保持一致，绝不使用 `git add -A`）；CDN 同步写入 `lib/generated/image-manifest.json` 与 `.image-cache/checksums.json`（`studioSync.ts` —— 同时只允许一次同步的互斥锁，SSE 进度推送）。
-- **API 面**（由 `scripts/lib/studioApi.ts` 路由）：`GET /api/items`、`POST /api/items`、`POST /api/items/bulk-status`、`GET|PATCH /api/items/<cat>/<item>`、`GET /api/items/<cat>/<item>/images`、`GET …/images/<filename>`（文件服务，`no-store`）、`POST …/images`（base64 上传）、`POST …/images/reorder`、`DELETE …/images/<filename>`、`POST /api/sync-images`（SSE progress/done/error 事件）、`GET /api/changes`、`POST /api/publish`（同步进行中返回 409）。非 GET/HEAD 请求须通过 `studio/csrfGuard.ts` 校验（要求 `Content-Type: application/json` → 否则 415；`Origin` 必须与服务器自身源一致 → 否则 403）。
+- **API 面**（由 `scripts/lib/studioApi.ts` 路由）：`GET /api/items`、`POST /api/items`、`POST /api/items/bulk-status`、`GET|PATCH /api/items/<cat>/<item>`、`GET /api/items/<cat>/<item>/images`、`GET …/images/<filename>`（文件服务，`no-store`）、`POST …/images`（base64 上传）、`POST …/images/reorder`、`POST …/images/import`（从卖家选中的链接下载，SSRF 安全——见下文）、`DELETE …/images/<filename>`、`POST /api/import-url/preview`（SSRF 安全抓取 + 名称/候选照片提取，不写入任何文件）、`POST /api/sync-images`（SSE progress/done/error 事件）、`GET /api/changes`、`POST /api/publish`（同步进行中返回 409）。非 GET/HEAD 请求须通过 `studio/csrfGuard.ts` 校验（要求 `Content-Type: application/json` → 否则 415；`Origin` 必须与服务器自身源一致 → 否则 403）。
+- **从链接导入**（`scripts/lib/ssrfGuard.ts` + `scripts/lib/urlImport.ts`）：卖家粘贴商品页面链接后，服务器通过 `fetchUrlSafely` 抓取该页面及之后选中的每张照片——该函数会先解析并校验每一个 DNS 解析结果,确认不属于回环/内网/链路本地/组播地址段(包括云平台元数据地址 `169.254.169.254`),再把实际连接绑定到已校验的地址,并在每一次跳转时重新校验。下载的照片会先从字节内容嗅探真实类型(绝不信任链接的扩展名或远端 `Content-Type`),再进入常规 `writeImage` 流程。
 
 > **目录 PDF 导出**（Seller Studio 中的"导出 PDF"按钮）通过 headless Chromium 渲染。首次使用需要执行一次：`npx playwright install chromium`。
 
@@ -271,6 +272,8 @@
 | `studioGit.ts` | `readChanges` / `publishChanges` + `GitError`：git status/commit/push 仅限 `PUBLISHABLE_PATHS = [content, lib/generated/image-manifest.json]` —— 与 `pnpm push` 保持一致，**绝不使用 `git add -A`**（保护 `.env.local`）；仅用 `execFile` 加参数数组（无 shell）；提交信息经 stdin 传入（`-F -`），`MAX_MESSAGE_LENGTH=500`；`-c core.quotepath=false -z` 确保中文/含空格文件名正确解析；处理 detached HEAD（拒绝）、未出生分支、裸仓库，以及滞留提交的重推。 |
 | `studioImages.ts` | 照片上传/删除/重排的文件系统操作：`IMAGE_EXTENSIONS` = jpg\|jpeg\|png\|webp\|gif、文件名规范化（`sanitizeUploadFilename`、`IMAGE_FILENAME_RE` 白名单）、魔数字节内容嗅探（`sniffImageType`）、防冲突写入。 |
 | `studioSync.ts` | 同时仅一次、以 SSE 推送进度的 CDN 同步封装（`streamImageSync`）；锁状态存于 `globalThis`（tsx 与 Vite 打包后的模块副本共享），在工作真正结束时释放，而非客户端断开时。 |
+| `ssrfGuard.ts` | 两个"从链接导入"路由共用的通用 SSRF 安全抓取器(`fetchUrlSafely`):协议白名单、先解析 DNS 再校验再把连接绑定到已校验地址(堵住 DNS 重绑定的 TOCTOU 漏洞)、每次跳转重新校验、请求超时、以及流式响应体大小上限。不了解 Studio 的路由或文件系统约定——是一个独立的网络原语模块。 |
+| `urlImport.ts` | 纯 HTML 文本处理层(`extractImportCandidates`):给定已抓取的 HTML 及其页面链接,猜测商品名称(依次尝试 JSON-LD `Product.name` → `og:title` → `twitter:title` → `<title>` → 第一个 `<h1>`)并列出经过过滤、去重的候选照片链接(JSON-LD `image` → `og:image` → `<img>`/`srcset` → `<link rel=preload as=image>`,并过滤垃圾/跟踪像素)。基于正则/字符串,而非 DOM 解析器;对畸形输入绝不抛出异常。 |
 
 ---
 

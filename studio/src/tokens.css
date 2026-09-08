@@ -202,6 +202,18 @@ input[type="radio"] {
   white-space: pre-line;
 }
 
+/* Partial success (e.g. the item saved but a photo import failed) — not a
+   failure of the action the seller just took, so it gets the accent wash
+   rather than .alert-error's red. */
+.alert-warning {
+  margin: 0;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  color: var(--ink);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  white-space: pre-line;
+}
+
 /* The app-level error banner sits between header and table, inset like
    the table itself. */
 .page-error {
@@ -645,6 +657,57 @@ tr.failed td {
   color: var(--ink-soft);
   font-size: 0.7rem;
   line-height: 1.3;
+}
+
+/* ── New item dialog — import from URL picker ─────────────────────────
+   Reuses .thumb-grid's layout; the thumb itself is a <label> (not a plain
+   <li>) so the whole card toggles the checkbox, not just its small hit area. */
+
+.url-fetch-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.url-fetch-row input {
+  flex: 1;
+}
+
+.url-picker-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  flex-wrap: wrap;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.url-picker-thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.url-picker-thumb img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+
+/* A candidate image that failed to load in the seller's own browser (a dead
+   link, a site that blocks hotlinking) still needs a selectable card — an
+   <img> with no usable src collapses to zero height otherwise, taking the
+   checkbox with it. */
+.url-picker-thumb img.url-picker-thumb-broken {
+  aspect-ratio: 1;
+  visibility: hidden;
 }
 
 /* ── Sync bar ───────────────────────────────────────────────────────── */

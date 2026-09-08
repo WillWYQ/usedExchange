@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { createCategory, createItem, type CategoryMetaInput } from "../api";
+import {
+  createCategory,
+  createItem,
+  importImagesFromUrls,
+  previewImportUrl,
+  type CategoryMetaInput,
+} from "../api";
 import { Button } from "../components/Button";
 import {
   CategoryMetaFields,
@@ -16,7 +22,7 @@ import { useStudioT } from "../i18n/StudioI18n";
 // trip.
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 
-type Mode = "item" | "category";
+type Mode = "item" | "category" | "url";
 
 export function NewItemDialog({
   categories,
@@ -38,6 +44,21 @@ export function NewItemDialog({
   const [applyDefaults, setApplyDefaults] = useState(true);
   const [showCategoryMeta, setShowCategoryMeta] = useState(false);
   const [categoryMeta, setCategoryMeta] = useState<CategoryMetaDraft>(EMPTY_CATEGORY_META_DRAFT);
+
+  // ── Import from URL ──────────────────────────────────────────────
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [fetchingPreview, setFetchingPreview] = useState(false);
+  const [previewFetched, setPreviewFetched] = useState(false);
+  const [candidateImages, setCandidateImages] = useState<string[]>([]);
+  const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
+  const [brokenImages, setBrokenImages] = useState<Set<string>>(new Set());
+  const [importStage, setImportStage] = useState<"idle" | "creating" | "importing">("idle");
+  const [warning, setWarning] = useState<string | null>(null);
+  // Set once the item itself is safely created but a photo import failed
+  // partway — see createUrlItem's comment. Holds the dialog open on the
+  // warning instead of auto-navigating away, so the seller actually sees
+  // which photos need a manual retry.
+  const [createdIdPendingWarning, setCreatedIdPendingWarning] = useState<string | null>(null);
 
   const dialogRef = useDialogBehavior(onCancel);
 
@@ -83,6 +104,98 @@ export function NewItemDialog({
     }
   }
 
+  async function fetchUrlPreview() {
+    const trimmed = sourceUrl.trim();
+    if (trimmed === "") return;
+    setFetchingPreview(true);
+    setError(null);
+    try {
+      const preview = await previewImportUrl(trimmed);
+      // Detected name pre-fills the same `name` field item mode uses — the
+      // seller edits it right there, exactly like the manual flow.
+      setName(preview.name ?? "");
+      setCandidateImages(preview.images);
+      // Pre-selected: the extraction heuristic (scripts/lib/urlImport.ts)
+      // already filters out obvious icons/tracking pixels, so what's left is
+      // worth defaulting to "import all" — the seller un-checks the odd one
+      // rather than having to hunt through a page of unchecked boxes first.
+      setSelectedImages(new Set(preview.images));
+      setBrokenImages(new Set());
+      setPreviewFetched(true);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFetchingPreview(false);
+    }
+  }
+
+  function toggleImage(src: string, checked: boolean) {
+    setSelectedImages((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(src);
+      else next.delete(src);
+      return next;
+    });
+  }
+
+  /**
+   * Two server round trips, not one: item creation (POST /api/items) and
+   * photo import (POST /api/items/:id/images/import) are separate endpoints
+   * because the second one needs the item's folder to already exist. A
+   * failure in the second step must not look like the whole thing failed —
+   * the item is real and already saved — so it's reported as a `warning`,
+   * with the dialog held open (via createdIdPendingWarning) instead of
+   * calling onCreated, which would unmount this component before the seller
+   * ever saw the message.
+   */
+  async function createUrlItem() {
+    const cat = category.trim();
+    const slug = name.trim();
+    if (!SLUG_RE.test(cat) || !SLUG_RE.test(slug)) {
+      setError(t("newItem.slugError"));
+      return;
+    }
+    setError(null);
+    setWarning(null);
+    setImportStage("creating");
+    let id: string;
+    try {
+      id = await createItem(cat, slug, applyDefaults);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+      setImportStage("idle");
+      return;
+    }
+
+    const urls = Array.from(selectedImages);
+    if (urls.length === 0) {
+      onCreated(id);
+      return;
+    }
+
+    setImportStage("importing");
+    try {
+      const result = await importImagesFromUrls(id, urls);
+      if (result.failed.length > 0) {
+        setWarning(
+          t("newItem.url.partialFailure", {
+            count: result.failed.length,
+            details: result.failed.map((f) => f.error).join("; "),
+          }),
+        );
+        setCreatedIdPendingWarning(id);
+        setImportStage("idle");
+        return;
+      }
+    } catch (err: unknown) {
+      setWarning(err instanceof Error ? err.message : String(err));
+      setCreatedIdPendingWarning(id);
+      setImportStage("idle");
+      return;
+    }
+    onCreated(id);
+  }
+
   return (
     <div className="dialog-backdrop" role="presentation" onClick={onCancel}>
       {/* Stop clicks inside the sheet from closing it. */}
@@ -104,9 +217,9 @@ export function NewItemDialog({
             onClick={() => {
               setMode("item");
               setError(null);
-              // `name` backs both this mode's "Item name" field and Category
-              // mode's "Category slug" field — clear it on every switch so a
-              // draft from one mode never carries into the other unnoticed.
+              // `name` backs the "Item name" field in every mode (and Category
+              // mode's "Category slug" field) — clear it on every switch so a
+              // draft from one mode never carries into another unnoticed.
               setName("");
             }}
           >
@@ -127,19 +240,48 @@ export function NewItemDialog({
           >
             {t("newItem.mode.category")}
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "url"}
+            className={mode === "url" ? "tab tab-active" : "tab"}
+            onClick={() => {
+              setMode("url");
+              setError(null);
+              setName("");
+            }}
+          >
+            {t("newItem.mode.url")}
+          </button>
         </div>
         {error !== null && (
           <p role="alert" className="alert-error">
             {error}
           </p>
         )}
+        {warning !== null && (
+          <p role="status" className="alert-warning">
+            {warning}
+          </p>
+        )}
+        <datalist id="studio-categories">
+          {categories.map((c) => (
+            <option key={c} value={c} />
+          ))}
+        </datalist>
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            void (mode === "item" ? createNewItem() : createNewCategory());
+            if (createdIdPendingWarning !== null) {
+              onCreated(createdIdPendingWarning);
+              return;
+            }
+            if (mode === "item") void createNewItem();
+            else if (mode === "category") void createNewCategory();
+            else void createUrlItem();
           }}
         >
-          {mode === "item" ? (
+          {mode === "item" && (
             <>
               <label className="field">
                 <span className="field-label">{t("newItem.category")}</span>
@@ -151,11 +293,6 @@ export function NewItemDialog({
                   onChange={(e) => setCategory(e.target.value)}
                   placeholder={t("newItem.categoryPlaceholder")}
                 />
-                <datalist id="studio-categories">
-                  {categories.map((c) => (
-                    <option key={c} value={c} />
-                  ))}
-                </datalist>
                 <span className="field-hint">{t("newItem.categoryHint")}</span>
               </label>
               <label className="field">
@@ -180,7 +317,8 @@ export function NewItemDialog({
                 <span className="field-hint">{t("newItem.applyDefaultsHint")}</span>
               </label>
             </>
-          ) : (
+          )}
+          {mode === "category" && (
             <>
               <label className="field">
                 <span className="field-label">{t("newItem.categorySlug")}</span>
@@ -205,10 +343,136 @@ export function NewItemDialog({
               )}
             </>
           )}
+          {mode === "url" && (
+            <>
+              <label className="field">
+                <span className="field-label">{t("newItem.category")}</span>
+                <input
+                  type="text"
+                  list="studio-categories"
+                  value={category}
+                  autoFocus
+                  onChange={(e) => setCategory(e.target.value)}
+                  placeholder={t("newItem.categoryPlaceholder")}
+                />
+                <span className="field-hint">{t("newItem.categoryHint")}</span>
+              </label>
+              <label className="field">
+                <span className="field-label">{t("newItem.url.sourceUrl")}</span>
+                <div className="url-fetch-row">
+                  <input
+                    type="url"
+                    value={sourceUrl}
+                    onChange={(e) => setSourceUrl(e.target.value)}
+                    placeholder={t("newItem.url.sourceUrlPlaceholder")}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={fetchingPreview || sourceUrl.trim() === "" || createdIdPendingWarning !== null}
+                    onClick={() => void fetchUrlPreview()}
+                  >
+                    {fetchingPreview ? t("newItem.url.fetching") : t("newItem.url.fetch")}
+                  </Button>
+                </div>
+                <span className="field-hint">{t("newItem.url.sourceUrlHint")}</span>
+              </label>
+
+              {previewFetched && createdIdPendingWarning === null && (
+                <>
+                  <label className="field">
+                    <span className="field-label">{t("newItem.name")}</span>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder={t("newItem.namePlaceholder")}
+                    />
+                    <span className="field-hint">{t("newItem.nameHint")}</span>
+                  </label>
+
+                  {candidateImages.length === 0 ? (
+                    <p className="field-hint">{t("newItem.url.noImages")}</p>
+                  ) : (
+                    <div className="field">
+                      <span className="field-label">{t("newItem.url.selectPhotos")}</span>
+                      <div className="url-picker-actions">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setSelectedImages(new Set(candidateImages))}
+                        >
+                          {t("newItem.url.selectAll")}
+                        </Button>
+                        <Button type="button" variant="ghost" onClick={() => setSelectedImages(new Set())}>
+                          {t("newItem.url.selectNone")}
+                        </Button>
+                        <span className="field-hint">
+                          {t("newItem.url.selectedCount", { count: selectedImages.size })}
+                        </span>
+                      </div>
+                      <ol className="thumb-grid">
+                        {candidateImages.map((src) => (
+                          <li key={src}>
+                            <label className="url-picker-thumb">
+                              <input
+                                type="checkbox"
+                                checked={selectedImages.has(src)}
+                                onChange={(e) => toggleImage(src, e.target.checked)}
+                              />
+                              <img
+                                src={src}
+                                alt=""
+                                loading="lazy"
+                                className={brokenImages.has(src) ? "url-picker-thumb-broken" : undefined}
+                                onError={() =>
+                                  setBrokenImages((prev) => new Set(prev).add(src))
+                                }
+                              />
+                            </label>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+
+                  <label className="field">
+                    <span className="field-label">
+                      <input
+                        type="checkbox"
+                        checked={applyDefaults}
+                        onChange={(e) => setApplyDefaults(e.target.checked)}
+                      />{" "}
+                      {t("newItem.applyDefaults")}
+                    </span>
+                    <span className="field-hint">{t("newItem.applyDefaultsHint")}</span>
+                  </label>
+                </>
+              )}
+            </>
+          )}
           <div className="dialog-actions">
-            <Button type="submit" variant="primary" disabled={busy}>
-              {busy ? t("newItem.creating") : t("newItem.create")}
-            </Button>
+            {mode === "url" && createdIdPendingWarning !== null ? (
+              <Button type="submit" variant="primary">
+                {t("newItem.create")}
+              </Button>
+            ) : mode === "url" ? (
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={importStage !== "idle" || !previewFetched}
+              >
+                {importStage === "creating"
+                  ? t("newItem.url.creating")
+                  : importStage === "importing"
+                    ? t("newItem.url.importing")
+                    : t("newItem.url.create")}
+              </Button>
+            ) : (
+              <Button type="submit" variant="primary" disabled={busy}>
+                {busy ? t("newItem.creating") : t("newItem.create")}
+              </Button>
+            )}
             <Button variant="ghost" onClick={onCancel}>
               {t("newItem.cancel")}
             </Button>
