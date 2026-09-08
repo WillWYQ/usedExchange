@@ -1,6 +1,6 @@
 # UsedExchange — 项目设计文档
 
-**版本：** 0.10.2  
+**版本：** 0.10.3  
 **日期：** 2026-09-07  
 **状态：** 决策已解决——实现已上线（0–18 阶段全部交付）
 
@@ -950,6 +950,13 @@ export const siteConfig: SiteConfig = {
   meta: {
     description: "个人二手商城。",
     twitterHandle: "",
+  },
+
+  // 可安装的"添加到主屏幕" Web App Manifest（app/manifest.ts）所用的配色。
+  // 留空 "" 即保留默认的米白色（#f8f4ec）。
+  pwa: {
+    themeColor:      "#f8f4ec",
+    backgroundColor: "#f8f4ec",
   },
 
   ui: {

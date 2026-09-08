@@ -514,7 +514,7 @@ AI 按 8 个问题组提问：站点身份、部署（网址 + 托管方式）�
 - 物品详情页的 **Twitter card**（`summary_large_image`）
 - 物品详情页的 **Pinterest 富 pin**（`og:type: "product"` + 价格元数据）
 - 构建时生成 `sitemap.xml` + `robots.txt`（启用时）
-- **Web App Manifest**（`app/manifest.ts`）— 使站点可作为主屏幕应用安装（名称、图标、主题色均来自 `siteConfig`）；无 Service Worker，不支持离线访问
+- **Web App Manifest**（`app/manifest.ts`）— 使站点可作为主屏幕应用安装（名称来自 `siteConfig.name`；主题色/背景色来自可选的 `siteConfig.pwa` 配置项，默认使用 `#f8f4ec`；图标为静态预渲染 PNG 文件，并非配置驱动）；无 Service Worker，不支持离线访问
 
 ---
 

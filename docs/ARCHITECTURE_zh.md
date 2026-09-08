@@ -648,6 +648,8 @@ Seller Studio 是用于管理 `content/` 的仅本机浏览器 GUI——以 `pnp
 
 SSE 流以普通 `fetch` + `ReadableStream` 消费（必须使用 POST，因此无法使用 `EventSource`）。同步成功后重置加载器的清单缓存（`resetManifestCache()`），使后续读取能看到最新的 CDN URL。
 
+**已知限制：** 每次 `PUT /api/config` 写入都会让本次请求的 HTTP 响应被短暂中断。保存 `content/config.ts` 会改动一个被 `vite.config.ts`（经由 `studioApi.ts`）间接引用的文件，Vite 默认的配置加载器会把它当作自身的“配置依赖”之一，从而在请求进行中整个重启开发服务器——写入本身总能成功落盘，但连接会被重置。`studio/src/api.ts` 的 `saveConfigValue` 用一次幂等重试掩盖了这个问题（PUT 每次都是写入绝对值而非增量，重试是安全的）。真正的根治需要换用 Vite 实验性的“native”配置加载器（要求 Node 22.15+/23.5+），并重构 `studioApi.ts` 中目前依赖这次重启来刷新过期 `siteConfig` 引用、并在解析失败时快速失败的几处调用点。
+
 ### 安全模型
 
 - **CSRF 防护**（`studio/csrfGuard.ts`）：所有非 GET/HEAD 请求必须携带 `Content-Type: application/json`（否则 `415`），且当存在 `Origin` 头时必须与服务器自身来源一致（否则 `403`）。该检查按方法生效，因此未来的 PUT/PATCH/DELETE 路由自动采用失败即拒绝策略；GET/HEAD 豁免。

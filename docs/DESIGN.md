@@ -1,6 +1,6 @@
 # UsedExchange — Project Design Document
 
-**Version:** 0.10.2  
+**Version:** 0.10.3  
 **Date:** 2026-09-07  
 **Status:** Decisions Resolved — Implementation Live (all phases 0–18 shipped)
 
@@ -1048,6 +1048,14 @@ export const siteConfig: SiteConfig = {
   meta: {
     description: "Personal second-hand marketplace.",
     twitterHandle: "",
+  },
+
+  // ── PWA ───────────────────────────────────────────────────────────────────
+  // Colors used in the installable "Add to Home Screen" web-app manifest
+  // (app/manifest.ts). Leave unset ("") to keep the default cream (#f8f4ec).
+  pwa: {
+    themeColor:      "#f8f4ec",
+    backgroundColor: "#f8f4ec",
   },
 
   // ── UI Component Slots ────────────────────────────────────────────────────

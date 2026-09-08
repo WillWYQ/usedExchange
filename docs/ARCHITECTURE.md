@@ -650,6 +650,8 @@ The `studioApiPlugin` middleware in `studio/vite.config.ts` runs every request t
 
 The SSE stream is consumed with a plain `fetch` + `ReadableStream` (POST is required, so `EventSource` cannot be used). After a successful sync the loader's manifest cache is reset (`resetManifestCache()`) so subsequent reads see the fresh CDN URLs.
 
+**Known limitation:** every `PUT /api/config` write briefly drops its own HTTP response. Saving `content/config.ts` changes a file that `vite.config.ts` transitively imports (via `studioApi.ts`), so Vite's default config loader treats it as one of its own "config dependencies" and fully restarts the dev server mid-request — the write itself always lands, but the connection resets. `studio/src/api.ts`'s `saveConfigValue` papers over this with an idempotent retry (the PUT sets an absolute value, never a delta, so retrying is safe). A real fix needs Vite's experimental "native" config loader (Node 22.15+/23.5+) plus reworking the handful of `studioApi.ts` call sites that currently rely on the restart to refresh their stale `siteConfig` import and fail fast on a parse error.
+
 ### Security model
 
 - **CSRF guard** (`studio/csrfGuard.ts`): every non-GET/HEAD request must carry `Content-Type: application/json` (else `415`) and, when an `Origin` header is present, it must equal the server's own origin (else `403`). The check applies by method, so future PUT/PATCH/DELETE routes fail closed automatically; GET/HEAD are exempt.

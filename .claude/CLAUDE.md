@@ -80,7 +80,7 @@ Checklist for every new config field:
 
 | File | Version | Date |
 |---|---|---|
-| docs/DESIGN.md / docs/DESIGN_zh.md | v0.10.2 | 2026-09-07 |
+| docs/DESIGN.md / docs/DESIGN_zh.md | v0.10.3 | 2026-09-07 |
 | docs/TECH_REQUIREMENTS.md / docs/TECH_REQUIREMENTS_zh.md | v0.10.2 | 2026-09-07 |
 | docs/IMPLEMENTATION_PLAN.md / docs/IMPLEMENTATION_PLAN_zh.md | **v1.7** | 2026-08-02 |
 | docs/FEATURES_ROADMAP.md / docs/FEATURES_ROADMAP_zh.md | v1.6 | 2026-09-05 |

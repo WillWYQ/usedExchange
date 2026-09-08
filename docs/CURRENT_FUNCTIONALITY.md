@@ -514,7 +514,7 @@ Developer tooling: `pnpm type-check`, `pnpm lint` (zero-warning), `pnpm format`,
 - **Twitter card** (`summary_large_image`) on item detail pages
 - **Pinterest rich pin** (`og:type: "product"` + price meta) on item detail pages
 - `sitemap.xml` + `robots.txt` generated at build time (when enabled)
-- **Web app manifest** (`app/manifest.ts`) — makes the site installable as a home-screen app (name, icons, theme colour from `siteConfig`); no service worker or offline support
+- **Web app manifest** (`app/manifest.ts`) — makes the site installable as a home-screen app (name from `siteConfig.name`, theme/background color from the optional `siteConfig.pwa` section, defaulting to `#f8f4ec`; icons are static pre-rendered PNGs, not config-driven); no service worker or offline support
 
 ---
 
