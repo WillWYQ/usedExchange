@@ -99,6 +99,13 @@ export type SiteConfig = {
     googleAnalyticsId?: string;
   };
 
+  // Web-app manifest colors (optional — see app/manifest.ts). Absent or empty
+  // → app/manifest.ts falls back to the default cream (#f8f4ec).
+  pwa?: {
+    themeColor?: string;
+    backgroundColor?: string;
+  };
+
   // Full-text search
   search: {
     enabled: boolean;

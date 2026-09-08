@@ -221,4 +221,44 @@ describe("ConfigPane", () => {
       expect(saveButton().disabled).toBe(false);
     });
   });
+
+  it("shows a copyable channel setup snippet for the contact-form relay, switching by provider", async () => {
+    const fields: ConfigField[] = [
+      makeField({ path: "name", value: "Test Store", section: "General" }),
+      makeField({ path: "baseUrl", value: "https://example.com", section: "General" }),
+      makeField({
+        path: "notifications.enabled",
+        value: false,
+        kind: "boolean",
+        section: "Contact-form enquiry relay (optional)",
+      }),
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/config" && init?.method === undefined) return jsonResponse({ fields, contactPlatforms: [] });
+        throw new Error(`unexpected fetch: ${url} ${init?.method ?? "GET"}`);
+      }),
+    );
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    render(<ConfigPane onClose={vi.fn()} />);
+    await userEvent.click(await screen.findByRole("tab", { name: "Contact-form enquiry relay (optional)" }));
+
+    expect(await screen.findByText(/NOTIFICATION_PROVIDER = "discord"/)).not.toBeNull();
+    expect(screen.getByText(/ALLOWED_ORIGIN = "https:\/\/example\.com"/)).not.toBeNull();
+
+    await userEvent.selectOptions(screen.getByLabelText("Notification provider"), "telegram");
+    expect(await screen.findByText(/NOTIFICATION_PROVIDER = "telegram"/)).not.toBeNull();
+    expect(screen.getByText(/TELEGRAM_CHAT_ID/)).not.toBeNull();
+    expect(screen.getByText(/pnpm wrangler secret put TELEGRAM_BOT_TOKEN/)).not.toBeNull();
+
+    await userEvent.click(screen.getAllByRole("button", { name: "Copy" })[0]!);
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('NOTIFICATION_PROVIDER = "telegram"'));
+  });
 });

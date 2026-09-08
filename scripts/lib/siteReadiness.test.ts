@@ -52,6 +52,7 @@ function configuredConfig(over: Partial<ReadinessConfig> = {}): ReadinessConfig 
     imageStorage: { provider: "local" },
     contact: { platforms: [{ type: "email" }] },
     shipping: { enabled: true },
+    pwa: { themeColor: "#f8f4ec", backgroundColor: "#f8f4ec" },
     i18n: { availableLocales: ["en"], defaultLocale: "en", translations: { en: fullDict() } },
     ...over,
   };
@@ -121,6 +122,7 @@ describe("a freshly-cloned template", () => {
       "contact",
       "translations",
       "shipping",
+      "pwa-colors",
       "aceternity",
       "flyer-cors",
     ]);
@@ -131,7 +133,7 @@ describe("a freshly-cloned template", () => {
     const report = await buildReadinessReport(root, templateConfig(), {});
     expect(report.tier1Total).toBe(6);
     expect(report.items.filter((i) => i.tier === 1)).toHaveLength(6);
-    expect(report.items.filter((i) => i.tier === 2)).toHaveLength(4);
+    expect(report.items.filter((i) => i.tier === 2)).toHaveLength(5);
   });
 });
 
@@ -346,6 +348,37 @@ describe("tier 2 optional checks", () => {
     expect(item.tier).toBe(2);
     expect(item.done).toBe(false);
     expect(item.detail).toMatch(/optional/i);
+  });
+
+  it("reports pwa colors honestly when not configured", async () => {
+    const root = await sandbox();
+    const report = await buildReadinessReport(root, configuredConfig({ pwa: undefined }), {});
+    const item = byId(report.items, "pwa-colors");
+    expect(item.tier).toBe(2);
+    expect(item.done).toBe(false);
+    expect(item.detail).toMatch(/optional/i);
+  });
+
+  it("reports pwa colors as not done when only one color is configured", async () => {
+    const root = await sandbox();
+    const report = await buildReadinessReport(
+      root,
+      configuredConfig({ pwa: { themeColor: "#f8f4ec" } }),
+      {},
+    );
+    expect(byId(report.items, "pwa-colors").done).toBe(false);
+  });
+
+  it("reports pwa colors as done when both colors are configured", async () => {
+    const root = await sandbox();
+    const report = await buildReadinessReport(
+      root,
+      configuredConfig({ pwa: { themeColor: "#f8f4ec", backgroundColor: "#f8f4ec" } }),
+      {},
+    );
+    const item = byId(report.items, "pwa-colors");
+    expect(item.done).toBe(true);
+    expect(item.detail).not.toMatch(/optional/i);
   });
 
   it("sees installed Aceternity components", async () => {

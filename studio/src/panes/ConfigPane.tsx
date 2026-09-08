@@ -258,6 +258,110 @@ function ContactPlatformsQrSection({
   );
 }
 
+// The Cloudflare Worker at workers/contact-form-proxy/ (which relays the
+// buyer enquiry form) picks its notification channel from NOTIFICATION_PROVIDER
+// in its own wrangler.toml — a Worker deploy-time file entirely outside
+// content/, so it's structurally out of reach for this pane the same way
+// contact.platforms' array elements are (see the comment above
+// ContactPlatformQrRow). Unlike that case, there's nothing here for Studio to
+// read or write at all — wrangler.toml is a separate package, and even a
+// successful edit does nothing until a seller manually runs `wrangler
+// deploy`. So this is a pure display helper: given a provider choice, show
+// the exact snippet/commands `.claude/commands/setup-contact-form.md` already
+// walks a seller through by hand, with copy buttons, so the seller doesn't
+// have to retype them. No API call, no file access.
+type ContactFormProvider = "discord" | "telegram" | "email";
+
+const CONTACT_FORM_SECRET_NAME: Record<ContactFormProvider, string> = {
+  discord: "DISCORD_WEBHOOK_URL",
+  telegram: "TELEGRAM_BOT_TOKEN",
+  email: "RESEND_API_KEY",
+};
+
+function contactFormVarsSnippet(provider: ContactFormProvider, baseUrl: string): string {
+  const origin = baseUrl !== "" ? baseUrl : "https://your-domain.com";
+  const lines = [
+    "[vars]",
+    `NOTIFICATION_PROVIDER = "${provider}"`,
+    `ALLOWED_ORIGIN = "${origin}"`,
+    `SITE_BASE_URL = "${origin}"`,
+  ];
+  if (provider === "telegram") lines.push('TELEGRAM_CHAT_ID = "<your chat id>"');
+  if (provider === "email") {
+    lines.push('NOTIFICATION_EMAIL_TO = "you@example.com"');
+    lines.push('NOTIFICATION_EMAIL_FROM = "noreply@yourdomain.com"');
+  }
+  return lines.join("\n");
+}
+
+function contactFormCommands(provider: ContactFormProvider): string {
+  return [
+    "cd workers/contact-form-proxy",
+    "pnpm install",
+    "pnpm wrangler login",
+    `pnpm wrangler secret put ${CONTACT_FORM_SECRET_NAME[provider]}`,
+    "pnpm deploy",
+  ].join("\n");
+}
+
+function ContactFormChannelHelper({ baseUrl }: { baseUrl: string }) {
+  const { t } = useStudioT();
+  const [provider, setProvider] = useState<ContactFormProvider>("discord");
+  const [copied, setCopied] = useState<"vars" | "commands" | null>(null);
+
+  async function copy(text: string, which: "vars" | "commands") {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(which);
+      setTimeout(() => setCopied((prev) => (prev === which ? null : prev)), 2000);
+    } catch {
+      // Clipboard access can be denied (permissions, insecure context). The
+      // text is still fully selectable by hand from the block below, so
+      // failing silently here is enough — no error state needed for a
+      // convenience copy button.
+    }
+  }
+
+  const vars = contactFormVarsSnippet(provider, baseUrl);
+  const commands = contactFormCommands(provider);
+
+  return (
+    <div className="contact-form-helper">
+      <h3>{t("configPane.contactHelper.title")}</h3>
+      <p className="field-hint">{t("configPane.contactHelper.hint")}</p>
+
+      <label className="field">
+        <span className="field-label">{t("configPane.contactHelper.provider")}</span>
+        <select value={provider} onChange={(e) => setProvider(e.target.value as ContactFormProvider)}>
+          <option value="discord">Discord</option>
+          <option value="telegram">Telegram</option>
+          <option value="email">Email</option>
+        </select>
+      </label>
+
+      <div className="contact-form-helper-block">
+        <div className="contact-form-helper-block-head">
+          <span>{t("configPane.contactHelper.varsLabel")}</span>
+          <Button variant="ghost" onClick={() => void copy(vars, "vars")}>
+            {copied === "vars" ? t("configPane.contactHelper.copied") : t("configPane.contactHelper.copy")}
+          </Button>
+        </div>
+        <pre className="contact-form-helper-code">{vars}</pre>
+      </div>
+
+      <div className="contact-form-helper-block">
+        <div className="contact-form-helper-block-head">
+          <span>{t("configPane.contactHelper.commandsLabel")}</span>
+          <Button variant="ghost" onClick={() => void copy(commands, "commands")}>
+            {copied === "commands" ? t("configPane.contactHelper.copied") : t("configPane.contactHelper.copy")}
+          </Button>
+        </div>
+        <pre className="contact-form-helper-code">{commands}</pre>
+      </div>
+    </div>
+  );
+}
+
 function FieldRow({
   field,
   raw,
@@ -607,6 +711,11 @@ export function ConfigPane({ onClose }: { onClose: () => void }) {
                     sectionBusy={busy}
                     qrBusy={qrBusy}
                     onQrBusyChange={setQrBusy}
+                  />
+                )}
+                {visibleFields.some((field) => field.path === "notifications.enabled") && (
+                  <ContactFormChannelHelper
+                    baseUrl={String(fields?.find((f) => f.path === "baseUrl")?.value ?? "")}
                   />
                 )}
               </fieldset>

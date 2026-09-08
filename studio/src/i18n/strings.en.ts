@@ -185,6 +185,14 @@ export const EN = {
   "configPane.qr.replaceHint": "Uploading a new PNG replaces this platform's QR code.",
   "configPane.qr.addHint": "Uploading a PNG adds a QR code to this platform.",
 
+  "configPane.contactHelper.title": "Channel setup helper",
+  "configPane.contactHelper.hint": "workers/contact-form-proxy/wrangler.toml is outside content/, so Studio can't edit it for you — pick a provider below to copy the exact snippet and commands to run by hand.",
+  "configPane.contactHelper.provider": "Notification provider",
+  "configPane.contactHelper.varsLabel": "wrangler.toml [vars]",
+  "configPane.contactHelper.commandsLabel": "Terminal commands",
+  "configPane.contactHelper.copy": "Copy",
+  "configPane.contactHelper.copied": "Copied!",
+
   // ── Drawer ──────────────────────────────────────────────────────
   "drawer.photos": "Photos",
   "drawer.details": "Details",
@@ -397,6 +405,9 @@ export const EN = {
   "readiness.shipping.title": "Shipping estimates",
   "readiness.shipping.enabled": "Enabled",
   "readiness.shipping.disabled": "Optional — not configured",
+  "readiness.pwaColors.title": "PWA install colors",
+  "readiness.pwaColors.enabled": "Theme and background colors configured",
+  "readiness.pwaColors.disabled": "Optional — not configured",
   "readiness.aceternity.title": "Aceternity UI",
   "readiness.aceternity.installed": "Components installed",
   "readiness.aceternity.missing": "components/ui/ not installed",

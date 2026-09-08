@@ -326,6 +326,12 @@ function isMeasurementIdField(path: string): boolean {
   return path === "analytics.googleAnalyticsId";
 }
 
+const HEX_COLOR_RE = /^#([0-9a-f]{3}){1,2}$/i;
+
+function isColorField(path: string): boolean {
+  return path === "pwa.themeColor" || path === "pwa.backgroundColor";
+}
+
 const NONNEGATIVE_INTEGER_FIELDS = new Set(["recentlyListedCount", "soldArchiveDisplayLimit"]);
 
 export function validateConfigValue(field: ConfigField, newValue: unknown): void {
@@ -399,6 +405,14 @@ export function validateConfigValue(field: ConfigField, newValue: unknown): void
     if (!MEASUREMENT_ID_RE.test(newValue)) {
       throw new Error(
         `Invalid value for ${path}: expected a GA4 Measurement ID like "G-XXXXXXXXXX" (or empty to disable)`,
+      );
+    }
+  }
+  if (isColorField(path)) {
+    if (newValue === "") return; // empty means "use default"
+    if (!HEX_COLOR_RE.test(newValue)) {
+      throw new Error(
+        `Invalid value for ${path}: expected a hex color like "#f8f4ec" or "#fff" (or empty to use the default)`,
       );
     }
   }

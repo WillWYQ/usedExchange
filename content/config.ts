@@ -119,6 +119,15 @@ export const siteConfig: SiteConfig = {
     twitterHandle: "",
   },
 
+  // ── PWA ────────────────────────────────────────────────────────────────────
+  // Colors used in the installable "Add to Home Screen" web-app manifest
+  // (app/manifest.ts). Leave unset ("") to keep the default cream (#f8f4ec)
+  // that matches the site's palette.
+  pwa: {
+    themeColor: "#f8f4ec",
+    backgroundColor: "#f8f4ec",
+  },
+
   // ── UI Component Slots ────────────────────────────────────────────────────
   // See DESIGN.md §18 for the full list of options per slot.
   ui: {

@@ -217,4 +217,19 @@ export const CONFIG_DEFAULTS: ConfigDefault[] = [
       '        pdfMessageOnDiscord: "Message on Discord",',
     ],
   },
+  {
+    key: "pwa",
+    afterKey: "baseUrl:",
+    lines: [
+      "",
+      "  // ── PWA ────────────────────────────────────────────────────────────────────",
+      '  // Colors used in the installable "Add to Home Screen" web-app manifest',
+      "  // (app/manifest.ts). Leave unset (\"\") to keep the default cream (#f8f4ec)",
+      "  // that matches the site's palette.",
+      "  pwa: {",
+      '    themeColor: "#f8f4ec",',
+      '    backgroundColor: "#f8f4ec",',
+      "  },",
+    ],
+  },
 ];

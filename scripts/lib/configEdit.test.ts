@@ -43,6 +43,12 @@ export const siteConfig: SiteConfig = {
     speedInsights: false,
     googleAnalyticsId: "",
   },
+
+  // ── PWA ───────────────────────────────────────────────────
+  pwa: {
+    themeColor: "#f8f4ec",
+    backgroundColor: "#f8f4ec",
+  },
 };
 `;
 
@@ -60,6 +66,7 @@ export interface SiteConfig {
   contact: { platforms: string[] };
   search: { enabled: boolean };
   analytics: { vercel: boolean; speedInsights: boolean; googleAnalyticsId?: string };
+  pwa?: { themeColor?: string; backgroundColor?: string };
 }
 `;
 
@@ -96,6 +103,11 @@ describe("readConfig — paths and kinds", () => {
     const f = byPath("analytics.googleAnalyticsId");
     expect(f.kind).toBe("string");
     expect(f.section).toBe("Analytics");
+  });
+
+  it("reads the pwa color fields as strings, auto-discovered with no bespoke code", () => {
+    expect(byPath("pwa.themeColor").kind).toBe("string");
+    expect(byPath("pwa.backgroundColor").kind).toBe("string");
   });
 });
 
@@ -242,6 +254,26 @@ describe("validateConfigValue", () => {
     const f = byPath("analytics.googleAnalyticsId");
     expect(() => validateConfigValue(f, "not-a-tag")).toThrow(/googleAnalyticsId/);
     expect(() => validateConfigValue(f, "G-ABC123")).not.toThrow();
+    expect(() => validateConfigValue(f, "")).not.toThrow();
+  });
+
+  it("validates the pwa theme color as a hex color, or empty for the default", () => {
+    const f = byPath("pwa.themeColor");
+    expect(() => validateConfigValue(f, "not-a-color")).toThrow(/pwa\.themeColor/);
+    expect(() => validateConfigValue(f, "red")).toThrow(/pwa\.themeColor/);
+    expect(() => validateConfigValue(f, "#gg0000")).toThrow(/pwa\.themeColor/);
+    expect(() => validateConfigValue(f, "#f8f4ec")).not.toThrow();
+    expect(() => validateConfigValue(f, "#fff")).not.toThrow();
+    expect(() => validateConfigValue(f, "")).not.toThrow();
+  });
+
+  it("validates the pwa background color as a hex color, or empty for the default", () => {
+    const f = byPath("pwa.backgroundColor");
+    expect(() => validateConfigValue(f, "not-a-color")).toThrow(/pwa\.backgroundColor/);
+    expect(() => validateConfigValue(f, "red")).toThrow(/pwa\.backgroundColor/);
+    expect(() => validateConfigValue(f, "#gg0000")).toThrow(/pwa\.backgroundColor/);
+    expect(() => validateConfigValue(f, "#f8f4ec")).not.toThrow();
+    expect(() => validateConfigValue(f, "#fff")).not.toThrow();
     expect(() => validateConfigValue(f, "")).not.toThrow();
   });
 });

@@ -20,6 +20,7 @@ const READINESS_ID_TO_KEY: Readonly<Record<string, string>> = {
   contact: "contact",
   translations: "translations",
   shipping: "shipping",
+  "pwa-colors": "pwaColors",
   aceternity: "aceternity",
   "config-parse": "configParse",
   "flyer-cors": "flyerCors",

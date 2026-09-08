@@ -79,6 +79,7 @@ export type ReadinessConfig = {
   imageStorage: { provider: string };
   contact: { platforms: Array<{ type: string }> };
   shipping?: { enabled: boolean };
+  pwa?: { themeColor?: string; backgroundColor?: string };
   i18n: {
     availableLocales: string[];
     defaultLocale: string;
@@ -346,6 +347,19 @@ function checkShipping(config: ReadinessConfig): ReadinessItem {
   };
 }
 
+function checkPwaColors(config: ReadinessConfig): ReadinessItem {
+  const configured = Boolean(config.pwa?.themeColor) && Boolean(config.pwa?.backgroundColor);
+  return {
+    id: "pwa-colors",
+    tier: 2,
+    title: "PWA install colors",
+    detail: configured ? "Theme and background colors configured" : "Optional — not configured",
+    params: { variant: configured ? "enabled" : "disabled" },
+    done: configured,
+    action: { kind: "pane", pane: "config" },
+  };
+}
+
 async function checkAceternity(projectRoot: string): Promise<ReadinessItem> {
   let installed = false;
   try {
@@ -492,6 +506,7 @@ export async function buildReadinessReport(
     checkContact(config),
     checkTranslations(config),
     checkShipping(config),
+    checkPwaColors(config),
     await checkAceternity(projectRoot),
     await checkFlyerCors(config, env),
   ]);
