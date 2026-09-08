@@ -2,7 +2,7 @@
 
 > 本文档为开发者参考文档。完整设计规范见 [DESIGN_zh.md](DESIGN_zh.md)；构建计划见 [IMPLEMENTATION_PLAN_zh.md](IMPLEMENTATION_PLAN_zh.md)；非技术卖家操作指南见 [../SETUP_GUIDE.md](../SETUP_GUIDE.md)。
 >
-> **版本：** v1.2 · **日期：** 2026-08-02
+> **版本：** v1.3 · **日期：** 2026-09-07
 >
 > 🇺🇸 English version: [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -15,6 +15,7 @@ usedExchange/
 ├── app/                              ← Next.js App Router 页面 + 根布局（100% 服务端组件）
 │   ├── layout.tsx                    ← 根布局：ThemeProvider > LocaleProvider > MeasurementUnitProvider > BackgroundEffect > SiteHeader/Footer
 │   ├── globals.css                   ← Tailwind v4 指令 + CSS 自定义属性
+│   ├── manifest.ts                   ← Web App Manifest（force-static）——可安装的图标/名称/主题色，无 Service Worker
 │   ├── page.tsx                      ← 首页 (/)
 │   ├── about/page.tsx                ← 项目介绍页：配置前显示于 "/"，配置后作为永久入口
 │   ├── all/page.tsx                  ← 全部浏览 (/all)
@@ -22,12 +23,13 @@ usedExchange/
 │   ├── sold/page.tsx                 ← 已售档案 (/sold)
 │   ├── not-found.tsx                 ← 全局 404 页面
 │   ├── [category]/page.tsx           ← 分类列表页 (/[category])
-│   └── [category]/[item]/page.tsx    ← 物品详情页 (/[category]/[item])
+│   ├── [category]/[item]/page.tsx    ← 物品详情页 (/[category]/[item])
+│   └── tags/[tag]/page.tsx           ← 标签筛选页 (/tags/[tag])——同一标签下的物品，路由来自 loadTagIndex() 的防冲突集合
 │
 ├── components/
 │   ├── category/                     ← CategoryCard, CategoryGrid
 │   ├── common/                       ← AdaptiveImage, JsonLd, RecentlyViewed, ShareButton, useIncrementalReveal
-│   ├── contact/                      ← ContactSection, PlatformButton, QRModal
+│   ├── contact/                      ← ContactSection, EnquiryForm（含 EnquiryForm.test.tsx）, PlatformButton, QRModal
 │   ├── filters/                      ← FilterBar, SortSelect, useFilters
 │   ├── home/                         ← RecentlyListedSection
 │   ├── i18n/                         ← LocaleProvider, LocaleSwitcher, useLocale, useT
@@ -69,7 +71,7 @@ usedExchange/
 │   │   ├── stripMetadata.ts          ← stripImageMetadata()：上传前用 sharp 去除 EXIF/GPS
 │   │   └── vercel-blob.ts            ← VercelBlobAdapter
 │   ├── i18n/
-│   │   ├── translations.ts           ← EN_FALLBACK: UIStrings——所有 87 个键的内置英文默认值
+│   │   ├── translations.ts           ← EN_FALLBACK: UIStrings——所有 124 个键的内置英文默认值
 │   │   └── getTranslations.ts        ← getTranslations(): UIStrings——服务端解析（始终返回 defaultLocale）
 │   ├── search/index.ts               ← buildSearchIndex(): SearchIndexEntry[]
 │   ├── ui/types.ts                   ← UIConfig 类型（background、itemGrid、gallery、itemCard 插槽）+ PriceFilterStrategy
@@ -88,16 +90,23 @@ usedExchange/
 │       └── units.ts                  ← resolveMeasurementUnit()、formatDimensions()、formatWeight()——禁止 "use client"
 │
 ├── scripts/                          ← pnpm run 脚本（大多经 tsx 运行，Node.js，不使用浏览器 API）
+│   ├── audit-listings.ts             ← pnpm audit-listings——报告缺失推荐字段的物品（只读）
 │   ├── build-search-index.ts         ← 构建前：写入 public/search-index.json
 │   ├── bump-version.ts               ← pnpm bump——交互式版本号升级 + GitHub 发布
 │   ├── check-config.ts               ← 构建前：若 baseUrl 仍为占位符或某语言的翻译不完整则中断构建
 │   ├── create-item.ts                ← pnpm create-item / pnpm new
 │   ├── create-template.ts            ← pnpm create-template
+│   ├── duplicate.ts                  ← pnpm duplicate——将一个物品目录复制为新的草稿物品
+│   ├── export-csv.ts                 ← pnpm export-csv——将全部物品导出为 CSV，供卖家自行记录
 │   ├── export-facebook.ts            ← pnpm fb-export——交互式 Facebook Marketplace CSV 导出
+│   ├── inventory.ts                  ← pnpm inventory——全部状态物品的 Markdown 清单表（只读）
+│   ├── mark-available.ts             ← pnpm mark-available——将 status 重置为 available，并清空 sold_date
 │   ├── mark-sold.ts                  ← pnpm mark-sold
 │   ├── migrate-config.ts             ← pnpm migrate-config——拼接缺失的可选配置字段
 │   ├── postbuild.ts                  ← 构建后：next-sitemap
+│   ├── semester-end.ts               ← pnpm semester-end——交互式滞销物品复查（标记售出 / 降价 / 保持不变）
 │   ├── setup-ui.sh                   ← pnpm setup-ui——安装所有 Aceternity 组件的 bash 脚本
+│   ├── stale-check.ts                ← pnpm stale-check [--days <n>]——列出滞销的在售物品（只读）
 │   ├── studio.ts                     ← pnpm studio——Seller Studio 启动器（Vite 绑定 127.0.0.1）
 │   ├── sync-images.ts                ← pnpm upload-images / dev-sync / build-check
 │   ├── update-site.ts                ← pnpm update-site——拉取已打标签的模板发布版本
@@ -123,9 +132,13 @@ usedExchange/
 │   └── release-seller.yml            ← 发布分支管理（v* 标签 / 手动触发）
 │
 ├── workers/                           ← 独立部署的 Cloudflare Workers（拥有自己的 tsconfig/eslint 范围）
-│   └── shipping-rate-proxy/          ← 可选：运费计算代理（见 DESIGN_zh.md §21）
-│       ├── src/index.ts              ← fetch 处理函数——调用 Shippo/EasyPost，返回最低运费
-│       ├── wrangler.toml             ← Worker 配置（变量与密钥见 workers/shipping-rate-proxy/README.md）
+│   ├── shipping-rate-proxy/          ← 可选：运费计算代理（见 DESIGN_zh.md §21）
+│   │   ├── src/index.ts              ← fetch 处理函数——调用 Shippo/EasyPost，返回最低运费
+│   │   ├── wrangler.toml             ← Worker 配置（变量与密钥见 workers/shipping-rate-proxy/README.md）
+│   │   └── README.md                 ← 部署指南 + API 约定
+│   └── contact-form-proxy/           ← 可选：买家询价转发（见 DESIGN_zh.md §23）
+│       ├── src/index.ts              ← fetch 处理函数——转发至 Discord/Telegram/邮件；服务端强制校验 ALLOWED_ORIGIN
+│       ├── wrangler.toml             ← Worker 配置（变量与密钥见 workers/contact-form-proxy/README.md）
 │       └── README.md                 ← 部署指南 + API 约定
 │
 ├── next.config.ts                    ← 静态导出配置、图片域名
@@ -210,6 +223,27 @@ ShippingEstimator（components/item/ShippingEstimator.tsx）
             │
             ▼  ShippingRate { amount, currency, carrier, service, estimatedDays }
             内联展示；出错时显示 t.shippingUnavailable
+```
+
+### 询价 / 联系表单转发（可选，客户端运行时）
+
+```
+EnquiryForm（components/contact/EnquiryForm.tsx）
+    │  仅当 siteConfig.notifications?.enabled && siteConfig.notifications?.proxyUrl
+    │  为真时渲染（app/[category]/[item]/page.tsx）——买家填写姓名 / 联系方式 / 留言
+    │  （item.price.negotiable 为真时还可填写报价）；隐藏的蜜罐字段用于识别机器人
+    ▼
+    POST siteConfig.notifications.proxyUrl
+        { itemCategory, itemSlug, itemName, buyerName, buyerContact,
+          message, offerAmount?, currency, honeypot }
+    │
+    ▼  workers/contact-form-proxy（Cloudflare Worker——持有通知渠道密钥）
+    服务端校验请求 Origin === ALLOWED_ORIGIN（而非仅依赖 CORS 响应头）
+    蜜罐字段非空 → 与成功时返回相同的 200 {ok:true}，静默丢弃
+    按 NOTIFICATION_PROVIDER 转发至 Discord webhook / Telegram bot / Resend 邮件
+    │
+    ▼  { ok: true } | { error: "..." }
+    成功显示 t.enquirySuccess；校验/发送失败显示 t.enquiryError
 ```
 
 ### 图片上传（仅在卖家本机）
@@ -487,6 +521,13 @@ isTemplateConfigured(): boolean
 | `pnpm new <分类>/<物品>` | `pnpm create-item` 的别名 |
 | `pnpm create-template [分类]` | `create-template.ts`——创建带完整注释的 `_template.json` 脚手架 |
 | `pnpm mark-sold <分类>/<物品>` | `mark-sold.ts`——通过外科式 JSONC 编辑设置 `status: "sold"` + `sold_date: 今天` |
+| `pnpm mark-available <分类>/<物品>` | `mark-available.ts`——将 `status` 重置为 `"available"` 并清空 `sold_date`（与 `mark-sold.ts` 镜像对称） |
+| `pnpm duplicate <分类>/<物品> <分类>/<新物品>` | `duplicate.ts`——将源物品目录（item.json + 全部照片）复制为新物品，并重置生命周期相关字段，使副本以全新草稿状态开始 |
+| `pnpm inventory` | `inventory.ts`——打印全部状态物品的 Markdown 表格：名称、分类、状态、最低已解析价格、已上架天数（只读） |
+| `pnpm stale-check [--days <n>]` | `stale-check.ts`——列出上架超过 N 天的 `available` 物品（默认 60 天；只读） |
+| `pnpm audit-listings` | `audit-listings.ts`——报告缺失推荐（Schema 可选）字段的物品：照片、描述、标签、运费档位下的重量/尺寸、价格档位（只读） |
+| `pnpm export-csv` | `export-csv.ts`——将全部状态的物品导出为 `exports/listings.csv`，供卖家自行记录——非 Facebook 格式（覆盖前会提示确认） |
+| `pnpm semester-end` | `semester-end.ts`——交互式复查滞销物品：逐项标记售出 / 降价 / 保持不变；仅提示（从不自动执行）提交命令 |
 | `pnpm fb-export` | `export-facebook.ts`——交互式 Facebook Marketplace CSV 导出（50 条一批、照片复制、运行历史去重，输出到 `exports/`） |
 | `pnpm push` | `git add content lib/generated/image-manifest.json && git commit -m 'chore: update listings' && git push`——Seller Studio 的发布流程严格镜像这两个路径 |
 | `pnpm setup-ui` | `bash scripts/setup-ui.sh`——一次性将全部 27 个 Aceternity 组件安装到 `components/ui/`（模板维护） |
@@ -504,7 +545,7 @@ isTemplateConfigured(): boolean
 
 ### `scripts/lib/` — 共享支持模块
 
-非独立可执行文件——由上述 CLI 导入。14 个模块中的 10 个有共置的 `*.test.ts`，由 `pnpm test` 运行（scripts 测试还包括 `scripts/update-site.test.ts` 和 `scripts/studioFields.test.ts`；全仓库测试套件约 37 个测试文件 / 619 个测试）。
+非独立可执行文件——由上述 CLI 导入。下表 26 个模块中的 21 个有共置的 `*.test.ts`，由 `pnpm test` 运行（scripts 测试还包括 `scripts/update-site.test.ts` 和 `scripts/studioFields.test.ts`；全仓库测试套件约 37 个测试文件 / 619 个测试）。
 
 | 模块 | 用途 |
 |---|---|
@@ -518,6 +559,14 @@ isTemplateConfigured(): boolean
 | `itemEdit.ts` | 基于 `jsonc-parser` 的外科式 JSONC 编辑——注释、格式与 `reserved_for` 在每次写入后均得以保留 |
 | `itemFields.ts` | 浏览器可写字段路径的严格 Zod 白名单；`resolveFieldSchema(path)` 是唯一权威；`reserved_for` 被拒绝 |
 | `markSold.ts` | `applyMarkSold(text, today)`——status → sold + `sold_date`；已售则返回 null |
+| `markAvailable.ts` | `applyMarkAvailable(text)`——status → available + `sold_date: null`（与 `markSold.ts` 镜像对称）；已是 available 则返回 null |
+| `duplicateItem.ts` | `pnpm duplicate` 的纯文本转换：重置 `status`/`listed_date`/`sold_date`/`price_reduced`/`previous_lowest_price`/`min_acceptable_offer`，使副本以全新草稿状态开始 |
+| `itemAge.ts` | `daysListed(listedDate, now?)`——由 `inventory`、`stale-check`、`semester-end` 共用的整天数计算；采用 UTC 零点计算，容忍格式错误/未来日期 |
+| `staleItems.ts` | `findStaleItems()` / `DEFAULT_STALE_DAYS = 60` / `parseStaleDaysArg()`——`stale-check` 与 `semester-end` 共用的"哪些物品滞销"判定逻辑 |
+| `reducePrice.ts` | `applyReducePrice()` / `parseReduceAmount()`——`semester-end`"降价"操作所用的最低档位价格外科式编辑 |
+| `auditListings.ts` | `auditListings()` / `formatAuditReport()`——标记缺失推荐（Schema 可选）字段的物品：照片、描述、标签、运费档位下的重量/尺寸、价格档位 |
+| `csv.ts` | `csvCell()` / `toCsvString()`——`export-csv` 与 `export-facebook` 共用的 RFC 4180 CSV 转义 |
+| `exportCsv.ts` | `buildExportCsvRows()` / `EXPORT_CSV_HEADERS`——`pnpm export-csv` 全状态卖家记录 CSV 的行构建器（非 Facebook 格式） |
 | `fbCategoryMap.ts` | 有序正则 → `Top//Sub//Leaf` Facebook 类目规则，供 `fb-export` 使用 |
 | `exportHistory.ts` | 读取/追加 `exports/.export-history.json`（.gitignore），支撑 fb-export 的跳过已导出步骤 |
 | `configDefaults.ts` | 可注入可选配置字段的声明式注册表（key / afterKey / lines），供 `pnpm migrate-config` 消费；`pnpm update-site` 会自动运行配置迁移 |
@@ -647,7 +696,7 @@ gh-pages   ← 线上站点（GitHub Pages 管理分支）
 | `lib/generated/image-manifest.json` 保留在 git 中 | 未加入 `.gitignore`；CI 构建依赖此文件 |
 | 物品和分类 slug 为 kebab-case | `lib/utils/slug.ts` 中的 `isValidSlug()`，由 `create-item.ts`、`mark-sold.ts`、`generateStaticParams` 使用 |
 | 卖家仅向 `content/` 写入 | AI 技能文件和所有脚本均遵守此边界（Seller Studio 额外写入 `lib/generated/image-manifest.json`，并对 `content/` + 清单执行 git 操作） |
-| 新增配置字段向后兼容 | 核心之后的字段（`shipping?`、`measurementUnit?`、`localeMeasurementUnits?`、`defaultPriceTiers?`、`ui.priceFilterStrategy?`、`ui.priceFilterBuckets?`）均为 TypeScript 可选，并有运行时 `??` 默认值；`scripts/lib/configDefaults.ts` + `pnpm migrate-config`（由 `pnpm update-site` 自动运行）将其拼接进旧配置 |
+| 新增配置字段向后兼容 | 核心之后的字段（`shipping?`、`measurementUnit?`、`localeMeasurementUnits?`、`defaultPriceTiers?`、`ui.priceFilterStrategy?`、`ui.priceFilterBuckets?`、`notifications?`、`contact.schedulingUrl?`）均为 TypeScript 可选，并有运行时 `??` 默认值；`scripts/lib/configDefaults.ts` + `pnpm migrate-config`（由 `pnpm update-site` 自动运行）将其拼接进旧配置 |
 | Studio 仅绑定 `127.0.0.1` 且绝不使用 `git add -A` | `scripts/studio.ts` 的 host 绑定；`scripts/lib/studioGit.ts` 的 `PUBLISHABLE_PATHS` 保护 `.env.local` |
 | 草稿物品无静态路由 | 加载器可见性过滤器从 `generateStaticParams` 中排除 `status: "draft"` |
 | `soldItemRetentionDays: -1` 立即隐藏 | `isSoldItemVisible()` 中的显式 `< 0` 判断 |
@@ -676,6 +725,8 @@ gh-pages   ← 线上站点（GitHub Pages 管理分支）
 
 shipping-rate-proxy Worker 的变量与密钥（`SHIPPO_API_KEY`、`EASYPOST_API_KEY`、`SHIPPING_PROVIDER`、`ALLOWED_ORIGIN`、`ORIGIN_ZIP`、`ORIGIN_COUNTRY`）均保存在 `workers/shipping-rate-proxy/` 内——见 [workers/shipping-rate-proxy/README.md](../workers/shipping-rate-proxy/README.md)。它们绝不存放在根目录的 `.env.local` 中。
 
+contact-form-proxy Worker 的变量与密钥（变量：`NOTIFICATION_PROVIDER`、`ALLOWED_ORIGIN`、`SITE_BASE_URL`、`TELEGRAM_CHAT_ID`、`NOTIFICATION_EMAIL_TO`、`NOTIFICATION_EMAIL_FROM`；密钥：`DISCORD_WEBHOOK_URL`、`TELEGRAM_BOT_TOKEN`、`RESEND_API_KEY`）均保存在 `workers/contact-form-proxy/` 内——见 [workers/contact-form-proxy/README.md](../workers/contact-form-proxy/README.md)。它们绝不存放在根目录的 `.env.local` 中。
+
 配置步骤见 [`.env.example`](../.env.example)，完整 CDN 配置说明见 [setup_instruction_zh.md](setup_instruction_zh.md)。
 
 ---
@@ -692,6 +743,7 @@ shipping-rate-proxy Worker 的变量与密钥（`SHIPPO_API_KEY`、`EASYPOST_API
 | i18n 运行时 | [DESIGN_zh.md §12](DESIGN_zh.md)、[TECH_REQUIREMENTS_zh.md §22.8](TECH_REQUIREMENTS_zh.md) |
 | 已售物品留存公式 | [DESIGN_zh.md §8](DESIGN_zh.md) |
 | 运费计算器集成（可选） | [DESIGN_zh.md §21](DESIGN_zh.md)、[workers/shipping-rate-proxy/README.md](../workers/shipping-rate-proxy/README.md) |
+| 联系表单询价转发（可选） | [DESIGN_zh.md §23](DESIGN_zh.md)、[TECH_REQUIREMENTS_zh.md §31](TECH_REQUIREMENTS_zh.md)、[workers/contact-form-proxy/README.md](../workers/contact-form-proxy/README.md) |
 | 部署清单 | [TECH_REQUIREMENTS_zh.md §19](TECH_REQUIREMENTS_zh.md) |
 | 测试策略 | [TECH_REQUIREMENTS_zh.md §25](TECH_REQUIREMENTS_zh.md) |
 | CDN 配置说明 | [setup_instruction_zh.md](setup_instruction_zh.md) |

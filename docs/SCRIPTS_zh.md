@@ -1,8 +1,8 @@
 # UsedExchange — 脚本与工具参考
 
-**版本：** 1.1
-**日期：** 2026-09-05
-**包版本：** 1.4.2（见 `package.json`）
+**版本：** 1.2
+**日期：** 2026-09-07
+**包版本：** 1.7.1（见 `package.json`）
 
 > 本文档为仓库中所有 npm 脚本、独立 CLI 及支撑模块的完整参考。架构与数据流见 [ARCHITECTURE_zh.md](ARCHITECTURE_zh.md)；完整设计规范见 [DESIGN_zh.md](DESIGN_zh.md)；非技术卖家操作指南见 [../SETUP_GUIDE.md](../SETUP_GUIDE.md)。
 >
@@ -15,7 +15,7 @@
 - 所有 CLI 均位于 `scripts/`，通过 **tsx** 执行（Node.js 环境——无浏览器 API），属于生产级工具，而非仅开发期辅助。
 - 根目录 `package.json` 共定义 **31 个 npm 脚本**；`new` 是 `create-item` 的完全别名，另有三个脚本（`upload-images`、`dev`、`prebuild`）是 `scripts/sync-images.ts` 三种模式的轻量封装。
 - **卖家只需手动编辑 `content/` 内的文件。** 下文的 CLI 会*代你*读写 `content/`——你无需亲自打开 `app/`、`lib/` 或 `scripts/`。
-- `workers/shipping-rate-proxy/` 是一个**独立部署**的 Cloudflare Worker 包，拥有自己的 `package.json`；它不在根级 tsconfig / ESLint / Vitest 的作用域内。
+- `workers/shipping-rate-proxy/` 与 `workers/contact-form-proxy/` 均为**独立部署**的 Cloudflare Worker 包，各自拥有自己的 `package.json`；两者均不在根级 tsconfig / ESLint / Vitest 的作用域内。
 - `lib/generated/image-manifest.json` **提交到 git**（铁律 #5）。脚本负责写入它；CI 直接读取它，无需任何 CDN 凭据。
 
 ---
@@ -197,7 +197,7 @@
 ### `migrate-config.ts` —— 配置迁移
 
 - **命令：** `pnpm migrate-config`（`update-site` 在检出后也会以编程方式调用它 —— 由 `argv[1]` 的 `endsWith` 判断守护，因此仅导入该模块不会自动执行）。
-- **用途：** 扫描 `content/config.ts`，找出模板升级后缺失的配置字段，并按 `scripts/lib/configDefaults.ts` 中 `CONFIG_DEFAULTS` 注册表的默认值拼接注入（当前为 `priceFilterStrategy` 块及 `filterPriceBucketAll` / `filterPriceIncludesOutliers` 两个 UIStrings 键）。**只做加法** —— 绝不删除或修改已有值。与铁律 #8 一致：每个被注入的字段在 TypeScript 类型上都是可选的，且在使用处有运行时默认值，因此即使下游配置跳过迁移也能通过类型检查。若某条目的锚点行（`afterKey`）未找到则跳过（并警告）；输出新增字段名或 "config is up to date"。
+- **用途：** 扫描 `content/config.ts`，找出模板升级后缺失的配置字段，并按 `scripts/lib/configDefaults.ts` 中 `CONFIG_DEFAULTS` 注册表的默认值拼接注入（当前涵盖价格筛选 UI 设置、已售存档展示上限、Google Analytics、联系表单通知/预约排程配置及其询价表单与预约看货相关 UI 文案、标签/课程筛选文案，以及 PDF 导出/联系方式 UI 文案）。**只做加法** —— 绝不删除或修改已有值。与铁律 #8 一致：每个被注入的字段在 TypeScript 类型上都是可选的，且在使用处有运行时默认值，因此即使下游配置跳过迁移也能通过类型检查。若某条目的锚点行（`afterKey`）未找到则跳过（并警告）；输出新增字段名或 "config is up to date"。
 - **环境变量：** 无。
 - **触碰的文件：** 读写 `content/config.ts`；读取 `scripts/lib/configDefaults.ts`。
 
@@ -266,7 +266,7 @@
 | `reducePrice.ts` | `findLowestTierIndex(tiers)` / `applyReducePrice(text, newAmount)`：通过 `applyFieldEdits` 改写物品最低价格分级；若没有可降价的分级则返回 `null`。供 `semester-end` 的"降价"操作使用。 |
 | `fbCategoryMap.ts` | 供 `fb-export` 使用的有序正则 → `"Top//Sub//Leaf"` Facebook 类目映射规则（49 条有序正则规则，另有 11 条 slug 级回退）。 |
 | `exportHistory.ts` | 读取/追加 `exports/.export-history.json`（gitignore），支撑 `fb-export` 第 0 步的跳过逻辑。 |
-| `configDefaults.ts` | 可注入配置字段的声明式注册表（`key` / `afterKey` / `lines`），供 `migrate-config` + `update-site` 使用 —— 当前为 `priceFilterStrategy` 块及 `filterPriceBucketAll` / `filterPriceIncludesOutliers` 两个 UIStrings 键。 |
+| `configDefaults.ts` | 可注入配置字段的声明式注册表（`key` / `afterKey` / `lines`），供 `migrate-config` + `update-site` 使用 —— 当前涵盖价格筛选 UI 设置、已售存档展示上限、Google Analytics、联系表单通知/预约排程配置及其询价表单与预约看货 UI 文案、标签/课程筛选文案，以及 PDF 导出/联系方式 UI 文案。 |
 | `studioApi.ts` | Studio 的框架无关 HTTP 处理器：Zod 校验请求、slug 白名单 + 针对 `content/items/` 的解析后路径包容性校验、JSON / 文件 / SSE 三类响应、`StudioError` → 带状态码的 JSON。路由正则匹配原始百分号编码路径，匹配成功后才逐段解码（防路径穿越）。 |
 | `studioGit.ts` | `readChanges` / `publishChanges` + `GitError`：git status/commit/push 仅限 `PUBLISHABLE_PATHS = [content, lib/generated/image-manifest.json]` —— 与 `pnpm push` 保持一致，**绝不使用 `git add -A`**（保护 `.env.local`）；仅用 `execFile` 加参数数组（无 shell）；提交信息经 stdin 传入（`-F -`），`MAX_MESSAGE_LENGTH=500`；`-c core.quotepath=false -z` 确保中文/含空格文件名正确解析；处理 detached HEAD（拒绝）、未出生分支、裸仓库，以及滞留提交的重推。 |
 | `studioImages.ts` | 照片上传/删除/重排的文件系统操作：`IMAGE_EXTENSIONS` = jpg\|jpeg\|png\|webp\|gif、文件名规范化（`sanitizeUploadFilename`、`IMAGE_FILENAME_RE` 白名单）、魔数字节内容嗅探（`sniffImageType`）、防冲突写入。 |
@@ -315,6 +315,49 @@ Worker 的 npm 脚本（在 `workers/shipping-rate-proxy/` 目录下运行）：
 
 ---
 
+## `workers/contact-form-proxy/`
+
+### 是什么
+
+一个 Cloudflare Worker，将物品详情页 `EnquiryForm.tsx` 提交的买家询价转发给卖家 —— 通过 **Discord**、**Telegram** 或**邮件**（Resend），无需直接暴露卖家的联系方式。仅接受 POST，校验 `itemCategory`、`itemSlug`、`itemName`、`buyerName`、`buyerContact`、`message`（≤2000 字符）、可选的 `offerAmount`，以及一个 `honeypot` 字段：`honeypot` 非空时会被静默判定为垃圾信息并丢弃，但 Worker 仍返回与真实成功相同的 `200 { "ok": true }`，使机器人无法得知其提交已被拒绝。`ALLOWED_ORIGIN` 在服务端校验请求的 `Origin` 头 —— 这是基本的访问门槛，而非密码学级别的保证。按设计**无持久化存储、无限流/验证码**（若卖家实际遇到垃圾信息，Worker 的 README 中给出了建议的基础设施级下一步方案 —— Cloudflare Turnstile、WAF 限流规则）。仅当 `siteConfig.notifications.enabled` 为 `true` 时才会在客户端被调用。
+
+### 为什么存在
+
+站点是完全静态导出的 —— 通知投递所需的密钥（Discord webhook URL、Telegram bot token 或 Resend API key）**绝不能**进入浏览器 bundle。Worker 将密钥保存在服务端，并将 CORS 严格锁定到唯一的 `ALLOWED_ORIGIN`，与 `workers/shipping-rate-proxy/` 的理由相同。见 [FEATURES_ROADMAP_zh.md §3.1](FEATURES_ROADMAP_zh.md)。
+
+### 部署与本地开发
+
+独立项目，自带 `package.json`（name 为 `contact-form-proxy`，`compatibility_date = 2026-01-01`）；完整步骤见 [../workers/contact-form-proxy/README.md](../workers/contact-form-proxy/README.md)：
+
+```bash
+cd workers/contact-form-proxy
+pnpm install
+
+# 1. 普通变量 —— 编辑 wrangler.toml 的 [vars]：
+#      NOTIFICATION_PROVIDER = "discord" | "telegram" | "email"
+#      ALLOWED_ORIGIN         = 与 siteConfig.baseUrl 完全一致（无结尾斜杠）
+#      SITE_BASE_URL          = 与 ALLOWED_ORIGIN 相同（用于链回物品详情页）
+#      TELEGRAM_CHAT_ID                                  （仅 telegram 需要）
+#      NOTIFICATION_EMAIL_TO / NOTIFICATION_EMAIL_FROM   （仅 email 需要）
+
+# 2. 本地开发：
+cp .dev.vars.example .dev.vars   # 在此填入测试用的服务商密钥（gitignore）
+pnpm dev                          # wrangler dev
+
+# 3. 部署：
+pnpm wrangler login               # 仅需一次
+pnpm wrangler secret put DISCORD_WEBHOOK_URL   # 或 TELEGRAM_BOT_TOKEN / RESEND_API_KEY
+pnpm deploy                       # wrangler deploy → 输出 workers.dev URL
+
+# 4. 将输出的 URL 填入 content/config.ts → notifications.proxyUrl，并设置 enabled: true
+#    （或运行 /setup-contact-form 技能）
+pnpm type-check                   # 可选：对 worker 包执行 tsc --noEmit
+```
+
+Worker 的 npm 脚本（在 `workers/contact-form-proxy/` 目录下运行）：`dev`（`wrangler dev`）、`deploy`（`wrangler deploy`）、`type-check`（`tsc --noEmit`）。
+
+---
+
 ## 环境变量参考
 
 ### 本机（gitignore 的 `.env.local`）
@@ -349,6 +392,20 @@ Worker 的 npm 脚本（在 `workers/shipping-rate-proxy/` 目录下运行）：
 | `SHIPPO_API_KEY` | **密钥** | `wrangler secret put`（本地：`.dev.vars`） | Shippo 令牌，provider = `shippo` 时置于 `Authorization: ShippoToken` 请求头 |
 | `EASYPOST_API_KEY` | **密钥** | `wrangler secret put`（本地：`.dev.vars`） | EasyPost 密钥，provider = `easypost` 时 base64 编码进 Basic auth 请求头 |
 
+### Worker（`workers/contact-form-proxy`）
+
+| 变量 | 类别 | 位置 | 说明 |
+|---|---|---|---|
+| `NOTIFICATION_PROVIDER` | 普通变量 | `wrangler.toml [vars]` | `"discord"`（默认）\| `"telegram"` \| `"email"` —— 选择通知渠道 |
+| `ALLOWED_ORIGIN` | 普通变量 | `wrangler.toml [vars]` | CORS 唯一允许的 Origin；必须与 `siteConfig.baseUrl` 完全一致（无结尾斜杠） |
+| `SITE_BASE_URL` | 普通变量 | `wrangler.toml [vars]` | 用于在通知消息中构造"查看在线物品"链接（Worker 无法导入 `content/config.ts`） |
+| `TELEGRAM_CHAT_ID` | 普通变量 | `wrangler.toml [vars]` | 要发送到的聊天/频道 id；仅在 provider = `telegram` 时有意义 |
+| `NOTIFICATION_EMAIL_TO` | 普通变量 | `wrangler.toml [vars]` | 卖家收件邮箱；仅 provider = `email` 时使用 |
+| `NOTIFICATION_EMAIL_FROM` | 普通变量 | `wrangler.toml [vars]` | 必须是已在 Resend 验证过的域名；仅 provider = `email` 时使用 |
+| `DISCORD_WEBHOOK_URL` | **密钥** | `wrangler secret put`（本地：`.dev.vars`） | Discord webhook URL，provider = `discord` 时必需 |
+| `TELEGRAM_BOT_TOKEN` | **密钥** | `wrangler secret put`（本地：`.dev.vars`） | Telegram bot token，provider = `telegram` 时必需 |
+| `RESEND_API_KEY` | **密钥** | `wrangler secret put`（本地：`.dev.vars`） | Resend API key，provider = `email` 时必需 |
+
 ---
 
 ## 安全说明
@@ -370,6 +427,7 @@ Worker 的 npm 脚本（在 `workers/shipping-rate-proxy/` 目录下运行）：
 | `item.json` 完整 Schema（36 个顶层字段；连同私有的 `reserved_for` 为 37 个） | [DESIGN_zh.md §5](DESIGN_zh.md) |
 | `content/config.ts` 完整模板 | [DESIGN_zh.md §13](DESIGN_zh.md) |
 | 运费计算器集成 | [DESIGN_zh.md §21](DESIGN_zh.md)、[../workers/shipping-rate-proxy/README.md](../workers/shipping-rate-proxy/README.md) |
+| 联系表单 / 询价转发集成 | [FEATURES_ROADMAP_zh.md §3.1](FEATURES_ROADMAP_zh.md)、[../workers/contact-form-proxy/README.md](../workers/contact-form-proxy/README.md) |
 | CDN 配置说明 | [setup_instruction_zh.md](setup_instruction_zh.md) |
 | 下游站点更新指南 | [UPDATE_GUIDE_zh.md](UPDATE_GUIDE_zh.md) |
 | 部署清单（GitHub Pages + R2） | [TECH_REQUIREMENTS_zh.md §19](TECH_REQUIREMENTS_zh.md) |

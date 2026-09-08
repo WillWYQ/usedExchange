@@ -1,7 +1,7 @@
-# UsedExchange — Current Functionality (v1.3)
+# UsedExchange — Current Functionality (v1.4)
 
-**Based on:** DESIGN.md v0.10.1 · TECH_REQUIREMENTS.md v0.10.1 · IMPLEMENTATION_PLAN.md v1.7  
-**Date:** 2026-09-05  
+**Based on:** DESIGN.md v0.10.2 · TECH_REQUIREMENTS.md v0.10.2 · IMPLEMENTATION_PLAN.md v1.7  
+**Date:** 2026-09-07  
 **Status:** Implemented — this document describes all live functionality: core v1 plus Phases 16–18 (shipping estimator, Facebook Marketplace export, Seller Studio).
 
 ---
@@ -166,7 +166,7 @@ Every new or changed JPEG/PNG/WebP photo is automatically re-encoded via `sharp`
 
 ### Category Page (`/[category]`)
 - Location price bar — detected distance + "Change distance" override
-- **Filter bar** — condition chips + price range slider (configurable outlier strategy via `ui.priceFilterStrategy`: none / percentile / logarithmic / preset-buckets / iqr) + status toggle
+- **Filter bar** — condition chips + course chip (single-select; shown only when the category has items with a non-empty `course` field, e.g. textbooks) + tag chips (multi-select, AND-matching; shown only when items in the category carry tags) + price range slider (configurable outlier strategy via `ui.priceFilterStrategy`: none / percentile / logarithmic / preset-buckets / iqr) + status toggle
 - **Sort select** — Price low/high · Date listed · Condition
 - **"Browse All" link** — navigates to `/all`
 - Item grid with location-resolved prices
@@ -183,9 +183,10 @@ Every new or changed JPEG/PNG/WebP photo is automatically re-encoded via `sharp`
 - **YouTube demo** — "Watch Demo" button when `youtube_link` is set
 - **Pickup windows** — shown when `pickup_windows` is non-empty
 - **Pricing section** — resolved tier + toggle + "Make an Offer" button + "Pay Deposit" Stripe button + "Pay with Venmo" button (when `venmo_payment_request` set)
+- **Schedule Viewing** — button shown when `siteConfig.contact.schedulingUrl` is set (optional, site-level, not per-item); opens the external scheduling link (Calendly/Cal.com/etc.) in a new tab
 - **Metadata table** — brand, model, dimensions, weight, original source/price
-- **Contact section** — platform buttons with pre-filled messages, payment methods, contact note
-- **Tags** — non-interactive chips (searchable via search)
+- **Contact section** — platform buttons with pre-filled messages, payment methods, contact note (below it, the optional enquiry form — see Contact System → Enquiry Form / Contact Relay)
+- **Tags** — each tag links to `/tags/{tag}`, a static page listing every visible item with that tag across categories (also searchable via search); falls back to a non-interactive chip when the tag's slug is unsafe (e.g. CJK-only) or collides with another tag's slug (both cases are dropped from the tag index)
 - **Share button** — native share on mobile; copy-link on desktop
 - **JSON-LD** — Product schema + BreadcrumbList for SEO rich snippets
 - **If sold** — "SOLD" banner; contact CTA disabled; sold date shown
@@ -241,6 +242,15 @@ Site header + "Page not found" + link home.
 - `reveal_behavior: "click"` — hidden behind "Show contact" toggle (default)
 - `reveal_behavior: "always"` — always visible
 
+### Enquiry Form / Contact Relay (Optional)
+Disabled by default — sellers opt in by setting both `siteConfig.notifications.enabled: true` and `siteConfig.notifications.proxyUrl`. When both are set, item detail pages show an `EnquiryForm` (name, contact info, message, and — when the item is negotiable — an offer amount) below the Contact section.
+
+- **On submit** — POSTs to the seller's `contact-form-proxy` Cloudflare Worker, which relays a formatted notification via Discord, Telegram, or email depending on the Worker's `NOTIFICATION_PROVIDER` setting.
+- **Anti-spam** — an off-screen honeypot field; a filled honeypot gets the exact same success response as a real submission, so a bot can't tell its submission was dropped.
+- **Origin enforcement** — the Worker checks the request's `Origin` header against `ALLOWED_ORIGIN` server-side (not just via CORS response headers), rejecting any other origin — a basic access gate, not a cryptographic guarantee.
+
+Notification-delivery secrets (Discord webhook URL, Telegram bot token, Resend API key) live only in the Worker, never in the static site bundle. See `workers/contact-form-proxy/README.md` and `.claude/commands/setup-contact-form.md`.
+
 ---
 
 ## AI-Powered Content Generation
@@ -292,7 +302,7 @@ Batch-translates item listings into additional locales. After adding a locale, i
 
 ```
 1. Add the locale code to siteConfig.i18n.availableLocales  (e.g. ["en", "zh"])
-2. Add a translations.{locale} block to content/config.ts with all 87 UI string keys translated
+2. Add a translations.{locale} block to content/config.ts with all 124 UI string keys translated
 3. Open Claude Code (or similar AI tool) in the project directory
 4. Type: /translate-items   (or "translate my items into zh")
 5. Review the proposed translations shown per item
@@ -301,7 +311,7 @@ Batch-translates item listings into additional locales. After adding a locale, i
 
 Translates `name` → `name_{locale}` and `description` → `description_{locale}` only; preserves brand, model, tags, prices, dates, and all Markdown syntax verbatim. Skips items that already have a non-empty translation. Writes only to `content/items/*/item.json`.
 
-> **Note:** `/translate-items` handles item-level translations only. The `translations.{locale}` UI strings block (buttons, badges, headers — 87 keys) must be filled in manually in `content/config.ts` (or by re-running `/setup`) before running this skill.
+> **Note:** `/translate-items` handles item-level translations only. The `translations.{locale}` UI strings block (buttons, badges, headers — 124 keys) must be filled in manually in `content/config.ts` (or by re-running `/setup`) before running this skill.
 
 ### Skill 4 — Shipping Setup Wizard (`/setup-shipping`)
 
@@ -331,7 +341,7 @@ Visitors can read listings in more than one language and switch on the fly.
 
 - **For visitors:** a language toggle (`LocaleSwitcher`) appears in the site header whenever more than one locale is configured. Switching language instantly updates item names, descriptions, and all UI labels (buttons, badges, headers) — no page reload. The choice is remembered in the browser (`localStorage`) across pages and visits.
 - **For sellers:** two steps to add a language:
-  1. Add the locale code to `siteConfig.i18n.availableLocales` (e.g. `["en", "zh"]`) **and** add a `translations.{locale}` block in `content/config.ts` with all 87 UI string keys translated. The build fails if this block is missing or incomplete.
+  1. Add the locale code to `siteConfig.i18n.availableLocales` (e.g. `["en", "zh"]`) **and** add a `translations.{locale}` block in `content/config.ts` with all 124 UI string keys translated. The build fails if this block is missing or incomplete.
   2. Fill in `name_zh` / `description_zh` on each item — by hand or with the `/translate-items` AI skill.
 - **Fallback:** any item without a translation shows the default language — never a blank or an error. Any missing UI string key falls back to the built-in English default.
 - **Single deployment:** all languages ship in one build; there are no separate per-language sites.
@@ -349,16 +359,23 @@ Built at compile time using `fuse.js`. Searches across: name, description, brand
 
 ## Seller CLI Tools
 
-Scripts run on the seller's machine. All listing changes write only to `content/` (plus the generated image manifest); `upload-images` additionally writes the manifest and checksum cache, and `fb-export` writes into `exports/`.
+Scripts run on the seller's machine. All listing changes write only to `content/` (plus the generated image manifest); `upload-images` additionally writes the manifest and checksum cache, and `fb-export`/`export-csv` write into `exports/`.
 
 | Command | What it does |
 |---|---|
 | `pnpm upload-images` | Upload photos to CDN, update manifest, print backup reminder |
 | `pnpm push` | Stage `content/` + manifest, commit with default message, and push |
 | `pnpm mark-sold <cat>/<name>` | Set `status: "sold"` and `sold_date: today` without editing JSON — edits the JSONC in place, preserving any `// options: ...` comments |
+| `pnpm mark-available <cat>/<name>` | Reset `status` to `"available"` and clear `sold_date` from any prior state (sold, pending, reserved, draft) — same surgical JSONC edit as `mark-sold`; no-op if already `available` |
+| `pnpm duplicate <cat>/<item> <cat>/<new-item>` | Copy an item's folder (item.json + photos) to a new item, resetting the copy's `status` to `draft`, `listed_date` to today, and clearing `sold_date` / `price_reduced` / `previous_lowest_price` / `min_acceptable_offer`; the private `reserved_for` field is stripped from the copy outright |
 | `pnpm create-item <cat>/<name>` | Create new item folder + `item.json` pre-filled with all 36 template fields (the full item schema, see DESIGN.md §5; the private `reserved_for` field is intentionally never scaffolded), written as JSONC with `// options: ...` hints listing every valid value for `condition`, `status`, `dimensions.unit`, and `weight.unit` |
 | `pnpm new <cat>/<name>` | Shorthand for `create-item` |
 | `pnpm create-template [cat]` | Create a `_template.json` for a category (or global) — same JSONC + `// options: ...` hints as `create-item` |
+| `pnpm inventory` | Print a Markdown table of every item (all statuses): category, status, lowest resolved price, days listed. Read-only |
+| `pnpm stale-check [--days <n>]` | List `available` items listed for more than N days (default 60), longest-listed first. Read-only |
+| `pnpm audit-listings` | Report non-sold items missing recommended fields — no photos, empty description, no tags, an open-ended shipping tier with no weight/dimensions, or no price tiers at all. Read-only |
+| `pnpm export-csv` | Export every item (all statuses) as a flat CSV to `exports/listings.csv` for the seller's own record-keeping — distinct from `fb-export`'s Facebook-formatted CSV |
+| `pnpm semester-end` | Interactively review stale `available` items (shares its 60-day threshold with `stale-check`): mark sold / reduce price / leave as-is per item, then runs `pnpm upload-images` if anything changed and prints the publish commands — never commits or pushes itself |
 | `pnpm fb-export` | Interactively export `available` / `pending` / `reserved` items to a Facebook Marketplace bulk-upload CSV. Guided prompt: select all / by category / individual items (supports comma lists and ranges like `1-4`); choose price strategy (lowest / highest / average / local-pickup tiers / shipping tiers — tier options appear only when matching items exist); auto-batches into 50-item files (FB's limit), written to `exports/facebook-marketplace.csv` (or `exports/facebook-marketplace-<N>.csv` when batched). Enforces FB limits: ≤150-char titles, ≤5000-char descriptions. Smart category mapping infers FB's category hierarchy from item tags, brand, and name — no manual setup needed. **Export history:** on the second run a Step 0 appears offering to skip items already exported in previous runs; history persisted in `exports/.export-history.json` (gitignored). **Photos:** the CSV PHOTO columns hold CDN `https://` URLs (up to 10 per item — FB's limit; Facebook fetches them when the CSV is uploaded), so run `pnpm upload-images` first or those columns are empty and the script warns you. As a manual-upload fallback (e.g. in case CDN URLs change), local photos are also copied to `exports/facebook-marketplace-photos/NNN_category-item/`. |
 
 ---
@@ -451,7 +468,8 @@ Fields marked **(optional)** are TypeScript-optional with runtime defaults — o
 | Seller location | `location.lat`, `location.lng`, `location.label` |
 | Content defaults | `currency`, `recentlyListedCount`, `soldItemRetentionDays`, `soldArchiveDisplayLimit?` **(optional)** — caps the `/sold` grid; `0` = unlimited, default `200`, `defaultPriceTiers?` **(optional)** — tier template used by `create-item`, `measurementUnit?` **(optional)** — `"metric"` / `"imperial"`, default `"metric"` |
 | Shipping **(optional section)** | `shipping.enabled`, `shipping.proxyUrl`, `shipping.defaultPayer` (`"seller"` / `"buyer"`), `shipping.origin.zip`, `shipping.origin.country` |
-| Contact | `contact.reveal_behavior`, `contact.platforms[]` |
+| Notifications **(optional section)** | `notifications.enabled`, `notifications.proxyUrl` |
+| Contact | `contact.reveal_behavior`, `contact.platforms[]`, `contact.schedulingUrl?` **(optional)** |
 | Hero | `hero.cta_label`, `hero.cta_href` |
 | SEO | `meta.description`, `meta.twitterHandle` |
 | UI slots | `ui.background`, `ui.itemGrid`, `ui.gallery`, `ui.itemCard`, `ui.priceFilterStrategy?` **(optional)**, `ui.priceFilterBuckets?` **(optional)** |
@@ -459,7 +477,7 @@ Fields marked **(optional)** are TypeScript-optional with runtime defaults — o
 | Analytics | `analytics.vercel`, `analytics.speedInsights`, `analytics.googleAnalyticsId` |
 | Search | `search.enabled`, `search.placeholder` |
 | Sitemap | `sitemap.enabled` |
-| i18n | `i18n.defaultLocale`, `i18n.availableLocales`, `i18n.showLocaleSwitcher`, `i18n.translations.{locale}.*` (87 UI string keys total; the prebuild check fails if any listed locale lacks the required keys, with the default locale as fallback), `i18n.localeMeasurementUnits?` **(optional)** — per-locale unit overrides |
+| i18n | `i18n.defaultLocale`, `i18n.availableLocales`, `i18n.showLocaleSwitcher`, `i18n.translations.{locale}.*` (124 UI string keys total; the prebuild check fails if any listed locale lacks the required keys, with the default locale as fallback), `i18n.localeMeasurementUnits?` **(optional)** — per-locale unit overrides |
 
 ---
 
@@ -496,6 +514,7 @@ Developer tooling: `pnpm type-check`, `pnpm lint` (zero-warning), `pnpm format`,
 - **Twitter card** (`summary_large_image`) on item detail pages
 - **Pinterest rich pin** (`og:type: "product"` + price meta) on item detail pages
 - `sitemap.xml` + `robots.txt` generated at build time (when enabled)
+- **Web app manifest** (`app/manifest.ts`) — makes the site installable as a home-screen app (name, icons, theme colour from `siteConfig`); no service worker or offline support
 
 ---
 
@@ -538,6 +557,7 @@ Vercel Analytics and Speed Insights are enabled via `siteConfig.analytics.vercel
 | `X-Powered-By` header | Suppressed |
 | Seller CLI tools | Listing changes write only to `content/` (plus the generated image manifest) |
 | Seller Studio | Binds to `127.0.0.1` only; CSRF-guarded mutating requests; publishes only `content/` + the image manifest (never `git add -A`, so `.env.local` can never be staged); never touches `reserved_for` |
+| Contact-form proxy Worker | Enforces `ALLOWED_ORIGIN` against the request's `Origin` header server-side (not just CORS response headers) — a basic access gate, not a cryptographic guarantee |
 | Image manifest | `lib/generated/image-manifest.json` is committed to git so CI builds need no CDN credentials |
 
 ---

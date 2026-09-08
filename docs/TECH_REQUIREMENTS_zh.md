@@ -1,8 +1,8 @@
 # UsedExchange — 技术要求
 
-**版本：** 0.10.0  
-**日期：** 2026-08-02  
-**配套：** DESIGN.md v0.10.0
+**版本：** 0.10.2  
+**日期：** 2026-09-07  
+**配套：** DESIGN.md v0.10.2
 
 ---
 
@@ -665,6 +665,20 @@ export async function generateStaticParams() {
 - `draft` 物品从参数中排除（不生成页面）
 - 超过保留期的 `sold` 物品从参数中排除（不生成页面）
 - `generateMetadata` 读取物品并返回 Open Graph + Twitter 卡片标签，包括 `og:image`（物品 `coverImage`）
+
+### `/tags/[tag]` 的 `generateStaticParams`
+
+```ts
+export async function generateStaticParams() {
+  const index = await loadTagIndex();
+  return [...index.keys()].map((slug) => ({ tag: slug }));
+}
+```
+
+- 由 `loadTagIndex()`（`lib/content/loader.ts`）支撑——对同一个可见物品集合（`isItemVisible`）做单次遍历，该集合已排除 `draft` 物品和超过保留期的 `sold` 物品，因此标签索引绝不会链接到一个 `/[category]/[item]` 本身不会生成的页面。
+- 具备碰撞检测：若两个不同的原始标签拼写 slugify 后落到同一个路由片段，`loadTagIndex()` 会将该 slug 整体从索引中剔除（通过 `console.warn` 警告），而不是生成一个混用两种标签物品、或只能从其中一种拼写链接过去的页面。
+- `generateMetadata` 返回 `#<tag> — <站点名称>` 标题 + 描述 + Open Graph 标签，其中 `<tag>` 是索引条目上存储的规范（未 slugify）原始拼写，而非 slug 本身。
+- 在 `deploymentMode: "vercel"` 下，页面组件仅在请求的 slug 没有匹配的索引条目时才调用 `notFound()`——与 `/[category]`、`/[category]/[item]` 相同的、由 `dynamicParams` 驱动的按需渲染保护机制。
 
 ---
 
@@ -1449,6 +1463,51 @@ export default { plugins: { "@tailwindcss/postcss": {} } };
 }
 ```
 
+#### 卖家 CLI 工具包新增（`3a714d6`）
+
+七个以只读为主的脚本沿用了上面确立的 slug 校验与 JSONC 编辑约定。本节仅覆盖接口/行为约定；完整操作说明与示例输出见 `docs/SCRIPTS.md`。
+
+#### `pnpm mark-available <category>/<name>`（`scripts/mark-available.ts`）
+
+1. 在任何文件系统访问之前，通过 `isValidSlug` 验证 `<category>` 和 `<name>` 为 kebab-case slug（与 `mark-sold`/`create-item` 完全相同的防护）。
+2. 应用 `applyMarkAvailable(text)`（`scripts/lib/markAvailable.ts`）——一次保留注释的 JSONC 编辑，设置 `status: "available"` 和 `sold_date: null`。可从**任何**其他状态（sold、pending、reserved、draft）重置，不仅限于 `"sold"`。
+3. **幂等：** 若 `status` 已为 `"available"`，返回 `null`（不写入）并打印 `[mark-available] <item> is already available.`。
+
+#### `pnpm duplicate <category>/<item> <category>/<new-item>`（`scripts/duplicate.ts`）
+
+1. 在任何文件系统访问之前，通过 `isValidSlug` 验证全部四个 slug 部分（源与目标的分类/物品）。
+2. 要求源物品存在，且目标分类文件夹存在；若目标物品文件夹已存在则以 exit 1 退出（绝不覆盖）。
+3. 通过 `fs.cp(..., { recursive: true })` 复制整个源文件夹（`item.json` + 所有照片文件），然后通过 `applyDuplicateEdits(text, today)`（`scripts/lib/duplicateItem.ts`）重写副本的 `item.json`：`status → "draft"`、`listed_date → today`、`sold_date`/`previous_lowest_price`/`min_acceptable_offer → null`、`price_reduced → false`，并直接剥离 `reserved_for`（若存在）（铁律 4——绝不将其带入一个新的、不相关的物品）。
+
+#### `pnpm inventory`（`scripts/inventory.ts`）
+
+1. 只读——无文件写入。调用 `loadAllItemsRaw()`（而非 `loadAllItems`），因此草稿、已售、待定和保留物品都会被包含，不仅限于被 `recentlyListedCount` 限制的 `available` 物品。
+2. 打印一个 Markdown 表格（`buildInventoryTable`，`scripts/lib/inventory.ts`）：名称、分类、状态、最低解析价格（`resolvePriceByStrategy(tiers, "lowest")`）和已上架天数（`daysListed()`，`scripts/lib/itemAge.ts`）。按分类、再按名称排序。
+
+#### `pnpm stale-check [--days <n>]`（`scripts/stale-check.ts`）
+
+1. 只读。`--days` 默认值为 `DEFAULT_STALE_DAYS`（`60`，`scripts/lib/staleItems.ts`）；`parseStaleDaysArg` 会拒绝非数字、负数或空字符串（空字符串**不会**被强制转换为 `0`）并以 exit 1 退出。
+2. 调用 `findStaleItems(items, days)`：仅限 `available` 状态物品，筛选出 `daysListed > days` 的，按上架时间从长到短排序。该函数与 `pnpm semester-end` 完全共享，因此两个命令永远不会对哪些物品符合条件产生分歧。
+
+#### `pnpm audit-listings`（`scripts/audit-listings.ts`）
+
+1. 只读。调用 `loadAllItemsRaw()`，过滤掉 `sold` 物品，并根据 5 项固定标准（`auditItem`，`scripts/lib/auditListings.ts`）标记其余每件物品：零照片、`description` 为空、`tags` 为空、存在开放式运费档位（无 `miles_max`）但缺失 `weight` 和/或 `dimensions`，或 `price.tiers` 为空。所有 5 个被检查字段都是 schema 可选的——这是一个「可以做得更好」的报告，而非合法性检查。
+2. 打印一份格式化报告（`formatAuditReport`），列出每个被标记物品的 `<category>/<item>` slug、名称及问题列表。
+
+#### `pnpm export-csv`（`scripts/export-csv.ts`）
+
+1. 对 `content/` 只读；仅写入 `exports/listings.csv`（缺失时创建 `exports/`）。若文件已存在，提示 `<path> already exists. Overwrite? [y/N]:`，除 `y`/`yes` 外任何输入均中止。
+2. 调用 `loadAllItemsRaw()`（所有状态），按分类再按名称排序，并通过 `buildExportCsvRows` / `EXPORT_CSV_HEADERS`（`scripts/lib/exportCsv.ts`）构建行：`name, category, status, condition, price, currency, negotiable, brand, model, quantity, listed_date, sold_date, tags`（`tags` 以分号连接；`price` 为最低解析档位）。列集合与 `pnpm fb-export`（`scripts/export-facebook.ts`，面向 Facebook Marketplace CSV 格式）不同。
+3. 通过共享的 `toCsvString`（`scripts/lib/csv.ts`）序列化，该函数也被 `fb-export` 使用，以保证一致的类 RFC-4180 转义规则。
+
+#### `pnpm semester-end`（`scripts/semester-end.ts`）
+
+1. 完全交互式。调用 `findStaleItems(items, DEFAULT_STALE_DAYS)`——与 `stale-check` 相同的函数和 60 天阈值——并对每个匹配项提示 **[s]old / [r]educe price / [l]eave as-is**（默认 `l`）。
+2. 「Sold」应用 `applyMarkSold(text, today)`（与 `mark-sold` 相同的 JSONC 编辑）。「Reduce price」提示输入新金额（`parseReduceAmount`，拒绝空字符串而非将其强制转换为 `0`），并应用 `applyReducePrice(text, amount)`（`scripts/lib/reducePrice.ts`），通过所有脚本共享的、保留注释的 `applyFieldEdits` 路径重写最低金额的价格档位。
+3. 若任何物品发生变化，通过 `execFileSync` 运行 `pnpm upload-images`（一次内容同步，而非 git 操作），并打印建议的提交信息 `"chore: end-of-semester listing cleanup"` 以及确切的 `git add`/`git commit`/`git push` 命令。**绝不**自行调用 `git commit`/`git push`——发布始终是卖家触发的 `pnpm push` 动作。
+
+---
+
 ### 22.4 JSON-LD 结构化数据
 
 **`lib/utils/jsonld.ts`**（服务器安全，无 `"use client"`）：
@@ -1534,7 +1593,7 @@ if (siteConfig.sitemap.enabled) {
 
 | 层 | 覆盖内容 | 存储位置 | 填写者 |
 |---|---|---|---|
-| **UI 字符串** | 全部 87 个按钮/标签/徽章/标题文本 | `content/config.ts` → `i18n.translations.{locale}` | 卖家（通过 `/setup` 或手动编辑） |
+| **UI 字符串** | 全部 124 个按钮/标签/徽章/标题文本 | `content/config.ts` → `i18n.translations.{locale}` | 卖家（通过 `/setup` 或手动编辑） |
 | **物品内容** | 每件物品的 `name` 和 `description` | `content/items/**/item.json` → `name_{locale}`、`description_{locale}` | `/translate-items` AI 技能或手动编辑 |
 
 ### SiteConfig i18n 类型（`lib/config/types.ts`）
@@ -1548,13 +1607,13 @@ export type I18nConfig = {
 };
 ```
 
-### `UIStrings` 类型（87 个键，`lib/config/types.ts`）
+### `UIStrings` 类型（124 个键，`lib/config/types.ts`）
 
-涵盖所有可见 UI 标签：导航链接、板块标题、联系标签、出价表单、分享按钮、元数据表头、成色/状态徽章、筛选/排序 + 价格过滤选项、新鲜度标签、页面横幅、成色说明、位置栏文本、定价表头、运费估算（§29.7）、移动导航、新上架页面文本。
+涵盖所有可见 UI 标签：导航链接、板块标题、联系标签（包括预约看货链接和买家询问表单，§31.3）、出价表单、分享按钮、传单按钮文本、元数据表头、成色/状态徽章、筛选/排序 + 价格过滤 + 标签过滤选项、新鲜度标签、页面横幅（包括 `/tags/[tag]` 页面标题）、成色说明、位置栏文本、定价表头、运费估算（§29.7）、移动导航、新上架页面文本，以及目录 PDF 导出界面文本（包括卖家联系方式无障碍字符串）。
 
-`lib/i18n/translations.ts` 中的 `EN_FALLBACK` 常量为全部 87 个键提供内置英文默认值，确保即使 `content/config.ts` 配置有误，UI 标签也不会为空。
+`lib/i18n/translations.ts` 中的 `EN_FALLBACK` 常量为全部 124 个键提供内置英文默认值，确保即使 `content/config.ts` 配置有误，UI 标签也不会为空。
 
-> **必需键与可选键：** `scripts/check-config.ts`（在 `prebuild` 中运行）强制一个 **73 键 `REQUIRED_KEYS` 子集**——每个启用的语区必须提供的键（见 §28）。其余约 14 个键在构建时可选，运行时回退到默认语区 / `EN_FALLBACK`：六个运费键（§29.7）、两个价格过滤键（`filterPriceBucketAll`、`filterPriceIncludesOutliers`）和新上架页面键。
+> **必需键与可选键：** `scripts/check-config.ts`（在 `prebuild` 中运行）强制一个 **73 键 `REQUIRED_KEYS` 子集**——每个启用的语区必须提供的键（见 §28）。其余 51 个键在构建时可选，运行时回退到默认语区 / `EN_FALLBACK`：六个运费键（§29.7）、两个价格过滤键（`filterPriceBucketAll`、`filterPriceIncludesOutliers`）、六个新上架页面键、六个传单按钮键、`scheduleViewing` 键、两个标签过滤键（`filterCourse`、`filterTags`）加 `tagPageHeading`、十一个询问表单键（§31.3），以及十六个目录 PDF 键（十个 PDF 界面文本 + 六个 PDF 联系方式无障碍字符串）。
 
 ### 运行时架构 — 语言切换
 
@@ -1580,7 +1639,7 @@ useT() hook     — 返回当前语区的 UIStrings 字典（合并顺序：EN_F
 
 ```ts
 // lib/i18n/translations.ts
-// EN_FALLBACK: UIStrings — 所有 87 个键的内置英文默认值
+// EN_FALLBACK: UIStrings — 所有 124 个键的内置英文默认值
 // 被 useT()（客户端）和 getTranslations()（服务端）用作安全兜底
 
 // lib/i18n/getTranslations.ts
@@ -1618,7 +1677,7 @@ export function getLocalizedField(
 ### 添加新语区步骤
 
 1. 将语区代码加入 `content/config.ts` 的 `siteConfig.i18n.availableLocales`。
-2. 添加包含全部 87 个 `UIStrings` 键（已翻译）的 `translations.{locale}` 块（至少覆盖 `check-config` 强制的 73 个 `REQUIRED_KEYS`）。
+2. 添加包含全部 124 个 `UIStrings` 键（已翻译）的 `translations.{locale}` 块（至少覆盖 `check-config` 强制的 73 个 `REQUIRED_KEYS`）。
 3. 在 Zod schema（`lib/content/schema.ts`）和 `Item` 类型（`lib/content/types.ts`）中添加 `name_{locale}` 和 `description_{locale}`——与现有的 `name_zh` / `description_zh` 模式相同。
 4. 运行 `/translate-items` AI 技能批量填充各 `item.json` 中的 `name_{locale}` / `description_{locale}`，或手动添加。
 5. `availableLocales.length > 1` 时，`LocaleSwitcher` 自动出现。
@@ -1717,6 +1776,8 @@ export function formatRelativeDate(isoDate: string | null, now?: Date): string
 | `ui.priceFilterStrategy?` / `ui.priceFilterBuckets?` | 可选 | 消费方默认 `"none"`（§21） |
 | `measurementUnit?` / `i18n.localeMeasurementUnits?` | 可选 | 见上 |
 | `soldArchiveDisplayLimit?` | 可选 `number` | 限制 `/sold` 渲染的已售物品数量（0 = 无上限）。在 `app/sold/page.tsx` 中以 `?? 200` 读取（运行时默认值 200），并已登记在 `scripts/lib/configDefaults.ts` 中，因此 `pnpm migrate-config` / `update-site` 会自动将其注入早于此字段的下游配置。 |
+| `contact.schedulingUrl?` | 可选 `string` | 外部 Calendly/Cal.com/Google Calendar 链接。为真值时，物品详情页会渲染一个"Schedule Viewing"按钮（`t.scheduleViewing`），在新标签页中打开该链接；不注入运行时默认值（不存在一个普遍适用的 URL）——留空 `""` 或省略即可禁用。已登记在 `scripts/lib/configDefaults.ts` 中（向下游配置拼接一个空字符串占位符及 `scheduleViewing` UIStrings 键）。 |
+| `notifications?` | 可选 `{ enabled: boolean; proxyUrl: string }` | 控制物品详情页的 `EnquiryForm`（§31）。缺失或 `enabled: false` → 零影响，不渲染，不发起网络请求。已登记在 `scripts/lib/configDefaults.ts` 中（向下游配置拼接一个 `enabled: false` 区块及 11 个询问表单 UIStrings 键）。见 §31.2。 |
 
 > **模板状态门控**（`lib/utils/templateStatus.ts`）：`PLACEHOLDER_DOMAIN`（`"your-domain.com"`）和 `DEMO_DOMAIN` 决定 `/` 渲染目录还是 `ProjectIntro` 页面。只要 `baseUrl` 仍含占位符，`isTemplateConfigured()` 为 false，首页显示项目介绍视图——`scripts/check-config.ts`（§28）在同一信号上使生产构建失败。
 
@@ -2337,7 +2398,7 @@ for (const [manifestKey, sourcePath] of imagesToUpload) {
 1. **占位符 `baseUrl`。** 若 `siteConfig.baseUrl` 包含 `PLACEHOLDER_DOMAIN`（`"your-domain.com"`，来自 `lib/utils/templateStatus.ts`），失败并提示卖家设置其真实部署域名。
 2. **翻译完整性。** 对 `siteConfig.i18n.availableLocales` 中的每个语区，要求有 `translations.{locale}` 条目，并要求 73 个 **`REQUIRED_KEYS`** 中的每一个都存在于该条目或默认语区条目中（回退）。缺失条目或缺失键会使构建失败，并指出语区和确切的缺失键。
 
-> 73 个 `REQUIRED_KEYS` 是 87 个 `UIStrings` 键的子集。其余约 14 个（运费 §29.7、价格过滤、新上架）在构建时可选，运行时回退——见 §22.8。
+> 73 个 `REQUIRED_KEYS` 是 124 个 `UIStrings` 键的子集。其余 51 个（运费 §29.7、价格过滤、新上架、传单按钮、预约看货、标签过滤/标题、询问表单 §31.3、目录 PDF 界面文本）在构建时可选，运行时回退——见 §22.8。
 
 ### 28.3 集成点
 
@@ -2539,6 +2600,132 @@ Seller Studio（`pnpm studio`）是一个**仅本地**的浏览器仪表板，�
 ### 30.6 测试覆盖
 
 Studio 覆盖**仅后端**：`studioApi`、`studioGit`、`studioImages`、`studioSync`、`itemEdit`、`itemFields`、`csrfGuard` 和 `studioFields` 测试（见 §25.3）。SPA UI 本身不做单元测试。
+
+---
+
+## 31. 联系表单/询问中继——技术规范
+
+> 完整功能设计与原理见 [DESIGN_zh.md §21](DESIGN_zh.md) / `docs/FEATURES_ROADMAP_zh.md` §3.1。本节涵盖实现约定，内容截至 `ee236bd` 安全修复之后的当前状态。
+
+### 31.1 概述
+
+询问中继功能**完全可选**，仅当 `siteConfig.notifications` 已定义、`enabled: true` 且 `proxyUrl` 非空时才启用。该功能纯粹是附加性的：缺失时 `EnquiryForm` 不会渲染，也不会引入任何新的网络请求或构建期要求。架构与 `workers/shipping-rate-proxy` 完全一致：一个无状态、独立部署的 Cloudflare Worker（`workers/contact-form-proxy`），持有一个绝不能进入浏览器打包产物的通知投递密钥。
+
+### 31.2 `SiteConfig.notifications` 类型（`lib/config/types.ts`）
+
+```ts
+notifications?: {
+  enabled: boolean;
+  proxyUrl: string;  // Cloudflare Worker 端点（workers/contact-form-proxy）
+};
+```
+
+在 `app/[category]/[item]/page.tsx` 中门控：
+
+```tsx
+{siteConfig.notifications?.enabled && siteConfig.notifications?.proxyUrl && (
+  <EnquiryForm item={itemData} />
+)}
+```
+
+`EnquiryForm` 自身不重复检查此门控——与 `ShippingEstimator`/`MakeOfferButton` 相同的模式，启用/禁用的判断由调用方负责。
+
+### 31.3 客户端请求约定（`components/contact/EnquiryForm.tsx`）
+
+以 `Content-Type: application/json` 向 `siteConfig.notifications.proxyUrl` 发起 `POST`，请求体：
+
+```ts
+{
+  itemCategory: string;   // item.categorySlug
+  itemSlug: string;       // item.itemSlug
+  itemName: string;       // item.name
+  buyerName: string;      // 已 trim
+  buyerContact: string;   // 已 trim
+  message: string;        // 已 trim；文本域客户端 maxLength=2000（Worker 端也独立强制 2000，见 §31.4）
+  offerAmount?: number;   // 仅当 item.price.negotiable 且买家填写了值时才存在；若 Number.isFinite(parsedOffer) 为 false（例如科学计数法溢出如 "1e400" → Infinity），客户端拒绝提交
+  currency: string;       // item.price.currency（如 "USD"、"GBP"）——绝不硬编码，使 Worker 的通知能以物品自身货币标注出价
+  honeypot: string;       // 隐藏字段的值；真实提交时为空字符串（""）
+}
+```
+
+由 11 个 `UIStrings` 键驱动：`enquiryFormHeading`、`enquiryNameLabel`、`enquiryContactLabel`、`enquiryContactPlaceholder`、`enquiryMessageLabel`、`enquiryMessagePlaceholder`、`enquiryOfferLabel`、`enquirySubmit`、`enquirySubmitting`、`enquirySuccess`、`enquiryError`（均为可选键，按 §22.8 回退到 `EN_FALLBACK`/默认语区）。
+
+### 31.4 Worker 响应约定（`workers/contact-form-proxy/src/index.ts`）
+
+请求处理顺序：`OPTIONS` 预检请求**无条件**应答（`200`，CORS 头，空响应体）——在 Origin 校验**之前**；其余所有方法都先针对 `ALLOWED_ORIGIN` 校验（§31.6），**再**检查方法是否为 `POST`；只有到此为止都通过，才会解析并校验 JSON 请求体。
+
+| 条件 | 状态码 | 响应体 |
+|---|---|---|
+| `OPTIONS`（预检） | `200` | `null` |
+| `Origin` 头缺失或 ≠ `ALLOWED_ORIGIN` | `403` | `{ "error": "Forbidden" }` |
+| 方法非 `POST`（且 Origin 已匹配） | `405` | `{ "error": "Method Not Allowed" }` |
+| 请求体不是合法 JSON | `400` | `{ "error": "Invalid JSON" }` |
+| 蜜罐字段被填写（§31.7） | `200` | `{ "ok": true }` |
+| 必填字段缺失/为空/类型错误、`message.length > 2000`，或 `offerAmount` 非有限数 | `400` | `{ "error": "Missing or invalid fields" }` |
+| 服务商发送函数抛出异常或返回非 2xx | `502` | `{ "error": "Notification delivery failed" }` |
+| 真实提交成功投递 | `200` | `{ "ok": true }` |
+
+`isValidRequest` 要求 `itemCategory`、`itemSlug`、`itemName`、`buyerName`、`buyerContact`、`message`、`currency` 均为非空字符串（经 `.trim().length === 0` 检查）；`offerAmount`（若存在）必须满足 `typeof === "number" && Number.isFinite(...)`；`honeypot` 必须为字符串（长度不限）。
+
+### 31.5 按服务商划分的 `Env` 变量与密钥
+
+```ts
+export interface Env {
+  NOTIFICATION_PROVIDER: "discord" | "telegram" | "email";
+  ALLOWED_ORIGIN: string;   // siteConfig.baseUrl —— 只有这一个精确的源可以调用该 Worker
+  SITE_BASE_URL: string;    // siteConfig.baseUrl —— 用于在通知正文中构建返回物品页的链接
+
+  DISCORD_WEBHOOK_URL?: string;      // 密钥
+  TELEGRAM_BOT_TOKEN?: string;       // 密钥
+  TELEGRAM_CHAT_ID?: string;         // 变量
+  RESEND_API_KEY?: string;           // 密钥
+  NOTIFICATION_EMAIL_TO?: string;    // 变量
+  NOTIFICATION_EMAIL_FROM?: string;  // 变量
+}
+```
+
+| 变量（`wrangler.toml` `[vars]`） | 何时必需 | 说明 |
+|---|---|---|
+| `NOTIFICATION_PROVIDER` | 始终 | `"discord"` \| `"telegram"` \| `"email"` |
+| `ALLOWED_ORIGIN` | 始终 | 精确的站点源，无尾部斜杠；服务端强制校验（§31.6） |
+| `SITE_BASE_URL` | 始终 | 实践中与 `ALLOWED_ORIGIN` 值相同；因为 Worker 无法导入 `content/config.ts`，所以单独传入 |
+| `TELEGRAM_CHAT_ID` | `telegram` | 非密钥 |
+| `NOTIFICATION_EMAIL_TO` | `email` | 卖家的收件邮箱 |
+| `NOTIFICATION_EMAIL_FROM` | `email` | 必须是在 Resend 上已验证的域名 |
+
+| 密钥（`wrangler secret put <NAME>`） | 何时必需 |
+|---|---|
+| `DISCORD_WEBHOOK_URL` | `discord` |
+| `TELEGRAM_BOT_TOKEN` | `telegram` |
+| `RESEND_API_KEY` | `email` |
+
+按服务商投递（`send` 按 `env.NOTIFICATION_PROVIDER` 分发，默认走 `sendDiscord`）：
+
+- **`sendDiscord`** —— 向 `env.DISCORD_WEBHOOK_URL` 发送 `POST`，请求体为 `{ embeds: [{ title, url, description, fields }] }`；`fields` 包括 `From`、`Contact`、`Offer`（仅当 `offerAmount !== undefined`）和 `Item`。
+- **`sendTelegram`** —— 向 `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage` 发送 `POST`，请求体为 `{ chat_id: TELEGRAM_CHAT_ID, text }`，`text` 由 `formatPlainText()` 构建。
+- **`sendEmail`** —— 向 `https://api.resend.com/emails` 发送 `POST`，携带 `Authorization: Bearer ${RESEND_API_KEY}` 及 `{ from: NOTIFICATION_EMAIL_FROM, to: NOTIFICATION_EMAIL_TO, subject: "New enquiry: ${itemName}", text }`。
+
+以上三者在各自所需的密钥/变量缺失时，或服务商自身响应非 `ok` 时，均返回 `false`（→ `502`，见 §31.4）。`formatOfferAmount()` 与 `EnquiryForm.tsx` 自身的 `currencyPrefix` 规则一致——`USD` 渲染为纯 `$`，其他 ISO 代码渲染为 `"<CODE> "`——因此非美元报价在通知中绝不会被误标为美元。
+
+### 31.6 Origin 强制校验
+
+由 `ee236bd` 修复。**当前**行为：Worker 读取 `Origin` 请求头，并用严格不等比较其与 `env.ALLOWED_ORIGIN`；任何不匹配（包括头缺失，其与一个已定义字符串比较视为不相等）都返回 `403 { "error": "Forbidden" }`——对每个非 `OPTIONS` 请求都会执行此检查，且在「方法是否为 `POST`」检查之前、请求体被解析之前。
+
+在此修复之前，`ALLOWED_ORIGIN` 仅被回填进 `Access-Control-Allow-Origin` 这一 CORS 响应头中——CORS 响应头只约束**浏览器**读取跨源响应的行为，对谁可以发出请求没有任何服务端限制，因此一次直接的 `curl`/脚本 `POST`（携带任意或不携带 `Origin` 头）此前会被接受并转发。
+
+按照该 Worker 自己 `README.md` 的说法：这个 Origin 检查是**"一道基础访问门槛，而非一种加密学意义上的保证"**。它能挡住来自另一个站点的浏览器请求，以及懒得设置请求头的普通脚本，但 `Origin`终究只是一个 HTTP 头——一个执意攻击者用 `curl` 或脚本仍可伪造它。README 给出的、面对真实垃圾信息时的建议后续步骤是基础设施层面的，而非修改 Worker 代码：在表单前加装 [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/)，或在 Cloudflare 控制台层面添加 WAF/速率限制规则——两者都刻意留给未来迭代，以保持 Worker 无状态。
+
+### 31.7 反垃圾信息（蜜罐字段）
+
+`EnquiryForm.tsx` 渲染一个隐藏字段（`id="enquiry-website"`、`name="website"`），以离屏定位（`position: absolute; left: -9999px; top: -9999px`）实现，而非 `display: none`/`visibility: hidden`/`type="hidden"`——部分机器人会专门跳过以这些方式隐藏的字段——并配以 `tabIndex={-1}`、`aria-hidden="true"` 和 `autoComplete="off"`，使其对真实访客不可见、不可达。其值作为请求体的 `honeypot` 字段发送。
+
+服务端（`workers/contact-form-proxy/src/index.ts`）的蜜罐检查在完整字段校验**之前**运行：`isRecord(body) && typeof body["honeypot"] === "string" && body["honeypot"].length > 0` → 返回 `200 { "ok": true }`，**无论其他字段是否格式正确**——与一次真实成功提交完全相同的状态码和 JSON 结构。这是刻意为之：如果机器人在「蜜罐被触发」和「字段缺失」两种情况下收到不同的响应，就可能学会哪个检查抓住了它并加以规避。
+
+无持久化存储、无速率限制、无 CAPTCHA——这是有意识的架构决定（与 `shipping-rate-proxy` 的无状态性一致），而非疏漏；详见该 Worker `README.md` 的"Not implemented"一节。
+
+### 31.8 部署
+
+独立部署；从根目录 `tsconfig.json`（`exclude`）和 `eslint.config.mjs`（`ignores`）中排除——拥有自己的 `package.json`、`tsconfig.json` 和 `wrangler.toml`（与 §29.6/§29.8 中 `shipping-rate-proxy` 的模式一致）。本地开发将 `.dev.vars.example` 复制为 `.dev.vars`（已加入 gitignore）供 `wrangler dev` 使用；生产密钥通过 `wrangler secret put <NAME>` 设置，绝不提交到 git。面向卖家的操作指南：`workers/contact-form-proxy/README.md` 和 `.claude/commands/setup-contact-form.md`。不影响 `pnpm build`、CI 或 GitHub Pages 部署——该 Worker 通过 `workers/contact-form-proxy/` 目录下的 `wrangler deploy` 单独部署。
 
 ---
 

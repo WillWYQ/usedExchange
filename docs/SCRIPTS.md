@@ -1,8 +1,8 @@
 # UsedExchange — Scripts & Tooling Reference
 
-**Version:** 1.1
-**Date:** 2026-09-05
-**Package version:** 1.4.2 (see `package.json`)
+**Version:** 1.2
+**Date:** 2026-09-07
+**Package version:** 1.7.1 (see `package.json`)
 
 > Complete reference for every npm script, standalone CLI, and support module in the repository. For architecture and data flow see [ARCHITECTURE.md](ARCHITECTURE.md); for the full design specification see [DESIGN.md](DESIGN.md); for non-technical seller operations see [../SETUP_GUIDE.md](../SETUP_GUIDE.md).
 >
@@ -15,7 +15,7 @@
 - All CLIs live in `scripts/`, are executed with **tsx** (Node.js — no browser APIs), and are production tooling, not dev-only helpers.
 - The root `package.json` defines **31 npm scripts**; `new` is an exact alias of `create-item`, and three scripts (`upload-images`, `dev`, `prebuild`) are thin wrappers over the three modes of `scripts/sync-images.ts`.
 - **Sellers only ever edit files under `content/` by hand.** The CLIs below read and write `content/` *on your behalf* — you never need to open `app/`, `lib/`, or `scripts/` yourself.
-- `workers/shipping-rate-proxy/` is an **independently deployed** Cloudflare Worker package with its own `package.json`; it is excluded from the root tsconfig / ESLint / Vitest scope.
+- `workers/shipping-rate-proxy/` and `workers/contact-form-proxy/` are **independently deployed** Cloudflare Worker packages, each with its own `package.json`; both are excluded from the root tsconfig / ESLint / Vitest scope.
 - `lib/generated/image-manifest.json` is **committed to git** (Iron Rule 5). Scripts write it; CI reads it and needs no CDN credentials.
 
 ---
@@ -198,7 +198,7 @@
 ### `migrate-config.ts` — config migration
 
 - **Command:** `pnpm migrate-config` (also invoked programmatically by `update-site` after checkout — guarded by an `argv[1]` `endsWith` check so importing the module does not auto-run it).
-- **Purpose:** scans `content/config.ts` for config fields missing after a template upgrade and splices them in with defaults from the `CONFIG_DEFAULTS` registry in `scripts/lib/configDefaults.ts` (currently the `priceFilterStrategy` block plus the `filterPriceBucketAll` / `filterPriceIncludesOutliers` UIStrings keys). **Additive only** — never removes or modifies existing values. Consistent with Iron Rule 8, every injected field is TypeScript-optional with a runtime default at its consumption site, so downstream configs that skip migration still pass type-check. Skips (with a warning) any entry whose anchor line (`afterKey`) is not found; prints added field names or "config is up to date".
+- **Purpose:** scans `content/config.ts` for config fields missing after a template upgrade and splices them in with defaults from the `CONFIG_DEFAULTS` registry in `scripts/lib/configDefaults.ts` (currently covers the price-filter UI settings, the sold-archive display limit, Google Analytics, the contact-form notifications/scheduling config plus its enquiry-form and schedule-viewing UI strings, tag/course filter strings, and PDF export/contact UI strings). **Additive only** — never removes or modifies existing values. Consistent with Iron Rule 8, every injected field is TypeScript-optional with a runtime default at its consumption site, so downstream configs that skip migration still pass type-check. Skips (with a warning) any entry whose anchor line (`afterKey`) is not found; prints added field names or "config is up to date".
 - **Env vars:** none.
 - **Touches:** reads/writes `content/config.ts`; reads `scripts/lib/configDefaults.ts`.
 
@@ -267,7 +267,7 @@ Not standalone runnables — imported by the CLIs above. Each has a colocated `*
 | `reducePrice.ts` | `findLowestTierIndex(tiers)` / `applyReducePrice(text, newAmount)`: rewrites an item's lowest-amount price tier via `applyFieldEdits`; returns `null` when there are no tiers to reduce. Used by `semester-end`'s "reduce price" action. |
 | `fbCategoryMap.ts` | Ordered regex → `"Top//Sub//Leaf"` Facebook category rules used by `fb-export` (49 ordered regex rules, plus 11 slug-level fallbacks). |
 | `exportHistory.ts` | Reads/appends `exports/.export-history.json` (gitignored) backing `fb-export`'s Step 0 skip logic. |
-| `configDefaults.ts` | Declarative registry (`key` / `afterKey` / `lines`) of injectable config fields used by `migrate-config` + `update-site` — currently the `priceFilterStrategy` block plus the `filterPriceBucketAll` / `filterPriceIncludesOutliers` UIStrings keys. |
+| `configDefaults.ts` | Declarative registry (`key` / `afterKey` / `lines`) of injectable config fields used by `migrate-config` + `update-site` — currently covers price-filter UI settings, the sold-archive display limit, Google Analytics, contact-form notifications/scheduling config plus its enquiry-form and schedule-viewing UI strings, tag/course filter strings, and PDF export/contact UI strings. |
 | `studioApi.ts` | Framework-agnostic HTTP handler for Studio: Zod-validated requests, slug allowlist + resolved-path containment against `content/items/`, JSON / file / SSE response variants, `StudioError` → status-coded JSON. Route regexes match the raw percent-encoded path; segments are decoded individually only after the match (traversal-safe). |
 | `studioGit.ts` | `readChanges` / `publishChanges` + `GitError`: git status/commit/push restricted to `PUBLISHABLE_PATHS = [content, lib/generated/image-manifest.json]` — mirrors `pnpm push`, **never `git add -A`** (protects `.env.local`); `execFile` with argument arrays only (no shell); commit message via stdin (`-F -`), `MAX_MESSAGE_LENGTH=500`; `-c core.quotepath=false -z` so CJK/space filenames parse; handles detached HEAD (refuse), unborn branches, bare repos, and stranded-commit retries. |
 | `studioImages.ts` | Photo upload/delete/reorder filesystem ops: `IMAGE_EXTENSIONS` = jpg\|jpeg\|png\|webp\|gif, filename normalisation (`sanitizeUploadFilename`, `IMAGE_FILENAME_RE` allowlist), magic-byte content sniffing (`sniffImageType`), collision-safe writes. |
@@ -316,6 +316,49 @@ Worker npm scripts (run from `workers/shipping-rate-proxy/`): `dev` (`wrangler d
 
 ---
 
+## `workers/contact-form-proxy/`
+
+### What it is
+
+A Cloudflare Worker that relays buyer enquiries from the item detail page's `EnquiryForm.tsx` to the seller via **Discord**, **Telegram**, or **email** (Resend) — without exposing the seller's contact details directly. POST-only endpoint validating `itemCategory`, `itemSlug`, `itemName`, `buyerName`, `buyerContact`, `message` (≤2000 chars), an optional `offerAmount`, and a `honeypot` field: a non-empty honeypot is silently treated as spam and dropped, but the Worker still returns the same `200 { "ok": true }` as a real success so a bot can't tell its submission was rejected. `ALLOWED_ORIGIN` is checked server-side against the request's `Origin` header — a basic access gate, not a cryptographic guarantee. No persistent storage and no rate limiting/CAPTCHA by design (see the Worker's README for the recommended infra-level next steps — Cloudflare Turnstile, WAF rate-limiting rules — if spam becomes an issue). Consumed client-side only when `siteConfig.notifications.enabled` is `true`.
+
+### Why it exists
+
+The site is a fully static export — notification-delivery secrets (a Discord webhook URL, Telegram bot token, or Resend API key) must **never** ship in the browser bundle. The Worker keeps the secret server-side and CORS-locks to exactly one `ALLOWED_ORIGIN`, the same reasoning as `workers/shipping-rate-proxy/`. See [FEATURES_ROADMAP.md §3.1](FEATURES_ROADMAP.md).
+
+### Deploy & dev
+
+Independent project with its own `package.json` (name `contact-form-proxy`, `compatibility_date = 2026-01-01`); see [../workers/contact-form-proxy/README.md](../workers/contact-form-proxy/README.md) for the full walkthrough:
+
+```bash
+cd workers/contact-form-proxy
+pnpm install
+
+# 1. Plain vars — edit wrangler.toml [vars]:
+#      NOTIFICATION_PROVIDER = "discord" | "telegram" | "email"
+#      ALLOWED_ORIGIN         = exact siteConfig.baseUrl (no trailing slash)
+#      SITE_BASE_URL          = same as ALLOWED_ORIGIN (links back to the item page)
+#      TELEGRAM_CHAT_ID                                  (telegram only)
+#      NOTIFICATION_EMAIL_TO / NOTIFICATION_EMAIL_FROM   (email only)
+
+# 2. Local dev:
+cp .dev.vars.example .dev.vars   # put the test provider's secret here (gitignored)
+pnpm dev                          # wrangler dev
+
+# 3. Deploy:
+pnpm wrangler login               # once
+pnpm wrangler secret put DISCORD_WEBHOOK_URL   # or TELEGRAM_BOT_TOKEN / RESEND_API_KEY
+pnpm deploy                       # wrangler deploy → prints the workers.dev URL
+
+# 4. Put the printed URL in content/config.ts → notifications.proxyUrl, set enabled: true
+#    (or run the /setup-contact-form skill)
+pnpm type-check                   # optional: tsc --noEmit for the worker package
+```
+
+Worker npm scripts (run from `workers/contact-form-proxy/`): `dev` (`wrangler dev`), `deploy` (`wrangler deploy`), `type-check` (`tsc --noEmit`).
+
+---
+
 ## Environment Variable Reference
 
 ### Local machine (gitignored `.env.local`)
@@ -350,6 +393,20 @@ Parsed into `process.env` by `scripts/lib/loadEnv.ts` (existing env values alway
 | `SHIPPO_API_KEY` | **secret** | `wrangler secret put` (local: `.dev.vars`) | Shippo token, sent in the `Authorization: ShippoToken` header when provider = `shippo` |
 | `EASYPOST_API_KEY` | **secret** | `wrangler secret put` (local: `.dev.vars`) | EasyPost key, base64'd into a Basic auth header when provider = `easypost` |
 
+### Worker (`workers/contact-form-proxy`)
+
+| Variable | Kind | Where | Notes |
+|---|---|---|---|
+| `NOTIFICATION_PROVIDER` | plain var | `wrangler.toml [vars]` | `"discord"` (default) \| `"telegram"` \| `"email"` — selects the notification channel |
+| `ALLOWED_ORIGIN` | plain var | `wrangler.toml [vars]` | The only Origin allowed by CORS; must exactly match `siteConfig.baseUrl` (no trailing slash) |
+| `SITE_BASE_URL` | plain var | `wrangler.toml [vars]` | Used to build the "view live listing" link in the notification message (the Worker can't import `content/config.ts`) |
+| `TELEGRAM_CHAT_ID` | plain var | `wrangler.toml [vars]` | Chat/channel id to post into; only meaningful when provider = `telegram` |
+| `NOTIFICATION_EMAIL_TO` | plain var | `wrangler.toml [vars]` | Seller's inbox address; only used when provider = `email` |
+| `NOTIFICATION_EMAIL_FROM` | plain var | `wrangler.toml [vars]` | Must be on a domain verified with Resend; only used when provider = `email` |
+| `DISCORD_WEBHOOK_URL` | **secret** | `wrangler secret put` (local: `.dev.vars`) | Discord webhook URL, required when provider = `discord` |
+| `TELEGRAM_BOT_TOKEN` | **secret** | `wrangler secret put` (local: `.dev.vars`) | Telegram bot token, required when provider = `telegram` |
+| `RESEND_API_KEY` | **secret** | `wrangler secret put` (local: `.dev.vars`) | Resend API key, required when provider = `email` |
+
 ---
 
 ## Security Notes
@@ -371,6 +428,7 @@ Parsed into `process.env` by `scripts/lib/loadEnv.ts` (existing env values alway
 | Full `item.json` schema (36 top-level fields; 37 counting the private `reserved_for`) | [DESIGN.md §5](DESIGN.md) |
 | `content/config.ts` full template | [DESIGN.md §13](DESIGN.md) |
 | Shipping calculator integration | [DESIGN.md §21](DESIGN.md), [../workers/shipping-rate-proxy/README.md](../workers/shipping-rate-proxy/README.md) |
+| Contact form / enquiry relay integration | [FEATURES_ROADMAP.md §3.1](FEATURES_ROADMAP.md), [../workers/contact-form-proxy/README.md](../workers/contact-form-proxy/README.md) |
 | CDN setup walkthrough | [setup_instruction.md](setup_instruction.md) |
 | Updating a downstream site | [UPDATE_GUIDE.md](UPDATE_GUIDE.md) |
 | Deployment checklist (GitHub Pages + R2) | [TECH_REQUIREMENTS.md §19](TECH_REQUIREMENTS.md) |

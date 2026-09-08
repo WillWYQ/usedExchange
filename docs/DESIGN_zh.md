@@ -1,7 +1,7 @@
 # UsedExchange — 项目设计文档
 
-**版本：** 0.10.0  
-**日期：** 2026-08-02  
+**版本：** 0.10.2  
+**日期：** 2026-09-07  
 **状态：** 决策已解决——实现已上线（0–18 阶段全部交付）
 
 ---
@@ -368,8 +368,10 @@ Schema（`lib/content/schema.ts`）定义了 **36 个顶层字段**；若计入�
   // ── 分类 ──────────────────────────────────────────────────────────────────
   "tags": ["照明", "智能家居"],
   // ^ string[]；默认 []。标签会被全文搜索引擎（fuse.js）索引，
-  //   买家可按标签找到物品。物品详情页上的标签片在 v1 中是不可交互的
-  //   <span> 元素（专门的标签筛选页是未来特性）。
+  //   买家可按标签找到物品。物品详情页上每个标签片都会链接到 /tags/{tag}——
+  //   一个跨分类页面，列出所有共享该标签的可见物品——除非其 slug 化形式与
+  //   另一个拼写不同的标签冲突，此时两者都会回退为不可交互的 <span>
+  //   （见 §10.3）。
   "category_override": "",
   // ^ 仅显示覆盖。若非空，在面包屑与物品卡片的分类标签中替换
   //   由文件夹派生的分类名称——但不改变：
@@ -615,6 +617,8 @@ visible = (status !== "sold")
 - **定位价格栏** — `📍 ~{N} 英里` 或 `📍 位置不可用` + "修改距离"覆盖；由 `ItemGrid` 持有
 - **筛选 + 排序栏**（客户端）：
   - **成色标签** — 多选，默认全选
+  - **课程标签片** — 单选（教材专用）；仅当该分类中存在含非空 `course` 字段的物品时显示。点击已激活的标签片会清除选择（重新显示所有课程）。
+  - **标签筛选片** — 多选，AND 匹配；仅当该分类中存在含非空 `tags` 条目的物品时显示。可见物品必须同时携带当前所有激活的标签，而非仅其中一个——与成色/课程标签片一样，用于收窄结果而非扩大结果。
   - **排序选择** — 价格从低到高 · 价格从高到低 · 上架日期（最新优先）· 成色（最佳优先）；默认 = 上架日期
   - **价格范围滑块** — 基于定位解析价格；无物品含档位时隐藏；距离变化时重置。其离群值处理由 `ui.priceFilterStrategy` 决定（见 §13），可选 `lib/utils/priceFilterStrategies.ts` 实现的五种策略：
     - `"none"` *（默认）* — 解析价格的原始最小/最大值
@@ -646,12 +650,14 @@ visible = (status !== "sold")
   - **"出个价"按钮** — 当 `price.negotiable: true` 且设置了 `min_acceptable_offer` 时显示。打开内联表单供买家输入金额，然后预填联系平台消息："I'd like to offer $X for {name}."。低于 `min_acceptable_offer` 的出价在客户端显示委婉的拒绝消息，不发送任何内容。
   - **"支付定金"按钮** — `stripe_payment_link` 非空时显示；在新标签页打开 Stripe 链接
   - **"通过 Venmo 支付"按钮** — `venmo_payment_request` 非空时显示；在新标签页打开 Venmo 付款请求 URL（与"支付定金"并列）。为空时不渲染按钮；Venmo 联系平台链接在联系区块中仍然可用。
+  - **"预约看货"按钮** — `siteConfig.contact.schedulingUrl` 非空时显示；在新标签页打开卖家的外部预约链接（Calendly/Cal.com/Google Calendar 等）。站点级，非物品级——同一链接会显示在每件物品的页面上。见 §23。
   - **初始 SSG 状态** — 静态 HTML 显示最高档位（`resolveItemPrice` 作为纯函数在服务器端调用 → 以 `initialResolvedTier` 传给 `PricingSection`）
   - **社交媒体说明** — 爬虫始终看到最高档位价格（有意为之）
 - **元数据表** — 品牌、型号、年龄、尺寸、重量、颜色、原始来源（链接）、原始价格。尺寸/重量会按访客解析出的单位制换算显示（`lib/utils/units.ts`；见 §13 `measurementUnit` / `localeMeasurementUnits`）。
 - **运费估算器** — `ShippingEstimator`（客户端）在 `siteConfig.shipping` 启用、物品含 `weight` + `dimensions`、且解析档位为开放式邮寄档位时，显示实时承运商运费估算。完整架构见 §21（Cloudflare Worker 代理）。
 - **联系区块** — 含预填消息的平台按钮；`preferred_payment` 列表；`contact_note`
-- **标签** — 不可交互标签片（通过 fuse.js 搜索可找到）
+- **询问表单**（`EnquiryForm`，可选） — 当 `siteConfig.notifications?.enabled` 与 `siteConfig.notifications?.proxyUrl` 均为真值时，直接渲染在联系区块下方。让买家发送结构化消息（姓名、联系方式、留言，以及——对可议价物品——可选的出价金额），经由 `contact-form-proxy` Cloudflare Worker 转发给卖家。页脚的 `ContactSection` 中从不显示（那里没有物品级上下文）。见 §23。
+- **标签** — 每个标签片链接到 `/tags/{tag}`，一个列出所有共享该标签的可见物品的跨分类页面，除非其 slug 化形式与另一个拼写不同的标签冲突——此时两者都会回退为不可交互的 `<span>`（见 `loadTagIndex`，`lib/content/loader.ts`）
 - **分享按钮** — 移动端原生分享；桌面端复制链接回退
 - **最近浏览** — 页面挂载时将本物品 slug 写入 `sessionStorage`
 - **JSON-LD** — `<script type="application/ld+json">`，类型 `@type: "Product"`；`BreadcrumbList`
@@ -863,7 +869,7 @@ components/
 
 > ⚠️ **`content/config.ts` 由客户端组件导入**，因此成为浏览器包的一部分。所有字段值必须是静态、可序列化的常量。不要在模块级别使用 Node.js API。
 
-> 🔁 **向后兼容（模板更新）。** `content/config.ts` 由卖家持有——`pnpm update-site` 绝不覆盖它（见 §22）。在原始核心之后新增的每个配置字段（`defaultPriceTiers?`、`measurementUnit?`、`shipping?`、`i18n.localeMeasurementUnits?`、`ui.priceFilterStrategy?`、`ui.priceFilterBuckets?`、`soldArchiveDisplayLimit?`）都是 **TypeScript 可选（`?`）**，且在消费点带运行时 `??` 默认值，因此拉取新模板代码但未更新配置的下游站点仍能通过类型检查并运行。`pnpm migrate-config`（由 `update-site` 自动调用）可依据 `scripts/lib/configDefaults.ts` 将这些可选字段拼接进旧配置。
+> 🔁 **向后兼容（模板更新）。** `content/config.ts` 由卖家持有——`pnpm update-site` 绝不覆盖它（见 §22）。在原始核心之后新增的每个配置字段（`defaultPriceTiers?`、`measurementUnit?`、`shipping?`、`i18n.localeMeasurementUnits?`、`ui.priceFilterStrategy?`、`ui.priceFilterBuckets?`、`soldArchiveDisplayLimit?`、`contact.schedulingUrl?`、`notifications?`）都是 **TypeScript 可选（`?`）**，且在消费点带运行时 `??` 默认值，因此拉取新模板代码但未更新配置的下游站点仍能通过类型检查并运行。`pnpm migrate-config`（由 `update-site` 自动调用）可依据 `scripts/lib/configDefaults.ts` 将这些可选字段拼接进旧配置。
 
 ```ts
 export const siteConfig: SiteConfig = {
@@ -915,8 +921,20 @@ export const siteConfig: SiteConfig = {
   //   origin: { zip: "94103", country: "US" },
   // },
 
+  // ── 联系表单询问转发（可选）──────────────────────────────────────────────
+  // 默认关闭——未配置前完全不影响站点。启用方式：部署
+  // workers/contact-form-proxy（见其 README），粘贴其 URL，并设置
+  // enabled: true。为物品详情页添加 EnquiryForm。见 §23。
+  notifications: {
+    enabled: false,
+    proxyUrl: "https://contact-form-proxy.<your-subdomain>.workers.dev",
+  },
+
   contact: {
     reveal_behavior: "click",
+    // Calendly/Cal.com/Google Calendar 预约链接——设置后会在物品页显示
+    // "预约看货"按钮。可选；留空 "" 即可禁用。见 §23。
+    schedulingUrl: "",  // 例如 "https://calendly.com/your-handle/viewing"
     platforms: [
       { type: "email",     value: "you@example.com" },
       { type: "instagram", value: "your_handle" },
@@ -967,7 +985,7 @@ export const siteConfig: SiteConfig = {
 
   // ── 国际化 ──────────────────────────────────────────────────────────────────
   // 两层翻译体系：
-  //   1. UI 字符串 — UIStrings（lib/config/types.ts）的约 87 个按钮/标签/徽章文本，
+  //   1. UI 字符串 — UIStrings（lib/config/types.ts）的约 124 个按钮/标签/徽章文本，
   //                 在 translations.{locale} 中定义
   //   2. 物品内容 — 各 item.json 中的 name_{locale} / description_{locale}；
   //                 运行 /translate-items 批量填充
@@ -1093,7 +1111,7 @@ export const siteConfig: SiteConfig = {
         newlyListedFirstVisit: "Welcome! Everything here is new to you.",
         newlyListedNoneInPeriod: "No new items in this period.",
       },
-      // 启用中文时，取消注释并翻译全部约 87 个键（至少覆盖 check-config 要求的 73 个），
+      // 启用中文时，取消注释并翻译全部约 124 个键（至少覆盖 check-config 要求的 73 个），
       // 并将 "zh" 加入 availableLocales：
       // zh: { home: "首页", about: "关于", browseAll: "浏览全部", ... },
     },
@@ -1257,8 +1275,11 @@ usedExchange/
 │   ├── sold/page.tsx              ← 已售档案（网格受 soldArchiveDisplayLimit 上限约束）
 │   ├── about/page.tsx             ← 关于——ProjectIntro（见 §10.6）
 │   ├── newly-listed/page.tsx      ← 最近上架——服务器外壳 → NewlyListedClient（见 §10.7）
+│   ├── tags/[tag]/page.tsx        ← 标签列表页——跨分类展示共享同一标签的物品（见 §10.3）
 │   ├── [category]/page.tsx
 │   ├── [category]/[item]/page.tsx
+│   ├── manifest.ts                ← PWA manifest（可安装的名称/图标/主题色，不含离线支持）；
+│   │                                force-static（output: "export" 下必需）
 │   └── not-found.tsx
 │
 ├── components/                    ← 见 §12
@@ -1267,8 +1288,11 @@ usedExchange/
 │                                    只编辑 content/ + lib/generated/image-manifest.json
 │
 ├── workers/
-│   └── shipping-rate-proxy/       ← 独立部署的 Cloudflare Worker（见 §21）；将承运商 API 密钥
-│                                    保留在服务端；有自己的 package.json + wrangler.toml
+│   ├── shipping-rate-proxy/       ← 独立部署的 Cloudflare Worker（见 §21）；将承运商 API 密钥
+│   │                                保留在服务端；有自己的 package.json + wrangler.toml
+│   └── contact-form-proxy/        ← 独立部署的 Cloudflare Worker（见 §23）；通过
+│                                    NOTIFICATION_PROVIDER 将买家询问转发至 Discord/Telegram/
+│                                    邮件；有自己的 package.json + wrangler.toml
 │
 ├── lib/
 │   ├── content/（loader.ts、schema.ts、types.ts）
@@ -1285,6 +1309,7 @@ usedExchange/
 │   └── commands/                  ← AI 技能文件（见 §20）；适用于 Claude Code + 其他 AI 工具
 │       ├── setup.md               ← 技能：交互式站点配置设置向导（/setup）
 │       ├── setup-shipping.md      ← 技能：运费计算器引导设置（/setup-shipping，见 §21）
+│       ├── setup-contact-form.md  ← 技能：询问表单/通知转发引导设置（/setup-contact-form，见 §23）
 │       ├── translate-items.md     ← 技能：批量翻译物品字段到其他语区
 │       └── update-items.md        ← 技能：从照片 + 描述文件生成 item.json
 │
@@ -1296,6 +1321,13 @@ usedExchange/
 │   ├── setup-ui.sh
 │   ├── create-item.ts             ← pnpm create-item <category>/<name>（别名：pnpm new）
 │   ├── mark-sold.ts
+│   ├── mark-available.ts          ← pnpm mark-available <category>/<name>——将状态重置为 "available"，清除 sold_date
+│   ├── duplicate.ts               ← pnpm duplicate <category>/<name> <category>/<new-name>——将物品文件夹复制为新草稿
+│   ├── inventory.ts               ← pnpm inventory——向 stdout 输出所有物品（全部状态）的 Markdown 表格；只读
+│   ├── stale-check.ts             ← pnpm stale-check [--days <n>]——列出上架超过 N 天（默认 60）的 available 物品；只读
+│   ├── audit-listings.ts          ← pnpm audit-listings——报告缺少建议性（schema 中可选）字段的物品；只读
+│   ├── export-csv.ts              ← pnpm export-csv——导出所有物品的扁平 CSV 供卖家自行记录（与 pnpm fb-export 不同）
+│   ├── semester-end.ts            ← pnpm semester-end——交互式滞销物品复查（标记售出 / 降价 / 保持不变）
 │   ├── create-template.ts
 │   ├── studio.ts                  ← pnpm studio——Seller Studio 启动器（见 §22）
 │   ├── export-facebook.ts         ← pnpm fb-export——Facebook Marketplace CSV 导出（见 §22）
@@ -1625,8 +1657,6 @@ export function BackgroundEffect({ children }: { children: React.ReactNode }) {
 
 | 未来功能 | 指定扩展点 |
 |---|---|
-| 联系表单/询问 | 无服务器函数；`ContactSection` 有保留槽位 |
-| 标签筛选页 | `/tags/{tag}` 路由 + 加载器中的标签索引 |
 | 草稿预览 | Next.js middleware 在 `/preview/[category]/[item]` |
 | 距离单位切换（英里 ↔ 公里） | 在 `siteConfig.i18n` 中添加 `distanceUnit: "mi" \| "km"` |
 | 跨导航缓存位置 | `sessionStorage` 可选，位于 `siteConfig.cacheLocationInSession: true` 后，需要同意 |
@@ -1644,7 +1674,7 @@ export function BackgroundEffect({ children }: { children: React.ReactNode }) {
 
 ## 20. AI 辅助内容生成——基于技能的方法
 
-四个 AI 辅助工作流以 **Claude Code 技能**形式提供（见 `.claude/commands/`）。卖家使用已有的任何 AI 编程工具——Claude Code、Cursor、GitHub Copilot 或任何有能力的助手。**无需额外 API 密钥、环境变量或包安装。** 卖家只需在项目目录中打开其 AI 工具并调用技能。
+五个 AI 辅助工作流以 **Claude Code 技能**形式提供（见 `.claude/commands/`）。卖家使用已有的任何 AI 编程工具——Claude Code、Cursor、GitHub Copilot 或任何有能力的助手。**无需额外 API 密钥、环境变量或包安装。** 卖家只需在项目目录中打开其 AI 工具并调用技能。
 
 ### 设计原则
 
@@ -1659,18 +1689,19 @@ export function BackgroundEffect({ children }: { children: React.ReactNode }) {
 
 ### 技能文件
 
-项目附带四个技能文件：
+项目附带五个技能文件：
 
 ```
 .claude/
 └── commands/
-    ├── setup.md             ← 技能：交互式站点配置设置
-    ├── setup-shipping.md    ← 技能：运费计算器引导设置（见 §21）
-    ├── translate-items.md   ← 技能：批量翻译物品字段到其他语区
-    └── update-items.md      ← 技能：从照片 + 描述生成 item.json
+    ├── setup.md               ← 技能：交互式站点配置设置
+    ├── setup-shipping.md      ← 技能：运费计算器引导设置（见 §21）
+    ├── setup-contact-form.md  ← 技能：询问表单/通知转发引导设置（见 §23）
+    ├── translate-items.md     ← 技能：批量翻译物品字段到其他语区
+    └── update-items.md        ← 技能：从照片 + 描述生成 item.json
 ```
 
-它们遵循标准 Claude Code 技能格式，可在 Claude Code 中通过 `/update-items`、`/setup`、`/setup-shipping`、`/translate-items` 调用。其他 AI 工具可直接将其作为提示词指令读取。
+它们遵循标准 Claude Code 技能格式，可在 Claude Code 中通过 `/update-items`、`/setup`、`/setup-shipping`、`/setup-contact-form`、`/translate-items` 调用。其他 AI 工具可直接将其作为提示词指令读取。
 
 ---
 
@@ -1925,7 +1956,7 @@ AI 逐件确认，或接受批量确认（"不再询问，翻译其余所有物�
 
 ### `content/` 规则——维持
 
-四个技能都指示 AI 只写入 `content/config.ts`、`content/items/*/item.json` 和 `content/items/*/_category.json`（翻译器只触碰 `item.json` 的语区字段；`setup-shipping` 只写入 `content/config.ts` 的 `shipping` 块以及可选的物品 `weight`/`dimensions`/`shipping_payer` 字段——见 §21）。不接触任何应用代码。AI 被明确指示不要修改 `content/` 之外的任何文件。
+五个技能都指示 AI 只写入 `content/config.ts`、`content/items/*/item.json` 和 `content/items/*/_category.json`（翻译器只触碰 `item.json` 的语区字段；`setup-shipping` 只写入 `content/config.ts` 的 `shipping` 块以及可选的物品 `weight`/`dimensions`/`shipping_payer` 字段——见 §21；`setup-contact-form` 只写入 `content/config.ts` 的 `notifications` 块——见 §23）。不接触任何应用代码。AI 被明确指示不要修改 `content/` 之外的任何文件。
 
 ---
 
@@ -2179,3 +2210,116 @@ shipping?: {
 `content/config.ts`，校验并提交。新配置字段以 **TypeScript 可选、带运行时 `??` 默认值**
 的方式添加，并登记在 `scripts/lib/configDefaults.ts`，使 `migrate-config` 能将其拼接进
 旧配置——即 §13 所述的向后兼容契约。详见 `docs/UPDATE_GUIDE.md`。
+
+---
+
+## 23. 联系表单／询问转发（可选）
+
+> 实现 `docs/FEATURES_ROADMAP.md` §3.1 中描述的功能。
+
+### 概述
+
+默认情况下，想联系卖家的买家必须已经认得页脚 `ContactSection` 中列出的某个联系平台
+（邮箱、Instagram、Discord 账号等），并自行采取行动——卖家没有办法收到一条结构化的
+消息，其中包含姓名、回复方式，以及（对可议价物品而言）一个具体的出价金额。本节新增
+一个**可选**的、由买家发起的询问表单——`EnquiryForm`，位于物品详情页——将结构化消息
+转发给卖家，转发渠道为 Discord、Telegram 或电子邮件。
+
+该功能**默认关闭**，对未配置的站点**零影响**：`siteConfig.notifications` 为
+`undefined`，物品详情页不渲染任何表单，也不发送任何网络请求。它不会改变任何地方现有
+的 `ContactSection` 平台按钮流程——包括页脚，页脚没有物品级上下文，因此从不渲染
+`EnquiryForm`。
+
+### 为何需要 Cloudflare Worker
+
+UsedExchange 是完全静态导出的站点，没有服务器，CI 中也不持有任何凭证（§3「部署
+模式」）。发送通知需要一个密钥——Discord webhook URL、Telegram bot token，或 Resend
+API key——该密钥**绝不能**进入浏览器打包文件。解决方案沿用与 §21 运费计算器相同的
+模式：一个独立部署的小型 **Cloudflare Worker** ——`workers/contact-form-proxy/`——
+以 `wrangler secret` 持有密钥，并暴露一个受 CORS 限制的单一 POST 端点。它有自己的
+`package.json`/`wrangler.toml`，不属于 Next.js 构建的一部分。
+
+### 架构
+
+```
+买家在物品详情页的 EnquiryForm 中填写表单
+   │
+   ▼
+EnquiryForm（components/contact/EnquiryForm.tsx，client）
+   │  POST { itemCategory, itemSlug, itemName, buyerName, buyerContact,
+   │         message, offerAmount?, currency, honeypot }
+   ▼
+Cloudflare Worker — workers/contact-form-proxy/
+   │  在服务端将请求的 Origin 与 ALLOWED_ORIGIN 比对；丢弃蜜罐字段
+   │  非空的请求；以 wrangler secret 持有 DISCORD_WEBHOOK_URL /
+   │  TELEGRAM_BOT_TOKEN / RESEND_API_KEY
+   ▼
+Discord webhook · Telegram sendMessage · Resend 邮件（经由 NOTIFICATION_PROVIDER）
+   │
+   ▼
+{ ok: true } 或 { error: "..." } 返回给 EnquiryForm
+```
+
+`NOTIFICATION_PROVIDER: "discord" | "telegram" | "email"` 选择投递路径，方式与 §21 中
+`SHIPPING_PROVIDER: "shippo" | "easypost"` 选择承运商完全一致——一个 Worker，一个可插拔
+的服务商开关。
+
+### 配置 — `siteConfig.notifications`
+
+```ts
+notifications?: {
+  enabled: boolean;
+  proxyUrl: string;               // Cloudflare Worker URL
+};
+```
+
+不设置或 `enabled: false` → 功能完全不生效。仅当 `notifications.enabled` 与
+`notifications.proxyUrl` **同时**为真值时，物品详情页才会渲染 `EnquiryForm`。完整模板
+见 §13。
+
+### 反垃圾信息 — 蜜罐字段
+
+表单包含一个隐藏的 `honeypot` 文本输入框，定位在屏幕外（`position: absolute; left:
+-9999px; top: -9999px`），并从 Tab 顺序/无障碍树中移除——刻意**不**使用
+`display: none` 或 `type="hidden"`，因为有些机器人会跳过以这些方式隐藏的字段，但会
+盲目填写它在 DOM 中能找到的每一个输入框，仍会填写这一个。`honeypot` 非空的提交会被
+Worker 静默丢弃，并返回与真实提交**完全相同**的 `200 { ok: true }` 响应，因此机器人
+无法得知哪项检查被触发，也无法据此调整策略。
+
+### 安全性 — `ALLOWED_ORIGIN` 强制校验
+
+仅靠 CORS 响应头只能阻止*浏览器*读取跨源响应——对谁能发起请求本身没有任何限制。因此
+Worker 会在**服务端**、在做任何其他事情之前，先检查请求的 `Origin` 头，不匹配时返回
+`403 Forbidden`（这正是 `ee236bd` 的加固——此前该 Worker 仅依赖 CORS 响应头）。这可以
+拦截运行在其他站点上的浏览器，以及懒得设置请求头的普通脚本，但 `Origin` 终究只是一个
+HTTP 头，蓄意的非浏览器客户端（`curl`、脚本）仍可伪造它——Worker 自己的 `README.md`
+明确将其描述为"一道基本的访问门槛，而非密码学级别的保证"。与本项目刻意保持无状态的
+设计一致（§21 的理由在此同样适用），该 Worker **没有持久化存储**（无 KV、无 D1），也
+**没有速率限制或验证码**；若卖家在实践中开始遭到骚扰，建议的应对方式是**基础设施层面**
+的选项（Cloudflare Turnstile、Cloudflare 控制台层面的速率限制规则），而非修改这个
+Worker 的代码。
+
+### 货币
+
+通知消息使用物品自身的 `price.currency`（随请求体一并传入），而非硬编码的 `$`——
+GBP 或 CAD 的出价，在面向买家的表单（`EnquiryForm` 的 `currencyPrefix`）和 Worker
+组装的消息（`formatOfferAmount`）中都会标注其真实货币代码，因此非 USD 物品的出价
+不会被静默误标为美元。
+
+### 部署
+
+完整设置流程见
+[`workers/contact-form-proxy/README.md`](../workers/contact-form-proxy/README.md)
+（选择通知服务商、配置 `wrangler.toml`、`wrangler secret put`、`wrangler deploy`），
+或运行 `/setup-contact-form` 获取对话式引导。
+
+### 新增 i18n 字符串
+
+新增 12 个 `UIStrings` key：`scheduleViewing`（由 `siteConfig.contact.schedulingUrl`
+控制显示的"预约看货"按钮——见 §10.3），以及 11 个 `EnquiryForm` 相关 key——
+`enquiryFormHeading`、`enquiryNameLabel`、`enquiryContactLabel`、
+`enquiryContactPlaceholder`、`enquiryMessageLabel`、`enquiryMessagePlaceholder`、
+`enquiryOfferLabel`、`enquirySubmit`、`enquirySubmitting`、`enquirySuccess`、
+`enquiryError`。这 12 个 key 均已按照 Iron Rule 8 的向后兼容清单（§13）登记在
+`scripts/lib/configDefaults.ts` 中，因此 `pnpm migrate-config` / `pnpm update-site`
+可以将它们拼接进下游站点的 translations 区块。

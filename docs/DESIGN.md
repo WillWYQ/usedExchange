@@ -1,7 +1,7 @@
 # UsedExchange — Project Design Document
 
-**Version:** 0.10.0  
-**Date:** 2026-08-02  
+**Version:** 0.10.2  
+**Date:** 2026-09-07  
 **Status:** Decisions Resolved — Implementation Live (all phases 0–18 shipped)
 
 ---
@@ -384,8 +384,10 @@ in place, so these comments survive.
   // ── Categorisation ────────────────────────────────────────────────────────
   "tags": ["lighting", "smart-home"],
   // ^ string[]; default []. Tags are indexed by the full-text search engine (fuse.js)
-  //   so buyers can find items by tag. Tag chips on item detail pages are non-interactive
-  //   <span> elements in v1 (dedicated tag filter page is a future feature).
+  //   so buyers can find items by tag. Each tag chip on the item detail page links to
+  //   /tags/{tag}, a cross-category page listing every visible item sharing that tag —
+  //   unless its slugified form collides with a different tag's spelling, in which case
+  //   both fall back to a non-interactive <span> (see §10.3).
   "category_override": "",
   // ^ DISPLAY-ONLY override. If non-empty, replaces the folder-derived category name
   //   in breadcrumbs and the item card's category label — but does NOT change:
@@ -668,6 +670,8 @@ The site header appears on all pages and contains:
 - **Location price bar** — `📍 ~{N} mi` or `📍 Location unavailable` + "Change distance" override; owned by `ItemGrid`
 - **Filter + sort bar** (client-side):
   - **Condition chips** — multi-select, all selected by default
+  - **Course chips** — single-select (textbooks); shown only when the category has items with a non-empty `course` field. Clicking the active chip clears it (shows all courses again).
+  - **Tag chips** — multi-select, AND-matching; shown only when the category has items with a non-empty `tags` entry. A visible item must carry every currently-active tag, not just one — this narrows results the same way condition/course chips do, rather than broadening them.
   - **Sort select** — Price low→high · Price high→low · Date listed (newest) · Condition (new first); default = Date listed
   - **Price range slider** — operates on location-resolved price; hidden when no items have tiers; resets when distance changes. Its outlier handling is governed by `ui.priceFilterStrategy` (see §13), which selects one of five strategies implemented in `lib/utils/priceFilterStrategies.ts`:
     - `"none"` *(default)* — raw min/max of the resolved prices
@@ -702,12 +706,14 @@ The site header appears on all pages and contains:
   - **"Make an Offer" button** — shown when `price.negotiable: true` AND `min_acceptable_offer` is set. Opens an inline form where the buyer types an amount, then pre-fills the contact platform message: "I'd like to offer $X for {name}." Offers below `min_acceptable_offer` show a gentle rejection message client-side without sending anything.
   - **"Pay Deposit" button** — shown when `stripe_payment_link` is non-empty; opens Stripe link in new tab
   - **"Pay with Venmo" button** — shown when `venmo_payment_request` is non-empty; opens the Venmo payment-request URL in a new tab (parallel to "Pay Deposit"). When empty, no button renders; the Venmo contact platform link remains available in the contact section.
+  - **"Schedule Viewing" button** — shown when `siteConfig.contact.schedulingUrl` is non-empty; opens the seller's external scheduling link (Calendly/Cal.com/Google Calendar/etc.) in a new tab. Site-level, not per-item — the same link renders on every item's page. See §23.
   - **Initial SSG state** — static HTML shows highest tier (`resolveItemPrice` called server-side as pure function → passed as `initialResolvedTier` to `PricingSection`)
   - **Social media note** — crawlers always see highest tier price (intentional)
 - **Metadata table** — brand, model, age, dimensions, weight, colour, original source (linked), original price; null/empty fields hidden. Dimensions/weight are converted for display to the visitor's resolved unit system (`lib/utils/units.ts`; see §13 `measurementUnit` / `localeMeasurementUnits`).
 - **Shipping estimator** — `ShippingEstimator` (client) shows a live carrier-rate estimate when `siteConfig.shipping` is enabled, the item has `weight` + `dimensions`, and the resolved tier is the open-ended shipping tier. See §21 for the full architecture (Cloudflare Worker proxy).
 - **Contact section** — platform buttons with pre-filled messages; `preferred_payment` list; `contact_note`
-- **Tags** — non-interactive chips (searchable via fuse.js search)
+- **Enquiry form** (`EnquiryForm`, optional) — rendered directly below the contact section when `siteConfig.notifications?.enabled` and `siteConfig.notifications?.proxyUrl` are both truthy. Lets a buyer send a structured message (name, contact info, message, and — for negotiable items — an optional offer amount) that's relayed to the seller via the `contact-form-proxy` Cloudflare Worker. Never shown in the footer's `ContactSection` (no per-item context there). See §23.
+- **Tags** — each tag chip links to `/tags/{tag}`, a cross-category page listing every visible item sharing that tag, unless its slugified form collides with a different tag's spelling — in which case both fall back to a non-interactive `<span>` (see `loadTagIndex`, `lib/content/loader.ts`)
 - **Share button** — native share (`navigator.share()`) on mobile; copy-link fallback on desktop; shows "Copied!" toast
 - **Recently Viewed** — records this item's slug to `sessionStorage` on page mount
 - **JSON-LD** — `<script type="application/ld+json">` with `@type: "Product"`, name, description, image, offers, brand; `BreadcrumbList` JSON-LD for breadcrumbs
@@ -939,7 +945,7 @@ This file lives inside `content/` alongside the items and QR codes. It is the on
 
 > ⚠️ **`content/config.ts` is imported by client components** and therefore becomes part of the browser bundle. All field values must be static, serialisable constants. Do not use Node.js APIs (`fs`, `path`, `process.env`, etc.) at the module level. Seller coordinates, contact handles, and site name are all intentionally public — they appear in page source.
 
-> 🔁 **Backward compatibility (template updates).** `content/config.ts` is seller-owned — `pnpm update-site` never overwrites it (see §22). Every config field added after the original core (`defaultPriceTiers?`, `measurementUnit?`, `shipping?`, `i18n.localeMeasurementUnits?`, `ui.priceFilterStrategy?`, `ui.priceFilterBuckets?`, `soldArchiveDisplayLimit?`) is **TypeScript-optional (`?`)** with a runtime `??` default at its consumption site, so a downstream site that pulls new template code but has not updated its config still type-checks and runs. `pnpm migrate-config` (run automatically by `update-site`) can splice these optional fields into an older config from `scripts/lib/configDefaults.ts`.
+> 🔁 **Backward compatibility (template updates).** `content/config.ts` is seller-owned — `pnpm update-site` never overwrites it (see §22). Every config field added after the original core (`defaultPriceTiers?`, `measurementUnit?`, `shipping?`, `i18n.localeMeasurementUnits?`, `ui.priceFilterStrategy?`, `ui.priceFilterBuckets?`, `soldArchiveDisplayLimit?`, `contact.schedulingUrl?`, `notifications?`) is **TypeScript-optional (`?`)** with a runtime `??` default at its consumption site, so a downstream site that pulls new template code but has not updated its config still type-checks and runs. `pnpm migrate-config` (run automatically by `update-site`) can splice these optional fields into an older config from `scripts/lib/configDefaults.ts`.
 
 ```ts
 import type { SiteConfig } from "@/lib/config/types";
@@ -1010,9 +1016,21 @@ export const siteConfig: SiteConfig = {
   //   origin: { zip: "94103", country: "US" },
   // },
 
+  // ── Contact-form enquiry relay (optional) ───────────────────────────────────
+  // Disabled by default — zero impact until configured. To enable: deploy
+  // workers/contact-form-proxy (see its README), paste its URL below, and set
+  // enabled: true. Adds an EnquiryForm to the item detail page. See §23.
+  notifications: {
+    enabled: false,
+    proxyUrl: "https://contact-form-proxy.<your-subdomain>.workers.dev",
+  },
+
   // ── Contact ───────────────────────────────────────────────────────────────
   contact: {
     reveal_behavior: "click",                 // "click" | "always"
+    // Calendly/Cal.com/Google Calendar appointment link — shows a "Schedule
+    // Viewing" button on item pages when set. Optional; "" disables it. See §23.
+    schedulingUrl: "",                        // e.g. "https://calendly.com/your-handle/viewing"
     platforms: [
       { type: "email",     value: "you@example.com" },
       { type: "instagram", value: "your_handle" },
@@ -1078,7 +1096,7 @@ export const siteConfig: SiteConfig = {
   // Selected locale is persisted in localStorage; static HTML always shows defaultLocale.
   //
   // Two translation layers:
-  //   1. UI strings  — the ~87 button/label/badge strings of UIStrings
+  //   1. UI strings  — the ~124 button/label/badge strings of UIStrings
   //                    (lib/config/types.ts), defined here in translations.{locale}
   //   2. Item content — name_{locale} / description_{locale} in each item.json;
   //                     run /translate-items to batch-fill these
@@ -1205,7 +1223,7 @@ export const siteConfig: SiteConfig = {
         newlyListedFirstVisit: "Welcome! Everything here is new to you.",
         newlyListedNoneInPeriod: "No new items in this period.",
       },
-      // To enable Chinese, uncomment and translate all ~87 keys (every UIStrings
+      // To enable Chinese, uncomment and translate all ~124 keys (every UIStrings
       // key; at minimum the 73 check-config requires), then add "zh" to availableLocales:
       // zh: { home: "首页", about: "关于", browseAll: "浏览全部", ... },
     },
@@ -1379,10 +1397,15 @@ usedExchange/
 │   │   └── page.tsx               ← About — ProjectIntro (see §10.6)
 │   ├── newly-listed/
 │   │   └── page.tsx               ← Newly Listed — server shell → NewlyListedClient (see §10.7)
+│   ├── tags/
+│   │   └── [tag]/
+│   │       └── page.tsx           ← Tag listing — cross-category items sharing one tag (see §10.3)
 │   ├── [category]/
 │   │   ├── page.tsx
 │   │   └── [item]/
 │   │       └── page.tsx
+│   ├── manifest.ts                ← PWA manifest (installable name/icon/theme, no offline support);
+│   │                                force-static (required under output: "export")
 │   └── not-found.tsx
 │
 ├── components/                    ← see §12
@@ -1391,8 +1414,11 @@ usedExchange/
 │                                    edits only content/ + lib/generated/image-manifest.json
 │
 ├── workers/
-│   └── shipping-rate-proxy/       ← independently-deployed Cloudflare Worker (see §21); keeps the
-│                                    carrier API key server-side; own package.json + wrangler.toml
+│   ├── shipping-rate-proxy/       ← independently-deployed Cloudflare Worker (see §21); keeps the
+│   │                                carrier API key server-side; own package.json + wrangler.toml
+│   └── contact-form-proxy/        ← independently-deployed Cloudflare Worker (see §23); relays buyer
+│                                    enquiries to Discord/Telegram/email via NOTIFICATION_PROVIDER;
+│                                    own package.json + wrangler.toml
 │
 ├── lib/
 │   ├── content/
@@ -1431,6 +1457,7 @@ usedExchange/
 │   └── commands/                  ← AI skill files (see §20); work with Claude Code + other AI tools
 │       ├── setup.md               ← Skill: interactive site config setup wizard (/setup)
 │       ├── setup-shipping.md      ← Skill: guided shipping calculator setup (/setup-shipping, see §21)
+│       ├── setup-contact-form.md  ← Skill: guided enquiry-form / notifications setup (/setup-contact-form, see §23)
 │       ├── translate-items.md     ← Skill: batch-translate item fields into additional locales
 │       └── update-items.md        ← Skill: generate item.json from photos + description file
 │
@@ -1442,6 +1469,13 @@ usedExchange/
 │   ├── setup-ui.sh                ← one-time developer setup: installs all Aceternity components
 │   ├── create-item.ts             ← pnpm create-item <category>/<name>  (alias: pnpm new)
 │   ├── mark-sold.ts               ← pnpm mark-sold <category>/<name>
+│   ├── mark-available.ts          ← pnpm mark-available <category>/<name> — resets status to "available", clears sold_date
+│   ├── duplicate.ts               ← pnpm duplicate <category>/<name> <category>/<new-name> — copies an item folder as a fresh draft
+│   ├── inventory.ts               ← pnpm inventory — Markdown table of every item (all statuses) to stdout; read-only
+│   ├── stale-check.ts             ← pnpm stale-check [--days <n>] — lists available items listed > N days (default 60); read-only
+│   ├── audit-listings.ts          ← pnpm audit-listings — reports items missing recommended (schema-optional) fields; read-only
+│   ├── export-csv.ts              ← pnpm export-csv — flat CSV of every item for the seller's own records (distinct from pnpm fb-export)
+│   ├── semester-end.ts            ← pnpm semester-end — interactive stale-listing review (mark sold / reduce price / leave as-is)
 │   ├── create-template.ts         ← pnpm create-template [category]
 │   ├── studio.ts                  ← pnpm studio — Seller Studio launcher (see §22)
 │   ├── export-facebook.ts         ← pnpm fb-export — Facebook Marketplace CSV export (see §22)
@@ -1825,8 +1859,6 @@ The following were previously listed as future features. Those now in v1 have be
 
 | Future feature | Designated extension point |
 |---|---|
-| Contact form / enquiry | Serverless function; `ContactSection` has a reserved slot |
-| Tag filter page | `/tags/{tag}` route + tag index in loader; tags are already stored and indexed by search |
 | Draft preview | Next.js middleware on `/preview/[category]/[item]`; reads `status: "draft"` items |
 | Distance unit toggle (mi ↔ km) | Add `distanceUnit: "mi" \| "km"` to `siteConfig.i18n`; `useDistancePricing` converts |
 | Cached location across navigations | `sessionStorage` opt-in behind `siteConfig.cacheLocationInSession: true`; consent-gated |
@@ -1844,7 +1876,7 @@ The following were previously listed as future features. Those now in v1 have be
 
 ## 20. AI-Powered Content Generation — Skill-Based Approach
 
-Four AI-assisted workflows are provided as **Claude Code skills** (see `.claude/commands/`). The seller uses whatever AI coding tool they already have — Claude Code, Cursor, GitHub Copilot, or any capable assistant. **No additional API keys, environment variables, or package installation is required.** The seller just opens their AI tool in the project directory and invokes the skill.
+Five AI-assisted workflows are provided as **Claude Code skills** (see `.claude/commands/`). The seller uses whatever AI coding tool they already have — Claude Code, Cursor, GitHub Copilot, or any capable assistant. **No additional API keys, environment variables, or package installation is required.** The seller just opens their AI tool in the project directory and invokes the skill.
 
 ### Design Principle
 
@@ -1859,18 +1891,19 @@ This approach:
 
 ### Skill Files
 
-Four skill files ship with the project:
+Five skill files ship with the project:
 
 ```
 .claude/
 └── commands/
-    ├── setup.md             ← Skill: interactive site config setup
-    ├── setup-shipping.md    ← Skill: guided shipping calculator setup (see §21)
-    ├── translate-items.md   ← Skill: batch-translate item fields into additional locales
-    └── update-items.md      ← Skill: generate item.json from photos + description
+    ├── setup.md               ← Skill: interactive site config setup
+    ├── setup-shipping.md      ← Skill: guided shipping calculator setup (see §21)
+    ├── setup-contact-form.md  ← Skill: guided enquiry-form / notifications setup (see §23)
+    ├── translate-items.md     ← Skill: batch-translate item fields into additional locales
+    └── update-items.md        ← Skill: generate item.json from photos + description
 ```
 
-These follow the standard Claude Code skill format and are invokable via `/update-items`, `/setup`, `/setup-shipping`, and `/translate-items` in Claude Code. Other AI tools can read them directly as prompt instructions.
+These follow the standard Claude Code skill format and are invokable via `/update-items`, `/setup`, `/setup-shipping`, `/setup-contact-form`, and `/translate-items` in Claude Code. Other AI tools can read them directly as prompt instructions.
 
 ---
 
@@ -2125,7 +2158,7 @@ The skill files are human-readable. A seller who opens them in a text editor wil
 
 ### `content/` Rule — Maintained
 
-All four skills instruct the AI to write ONLY to `content/config.ts`, `content/items/*/item.json`, and `content/items/*/_category.json` (the translator touches only `item.json` locale fields; `setup-shipping` writes only the `shipping` block of `content/config.ts` plus optional `weight`/`dimensions`/`shipping_payer` item fields — see §21). No app code is touched. The AI is explicitly instructed not to modify any files outside `content/`.
+All five skills instruct the AI to write ONLY to `content/config.ts`, `content/items/*/item.json`, and `content/items/*/_category.json` (the translator touches only `item.json` locale fields; `setup-shipping` writes only the `shipping` block of `content/config.ts` plus optional `weight`/`dimensions`/`shipping_payer` item fields — see §21; `setup-contact-form` writes only the `notifications` block of `content/config.ts` — see §23). No app code is touched. The AI is explicitly instructed not to modify any files outside `content/`.
 
 ---
 
@@ -2414,4 +2447,122 @@ to `exports/` (gitignored), including `.export-history.json` for de-duplication.
 **TypeScript-optional with runtime `??` defaults** and registered in `scripts/lib/configDefaults.ts`
 so `migrate-config` can splice them into older configs — the backward-compat contract described in
 §13. See `docs/UPDATE_GUIDE.md`.
+
+---
+
+## 23. Contact Form / Enquiry Relay (Optional)
+
+> Implements the feature described in `docs/FEATURES_ROADMAP.md` §3.1.
+
+### Overview
+
+By default, a buyer who wants to reach the seller has to already recognise one of the contact
+platforms in the footer's `ContactSection` (email, Instagram, a Discord handle, etc.) and act on it
+themselves — there is no way for the seller to receive a structured message with a name, a way to
+reply, and, for negotiable items, a proposed offer amount. This section adds an **optional**
+buyer-initiated enquiry form — `EnquiryForm`, on the item detail page — that relays a structured
+message to the seller via Discord, Telegram, or email.
+
+The feature is **off by default** and has **zero impact** on a site that doesn't configure it:
+`siteConfig.notifications` is `undefined`, the item detail page renders no form, and no network
+requests are made. It does not change the existing `ContactSection` platform-button flow anywhere —
+including the footer, which has no per-item context and therefore never renders `EnquiryForm`.
+
+### Why a Cloudflare Worker is required
+
+UsedExchange is a fully static export with no server and no credentials in CI (§3 "Deployment
+Modes"). Delivering a notification requires a secret — a Discord webhook URL, a Telegram bot token,
+or a Resend API key — that must never ship in the browser bundle. The solution follows the same
+pattern as §21's shipping calculator: a small, independently-deployed **Cloudflare Worker** —
+`workers/contact-form-proxy/` — holds the secret as a `wrangler secret` and exposes a single
+CORS-restricted POST endpoint. It has its own `package.json`/`wrangler.toml` and is not part of the
+Next.js build.
+
+### Architecture
+
+```
+Buyer fills out EnquiryForm (item detail page)
+   │
+   ▼
+EnquiryForm  (components/contact/EnquiryForm.tsx, client)
+   │  POST { itemCategory, itemSlug, itemName, buyerName, buyerContact,
+   │         message, offerAmount?, currency, honeypot }
+   ▼
+Cloudflare Worker — workers/contact-form-proxy/
+   │  Checks the request's Origin against ALLOWED_ORIGIN server-side;
+   │  drops honeypot-filled requests; holds DISCORD_WEBHOOK_URL /
+   │  TELEGRAM_BOT_TOKEN / RESEND_API_KEY as a wrangler secret
+   ▼
+Discord webhook · Telegram sendMessage · Resend email  (via NOTIFICATION_PROVIDER)
+   │
+   ▼
+{ ok: true } or { error: "..." } back to EnquiryForm
+```
+
+`NOTIFICATION_PROVIDER: "discord" | "telegram" | "email"` selects the delivery path the same way
+`SHIPPING_PROVIDER: "shippo" | "easypost"` selects a carrier in §21 — one Worker, one pluggable
+provider switch.
+
+### Configuration — `siteConfig.notifications`
+
+```ts
+notifications?: {
+  enabled: boolean;
+  proxyUrl: string;               // Cloudflare Worker URL
+};
+```
+
+Absent or `enabled: false` → feature fully inert. `EnquiryForm` is rendered by the item detail page
+only when **both** `notifications.enabled` and `notifications.proxyUrl` are truthy. See §13 for the
+full template.
+
+### Anti-spam — honeypot field
+
+The form includes a hidden `honeypot` text input, positioned off-screen (`position: absolute; left:
+-9999px; top: -9999px`) and removed from the tab order/accessibility tree — deliberately **not**
+`display: none` or `type="hidden"`, since some bots skip fields hidden those ways, but a bot that
+blindly fills every input it finds in the DOM will still fill this one. A submission with a
+non-empty `honeypot` is dropped silently by the Worker and receives the **exact same**
+`200 { ok: true }` response as a real submission, so a bot can't tell which check tripped and adapt
+around it.
+
+### Security — `ALLOWED_ORIGIN` enforcement
+
+CORS response headers alone only stop a *browser* from reading a cross-origin response — they
+impose no restriction on who can send the request in the first place. The Worker therefore checks
+the request's `Origin` header **server-side**, before anything else, and returns `403 Forbidden` on
+a mismatch (this is the `ee236bd` hardening — the Worker used to rely on CORS headers alone). This
+blocks a browser running on another site and a casual script that doesn't bother setting headers,
+but `Origin` is just an HTTP header, so a determined non-browser client (`curl`, a script) can still
+forge it — the Worker's own `README.md` documents this explicitly as "a basic access gate, not a
+cryptographic guarantee." Consistent with the project's deliberately stateless design (§21's
+rationale applies identically here), the Worker has **no persistent storage** (no KV, no D1) and
+**no rate limiting or CAPTCHA**; a seller who starts getting spammed in practice is pointed at
+infra-level options (Cloudflare Turnstile, a dashboard-level rate-limiting rule) rather than a code
+change here.
+
+### Currency
+
+The notification message uses the item's own `price.currency` (passed through in the request
+body), not a hardcoded `$` — a GBP or CAD offer is labelled with its real currency code both in the
+buyer-facing form (`EnquiryForm`'s `currencyPrefix`) and in the message the Worker composes
+(`formatOfferAmount`), so an offer on a non-USD listing is never silently mislabeled as US dollars.
+
+### Deployment
+
+See [`workers/contact-form-proxy/README.md`](../workers/contact-form-proxy/README.md) for the full
+setup walkthrough (choose a notification provider, configure `wrangler.toml`, `wrangler secret
+put`, `wrangler deploy`), or run `/setup-contact-form` for a guided, conversational version of the
+same steps.
+
+### New i18n strings
+
+Twelve new `UIStrings` keys: `scheduleViewing` (the "Schedule Viewing" button gated by
+`siteConfig.contact.schedulingUrl` — see §10.3) plus eleven `EnquiryForm` keys —
+`enquiryFormHeading`, `enquiryNameLabel`, `enquiryContactLabel`, `enquiryContactPlaceholder`,
+`enquiryMessageLabel`, `enquiryMessagePlaceholder`, `enquiryOfferLabel`, `enquirySubmit`,
+`enquirySubmitting`, `enquirySuccess`, `enquiryError`. All twelve are registered in
+`scripts/lib/configDefaults.ts` per the Iron Rule 8 backward-compatibility checklist (§13), so
+`pnpm migrate-config` / `pnpm update-site` can splice them into a downstream site's translations
+block.
 

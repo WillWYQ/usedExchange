@@ -1,7 +1,7 @@
-# UsedExchange — 当前功能（v1.3）
+# UsedExchange — 当前功能（v1.4）
 
-**基于：** DESIGN.md v0.10.1 · TECH_REQUIREMENTS.md v0.10.1 · IMPLEMENTATION_PLAN.md v1.7  
-**日期：** 2026-09-05  
+**基于：** DESIGN.md v0.10.2 · TECH_REQUIREMENTS.md v0.10.2 · IMPLEMENTATION_PLAN.md v1.7  
+**日期：** 2026-09-07  
 **状态：** 已实现——本文档描述全部线上功能：v1 核心 + Phase 16–18（运费估算、Facebook Marketplace 导出、卖家工作台）。
 
 ---
@@ -166,7 +166,7 @@ content/
 
 ### 分类页（`/[category]`）
 - 定位价格栏——检测到的距离 + "修改距离"覆盖
-- **筛选栏** — 成色标签 + 价格范围滑块（可配置离群值策略 `ui.priceFilterStrategy`：none / percentile / logarithmic / preset-buckets / iqr） + 状态切换
+- **筛选栏** — 成色标签 + 课程标签（单选；仅当该分类下的物品含有非空 `course` 字段时显示，如教材）+ 标签筛选（多选，交集匹配；仅当该分类下的物品带有标签时显示）+ 价格范围滑块（可配置离群值策略 `ui.priceFilterStrategy`：none / percentile / logarithmic / preset-buckets / iqr） + 状态切换
 - **排序选择** — 价格低/高 · 上架日期 · 成色
 - **"浏览全部"链接** — 导航到 `/all`
 - 物品网格，显示定位解析价格
@@ -183,9 +183,10 @@ content/
 - **YouTube 演示** — 设置 `youtube_link` 时显示"观看演示"按钮
 - **取货时段** — `pickup_windows` 非空时显示
 - **定价区块** — 解析档位 + 切换 + "出价"按钮 + Stripe"支付定金"按钮 + "通过 Venmo 支付"按钮（设置 `venmo_payment_request` 时）
+- **预约看货** — 设置了 `siteConfig.contact.schedulingUrl`（可选，站点级，非单品）时显示按钮；在新标签页打开外部预约链接（Calendly/Cal.com 等）
 - **元数据表** — 品牌、型号、尺寸、重量、原始来源/价格
-- **联系区块** — 平台按钮含预填消息、付款方式、联系说明
-- **标签** — 不可交互的标签片（可通过搜索找到）
+- **联系区块** — 平台按钮含预填消息、付款方式、联系说明（下方为可选的联系表单——见"联系系统 → 联系表单 / 联系转发"）
+- **标签** — 每个标签链接到 `/tags/{tag}`，该静态页面列出所有分类中带有该标签的可见物品（也可通过搜索找到）；当标签的 slug 不安全（如纯 CJK 字符）或与另一个标签的 slug 冲突时（两种情况都会从标签索引中剔除），回退为不可交互的标签片
 - **分享按钮** — 移动端原生分享；桌面端复制链接
 - **JSON-LD** — Product schema + BreadcrumbList，用于 SEO 富摘要
 - **已售状态** — 顶部"已售"横幅；联系 CTA 禁用；显示售出日期
@@ -241,6 +242,15 @@ content/
 - `reveal_behavior: "click"` — 隐藏在"显示联系方式"切换后（默认）
 - `reveal_behavior: "always"` — 始终可见
 
+### 联系表单 / 联系转发（可选）
+默认关闭——卖家需同时设置 `siteConfig.notifications.enabled: true` 和 `siteConfig.notifications.proxyUrl` 才会开启。两者都设置后，物品详情页会在联系区块下方显示 `EnquiryForm`（姓名、联系方式、留言，以及物品可议价时的出价金额）。
+
+- **提交时** — POST 到卖家的 `contact-form-proxy` Cloudflare Worker，由其根据 Worker 的 `NOTIFICATION_PROVIDER` 设置通过 Discord、Telegram 或邮件转发格式化的通知。
+- **反垃圾** — 一个屏幕外的蜜罐字段；填写了蜜罐字段的提交会收到与正常提交完全相同的成功响应，因此机器人无法得知提交已被丢弃。
+- **来源校验** — Worker 在服务端将请求的 `Origin` 头与 `ALLOWED_ORIGIN` 比对（而不仅是通过 CORS 响应头），拒绝其他来源——这是一道基础的访问门槛，而非加密级别的保证。
+
+通知投递所需的密钥（Discord webhook URL、Telegram bot token、Resend API key）只存在于 Worker 中，绝不出现在静态站点构建产物中。详见 `workers/contact-form-proxy/README.md` 和 `.claude/commands/setup-contact-form.md`。
+
 ---
 
 ## AI 辅助内容生成
@@ -292,7 +302,7 @@ AI 按 8 个问题组提问：站点身份、部署（网址 + 托管方式）�
 
 ```
 1. 将目标语区代码加入 siteConfig.i18n.availableLocales（如 ["en", "zh"]）
-2. 在 content/config.ts 中添加 translations.{locale} 块，翻译全部 87 个 UI 字符串键
+2. 在 content/config.ts 中添加 translations.{locale} 块，翻译全部 124 个 UI 字符串键
 3. 在项目目录中打开 Claude Code（或类似 AI 工具）
 4. 输入：/translate-items（或"将我的物品翻译成中文"）
 5. 审阅 AI 为每件物品显示的翻译建议
@@ -301,7 +311,7 @@ AI 按 8 个问题组提问：站点身份、部署（网址 + 托管方式）�
 
 仅翻译 `name` → `name_{locale}` 和 `description` → `description_{locale}`；品牌、型号、标签、价格、日期以及所有 Markdown 语法均原样保留。已有非空翻译的物品会被跳过。只写入 `content/items/*/item.json`。
 
-> **注意：** `/translate-items` 仅处理物品级别的 `name_{locale}` / `description_{locale}` 字段——UI 字符串（按钮、徽章、标题等，共 87 个键）的翻译需要在 `content/config.ts` 中手动填写 `translations.{locale}` 块（或重新运行 `/setup`）后才能运行此技能。
+> **注意：** `/translate-items` 仅处理物品级别的 `name_{locale}` / `description_{locale}` 字段——UI 字符串（按钮、徽章、标题等，共 124 个键）的翻译需要在 `content/config.ts` 中手动填写 `translations.{locale}` 块（或重新运行 `/setup`）后才能运行此技能。
 
 ### 技能 4 — 运费配置向导（`/setup-shipping`）
 
@@ -331,7 +341,7 @@ AI 按 8 个问题组提问：站点身份、部署（网址 + 托管方式）�
 
 - **对访客：** 配置了多个语区时，站点头部会出现语言切换器（`LocaleSwitcher`）。切换语言会立即更新物品名称、描述以及所有 UI 标签（按钮、徽章、标题）——无需刷新页面。所选语言保存在浏览器 `localStorage` 中，跨页面和跨访问持久有效。
 - **对卖家：** 添加新语言需要两步：
-  1. 将语区代码加入 `siteConfig.i18n.availableLocales`（如 `["en", "zh"]`），**并**在 `content/config.ts` 中添加包含全部 87 个 UI 字符串键（已翻译）的 `translations.{locale}` 块。该块缺失或不完整时构建将失败。
+  1. 将语区代码加入 `siteConfig.i18n.availableLocales`（如 `["en", "zh"]`），**并**在 `content/config.ts` 中添加包含全部 124 个 UI 字符串键（已翻译）的 `translations.{locale}` 块。该块缺失或不完整时构建将失败。
   2. 为每件物品填写 `name_zh` / `description_zh`——手动填写或使用 `/translate-items` AI 技能。
 - **回退：** 没有翻译的物品显示默认语言——不会留空或报错。任何缺失的 UI 字符串键回退到内置英文默认值。
 - **单次部署：** 所有语言在同一次构建中发布；没有独立的多语言站点。
@@ -349,16 +359,23 @@ AI 按 8 个问题组提问：站点身份、部署（网址 + 托管方式）�
 
 ## 卖家 CLI 工具
 
-脚本在卖家机器上运行。所有列表内容变更只写入 `content/`（外加生成的图片清单）；`upload-images` 还会写入清单和校验和缓存，`fb-export` 写入 `exports/`。
+脚本在卖家机器上运行。所有列表内容变更只写入 `content/`（外加生成的图片清单）；`upload-images` 还会写入清单和校验和缓存，`fb-export`/`export-csv` 写入 `exports/`。
 
 | 命令 | 功能 |
 |---|---|
 | `pnpm upload-images` | 上传照片到 CDN，更新清单，打印备份提醒 |
 | `pnpm push` | 暂存 `content/` 和清单文件、提交（默认消息）并推送 |
 | `pnpm mark-sold <cat>/<name>` | 将 `status` 设为 `"sold"` 并记录 `sold_date`，无需手动编辑 JSON——原地修改 JSONC，保留所有 `// options: ...` 注释 |
+| `pnpm mark-available <cat>/<name>` | 将 `status` 从任意状态（已售、待定、预订、草稿）重置为 `"available"` 并清空 `sold_date`——与 `mark-sold` 相同的原地 JSONC 修改方式；若已是 `available` 则不做任何改动 |
+| `pnpm duplicate <cat>/<item> <cat>/<new-item>` | 复制物品文件夹（item.json + 照片）为新物品，并将副本的 `status` 重置为 `draft`、`listed_date` 设为今天，清空 `sold_date` / `price_reduced` / `previous_lowest_price` / `min_acceptable_offer`；副本中的私有字段 `reserved_for` 会被直接移除 |
 | `pnpm create-item <cat>/<name>` | 创建新物品文件夹 + 预填全部 36 个模板字段（完整物品 schema；私有字段 `reserved_for` 有意不生成）的 `item.json`（参见 DESIGN.md §5），以 JSONC 格式写入，并为 `condition`、`status`、`dimensions.unit`、`weight.unit` 附上列出所有可选值的 `// options: ...` 提示 |
 | `pnpm new <cat>/<name>` | `create-item` 的简写 |
 | `pnpm create-template [cat]` | 为某分类（或全局）创建 `_template.json`——与 `create-item` 相同的 JSONC + `// options: ...` 提示 |
+| `pnpm inventory` | 打印所有物品（含所有状态）的 Markdown 表格：分类、状态、最低解析价格、已上架天数；只读 |
+| `pnpm stale-check [--days <n>]` | 列出上架超过 N 天（默认 60）的 `available` 物品，按上架时长降序排列；只读 |
+| `pnpm audit-listings` | 报告缺少推荐字段的非已售物品——无照片、描述为空、无标签、开放式邮寄档位缺少重量/尺寸，或完全没有价格档位；只读 |
+| `pnpm export-csv` | 将所有物品（含所有状态）导出为扁平 CSV 至 `exports/listings.csv`，供卖家自行记账使用——区别于 `fb-export` 的 Facebook 格式 CSV |
+| `pnpm semester-end` | 交互式审查过期的 `available` 物品（与 `stale-check` 共享 60 天阈值）：逐项选择标记已售 / 降价 / 保持不变，有变更时运行 `pnpm upload-images` 并打印发布命令——本身从不提交或推送 |
 | `pnpm fb-export` | 交互式将 `available` / `pending` / `reserved` 物品导出为 Facebook Marketplace 批量上传 CSV。引导式提示：选择全部 / 按分类 / 单独物品（支持逗号列表和 `1-4` 区间）；选择价格策略（最低价 / 最高价 / 平均价 / 本地自提档位 / 邮寄档位——后两项仅在存在匹配物品时出现）；超过 50 条自动分批（FB 上限），写入 `exports/facebook-marketplace.csv`（分批时为 `exports/facebook-marketplace-<N>.csv`）。强制 FB 限制：标题 ≤150 字符、描述 ≤5000 字符。智能分类映射根据物品标签、品牌和名称推断 FB 分类层级，无需手动配置。**导出历史：** 第二次运行时会出现步骤 0，提供跳过已导出物品的选项；历史记录保存于 `exports/.export-history.json`（已加入 gitignore）。**照片：** CSV 的 PHOTO 列保存 CDN `https://` 链接（每件物品最多 10 个——FB 上限；上传 CSV 时由 Facebook 自动抓取），因此请先运行 `pnpm upload-images`，否则这些列为空且脚本会发出警告。作为手动上传的备用方案（例如 CDN 链接变更时），本地照片还会复制到 `exports/facebook-marketplace-photos/NNN_category-item/`。 |
 
 ---
@@ -451,7 +468,8 @@ AI 按 8 个问题组提问：站点身份、部署（网址 + 托管方式）�
 | 卖家位置 | `location.lat`、`location.lng`、`location.label` |
 | 内容默认值 | `currency`、`recentlyListedCount`、`soldItemRetentionDays`、`soldArchiveDisplayLimit?`**（可选）**——限制 `/sold` 网格条数；`0` = 不限，默认 `200`、`defaultPriceTiers?`**（可选）**——`create-item` 使用的档位模板、`measurementUnit?`**（可选）**——`"metric"` / `"imperial"`，默认 `"metric"` |
 | 运费**（可选区块）** | `shipping.enabled`、`shipping.proxyUrl`、`shipping.defaultPayer`（`"seller"` / `"buyer"`）、`shipping.origin.zip`、`shipping.origin.country` |
-| 联系方式 | `contact.reveal_behavior`、`contact.platforms[]` |
+| 通知**（可选区块）** | `notifications.enabled`、`notifications.proxyUrl` |
+| 联系方式 | `contact.reveal_behavior`、`contact.platforms[]`、`contact.schedulingUrl?`**（可选）** |
 | Hero | `hero.cta_label`、`hero.cta_href` |
 | SEO | `meta.description`、`meta.twitterHandle` |
 | UI 槽位 | `ui.background`、`ui.itemGrid`、`ui.gallery`、`ui.itemCard`、`ui.priceFilterStrategy?`**（可选）**、`ui.priceFilterBuckets?`**（可选）** |
@@ -459,7 +477,7 @@ AI 按 8 个问题组提问：站点身份、部署（网址 + 托管方式）�
 | 分析 | `analytics.vercel`、`analytics.speedInsights`、`analytics.googleAnalyticsId` |
 | 搜索 | `search.enabled`、`search.placeholder` |
 | 站点地图 | `sitemap.enabled` |
-| 国际化 | `i18n.defaultLocale`、`i18n.availableLocales`、`i18n.showLocaleSwitcher`、`i18n.translations.{locale}.*`（共 87 个 UI 字符串键；任一已列语区缺少必需键时预构建失败，缺失键回退到默认语区）、`i18n.localeMeasurementUnits?`**（可选）**——按语区覆盖单位制 |
+| 国际化 | `i18n.defaultLocale`、`i18n.availableLocales`、`i18n.showLocaleSwitcher`、`i18n.translations.{locale}.*`（共 124 个 UI 字符串键；任一已列语区缺少必需键时预构建失败，缺失键回退到默认语区）、`i18n.localeMeasurementUnits?`**（可选）**——按语区覆盖单位制 |
 
 ---
 
@@ -496,6 +514,7 @@ AI 按 8 个问题组提问：站点身份、部署（网址 + 托管方式）�
 - 物品详情页的 **Twitter card**（`summary_large_image`）
 - 物品详情页的 **Pinterest 富 pin**（`og:type: "product"` + 价格元数据）
 - 构建时生成 `sitemap.xml` + `robots.txt`（启用时）
+- **Web App Manifest**（`app/manifest.ts`）— 使站点可作为主屏幕应用安装（名称、图标、主题色均来自 `siteConfig`）；无 Service Worker，不支持离线访问
 
 ---
 
@@ -538,6 +557,7 @@ Vercel Analytics 与 Speed Insights 通过 `siteConfig.analytics.vercel` / `site
 | `X-Powered-By` 头 | 已抑制 |
 | 卖家 CLI 工具 | 列表内容变更只写入 `content/`（外加生成的图片清单） |
 | 卖家工作台 | 仅绑定 `127.0.0.1`；写操作请求有 CSRF 防护；发布时只暂存 `content/` + 图片清单（绝不使用 `git add -A`，因此 `.env.local` 不可能被暂存）；从不触碰 `reserved_for` |
+| 联系表单代理 Worker | 在服务端将请求的 `Origin` 头与 `ALLOWED_ORIGIN` 比对（而不仅是 CORS 响应头）——这是一道基础的访问门槛，而非加密级别的保证 |
 | 图片清单 | `lib/generated/image-manifest.json` 提交到 git，CI 构建因此无需 CDN 凭据 |
 
 ---

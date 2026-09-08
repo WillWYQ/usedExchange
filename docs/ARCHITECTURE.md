@@ -2,7 +2,7 @@
 
 > Developer reference. For the full design specification see [DESIGN.md](DESIGN.md); for the build plan see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md); for non-technical seller operations see [../SETUP_GUIDE.md](../SETUP_GUIDE.md).
 >
-> **Version:** v1.2 · **Date:** 2026-08-02
+> **Version:** v1.3 · **Date:** 2026-09-07
 >
 > 🇨🇳 Chinese version: [ARCHITECTURE_zh.md](ARCHITECTURE_zh.md)
 
@@ -15,6 +15,7 @@ usedExchange/
 ├── app/                              ← Next.js App Router pages + root layout (100% Server Components)
 │   ├── layout.tsx                    ← Root layout: ThemeProvider > LocaleProvider > MeasurementUnitProvider > BackgroundEffect > SiteHeader/Footer
 │   ├── globals.css                   ← Tailwind v4 directives + CSS custom properties
+│   ├── manifest.ts                   ← Web app manifest (force-static) — installable icon/name/theme, no service worker
 │   ├── page.tsx                      ← Home page (/)
 │   ├── about/page.tsx                ← Project intro: shown at "/" pre-setup, permanent home afterwards
 │   ├── all/page.tsx                  ← Browse All (/all)
@@ -22,12 +23,13 @@ usedExchange/
 │   ├── sold/page.tsx                 ← Sold Archive (/sold)
 │   ├── not-found.tsx                 ← Global 404 page
 │   ├── [category]/page.tsx           ← Category listing page (/[category])
-│   └── [category]/[item]/page.tsx    ← Item detail page (/[category]/[item])
+│   ├── [category]/[item]/page.tsx    ← Item detail page (/[category]/[item])
+│   └── tags/[tag]/page.tsx           ← Tag filter page (/tags/[tag]) — items sharing one tag, collision-aware routes from loadTagIndex()
 │
 ├── components/
 │   ├── category/                     ← CategoryCard, CategoryGrid
 │   ├── common/                       ← AdaptiveImage, JsonLd, RecentlyViewed, ShareButton, useIncrementalReveal
-│   ├── contact/                      ← ContactSection, PlatformButton, QRModal
+│   ├── contact/                      ← ContactSection, EnquiryForm (+ EnquiryForm.test.tsx), PlatformButton, QRModal
 │   ├── filters/                      ← FilterBar, SortSelect, useFilters
 │   ├── home/                         ← RecentlyListedSection
 │   ├── i18n/                         ← LocaleProvider, LocaleSwitcher, useLocale, useT
@@ -69,7 +71,7 @@ usedExchange/
 │   │   ├── stripMetadata.ts          ← stripImageMetadata(): sharp EXIF/GPS removal before upload
 │   │   └── vercel-blob.ts            ← VercelBlobAdapter
 │   ├── i18n/
-│   │   ├── translations.ts           ← EN_FALLBACK: UIStrings — built-in English defaults for all 87 keys
+│   │   ├── translations.ts           ← EN_FALLBACK: UIStrings — built-in English defaults for all 124 keys
 │   │   └── getTranslations.ts        ← getTranslations(): UIStrings — server-side resolution (always defaultLocale)
 │   ├── search/index.ts               ← buildSearchIndex(): SearchIndexEntry[]
 │   ├── ui/types.ts                   ← UIConfig type (background, itemGrid, gallery, itemCard slots) + PriceFilterStrategy
@@ -88,16 +90,23 @@ usedExchange/
 │       └── units.ts                  ← resolveMeasurementUnit(), formatDimensions(), formatWeight() — NO "use client"
 │
 ├── scripts/                          ← pnpm run scripts (mostly tsx, Node.js, no browser APIs)
+│   ├── audit-listings.ts             ← pnpm audit-listings — reports items missing recommended fields (read-only)
 │   ├── build-search-index.ts         ← Prebuild: writes public/search-index.json
 │   ├── bump-version.ts               ← pnpm bump — interactive version bump + GitHub release
 │   ├── check-config.ts               ← Prebuild: fails build if baseUrl is still placeholder or a locale's translations are incomplete
 │   ├── create-item.ts                ← pnpm create-item / pnpm new
 │   ├── create-template.ts            ← pnpm create-template
+│   ├── duplicate.ts                  ← pnpm duplicate — copies an item folder into a new draft item
+│   ├── export-csv.ts                 ← pnpm export-csv — exports every item to CSV for seller record-keeping
 │   ├── export-facebook.ts            ← pnpm fb-export — interactive Facebook Marketplace CSV export
+│   ├── inventory.ts                  ← pnpm inventory — Markdown inventory table, all statuses (read-only)
+│   ├── mark-available.ts             ← pnpm mark-available — resets status to available, clears sold_date
 │   ├── mark-sold.ts                  ← pnpm mark-sold
 │   ├── migrate-config.ts             ← pnpm migrate-config — splices missing optional config fields
 │   ├── postbuild.ts                  ← Postbuild: next-sitemap
+│   ├── semester-end.ts               ← pnpm semester-end — interactive stale-listing review (mark sold / reduce price / leave as-is)
 │   ├── setup-ui.sh                   ← pnpm setup-ui — bash installer for all Aceternity components
+│   ├── stale-check.ts                ← pnpm stale-check [--days <n>] — lists stale available items (read-only)
 │   ├── studio.ts                     ← pnpm studio — Seller Studio launcher (Vite bound to 127.0.0.1)
 │   ├── sync-images.ts                ← pnpm upload-images / dev-sync / build-check
 │   ├── update-site.ts                ← pnpm update-site — pulls a tagged template release
@@ -123,9 +132,13 @@ usedExchange/
 │   └── release-seller.yml            ← Release branch management (v* tags / manual)
 │
 ├── workers/                           ← Independently deployed Cloudflare Workers (own tsconfig/eslint scope)
-│   └── shipping-rate-proxy/          ← Optional: shipping rate proxy (see DESIGN.md §21)
-│       ├── src/index.ts              ← fetch handler — calls Shippo/EasyPost, returns cheapest rate
-│       ├── wrangler.toml             ← Worker config (vars + secrets — see workers/shipping-rate-proxy/README.md)
+│   ├── shipping-rate-proxy/          ← Optional: shipping rate proxy (see DESIGN.md §21)
+│   │   ├── src/index.ts              ← fetch handler — calls Shippo/EasyPost, returns cheapest rate
+│   │   ├── wrangler.toml             ← Worker config (vars + secrets — see workers/shipping-rate-proxy/README.md)
+│   │   └── README.md                 ← Deploy walkthrough + API contract
+│   └── contact-form-proxy/           ← Optional: buyer enquiry relay (see DESIGN.md §23)
+│       ├── src/index.ts              ← fetch handler — relays to Discord/Telegram/email; enforces ALLOWED_ORIGIN server-side
+│       ├── wrangler.toml             ← Worker config (vars + secrets — see workers/contact-form-proxy/README.md)
 │       └── README.md                 ← Deploy walkthrough + API contract
 │
 ├── next.config.ts                    ← Static export flag, image domains
@@ -210,6 +223,27 @@ ShippingEstimator (components/item/ShippingEstimator.tsx)
             │
             ▼  ShippingRate { amount, currency, carrier, service, estimatedDays }
             Displayed inline; errors shown as t.shippingUnavailable
+```
+
+### Enquiry / Contact-Form Relay (Optional, Client Runtime)
+
+```
+EnquiryForm (components/contact/EnquiryForm.tsx)
+    │  rendered only if siteConfig.notifications?.enabled && siteConfig.notifications?.proxyUrl
+    │  (app/[category]/[item]/page.tsx) — buyer fills name / contact / message
+    │  (+ offer, if item.price.negotiable); hidden honeypot field flags bots
+    ▼
+    POST siteConfig.notifications.proxyUrl
+        { itemCategory, itemSlug, itemName, buyerName, buyerContact,
+          message, offerAmount?, currency, honeypot }
+    │
+    ▼  workers/contact-form-proxy (Cloudflare Worker — holds notification secrets)
+    Checks request Origin === ALLOWED_ORIGIN server-side (not just CORS headers)
+    Non-empty honeypot → same 200 {ok:true} as success, silently dropped
+    Relays to Discord webhook / Telegram bot / Resend email per NOTIFICATION_PROVIDER
+    │
+    ▼  { ok: true } | { error: "..." }
+    Success shows t.enquirySuccess; validation/delivery failure shows t.enquiryError
 ```
 
 ### Image Upload (Seller Machine Only)
@@ -487,6 +521,13 @@ Most scripts run via `tsx` (TypeScript execution, no compilation step). Exceptio
 | `pnpm new <cat>/<item>` | Alias for `pnpm create-item` |
 | `pnpm create-template [cat]` | `create-template.ts` — creates a fully-commented `_template.json` scaffold |
 | `pnpm mark-sold <cat>/<item>` | `mark-sold.ts` — sets `status: "sold"` + `sold_date: today` via surgical JSONC edits |
+| `pnpm mark-available <cat>/<item>` | `mark-available.ts` — resets `status: "available"` and clears `sold_date` (mirrors `mark-sold.ts`) |
+| `pnpm duplicate <cat>/<item> <cat>/<new-item>` | `duplicate.ts` — copies a source item's folder (item.json + photos) into a new item, resetting listing-lifecycle fields so the copy starts life as a fresh draft |
+| `pnpm inventory` | `inventory.ts` — prints a Markdown table of every item, all statuses: name, category, status, lowest resolved price, days listed (read-only) |
+| `pnpm stale-check [--days <n>]` | `stale-check.ts` — lists `available` items listed longer than N days (default 60; read-only) |
+| `pnpm audit-listings` | `audit-listings.ts` — reports items missing recommended (schema-optional) fields: photos, description, tags, weight/dimensions on shipping tiers, price tiers (read-only) |
+| `pnpm export-csv` | `export-csv.ts` — exports every item (all statuses) to `exports/listings.csv` for the seller's own record-keeping — not the Facebook format (prompts before overwrite) |
+| `pnpm semester-end` | `semester-end.ts` — interactive review of stale listings: mark sold / reduce price / leave as-is per item; suggests (never runs) a commit |
 | `pnpm fb-export` | `export-facebook.ts` — interactive Facebook Marketplace CSV export (50-item batches, photo copy, run-history dedupe into `exports/`) |
 | `pnpm push` | `git add content lib/generated/image-manifest.json && git commit -m 'chore: update listings' && git push` — Seller Studio's publish mirrors exactly these two paths |
 | `pnpm setup-ui` | `bash scripts/setup-ui.sh` — one-time install of all 27 Aceternity components into `components/ui/` (template maintenance) |
@@ -504,7 +545,7 @@ Most scripts run via `tsx` (TypeScript execution, no compilation step). Exceptio
 
 ### `scripts/lib/` — Shared Support Modules
 
-Not standalone runnables — imported by the CLIs above. 10 of the 14 modules have a colocated `*.test.ts` run by `pnpm test` (scripts tests include `scripts/update-site.test.ts` and `scripts/studioFields.test.ts`; the repo-wide suite is ~37 test files / 619 tests).
+Not standalone runnables — imported by the CLIs above. 21 of the 26 modules below have a colocated `*.test.ts` run by `pnpm test` (scripts tests include `scripts/update-site.test.ts` and `scripts/studioFields.test.ts`; the repo-wide suite is ~37 test files / 619 tests).
 
 | Module | Purpose |
 |---|---|
@@ -518,6 +559,14 @@ Not standalone runnables — imported by the CLIs above. 10 of the 14 modules ha
 | `itemEdit.ts` | Surgical JSONC edits via `jsonc-parser` — comments, formatting, and `reserved_for` survive every write |
 | `itemFields.ts` | Strict Zod allowlist of browser-writable field paths; `resolveFieldSchema(path)` is the single authority; `reserved_for` denied |
 | `markSold.ts` | `applyMarkSold(text, today)` — status → sold + `sold_date`; null when already sold |
+| `markAvailable.ts` | `applyMarkAvailable(text)` — status → available + `sold_date: null` (mirrors `markSold.ts`); null when already available |
+| `duplicateItem.ts` | Pure text transform for `pnpm duplicate`: resets `status`/`listed_date`/`sold_date`/`price_reduced`/`previous_lowest_price`/`min_acceptable_offer` so the copy starts life as a fresh draft |
+| `itemAge.ts` | `daysListed(listedDate, now?)` — whole-day age shared by `inventory`, `stale-check`, `semester-end`; UTC-midnight math, tolerant of malformed/future dates |
+| `staleItems.ts` | `findStaleItems()` / `DEFAULT_STALE_DAYS = 60` / `parseStaleDaysArg()` — shared "which items are stale" logic for `stale-check` and `semester-end` |
+| `reducePrice.ts` | `applyReducePrice()` / `parseReduceAmount()` — surgical lowest-tier price edit for `semester-end`'s "reduce price" action |
+| `auditListings.ts` | `auditListings()` / `formatAuditReport()` — flags items missing recommended (schema-optional) fields: photos, description, tags, weight/dimensions on shipping tiers, price tiers |
+| `csv.ts` | `csvCell()` / `toCsvString()` — RFC 4180 CSV escaping shared by `export-csv` and `export-facebook` |
+| `exportCsv.ts` | `buildExportCsvRows()` / `EXPORT_CSV_HEADERS` — row builder for `pnpm export-csv`'s all-statuses seller record-keeping CSV (not the Facebook format) |
 | `fbCategoryMap.ts` | Ordered regex → `Top//Sub//Leaf` Facebook category rules used by `fb-export` |
 | `exportHistory.ts` | Reads/appends `exports/.export-history.json` (gitignored) backing fb-export's skip-already-exported step |
 | `configDefaults.ts` | Declarative registry (key / afterKey / lines) of injectable optional config fields, consumed by `pnpm migrate-config`; `pnpm update-site` runs the migration automatically |
@@ -649,7 +698,7 @@ These are enforced by code and must never be violated:
 | `lib/generated/image-manifest.json` stays in git | Not in `.gitignore`; CI build depends on it |
 | Item + category slugs are kebab-case only | `isValidSlug()` in `lib/utils/slug.ts`, used by `create-item.ts`, `mark-sold.ts`, `generateStaticParams` |
 | Sellers write only to `content/` | AI skill files + all scripts enforce this boundary (Seller Studio additionally writes `lib/generated/image-manifest.json` and runs git over `content/` + the manifest) |
-| New config fields are backward-compatible | Post-core fields (`shipping?`, `measurementUnit?`, `localeMeasurementUnits?`, `defaultPriceTiers?`, `ui.priceFilterStrategy?`, `ui.priceFilterBuckets?`) are TypeScript-optional with runtime `??` defaults; `scripts/lib/configDefaults.ts` + `pnpm migrate-config` (run automatically by `pnpm update-site`) splice them into older configs |
+| New config fields are backward-compatible | Post-core fields (`shipping?`, `measurementUnit?`, `localeMeasurementUnits?`, `defaultPriceTiers?`, `ui.priceFilterStrategy?`, `ui.priceFilterBuckets?`, `notifications?`, `contact.schedulingUrl?`) are TypeScript-optional with runtime `??` defaults; `scripts/lib/configDefaults.ts` + `pnpm migrate-config` (run automatically by `pnpm update-site`) splice them into older configs |
 | Studio binds `127.0.0.1` only and never uses `git add -A` | Host binding in `scripts/studio.ts`; `PUBLISHABLE_PATHS` in `scripts/lib/studioGit.ts` protects `.env.local` |
 | Draft items have no static route | Loader visibility filter excludes `status: "draft"` from `generateStaticParams` |
 | `soldItemRetentionDays: -1` hides immediately | Explicit `< 0` guard in `isSoldItemVisible()` |
@@ -678,6 +727,8 @@ Only needed on the seller's local machine when running `pnpm upload-images` or a
 
 The shipping-rate-proxy Worker keeps its own variables and secrets (`SHIPPO_API_KEY`, `EASYPOST_API_KEY`, `SHIPPING_PROVIDER`, `ALLOWED_ORIGIN`, `ORIGIN_ZIP`, `ORIGIN_COUNTRY`) inside `workers/shipping-rate-proxy/` — see [workers/shipping-rate-proxy/README.md](../workers/shipping-rate-proxy/README.md). They never live in the root `.env.local`.
 
+The contact-form-proxy Worker keeps its own variables and secrets (`NOTIFICATION_PROVIDER`, `ALLOWED_ORIGIN`, `SITE_BASE_URL`, `TELEGRAM_CHAT_ID`, `NOTIFICATION_EMAIL_TO`, `NOTIFICATION_EMAIL_FROM` as vars; `DISCORD_WEBHOOK_URL`, `TELEGRAM_BOT_TOKEN`, `RESEND_API_KEY` as secrets) inside `workers/contact-form-proxy/` — see [workers/contact-form-proxy/README.md](../workers/contact-form-proxy/README.md). They never live in the root `.env.local`.
+
 See [`.env.example`](../.env.example) for setup instructions and [setup_instruction.md](setup_instruction.md) for the full CDN configuration walkthrough.
 
 ---
@@ -694,6 +745,7 @@ See [`.env.example`](../.env.example) for setup instructions and [setup_instruct
 | i18n runtime | [DESIGN.md §12](DESIGN.md), [TECH_REQUIREMENTS.md §22.8](TECH_REQUIREMENTS.md) |
 | Sold item retention formula | [DESIGN.md §8](DESIGN.md) |
 | Shipping calculator integration (optional) | [DESIGN.md §21](DESIGN.md), [workers/shipping-rate-proxy/README.md](../workers/shipping-rate-proxy/README.md) |
+| Contact-form enquiry relay (optional) | [DESIGN.md §23](DESIGN.md), [TECH_REQUIREMENTS.md §31](TECH_REQUIREMENTS.md), [workers/contact-form-proxy/README.md](../workers/contact-form-proxy/README.md) |
 | Deployment checklist | [TECH_REQUIREMENTS.md §19](TECH_REQUIREMENTS.md) |
 | Testing strategy | [TECH_REQUIREMENTS.md §25](TECH_REQUIREMENTS.md) |
 | CDN setup walkthrough | [setup_instruction.md](setup_instruction.md) |

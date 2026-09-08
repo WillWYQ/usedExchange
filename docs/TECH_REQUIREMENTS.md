@@ -1,8 +1,8 @@
 # UsedExchange — Technical Requirements
 
-**Version:** 0.10.0  
-**Date:** 2026-08-02  
-**Companion:** DESIGN.md v0.10.0
+**Version:** 0.10.2  
+**Date:** 2026-09-07  
+**Companion:** DESIGN.md v0.10.2
 
 ---
 
@@ -731,6 +731,20 @@ export async function generateStaticParams() {
 - `draft` items are excluded from params (no page generated)
 - `sold` items past retention are excluded from params (no page generated)
 - `generateMetadata` reads the item and returns Open Graph + Twitter card tags including `og:image` (item `coverImage`)
+
+### `generateStaticParams` for `/tags/[tag]`
+
+```ts
+export async function generateStaticParams() {
+  const index = await loadTagIndex();
+  return [...index.keys()].map((slug) => ({ tag: slug }));
+}
+```
+
+- Backed by `loadTagIndex()` (`lib/content/loader.ts`) — a single pass over the same visible-item set (`isItemVisible`) that excludes `draft` items and `sold` items past retention, so the tag index never links to a page `/[category]/[item]` wouldn't also generate.
+- Collision-aware: if two distinct raw tag spellings slugify to the same route segment, `loadTagIndex()` drops that slug from the index entirely (warns via `console.warn`) rather than emitting a page that silently mixes both tags' items or links from only one spelling.
+- `generateMetadata` returns `#<tag> — <site name>` title + description + Open Graph tags, where `<tag>` is the canonical (un-slugified) raw spelling stored on the index entry, not the slug.
+- In `deploymentMode: "vercel"`, the page component calls `notFound()` only when no matching index entry exists for the requested slug — same `dynamicParams`-driven on-demand-rendering guard as `/[category]` and `/[category]/[item]` use.
 
 ---
 
@@ -1616,6 +1630,51 @@ This script exists so non-technical users (the "potential" user persona) can mar
 }
 ```
 
+#### Seller CLI toolkit additions (`3a714d6`)
+
+Seven read-mostly scripts share the slug-validation and JSONC-edit conventions established above. This
+section covers only the interface/behavior contract; full walkthroughs and example output live in
+`docs/SCRIPTS.md`.
+
+#### `pnpm mark-available <category>/<name>` (`scripts/mark-available.ts`)
+
+1. Validates `<category>` and `<name>` as kebab-case slugs via `isValidSlug` before any filesystem access (identical guard to `mark-sold`/`create-item`).
+2. Applies `applyMarkAvailable(text)` (`scripts/lib/markAvailable.ts`) — a comment-preserving JSONC edit setting `status: "available"` and `sold_date: null`. Resets from **any** other status (sold, pending, reserved, draft), not just `"sold"`.
+3. **Idempotent:** returns `null` (no write) and prints `[mark-available] <item> is already available.` if `status` is already `"available"`.
+
+#### `pnpm duplicate <category>/<item> <category>/<new-item>` (`scripts/duplicate.ts`)
+
+1. Validates all four slug components (source + destination category/item) via `isValidSlug` before any filesystem access.
+2. Requires the source item to exist and the destination category folder to exist; exits 1 if the destination item folder already exists (never overwrites).
+3. Copies the entire source folder (`item.json` + every photo file) via `fs.cp(..., { recursive: true })`, then rewrites the copy's `item.json` via `applyDuplicateEdits(text, today)` (`scripts/lib/duplicateItem.ts`): `status → "draft"`, `listed_date → today`, `sold_date`/`previous_lowest_price`/`min_acceptable_offer → null`, `price_reduced → false`, and strips `reserved_for` outright if present (Iron Rule 4 — never round-tripped into a new listing).
+
+#### `pnpm inventory` (`scripts/inventory.ts`)
+
+1. Read-only — no file writes. Calls `loadAllItemsRaw()` (not `loadAllItems`), so drafts, sold, pending, and reserved items are all included, not just `available` items capped at `recentlyListedCount`.
+2. Prints a Markdown table (`buildInventoryTable`, `scripts/lib/inventory.ts`): name, category, status, lowest resolved price (`resolvePriceByStrategy(tiers, "lowest")`), and days listed (`daysListed()`, `scripts/lib/itemAge.ts`). Sorted by category, then name.
+
+#### `pnpm stale-check [--days <n>]` (`scripts/stale-check.ts`)
+
+1. Read-only. `--days` defaults to `DEFAULT_STALE_DAYS` (`60`, `scripts/lib/staleItems.ts`); `parseStaleDaysArg` rejects a non-numeric, negative, or empty-string value (empty string is **not** coerced to `0`) and exits 1.
+2. Calls `findStaleItems(items, days)`: `available`-status items only, filtered to `daysListed > days`, sorted longest-listed first. This function is shared verbatim with `pnpm semester-end`, so the two commands can never disagree about which items qualify.
+
+#### `pnpm audit-listings` (`scripts/audit-listings.ts`)
+
+1. Read-only. Calls `loadAllItemsRaw()`, filters out `sold` items, and flags every remaining item against 5 fixed criteria (`auditItem`, `scripts/lib/auditListings.ts`): zero photos, empty `description`, empty `tags`, an open-ended shipping tier (no `miles_max`) missing `weight` and/or `dimensions`, or zero `price.tiers`. All 5 checked fields are schema-optional — this is a "could be better" report, not a validity check.
+2. Prints a formatted report (`formatAuditReport`) listing each flagged item's `<category>/<item>` slug, name, and issue list.
+
+#### `pnpm export-csv` (`scripts/export-csv.ts`)
+
+1. Read-only against `content/`; writes only to `exports/listings.csv` (creates `exports/` if missing). Prompts `<path> already exists. Overwrite? [y/N]:` and aborts on anything but `y`/`yes` if the file already exists.
+2. Calls `loadAllItemsRaw()` (all statuses), sorts by category then name, and builds rows via `buildExportCsvRows` / `EXPORT_CSV_HEADERS` (`scripts/lib/exportCsv.ts`): `name, category, status, condition, price, currency, negotiable, brand, model, quantity, listed_date, sold_date, tags` (`tags` semicolon-joined; `price` is the lowest resolved tier). Distinct column set from `pnpm fb-export` (`scripts/export-facebook.ts`), which targets the Facebook Marketplace CSV format.
+3. Serializes via the shared `toCsvString` (`scripts/lib/csv.ts`), also used by `fb-export`, for consistent RFC-4180-ish quoting.
+
+#### `pnpm semester-end` (`scripts/semester-end.ts`)
+
+1. Fully interactive. Calls `findStaleItems(items, DEFAULT_STALE_DAYS)` — the same function and 60-day threshold `stale-check` uses — and, for each match, prompts **[s]old / [r]educe price / [l]eave as-is** (default `l`).
+2. "Sold" applies `applyMarkSold(text, today)` (same JSONC edit `mark-sold` uses). "Reduce price" prompts for a new amount (`parseReduceAmount`, which rejects an empty string rather than coercing it to `0`) and applies `applyReducePrice(text, amount)` (`scripts/lib/reducePrice.ts`), rewriting the lowest-amount price tier via the shared comment-preserving `applyFieldEdits` path.
+3. If any item changed, runs `pnpm upload-images` via `execFileSync` (a content sync, not a git operation) and prints the suggested commit message `"chore: end-of-semester listing cleanup"` plus the exact `git add`/`git commit`/`git push` commands. **Never** calls `git commit`/`git push` itself — publishing stays the seller-triggered `pnpm push` action.
+
 ---
 
 ### 22.4 JSON-LD Structured Data
@@ -1721,7 +1780,7 @@ The sitemap only generates when `siteConfig.sitemap.enabled === true`. The `post
 
 | Layer | What it covers | Where it lives | Who fills it |
 |---|---|---|---|
-| **UI strings** | All 87 button/label/badge/header strings | `content/config.ts` → `i18n.translations.{locale}` | Seller (via `/setup` or manual edit) |
+| **UI strings** | All 124 button/label/badge/header strings | `content/config.ts` → `i18n.translations.{locale}` | Seller (via `/setup` or manual edit) |
 | **Item content** | `name` and `description` per item | `content/items/**/item.json` → `name_{locale}`, `description_{locale}` | `/translate-items` AI skill or manual edit |
 
 ### SiteConfig i18n type (`lib/config/types.ts`)
@@ -1735,17 +1794,25 @@ export type I18nConfig = {
 };
 ```
 
-### `UIStrings` type (87 keys, `lib/config/types.ts`)
+### `UIStrings` type (124 keys, `lib/config/types.ts`)
 
-Covers every visible UI label: navigation links, section headings, contact labels, offer form, share button, metadata table headers, condition/status badges, filter/sort + price-filter options, freshness label, page banners, condition guide descriptions, location bar strings, pricing table headers, shipping estimator (§29.7), mobile-nav, and Newly Listed page strings.
+Covers every visible UI label: navigation links, section headings, contact labels (including pickup
+scheduling and the buyer enquiry form, §31.3), offer form, share button, flyer-button strings, metadata
+table headers, condition/status badges, filter/sort + price-filter + tag-filter options, freshness
+label, page banners (including the `/tags/[tag]` page heading), condition guide descriptions, location
+bar strings, pricing table headers, shipping estimator (§29.7), mobile-nav, Newly Listed page strings,
+and catalog PDF export chrome (including the seller-contact accessibility strings).
 
-The `EN_FALLBACK` constant in `lib/i18n/translations.ts` provides the built-in English default for all 87 keys — guarantees no UI label is ever blank even if `content/config.ts` is misconfigured.
+The `EN_FALLBACK` constant in `lib/i18n/translations.ts` provides the built-in English default for all 124 keys — guarantees no UI label is ever blank even if `content/config.ts` is misconfigured.
 
 > **Required vs optional keys:** `scripts/check-config.ts` (run in `prebuild`) enforces a
 > **73-key `REQUIRED_KEYS` subset** — the keys every enabled locale must provide (see §28). The
-> remaining ~14 keys are optional at build time and fall back to the default locale / `EN_FALLBACK`:
+> remaining 51 keys are optional at build time and fall back to the default locale / `EN_FALLBACK`:
 > the six shipping keys (§29.7), the two price-filter keys (`filterPriceBucketAll`,
-> `filterPriceIncludesOutliers`), and the Newly Listed page keys.
+> `filterPriceIncludesOutliers`), the six Newly Listed page keys, the six flyer-button keys, the
+> `scheduleViewing` key, the two tag-filter keys (`filterCourse`, `filterTags`) plus `tagPageHeading`,
+> the eleven enquiry-form keys (§31.3), and the sixteen catalog-PDF keys (ten PDF-chrome + six
+> PDF-contact-accessibility).
 
 ### Runtime architecture — locale switching
 
@@ -1772,7 +1839,7 @@ useT() hook     — returns the active locale's UIStrings dict (merged: EN_FALLB
 
 ```ts
 // lib/i18n/translations.ts
-// EN_FALLBACK: UIStrings — built-in English default for all 87 keys.
+// EN_FALLBACK: UIStrings — built-in English default for all 124 keys.
 // Used by both useT() (client) and getTranslations() (server) as the safety net.
 
 // lib/i18n/getTranslations.ts
@@ -1812,7 +1879,7 @@ Server-only surfaces (`generateMetadata`, `<title>`, OG tags, JSON-LD) call `get
 ### Adding a new locale
 
 1. Add the locale code to `siteConfig.i18n.availableLocales` in `content/config.ts`.
-2. Add a `translations.{locale}` block with all 87 `UIStrings` keys translated (at minimum the 73 `REQUIRED_KEYS` enforced by `check-config`).
+2. Add a `translations.{locale}` block with all 124 `UIStrings` keys translated (at minimum the 73 `REQUIRED_KEYS` enforced by `check-config`).
 3. Add `name_{locale}` and `description_{locale}` to the Zod schema (`lib/content/schema.ts`) and `Item` type (`lib/content/types.ts`) — mirrors the existing `name_zh` / `description_zh` pattern.
 4. Run `/translate-items` AI skill to batch-fill `name_{locale}` / `description_{locale}` on each `item.json`, or add them manually.
 5. `LocaleSwitcher` appears automatically once `availableLocales.length > 1`.
@@ -1926,6 +1993,8 @@ unit the seller entered and converted for display. `MeasurementUnitProvider` / `
 | `ui.priceFilterStrategy?` / `ui.priceFilterBuckets?` | optional | Consumers default to `"none"` (§21) |
 | `measurementUnit?` / `i18n.localeMeasurementUnits?` | optional | See above |
 | `soldArchiveDisplayLimit?` | optional `number` | Caps how many sold items render on `/sold` (0 = no cap). Read with `?? 200` in `app/sold/page.tsx` (runtime default 200) and registered in `scripts/lib/configDefaults.ts`, so `pnpm migrate-config` / `update-site` auto-injects it into downstream configs that predate the field. |
+| `contact.schedulingUrl?` | optional `string` | External Calendly/Cal.com/Google Calendar link. When truthy, the item detail page renders a "Schedule Viewing" button (`t.scheduleViewing`) opening it in a new tab; no runtime default is injected (there's no universally sensible URL) — omit or leave `""` to disable. Registered in `scripts/lib/configDefaults.ts` (splices an empty-string placeholder plus the `scheduleViewing` UIStrings key into downstream configs). |
+| `notifications?` | optional `{ enabled: boolean; proxyUrl: string }` | Gates the item-detail `EnquiryForm` (§31). Absent or `enabled: false` → zero impact, no render, no network call. Registered in `scripts/lib/configDefaults.ts` (splices an `enabled: false` block plus the 11 enquiry-form UIStrings keys into downstream configs). See §31.2. |
 
 > **Template-state gating** (`lib/utils/templateStatus.ts`): `PLACEHOLDER_DOMAIN` (`"your-domain.com"`)
 > and `DEMO_DOMAIN` decide whether `/` renders the catalog or the `ProjectIntro` page. While `baseUrl`
@@ -2617,8 +2686,9 @@ SEO footgun with no error. `check-config.ts` fails the build loudly on exactly t
    entry or in the default locale's entry (fallback). A missing entry or missing key(s) fail the build,
    naming the locale and the exact missing keys.
 
-> The 73 `REQUIRED_KEYS` are a subset of the 87 `UIStrings` keys. The remaining ~14 (shipping §29.7,
-> price-filter, Newly Listed) are optional at build time and fall back at runtime — see §22.8.
+> The 73 `REQUIRED_KEYS` are a subset of the 124 `UIStrings` keys. The remaining 51 (shipping §29.7,
+> price-filter, Newly Listed, flyer button, pickup scheduling, tag filter/heading, the enquiry form
+> §31.3, catalog PDF chrome) are optional at build time and fall back at runtime — see §22.8.
 
 ### 28.3 Integration point
 
@@ -2857,6 +2927,132 @@ subsequent reads show fresh CDN URLs.
 
 Studio coverage is **backend-only**: `studioApi`, `studioGit`, `studioImages`, `studioSync`, `itemEdit`,
 `itemFields`, `csrfGuard`, and `studioFields` tests (see §25.3). The SPA UI itself is not unit-tested.
+
+---
+
+## 31. Contact Form / Enquiry Relay — Technical Specification
+
+> Full feature design and rationale: [DESIGN.md §21](DESIGN.md) / `docs/FEATURES_ROADMAP.md` §3.1. This section covers the implementation contracts, current as of the `ee236bd` security fix.
+
+### 31.1 Overview
+
+The enquiry relay is **fully optional**, disabled unless `siteConfig.notifications` is defined with `enabled: true` and a non-empty `proxyUrl`. It is purely additive: when absent, `EnquiryForm` is not rendered and no new network calls or build-time requirements are introduced. Architecture mirrors `workers/shipping-rate-proxy` exactly: a stateless, independently deployed Cloudflare Worker (`workers/contact-form-proxy`) holding a notification-delivery secret that must never reach the browser bundle.
+
+### 31.2 `SiteConfig.notifications` type (`lib/config/types.ts`)
+
+```ts
+notifications?: {
+  enabled: boolean;
+  proxyUrl: string;  // Cloudflare Worker endpoint (workers/contact-form-proxy)
+};
+```
+
+Gated in `app/[category]/[item]/page.tsx`:
+
+```tsx
+{siteConfig.notifications?.enabled && siteConfig.notifications?.proxyUrl && (
+  <EnquiryForm item={itemData} />
+)}
+```
+
+`EnquiryForm` itself does not re-check this gate — same pattern as `ShippingEstimator`/`MakeOfferButton`, whose callers own the enable/disable decision.
+
+### 31.3 Client request contract (`components/contact/EnquiryForm.tsx`)
+
+`POST` to `siteConfig.notifications.proxyUrl` with `Content-Type: application/json` and body:
+
+```ts
+{
+  itemCategory: string;   // item.categorySlug
+  itemSlug: string;       // item.itemSlug
+  itemName: string;       // item.name
+  buyerName: string;      // trimmed
+  buyerContact: string;   // trimmed
+  message: string;        // trimmed; textarea maxLength=2000 client-side (Worker independently enforces 2000, §31.4)
+  offerAmount?: number;   // present only when item.price.negotiable and the buyer entered a value; client rejects (aborts submit) if Number.isFinite(parsedOffer) is false, e.g. scientific-notation overflow like "1e400" → Infinity
+  currency: string;       // item.price.currency (e.g. "USD", "GBP") — never hardcoded, so the Worker's notification labels an offer in the item's own currency
+  honeypot: string;       // hidden field value; empty ("") for a real submission
+}
+```
+
+Driven by 11 `UIStrings` keys: `enquiryFormHeading`, `enquiryNameLabel`, `enquiryContactLabel`, `enquiryContactPlaceholder`, `enquiryMessageLabel`, `enquiryMessagePlaceholder`, `enquiryOfferLabel`, `enquirySubmit`, `enquirySubmitting`, `enquirySuccess`, `enquiryError` (all optional per §22.8 — fall back to `EN_FALLBACK`/default locale).
+
+### 31.4 Worker response contract (`workers/contact-form-proxy/src/index.ts`)
+
+Request handling order: `OPTIONS` preflight is answered unconditionally (`200`, CORS headers, null body) **before** the Origin check; every other method is checked against `ALLOWED_ORIGIN` (§31.6) **before** the method-is-`POST` check; only then is the JSON body parsed and validated.
+
+| Condition | Status | Body |
+|---|---|---|
+| `OPTIONS` (preflight) | `200` | `null` |
+| `Origin` header missing or ≠ `ALLOWED_ORIGIN` | `403` | `{ "error": "Forbidden" }` |
+| Method not `POST` (and Origin matched) | `405` | `{ "error": "Method Not Allowed" }` |
+| Body is not valid JSON | `400` | `{ "error": "Invalid JSON" }` |
+| Honeypot filled (§31.7) | `200` | `{ "ok": true }` |
+| Missing/empty/wrong-typed required field, `message.length > 2000`, or non-finite `offerAmount` | `400` | `{ "error": "Missing or invalid fields" }` |
+| Provider send throws or returns non-2xx | `502` | `{ "error": "Notification delivery failed" }` |
+| Real submission delivered | `200` | `{ "ok": true }` |
+
+`isValidRequest` requires `itemCategory`, `itemSlug`, `itemName`, `buyerName`, `buyerContact`, `message`, and `currency` to be non-empty strings (after `.trim().length === 0` check); `offerAmount`, if present, must satisfy `typeof === "number" && Number.isFinite(...)`; `honeypot` must be a string (any length).
+
+### 31.5 `Env` vars & secrets by provider
+
+```ts
+export interface Env {
+  NOTIFICATION_PROVIDER: "discord" | "telegram" | "email";
+  ALLOWED_ORIGIN: string;   // siteConfig.baseUrl — only this exact origin may call the Worker
+  SITE_BASE_URL: string;    // siteConfig.baseUrl — builds the item-page link in the notification body
+
+  DISCORD_WEBHOOK_URL?: string;      // secret
+  TELEGRAM_BOT_TOKEN?: string;       // secret
+  TELEGRAM_CHAT_ID?: string;         // var
+  RESEND_API_KEY?: string;           // secret
+  NOTIFICATION_EMAIL_TO?: string;    // var
+  NOTIFICATION_EMAIL_FROM?: string;  // var
+}
+```
+
+| Var (`wrangler.toml` `[vars]`) | Required for | Notes |
+|---|---|---|
+| `NOTIFICATION_PROVIDER` | always | `"discord"` \| `"telegram"` \| `"email"` |
+| `ALLOWED_ORIGIN` | always | Exact site origin, no trailing slash; enforced server-side (§31.6) |
+| `SITE_BASE_URL` | always | Same value as `ALLOWED_ORIGIN` in practice; the Worker can't import `content/config.ts` so this is passed separately |
+| `TELEGRAM_CHAT_ID` | `telegram` | Not secret |
+| `NOTIFICATION_EMAIL_TO` | `email` | Seller's inbox |
+| `NOTIFICATION_EMAIL_FROM` | `email` | Must be on a domain verified with Resend |
+
+| Secret (`wrangler secret put <NAME>`) | Required for |
+|---|---|
+| `DISCORD_WEBHOOK_URL` | `discord` |
+| `TELEGRAM_BOT_TOKEN` | `telegram` |
+| `RESEND_API_KEY` | `email` |
+
+Per-provider delivery (`send` dispatches on `env.NOTIFICATION_PROVIDER`, defaulting to `sendDiscord`):
+
+- **`sendDiscord`** — `POST env.DISCORD_WEBHOOK_URL` with `{ embeds: [{ title, url, description, fields }] }`; `fields` include `From`, `Contact`, `Offer` (only when `offerAmount !== undefined`), and `Item`.
+- **`sendTelegram`** — `POST https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage` with `{ chat_id: TELEGRAM_CHAT_ID, text }`, `text` built by `formatPlainText()`.
+- **`sendEmail`** — `POST https://api.resend.com/emails` with `Authorization: Bearer ${RESEND_API_KEY}` and `{ from: NOTIFICATION_EMAIL_FROM, to: NOTIFICATION_EMAIL_TO, subject: "New enquiry: ${itemName}", text }`.
+
+All three return `false` (→ `502`, §31.4) when their required secret/vars are missing, or when the provider's own response is non-`ok`. `formatOfferAmount()` mirrors `EnquiryForm.tsx`'s own `currencyPrefix` rule — `USD` renders as a bare `$`, every other ISO code renders as `"<CODE> "` — so a non-USD offer is never mislabeled as US dollars in the notification.
+
+### 31.6 Origin enforcement
+
+Fixed in `ee236bd`. The **current** behavior: the Worker reads the `Origin` request header and compares it with strict inequality against `env.ALLOWED_ORIGIN`; any mismatch (including a missing header, which compares unequal to a defined string) returns `403 { "error": "Forbidden" }` — checked for every non-`OPTIONS` request, before the method-is-`POST` check and before the body is parsed.
+
+Before this fix, `ALLOWED_ORIGIN` was only echoed into the `Access-Control-Allow-Origin` CORS response header — CORS headers constrain a **browser** reading a cross-origin response, but impose no server-side restriction on who may send the request, so a direct `curl`/script POST with any or no `Origin` header was accepted and relayed.
+
+Per the Worker's own `README.md`: this Origin check is **"a basic access gate, not a cryptographic guarantee."** It blocks a browser running on another site and a casual script that doesn't bother setting headers, but `Origin` is just an HTTP header — a determined attacker using `curl` or a script can still forge it. The README's recommended next steps for a seller facing real spam are infra-level, not Worker code changes: add [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/) in front of the form, or a Cloudflare dashboard-level WAF/Rate Limiting rule — both left for a future pass so the Worker stays stateless.
+
+### 31.7 Anti-spam (honeypot)
+
+`EnquiryForm.tsx` renders a hidden field (`id="enquiry-website"`, `name="website"`) positioned off-screen (`position: absolute; left: -9999px; top: -9999px`) rather than `display: none`/`visibility: hidden`/`type="hidden"` — some bots specifically skip fields hidden those ways — with `tabIndex={-1}`, `aria-hidden="true"`, and `autoComplete="off"` so it's invisible and unreachable for a real visitor. Its value is sent as the request body's `honeypot` field.
+
+Server-side (`workers/contact-form-proxy/src/index.ts`), the honeypot check runs **before** full field validation: `isRecord(body) && typeof body["honeypot"] === "string" && body["honeypot"].length > 0` → returns `200 { "ok": true }` **regardless of whether any other field is even well-formed** — the identical status and JSON shape as a genuine successful submission. This is deliberate: a bot given a different response for "honeypot tripped" vs. "field missing" could learn which check caught it and adapt around it.
+
+No persistent storage, rate limiting, or CAPTCHA — a conscious architecture decision (matching `shipping-rate-proxy`'s statelessness), not an oversight; see the Worker's `README.md` "Not implemented" section.
+
+### 31.8 Deployment
+
+Independently deployed; excluded from the root `tsconfig.json` (`exclude`) and `eslint.config.mjs` (`ignores`) — has its own `package.json`, `tsconfig.json`, and `wrangler.toml` (mirrors §29.6/§29.8's pattern for `shipping-rate-proxy`). Local development copies `.dev.vars.example` → `.dev.vars` (gitignored) for `wrangler dev`; production secrets are set via `wrangler secret put <NAME>`, never committed. Seller-facing walkthrough: `workers/contact-form-proxy/README.md` and `.claude/commands/setup-contact-form.md`. No changes to `pnpm build`, CI, or GitHub Pages deployment — the Worker is deployed separately via `wrangler deploy` from `workers/contact-form-proxy/`.
 
 ---
 

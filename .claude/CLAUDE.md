@@ -12,7 +12,7 @@ Single seller, zero database, file-system-driven. Hosted on GitHub Pages + Cloud
 
 **Status:** All phases (0–18) implemented and live. Seller Studio (`pnpm studio`) is local-only by design: it binds to 127.0.0.1, enforces a CSRF guard, and its git publish stages only `content/` + `lib/generated/image-manifest.json` (never `git add -A`).
 
-**Template versioning:** `package.json` is at 1.4.2. Phase 17 shipped in v1.3.0; Phase 18 is merged on `develop` after v1.4.2 (no release tag contains it yet). Doc versions are tracked in the table below; the full script inventory lives in `docs/SCRIPTS.md`.
+**Template versioning:** `package.json` is at 1.7.1 (latest tag: `v1.7.1`). All phases (0–18) are released; `develop` is currently 11 commits ahead of `v1.7.1` with unreleased work — GA4 analytics, pickup scheduling, tag/course filters, a seven-script seller CLI toolkit, and the contact form/enquiry relay (Cloudflare Worker) plus a follow-up hardening fix — none of which has a release tag yet. Doc versions are tracked in the table below; the full script inventory lives in `docs/SCRIPTS.md`.
 
 ---
 
@@ -80,14 +80,14 @@ Checklist for every new config field:
 
 | File | Version | Date |
 |---|---|---|
-| docs/DESIGN.md / docs/DESIGN_zh.md | v0.10.1 | 2026-09-04 |
-| docs/TECH_REQUIREMENTS.md / docs/TECH_REQUIREMENTS_zh.md | v0.10.1 | 2026-09-04 |
+| docs/DESIGN.md / docs/DESIGN_zh.md | v0.10.2 | 2026-09-07 |
+| docs/TECH_REQUIREMENTS.md / docs/TECH_REQUIREMENTS_zh.md | v0.10.2 | 2026-09-07 |
 | docs/IMPLEMENTATION_PLAN.md / docs/IMPLEMENTATION_PLAN_zh.md | **v1.7** | 2026-08-02 |
 | docs/FEATURES_ROADMAP.md / docs/FEATURES_ROADMAP_zh.md | v1.6 | 2026-09-05 |
-| docs/CURRENT_FUNCTIONALITY.md / docs/CURRENT_FUNCTIONALITY_zh.md | v1.3 | 2026-09-05 |
-| docs/ARCHITECTURE.md / docs/ARCHITECTURE_zh.md | v1.2 | 2026-08-02 |
+| docs/CURRENT_FUNCTIONALITY.md / docs/CURRENT_FUNCTIONALITY_zh.md | v1.4 | 2026-09-07 |
+| docs/ARCHITECTURE.md / docs/ARCHITECTURE_zh.md | v1.3 | 2026-09-07 |
 | docs/setup_instruction.md / docs/setup_instruction_zh.md | v1.1 | 2026-08-02 |
-| docs/SCRIPTS.md / docs/SCRIPTS_zh.md | v1.1 | 2026-09-05 |
+| docs/SCRIPTS.md / docs/SCRIPTS_zh.md | v1.2 | 2026-09-07 |
 | docs/UPDATE_GUIDE.md / docs/UPDATE_GUIDE_zh.md | v1.1 | 2026-08-02 |
 
 ---
@@ -105,7 +105,14 @@ Checklist for every new config field:
 | Publish content changes | `pnpm push` (stages `content/` + `lib/generated/image-manifest.json`, commits, pushes; Studio's git publish mirrors exactly these paths) |
 | Mark an item sold | `pnpm mark-sold <category>/<name>` |
 | Create a new item | `pnpm create-item <category>/<name>` (alias: `pnpm new`) |
+| Duplicate an item as a starting point | `pnpm duplicate <category>/<name> <category>/<new-name>` (copies photos, resets lifecycle fields, strips `reserved_for`) |
 | Scaffold a commented `_template.json` | `pnpm create-template [category]` |
+| Reset a sold/reserved item back to available | `pnpm mark-available <category>/<name>` |
+| List every item with status/price/age | `pnpm inventory` |
+| Find long-listed `available` items | `pnpm stale-check [--days N]` (default 60) |
+| Find listings missing recommended fields | `pnpm audit-listings` |
+| Export all listings to a personal CSV | `pnpm export-csv` |
+| End-of-semester batch cleanup (CS student workflow) | `pnpm semester-end` |
 | Upload photos to CDN | `pnpm upload-images` |
 | Enable photos in the item flyer PDF | `pnpm configure-image-cors` (one-time, `cloudflare-r2` only; needed because the flyer button fetches image bytes cross-origin, unlike the `<img>` tags used elsewhere) |
 | Export listings to Facebook Marketplace | `pnpm fb-export` (interactive; outputs `exports/facebook-marketplace.csv` — numbered `-<N>` variants for 50+ item batches, plus `exports/facebook-marketplace-photos/` for manual photo upload) |
@@ -129,6 +136,7 @@ Checklist for every new config field:
 | Component architecture + `"use client"` list | docs/DESIGN.md §12, docs/ARCHITECTURE.md |
 | UI slot options (27 Aceternity components) | docs/DESIGN.md §18 |
 | Shipping cost estimator (incl. `workers/shipping-rate-proxy` contract) | docs/DESIGN.md §21, docs/TECH_REQUIREMENTS.md §29 |
+| Contact form / enquiry relay (incl. `workers/contact-form-proxy` contract) | docs/DESIGN.md §23, docs/TECH_REQUIREMENTS.md §31 |
 | Seller Studio (local management GUI) | docs/DESIGN.md §22, docs/TECH_REQUIREMENTS.md §30, docs/CURRENT_FUNCTIONALITY.md |
 | i18n runtime (useT / getTranslations / UIStrings) | docs/DESIGN.md §12, docs/TECH_REQUIREMENTS.md §22.8 |
 | Environment variables (CF_R2_* / BLOB_READ_WRITE_TOKEN / NEXT_PUBLIC_SITE_URL) | docs/TECH_REQUIREMENTS.md §3 |
