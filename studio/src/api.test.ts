@@ -12,6 +12,7 @@ import {
   deleteContactImage,
   fetchConfig,
   saveContactPlatformQrImage,
+  saveConfigValue,
 } from "./api";
 
 /** Builds a Response whose body streams the given SSE frames, one chunk each. */
@@ -376,6 +377,97 @@ describe("fetchConfig", () => {
       })) as unknown as typeof fetch,
     );
     await expect(fetchConfig()).rejects.toThrow(/unreadable/);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("saveConfigValue", () => {
+  // Saving content/config.ts triggers Vite's dev-server restart (see the
+  // fetchWithRetry comment in api.ts), which drops the in-flight PUT's
+  // connection. These cases exercise the retry that papers over it.
+
+  it("PUTs the path/value and returns fields on the first try with no retry", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ fields: [{ path: "site.siteName" }] }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await saveConfigValue("site.siteName", "New Name");
+
+    expect(result).toEqual([{ path: "site.siteName" }]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/config");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string)).toEqual({ path: "site.siteName", value: "New Name" });
+    vi.unstubAllGlobals();
+  });
+
+  it("throws immediately on a resolved !res.ok response, without retrying", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 400,
+      statusText: "Bad Request",
+      json: async () => ({ error: "Invalid GA4 measurement ID." }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(saveConfigValue("analytics.ga4Id", "bad-id")).rejects.toThrow(
+      "Invalid GA4 measurement ID.",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
+  it("retries once after a network-level failure and succeeds on the second attempt", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const fetchMock = vi.fn(async () => {
+      calls++;
+      if (calls === 1) throw new TypeError("Failed to fetch");
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({ fields: [{ path: "site.siteName" }] }),
+      };
+    }) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+
+    const resultPromise = saveConfigValue("site.siteName", "New Name");
+    // The dev server needs a moment to finish restarting before it can
+    // answer again — the retry waits ~400ms before trying the identical PUT.
+    await vi.advanceTimersByTimeAsync(400);
+    const result = await resultPromise;
+
+    expect(result).toEqual([{ path: "site.siteName" }]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("throws a clear error after exhausting retries when every attempt rejects", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+
+    const resultPromise = saveConfigValue("site.siteName", "New Name");
+    // Swallow the eventual rejection on this handle so advancing timers below
+    // doesn't trip an unhandled-rejection warning before the assertion runs.
+    resultPromise.catch(() => {});
+
+    // Two retries, backing off 400ms then 800ms, before giving up.
+    await vi.advanceTimersByTimeAsync(400);
+    await vi.advanceTimersByTimeAsync(800);
+
+    await expect(resultPromise).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 });

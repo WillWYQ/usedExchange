@@ -331,11 +331,50 @@ export async function saveContactPlatformQrImage(index: number, qrImage: string)
   return (body?.contactPlatforms as ContactPlatformSummary[] | undefined) ?? [];
 }
 
+// Saving content/config.ts is the one thing PUT /api/config ever does, and
+// that write makes Vite's own dev-server restart mid-request: vite.config.ts's
+// plugin statically imports scripts/lib/studioApi.ts, which statically
+// imports content/config.ts at module scope, so Vite's default "bundle"
+// config loader treats content/config.ts as one of vite.config.ts's own
+// "config dependencies" and fully restarts the server whenever that file
+// changes on disk — dropping this very request's connection, even though the
+// write already landed. A PUT here is idempotent (it sets an absolute
+// {path, value}, never a delta), so retrying the identical request once the
+// restart settles is safe. A validation rejection (e.g. a bad GA4 id) is a
+// normal *resolved* response with res.ok === false and must never be
+// retried — only an actual network-level failure (the dropped connection)
+// rejects `fetch` itself, which is the only thing this catches.
+//
+// The real fix would swap in Vite's "native" config loader (it only tracks
+// static imports, not this transitive restart-on-any-dependency-change
+// behavior) — but that needs Node 22.15+/23.5+, which isn't guaranteed on a
+// seller's machine, and it would also require reworking the ~7 call sites in
+// scripts/lib/studioApi.ts that currently rely on this same restart to both
+// refresh their stale module-scope `siteConfig` import and fail fast on a
+// config parse error. Out of scope for now; see docs/ARCHITECTURE.md's
+// Seller Studio section for the full write-up. This retry is the pragmatic
+// stand-in until that architecture work happens.
+const CONFIG_SAVE_RETRY_DELAYS_MS = [400, 800];
+
+async function fetchWithRetry(input: string, init: RequestInit): Promise<Response> {
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await fetch(input, init);
+    } catch (err) {
+      if (attempt >= CONFIG_SAVE_RETRY_DELAYS_MS.length) throw err;
+      const delay = CONFIG_SAVE_RETRY_DELAYS_MS[attempt];
+      attempt += 1;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
 export async function saveConfigValue(
   path: string,
   value: string | number | boolean,
 ): Promise<ConfigField[]> {
-  const res = await fetch("/api/config", {
+  const res = await fetchWithRetry("/api/config", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ path, value }),
