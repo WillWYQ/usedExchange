@@ -268,7 +268,7 @@ New/changed keys in both `studio/src/i18n/strings.en.ts` and `strings.zh.ts` (bi
 
 - `docs/CURRENT_FUNCTIONALITY.md` / `_zh`: describe the two-tier fetch, the manual paste-URL escape hatch, that the headless fallback reuses the same one-time Chromium setup as PDF export, and the Amazon/Costco/login-wall known limitation.
 - `docs/DESIGN.md` / `_zh` (§22, Seller Studio): headless-fallback architecture, the extended SSRF model (including the WebSocket-blocking approach and the accepted DNS-rebinding residual risk), the new thumbnail route, and the new `scripts/lib/chromiumLauncher.ts` shared module (also referenced from the PDF-export design material).
-- `docs/TECH_REQUIREMENTS.md` / `_zh` (§29-30 area): updated `POST /api/import-url/preview` response shape, updated images/import body shape, new `POST /api/import-url/thumbnail` contract.
+- `docs/TECH_REQUIREMENTS.md` / `_zh` (§30, Seller Studio — per CLAUDE.md's own doc-section reference table; §29 is the shipping estimator, a different feature): updated `POST /api/import-url/preview` response shape, updated images/import body shape, new `POST /api/import-url/thumbnail` contract.
 - `docs/SCRIPTS.md` / `_zh`: update the existing "Catalog PDF export... one-time setup: `npx playwright install chromium`" note to mention it now also unlocks URL-import's deep-import fallback — no new script row needed.
 
 ## 17. Files touched (implementation-plan input)
