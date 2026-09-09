@@ -218,7 +218,7 @@ export function NewItemDialog({
       {/* Stop clicks inside the sheet from closing it. */}
       <div
         ref={dialogRef}
-        className="dialog"
+        className="dialog new-item-dialog"
         role="dialog"
         aria-modal="true"
         aria-label={t("newItem.title")}
