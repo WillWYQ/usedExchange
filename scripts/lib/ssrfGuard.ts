@@ -198,35 +198,46 @@ export function isDisallowedAddress(ip: string): boolean {
 
 type PinnedAddress = { address: string; family: 4 | 6 };
 
-async function resolveAndValidate(hostname: string): Promise<PinnedAddress> {
+export async function checkHostnameAllowed(
+  hostname: string,
+): Promise<{ allowed: true; address: string; family: 4 | 6 } | { allowed: false; reason: string }> {
   if (net.isIP(hostname)) {
     if (addressValidatorImpl(hostname)) {
-      throw new SsrfError(`Disallowed address: ${hostname}`);
+      return { allowed: false, reason: `Disallowed address: ${hostname}` };
     }
-    return { address: hostname, family: net.isIPv6(hostname) ? 6 : 4 };
+    return { allowed: true, address: hostname, family: net.isIPv6(hostname) ? 6 : 4 };
   }
 
   let addresses: Array<{ address: string; family: number }>;
   try {
     addresses = await dnsLookupImpl(hostname);
   } catch (err) {
-    throw new SsrfError(
-      `DNS resolution failed for ${hostname}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    return {
+      allowed: false,
+      reason: `DNS resolution failed for ${hostname}: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
   if (addresses.length === 0) {
-    throw new SsrfError(`DNS resolution returned no addresses for ${hostname}`);
+    return { allowed: false, reason: `DNS resolution returned no addresses for ${hostname}` };
   }
   // A domain that resolves to a mix of public and private addresses is
-  // treated as fully untrustworthy — reject on ANY disallowed hit, before
-  // ever attempting a connection.
+  // treated as fully untrustworthy -- reject on ANY disallowed hit, even
+  // though only the first address below is ever actually used to connect.
   for (const { address } of addresses) {
     if (addressValidatorImpl(address)) {
-      throw new SsrfError(`Disallowed resolved address for ${hostname}: ${address}`);
+      return { allowed: false, reason: `Disallowed resolved address for ${hostname}: ${address}` };
     }
   }
   const first = addresses[0]!;
-  return { address: first.address, family: first.family === 6 ? 6 : 4 };
+  return { allowed: true, address: first.address, family: first.family === 6 ? 6 : 4 };
+}
+
+async function resolveAndValidate(hostname: string): Promise<PinnedAddress> {
+  const check = await checkHostnameAllowed(hostname);
+  if (!check.allowed) {
+    throw new SsrfError(check.reason);
+  }
+  return { address: check.address, family: check.family };
 }
 
 function resolveRedirectUrl(location: string, base: URL): URL {

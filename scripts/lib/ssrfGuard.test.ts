@@ -3,6 +3,7 @@ import type { AddressInfo } from "net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   SsrfError,
+  checkHostnameAllowed,
   fetchUrlSafely,
   isDisallowedAddress,
   __setAddressValidatorForTests,
@@ -67,6 +68,60 @@ describe("isDisallowedAddress", () => {
 
   it("fails closed on garbage input", () => {
     expect(isDisallowedAddress("not-an-ip")).toBe(true);
+  });
+});
+
+describe("checkHostnameAllowed", () => {
+  afterEach(() => {
+    __setDnsLookupForTests(null);
+  });
+
+  it("returns the resolved address and family when a hostname's only address is allowed", async () => {
+    __setDnsLookupForTests(async () => [{ address: "93.184.216.34", family: 4 }]);
+
+    const result = await checkHostnameAllowed("example.com");
+
+    expect(result).toEqual({ allowed: true, address: "93.184.216.34", family: 4 });
+  });
+
+  it("rejects when the hostname resolves to a disallowed address", async () => {
+    __setDnsLookupForTests(async () => [{ address: "127.0.0.1", family: 4 }]);
+
+    const result = await checkHostnameAllowed("localhost.example");
+
+    expect(result.allowed).toBe(false);
+  });
+
+  it("rejects if ANY of several resolved addresses is disallowed, even if the first is fine", async () => {
+    __setDnsLookupForTests(async () => [
+      { address: "93.184.216.34", family: 4 },
+      { address: "10.0.0.5", family: 4 },
+    ]);
+
+    const result = await checkHostnameAllowed("mixed.example");
+
+    expect(result.allowed).toBe(false);
+  });
+
+  it("returns the first address when a hostname resolves to multiple allowed addresses", async () => {
+    __setDnsLookupForTests(async () => [
+      { address: "93.184.216.34", family: 4 },
+      { address: "93.184.216.35", family: 4 },
+    ]);
+
+    const result = await checkHostnameAllowed("multi.example");
+
+    expect(result).toEqual({ allowed: true, address: "93.184.216.34", family: 4 });
+  });
+
+  it("rejects (does not throw) when DNS resolution fails", async () => {
+    __setDnsLookupForTests(async () => {
+      throw new Error("ENOTFOUND");
+    });
+
+    const result = await checkHostnameAllowed("nonexistent.invalid");
+
+    expect(result.allowed).toBe(false);
   });
 });
 
