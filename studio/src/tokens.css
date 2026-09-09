@@ -1549,6 +1549,16 @@ tr.failed td {
   font-weight: 600;
 }
 
+/* Bare .dialog has no height cap, so the url-import picker's thumb grid
+   (which can grow to dozens of candidates) pushed the sheet past the
+   viewport with no way to reach the Create/Cancel buttons or the lower
+   thumbnails — the backdrop itself doesn't scroll. Capped and made
+   scrollable like .defaults-dialog / .categories-dialog / .config-dialog. */
+.new-item-dialog {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
 .new-item-mode {
   display: flex;
   gap: var(--gap);
