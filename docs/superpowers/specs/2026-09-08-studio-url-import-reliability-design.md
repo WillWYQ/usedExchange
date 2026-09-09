@@ -39,7 +39,7 @@ A third, separate bug (not the seller's reported symptom, found by reading `NewI
 - Always leave the seller a working path to finish the job, even on sites where automated extraction is a lost cause (Amazon/Costco-class bot defense, or a login wall).
 - Fix the thumbnail hotlink/broken-image bug in the picker.
 - Keep the SSRF guarantee intact across every new code path — no exceptions.
-- Keep `pnpm install` light for sellers who never touch this feature.
+- Add zero new install-time cost — see §7: this reuses an already-present dependency rather than adding one.
 
 **Non-goals:**
 - Defeating enterprise bot-management (Akamai/PerimeterX/Amazon's own stack) via fingerprint spoofing, stealth plugins, or a stealth arms race. See §10 (Known limitations) — this is a deliberate line, not an oversight.
@@ -82,7 +82,14 @@ Tier 1 is untouched in behavior for any site that already works today — zero a
 ```ts
 export type HeadlessRenderResult =
   | { available: true; html: string; finalUrl: string }
-  | { available: false; reason: "not-installed" | "launch-failed" | "navigation-failed" };
+  | { available: false; reason: "not-installed" | "navigation-failed" };
+// "not-installed" covers everything launchChromiumOrError() collapses into
+// its one generic { error } case (missing package, missing Chromium binary,
+// or any other launch-time failure) — it doesn't distinguish these itself,
+// and the actionable advice is the same either way (§7), matching how the
+// PDF-export feature already treats this same function's error today.
+// "navigation-failed" is reserved for a failure *after* a successful
+// launch that isn't a plain timeout (a timeout is non-fatal, per §6.2).
 
 export async function renderWithHeadlessBrowser(
   url: string,
@@ -95,11 +102,19 @@ export function __setHeadlessRendererForTests(
 ): void;
 ```
 
-`renderWithHeadlessBrowser` never throws — same "degrade to empty, don't crash the request" philosophy as `urlImport.ts`. `{ available: false, reason: "not-installed" }` is returned the moment `import("playwright-core")` fails to resolve, before any launch is attempted.
+`renderWithHeadlessBrowser` never throws — same "degrade to empty, don't crash the request" philosophy as `urlImport.ts`. `{ available: false, reason: "not-installed" }` is returned the moment launching Chromium fails (package or binary missing — see §7), before any navigation is attempted.
 
-### 6.2 Lifecycle
+### 6.2 Lifecycle, and reusing the existing Chromium launcher
 
-A module-level `Browser` instance is launched lazily on first use and kept warm for the life of the Studio server process (avoids paying Chromium's ~1-2s cold-launch cost on every single import). Each call gets its own fresh incognito `BrowserContext` + `Page` (no cookie/storage leakage between unrelated imports), closed in a `finally` after content is captured or the attempt fails. The shared `Browser` itself is not closed per-request.
+**Correction from the independent design review (see §19):** the first draft of this section proposed launching Chromium via a brand-new `playwright-core` dependency. That was wrong — this repo already depends on the full `playwright` package (`package.json`, used by `scripts/lib/pdfCatalog/generate.ts` for the "Export catalog PDF" feature) and already has exactly the lazy-launch-with-friendly-error pattern this module needs, in `launchChromiumOrError()`. This design now **extracts that function** out of `pdfCatalog/generate.ts` into a small new shared module, `scripts/lib/chromiumLauncher.ts`, with the same signature it has today:
+
+```ts
+export async function launchChromiumOrError(): Promise<{ browser: Browser } | { error: string }>;
+```
+
+Both `pdfCatalog/generate.ts` (unchanged behavior, now importing from the shared location) and `headlessImport.ts` (new) depend on this one module — one Playwright dependency, one Chromium install, one lazy-import/friendly-error pattern, shared by both features instead of duplicated. A seller who already ran the PDF export's one-time Chromium setup gets URL-import's fallback working for free, and vice versa.
+
+`renderWithHeadlessBrowser` calls `launchChromiumOrError()` to obtain a module-level, lazily-launched `Browser` kept warm for the life of the Studio server process (avoids paying Chromium's ~1-2s cold-launch cost on every single import) — a `{ error }` result maps to `{ available: false, reason: "not-installed" }`. Each call gets its own fresh incognito `BrowserContext` + `Page` (no cookie/storage leakage between unrelated imports), closed in a `finally` after content is captured or the attempt fails. The shared `Browser` itself is not closed per-request.
 
 Navigation uses `page.goto(url, { waitUntil: "networkidle", timeout })`; a navigation timeout is caught and treated as non-fatal — `page.content()` is still read from whatever state was reached, consistent with "degrade to fewer/no results, don't throw."
 
@@ -111,31 +126,29 @@ This is the part that needed the most care. `fetchUrlSafely` normally resolves D
 
 To preserve the guarantee:
 
-- **`ssrfGuard.ts` is refactored** to expose the address-validation step as its own reusable function, independent of the throw-based `resolveAndValidate` used by the plain-fetch path:
+- **`ssrfGuard.ts` is refactored** to expose the address-validation step as its own reusable function, independent of the throw-based `resolveAndValidate` used by the plain-fetch path. **Corrected per §19:** the first draft of this function returned only an `allowed` boolean, which would have forced `resolveAndValidate` to either duplicate the DNS lookup afterward (reopening a TOCTOU gap *in the currently-safe, pinned Tier-1 path*) or stopped being a real "thin wrapper" as claimed. The resolved address must travel with the allow/deny answer so Tier 1's existing pinning behavior needs no second lookup:
   ```ts
-  export async function isHostnameAllowed(
+  export async function checkHostnameAllowed(
     hostname: string,
-  ): Promise<{ allowed: true } | { allowed: false; reason: string }>;
+  ): Promise<
+    | { allowed: true; address: string; family: 4 | 6 }
+    | { allowed: false; reason: string }
+  >;
   ```
-  `resolveAndValidate` becomes a thin wrapper that calls this and throws `SsrfError` on `allowed: false`. One validation implementation, shared by both fetch paths — they cannot drift apart.
-- **Every request Chromium makes is intercepted** via `context.route("**/*", handler)`. Resource types `image`, `media`, `font`, `stylesheet`, `websocket`, `manifest`, `other` are aborted outright — extraction only needs resolved `src` attribute *strings*, never the actual bytes (those are downloaded later through the existing safe pipeline), so blocking them costs nothing and shrinks the attack surface. For the resource types that must load for JS-rendering to work (`document`, `script`, `xhr`, `fetch`, `eventsource`), the handler resolves the request's hostname through `isHostnameAllowed` and aborts if disallowed. Because each redirect hop generates its own new intercepted request, redirects are re-validated automatically — the same "no exceptions, re-check every hop" property `fetchUrlSafely` already has.
-- **Accepted residual gap (seller sign-off obtained, §2.5):** Chromium performs its own DNS resolution at actual connect time, a moment after `isHostnameAllowed` ran. Unlike the pinned-socket plain-fetch path, there is no hook to force Chromium's connection onto the literal address we validated — a narrowly-timed DNS-rebinding attack (the attacker's DNS server changes its answer between our check and Chromium's connect) is theoretically possible in the headless path only. Closing this fully would require a local forward proxy that Chromium's traffic is routed through, so *that* proxy — not Chromium — does the resolve-validate-pin dance. Given the threat model this guard exists for ("a remote page tries to reach the seller's own machine," documented in `ssrfGuard.ts`'s own comments) and that only the seller ever supplies the URL, this gap is accepted and documented rather than built around, for now. Flagged here as a known follow-up if the risk tolerance ever changes.
+  `resolveAndValidate` becomes a genuinely thin wrapper: call this, throw `SsrfError(reason)` on `allowed: false`, otherwise return `{ address, family }` exactly as it does today — same one DNS lookup, same pinning, zero behavior change for the plain-fetch path. The headless path calls the same function for its own per-request checks (§ below) but, per the accepted residual gap, has no way to force Chromium to connect to the literal `address` it gets back — only the plain-fetch path can use that part of the answer.
+- **Every HTTP(S) request Chromium makes is intercepted** via `context.route("**/*", handler)`. Resource types `image`, `media`, `font`, `stylesheet`, `manifest`, `other` are aborted outright — extraction only needs resolved `src` attribute *strings*, never the actual bytes (those are downloaded later through the existing safe pipeline), so blocking them costs nothing and shrinks the attack surface. For the resource types that must load for JS-rendering to work (`document`, `script`, `xhr`, `fetch`, `eventsource`), the handler resolves the request's hostname through `checkHostnameAllowed` and aborts if disallowed. Because each redirect hop generates its own new intercepted request, redirects are re-validated automatically — the same "no exceptions, re-check every hop" property `fetchUrlSafely` already has.
+- **WebSocket connections are a separate mechanism, not covered by `context.route()`.** Playwright's generic `route()`/`context.route()` API does not intercept WebSocket handshakes at all — a known, documented Playwright limitation, which is why a dedicated `context.routeWebSocket()` API exists. This module registers a `routeWebSocket()` handler that never calls the route's `connectToServer()`: by design, a routed WebSocket that's never connected through simply never reaches the real server, which is a full, simple block — appropriate here since photo-gallery extraction never needs a live WebSocket. (Implementation note: `routeWebSocket()` matches its pattern as a glob by default, and a glob does not handle the `wss://` scheme cleanly — the actual handler should register a regex pattern, not a bare URL string, to reliably match every WebSocket regardless of scheme.) Blocking every WebSocket outright — rather than trying to allow/deny individual ones by hostname the way HTTP requests are handled — avoids relying on interception behavior this module cannot fully verify hostname-by-hostname.
+- **Accepted residual gap (seller sign-off obtained, §2.5):** Chromium performs its own DNS resolution at actual connect time, a moment after `checkHostnameAllowed` ran. Unlike the pinned-socket plain-fetch path, there is no hook to force Chromium's connection onto the literal address we validated — a narrowly-timed DNS-rebinding attack (the attacker's DNS server changes its answer between our check and Chromium's connect) is theoretically possible in the headless path only. Closing this fully would require a local forward proxy that Chromium's traffic is routed through, so *that* proxy — not Chromium — does the resolve-validate-pin dance. Given the threat model this guard exists for ("a remote page tries to reach the seller's own machine," documented in `ssrfGuard.ts`'s own comments) and that only the seller ever supplies the URL, this gap is accepted and documented rather than built around, for now. Flagged here as a known follow-up if the risk tolerance ever changes.
 
 ### 6.4 Trigger condition
 
 Tier 2 runs if and only if Tier 1's `images.length === 0`, regardless of whether a name was found. This is a direct, simple match to the confirmed symptom and keeps the fast path fast for every site that isn't broken.
 
-## 7. Optional dependency, kept off the default install path
+## 7. No new dependency — reusing what PDF export already installs
 
-`playwright-core` is a small JS package with no bundled browser and no postinstall download — safe to add as a normal `devDependency` with effectively zero cost to `pnpm install`. The actual Chromium binary (the heavy part, ~100-300MB) is a separate, explicit download that only happens when the seller runs a new one-time command:
+**This entire section was wrong in the first draft and is rewritten per §19.** `playwright` (the full package, not `-core`) is already a `devDependency` in `package.json`, already used by `scripts/lib/pdfCatalog/generate.ts` for the "Export catalog PDF" feature, and its one-time Chromium install step is already documented — `docs/SCRIPTS.md`: "Catalog PDF export... renders via headless Chromium. One-time setup: `npx playwright install chromium`." There is no new dependency to add, no version-alignment problem to solve, and no new setup script to build or document — §6.2's extraction of `launchChromiumOrError()` into a shared `scripts/lib/chromiumLauncher.ts` means URL-import's headless fallback rides the exact same package and the exact same already-documented one-time command as PDF export.
 
-```
-pnpm setup-url-import
-```
-
-matching the existing opt-in-setup convention (`pnpm setup-ui`, `pnpm configure-image-cors`). Implementation: `scripts/setup-url-import.sh`, which installs the Chromium build matching the exact `playwright-core` version pinned in `package.json` (version alignment matters — `playwright-core` resolves browsers from a version-keyed cache directory, so a mismatched installer version would silently not find the binary it just downloaded).
-
-If Chromium isn't installed, Tier 2 returns `{ available: false, reason: "not-installed" }` and Studio surfaces this to the seller as an actionable hint (§9) rather than failing silently or crashing. No new `content/config.ts` field: whether the optional dependency is present *is* the on/off switch, which is simpler than adding and documenting a redundant config toggle for the same thing.
+If Chromium isn't installed, `launchChromiumOrError()` returns `{ error }` today (surfaced by the PDF feature as "PDF renderer not installed. Run: npx playwright install chromium"); `headlessImport.ts` maps that same result to `{ available: false, reason: "not-installed" }`, and Studio surfaces a URL-import-appropriate version of the same hint (§12) pointing at the same command. No new `content/config.ts` field: whether Chromium is installed *is* the on/off switch, exactly as it already is for PDF export — one existing pattern, now serving two features.
 
 ## 8. Referer and header realism (`ssrfGuard.ts`)
 
@@ -190,13 +203,15 @@ Request: `{ url: string; sourceUrl?: string }`. Response: the raw image bytes wi
 
 Bounded concurrency comes for free: all ~40 candidate thumbnails now request the *same local origin*, so the browser's own per-origin connection cap (~6 concurrent in most browsers) naturally throttles both the client requests and, transitively, the server's fan-out to the various remote hosts — no hand-rolled semaphore needed.
 
+**Lazy loading is preserved, not silently dropped (per §19).** Moving from a bare `<img src>` to a `fetch()` + blob-URL means the native `loading="lazy"` attribute (today's `NewItemDialog.tsx`) no longer does anything — a `fetch()` call has no browser-native deferral. Left alone, that would mean every one of up to 40 candidates gets fetched immediately on mount, each one now a *double* network hop (server re-fetches the remote image, then the browser fetches it from the local server) instead of today's single direct hop — a real latency/bandwidth regression for a seller who only ever looks at the first handful of candidates. This design replaces the native attribute with an `IntersectionObserver`-gated fetch (a small hook: only fetch a thumbnail once its `<li>` scrolls near the viewport), keeping the original "don't fetch what isn't shown" intent through the proxy instead of losing it.
+
 ## 12. UI error-messaging states (`NewItemDialog.tsx`)
 
 When the preview returns `images.length === 0`:
 
 | Condition | Message |
 |---|---|
-| `headlessUnavailable === true` | This page may need JavaScript to show photos. Run `pnpm setup-url-import` once to enable deeper import, then retry — or paste a photo link directly below. |
+| `headlessUnavailable === true` | This page may need JavaScript to show photos. Run `npx playwright install chromium` once to enable deeper import (the same one-time step the catalog PDF export uses — already done if you've set that up), then retry — or paste a photo link directly below. |
 | `headlessUnavailable === false` (Tier 2 ran — since the trigger for reaching this branch at all is "Tier 1 found zero images," `false` here always means Tier 2 was attempted and also found nothing) | Couldn't find photos on this page automatically (it may block automated access, or require login). Paste a photo link directly below. |
 
 Both states point at the same always-available escape hatch (§9) rather than dead-ending the seller.
@@ -211,16 +226,17 @@ New/changed keys in both `studio/src/i18n/strings.en.ts` and `strings.zh.ts` (bi
 
 ## 14. Testing strategy
 
-- **`scripts/lib/ssrfGuard.test.ts`:** cases for the new `isHostnameAllowed` export (existing `resolveAndValidate`/`fetchUrlSafely` tests should pass unchanged since it's a refactor, not a behavior change), the `referer` header being sent when provided and absent when not, and gzip/deflate/br response decompression against a local test server.
-- **`scripts/lib/headlessImport.test.ts`** (new): unit tests against **mocked** Playwright objects (route/request interception decisions — resource-type blocking, hostname allow/deny via a stubbed `isHostnameAllowed`) so the security-critical interception logic is covered deterministically without a real browser. `{ available: false, reason: "not-installed" }` is tested by simulating the dynamic import failure. A small number of real-Chromium smoke tests are gated behind an opt-in env var and **not** part of default `pnpm test` / CI — consistent with keeping CI fast and not requiring a Chromium download on every run.
+- **`scripts/lib/ssrfGuard.test.ts`:** cases for the new `checkHostnameAllowed` export, confirming it returns the resolved `address`/`family` alongside `allowed: true` (existing `resolveAndValidate`/`fetchUrlSafely` tests should pass unchanged since it's a refactor, not a behavior change — same one DNS lookup, same pinning), the `referer` header being sent when provided and absent when not, and gzip/deflate/br response decompression against a local test server.
+- **`scripts/lib/chromiumLauncher.test.ts`** (new, extracted alongside the function itself): covers what were previously inline expectations on `pdfCatalog/generate.ts`'s `launchChromiumOrError` — successful launch, and the missing-package/missing-binary cases both mapping to the same friendly `{ error }`.
+- **`scripts/lib/headlessImport.test.ts`** (new): unit tests against **mocked** Playwright objects (route/request interception decisions — resource-type blocking, hostname allow/deny via a stubbed `checkHostnameAllowed`, and that a registered `routeWebSocket()` handler never calls `connectToServer()`) so the security-critical interception logic is covered deterministically without a real browser. `{ available: false, reason: "not-installed" }` is tested via a stubbed `launchChromiumOrError` returning `{ error }`. A small number of real-Chromium smoke tests are gated behind an opt-in env var and **not** part of default `pnpm test` / CI — consistent with keeping CI fast and not requiring a Chromium download on every run.
 - **`scripts/lib/studioApi.test.ts`:** two-tier trigger logic using `__setHeadlessRendererForTests` (Tier 2 only invoked when Tier 1 finds zero images; response flags set correctly in each branch), `sourceUrl` → `referer` threading in `handleImageImport`, and the new thumbnail route's CSRF/validation/error-shape behavior.
 - **`studio/src/api.test.ts`:** the new thumbnail-fetch client function returns a `Blob` on success and throws the server's `{ error }` message on failure, matching this file's existing per-function test pattern.
-- **`studio/src/panes/NewItemDialog.test.tsx`:** the two new conditional messages render correctly based on preview-response flags, the manual paste-URL textarea's parsing/validation/dedup/merge-into-selection behavior, and thumbnail blob-URL lifecycle (created on mount, revoked on unmount — no leaked object URLs).
+- **`studio/src/panes/NewItemDialog.test.tsx`:** the two new conditional messages render correctly based on preview-response flags, the manual paste-URL textarea's parsing/validation/dedup/merge-into-selection behavior, and thumbnail blob-URL lifecycle (fetched only once `IntersectionObserver` reports a candidate near-viewport, revoked on unmount — no leaked object URLs, no eager fetch of all 40 on mount).
 
 ## 15. Iron-Rule compliance (CLAUDE.md)
 
 1. **`content/` folder rule:** N/A — no seller-content files touched by this feature.
-2. **Bilingual doc sync:** `docs/CURRENT_FUNCTIONALITY.md`, `docs/DESIGN.md`, `docs/TECH_REQUIREMENTS.md`, and `docs/SCRIPTS.md` all currently describe URL-import and/or the `pnpm setup-*` script family — all four **and their `_zh` counterparts** need updates during implementation (new route, new script, new known-limitations note, updated response/body shapes). Tracked explicitly in §16.
+2. **Bilingual doc sync:** `docs/CURRENT_FUNCTIONALITY.md`, `docs/DESIGN.md`, and `docs/TECH_REQUIREMENTS.md` all currently describe URL-import — all three **and their `_zh` counterparts** need updates during implementation (new route, new known-limitations note, updated response/body shapes, the shared-launcher relationship with PDF export). Tracked explicitly in §16.
 3. **App code is live:** this is exactly the kind of explicitly-requested feature change Rule 3 allows.
 4. **`reserved_for` never rendered:** untouched by this feature.
 5. **`image-manifest.json` stays in git:** untouched.
@@ -230,26 +246,27 @@ New/changed keys in both `studio/src/i18n/strings.en.ts` and `strings.zh.ts` (bi
 
 ## 16. Docs to update during implementation (bilingual, per CLAUDE.md Rule 2)
 
-- `docs/CURRENT_FUNCTIONALITY.md` / `_zh`: describe the two-tier fetch, the manual paste-URL escape hatch, the `pnpm setup-url-import` command, and the Amazon/Costco/login-wall known limitation.
-- `docs/DESIGN.md` / `_zh` (§22, Seller Studio): headless-fallback architecture, the extended SSRF model, the new thumbnail route.
+- `docs/CURRENT_FUNCTIONALITY.md` / `_zh`: describe the two-tier fetch, the manual paste-URL escape hatch, that the headless fallback reuses the same one-time Chromium setup as PDF export, and the Amazon/Costco/login-wall known limitation.
+- `docs/DESIGN.md` / `_zh` (§22, Seller Studio): headless-fallback architecture, the extended SSRF model (including the WebSocket-blocking approach and the accepted DNS-rebinding residual risk), the new thumbnail route, and the new `scripts/lib/chromiumLauncher.ts` shared module (also referenced from the PDF-export design material).
 - `docs/TECH_REQUIREMENTS.md` / `_zh` (§29-30 area): updated `POST /api/import-url/preview` response shape, updated images/import body shape, new `POST /api/import-url/thumbnail` contract.
-- `docs/SCRIPTS.md` / `_zh`: new `pnpm setup-url-import` entry, matching the existing `pnpm setup-ui` / `pnpm configure-image-cors` style.
-- `.claude/CLAUDE.md`'s "Common Seller Tasks" table: add the new script row.
+- `docs/SCRIPTS.md` / `_zh`: update the existing "Catalog PDF export... one-time setup: `npx playwright install chromium`" note to mention it now also unlocks URL-import's deep-import fallback — no new script row needed.
 
 ## 17. Files touched (implementation-plan input)
 
 **New:**
+- `scripts/lib/chromiumLauncher.ts` + `.test.ts` — `launchChromiumOrError()`, extracted from `pdfCatalog/generate.ts` (§6.2).
 - `scripts/lib/headlessImport.ts` + `.test.ts`
-- `scripts/setup-url-import.sh`
 
 **Edited:**
-- `scripts/lib/ssrfGuard.ts` (+ `.test.ts`) — `isHostnameAllowed` export, `referer` option, header realism, decompression.
+- `scripts/lib/pdfCatalog/generate.ts` (+ existing tests) — `launchChromiumOrError()` removed in favor of importing it from the new shared module; no behavior change.
+- `scripts/lib/ssrfGuard.ts` (+ `.test.ts`) — `checkHostnameAllowed` export (address-carrying, §6.3), `referer` option, header realism, decompression.
 - `scripts/lib/studioApi.ts` (+ `.test.ts`) — two-tier orchestration, `sourceUrl`/referer threading, new thumbnail route.
 - `studio/src/api.ts` (+ `.test.ts`) — updated `previewImportUrl`/`importImagesFromUrls` types, new thumbnail-fetch client function.
-- `studio/src/panes/NewItemDialog.tsx` (+ `.test.tsx`) — new messaging states, paste-URL textarea, thumbnail blob-URL rendering.
+- `studio/src/panes/NewItemDialog.tsx` (+ `.test.tsx`) — new messaging states, paste-URL textarea, `IntersectionObserver`-gated thumbnail blob-URL rendering.
 - `studio/src/i18n/strings.en.ts`, `strings.zh.ts` — new/changed keys (§13).
-- `package.json` — `playwright-core` devDependency, `setup-url-import` script.
 - Docs listed in §16.
+
+**Not touched:** `package.json` — no new dependency, no new script (§7).
 
 ## 18. Out of scope (this change)
 
@@ -257,3 +274,20 @@ New/changed keys in both `studio/src/i18n/strings.en.ts` and `strings.zh.ts` (bi
 - A local DNS-pinning forward proxy for the headless path (§6.3 — accepted residual risk instead).
 - A `content/config.ts` toggle for this feature (§7).
 - Any change to `extractImportCandidates`'s parsing/ranking rules.
+
+## 19. Post-review findings (independent audit, 2026-09-08)
+
+An independent general-purpose subagent reviewed the first draft of this spec against the actual codebase before it moved to `writing-plans`, per the seller's request. Its findings, and how each was resolved, are recorded here rather than silently folded into the sections above — this directory's own convention (see `2026-08-17-studio-pdf-contact-accessibility-design.md`'s §8a) for exactly this situation.
+
+**Substantive findings, all fixed in this revision:**
+
+- **[factual error]** The first draft proposed adding `playwright-core` as a new dependency with a new `pnpm setup-url-import` script, unaware that `playwright` (the full package) is already a `devDependency` used by `pdfCatalog/generate.ts`'s PDF export, with its Chromium install step already documented in `docs/SCRIPTS.md`. Fixed: §6.2 and §7 rewritten to extract the existing `launchChromiumOrError()` into a shared `scripts/lib/chromiumLauncher.ts` and reuse the already-documented setup step. No new dependency, no new script.
+- **[design concern]** Following from the above, a separate `playwright-core` would have created a second, independently-versioned Chromium cache alongside the existing one. Resolved by the same fix — there is now only ever one Playwright dependency and one Chromium install.
+- **[design concern]** The original `isHostnameAllowed(hostname): Promise<{allowed}>` sketch didn't carry the resolved address, so `resolveAndValidate` could not actually become "a thin wrapper" around it without a second DNS lookup — which would have reopened a TOCTOU gap in the currently-safe, pinned Tier-1 path. Fixed: §6.3's `checkHostnameAllowed` now returns `{ allowed: true; address; family }`, so the plain-fetch path's existing single-lookup, pinned-socket behavior is preserved exactly.
+- **[security gap]** The original design blocked the `websocket` resource type through the same generic `context.route()` handler used for images/fonts/etc. Verified via Playwright's own issue tracker (microsoft/playwright#31969, #28947) that `route()` does not intercept WebSocket handshakes at all — a dedicated `context.routeWebSocket()` API exists specifically because of this gap. Fixed: §6.3 now specifies `routeWebSocket()` with a handler that never calls `connectToServer()` (which fully blocks the connection by default), plus a note on the `wss://` glob-matching pitfall that pushed the pattern to a regex.
+
+**Addressed as a deliberate trade-off, not a defect:**
+
+- **[nitpick]** Moving thumbnails from a plain `<img src>` to a `fetch()`-based proxy silently drops native `loading="lazy"` and doubles each thumbnail's network hop. Fixed: §11.3 now specifies `IntersectionObserver`-gated fetching to preserve the original "don't fetch what isn't shown" behavior.
+
+**Confirmed accurate — no change:** the `checkStudioCsrf` GET/HEAD-exemption reasoning and the POST-only justification for the new thumbnail route (§11.3); the English-only doc-convention citation; the i18n key claims (§13).
