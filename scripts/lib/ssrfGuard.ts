@@ -2,6 +2,7 @@ import * as dns from "dns/promises";
 import * as http from "http";
 import * as https from "https";
 import * as net from "net";
+import * as zlib from "zlib";
 import type { LookupAddress } from "dns";
 
 export class SsrfError extends Error {}
@@ -11,6 +12,7 @@ export type SafeFetchOptions = {
   maxBytes: number;
   maxRedirects?: number;
   userAgent?: string;
+  referer?: string;
 };
 
 export type SafeFetchResult = {
@@ -255,6 +257,20 @@ function stripContentType(header: string | undefined): string {
   return value.trim().toLowerCase();
 }
 
+function pickDecompressor(contentEncoding: string | string[] | undefined): (NodeJS.ReadWriteStream & { destroy(): void }) | null {
+  const value = Array.isArray(contentEncoding) ? contentEncoding[0] : contentEncoding;
+  switch ((value ?? "").trim().toLowerCase()) {
+    case "gzip":
+      return zlib.createGunzip() as NodeJS.ReadWriteStream & { destroy(): void };
+    case "deflate":
+      return zlib.createInflate() as NodeJS.ReadWriteStream & { destroy(): void };
+    case "br":
+      return zlib.createBrotliDecompress() as NodeJS.ReadWriteStream & { destroy(): void };
+    default:
+      return null;
+  }
+}
+
 export async function fetchUrlSafely(
   url: string,
   options: SafeFetchOptions,
@@ -315,6 +331,10 @@ export async function fetchUrlSafely(
           headers: {
             Host: currentUrl.host,
             "User-Agent": userAgent,
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            ...(options.referer ? { Referer: options.referer } : {}),
           },
           // Pinning to the already-validated address means Node must not
           // redo its own DNS lookup — that would reopen the TOCTOU /
@@ -339,22 +359,35 @@ export async function fetchUrlSafely(
           }
 
           const contentType = stripContentType(res.headers["content-type"]);
+          const decompressor = pickDecompressor(res.headers["content-encoding"]);
+          // The cap runs on whatever stream produces the FINAL content bytes -- the
+          // decompressor's output when one exists, never on compressed wire bytes.
+          // Capping compressed size only would let a small adversarial payload
+          // expand to gigabytes in memory before any check ever saw the real size.
+          const source: NodeJS.ReadableStream = decompressor ? res.pipe(decompressor) : res;
+
           const chunks: Buffer[] = [];
           let total = 0;
           let destroyed = false;
 
-          res.on("data", (chunk: Buffer) => {
+          const fail = (err: Error) => {
+            if (destroyed) return;
+            destroyed = true;
+            res.destroy();
+            decompressor?.destroy();
+            rejectPromise(err);
+          };
+
+          source.on("data", (chunk: Buffer) => {
             if (destroyed) return;
             total += chunk.length;
             if (total > options.maxBytes) {
-              destroyed = true;
-              res.destroy();
-              rejectPromise(new SsrfError(`Response exceeded maxBytes (${options.maxBytes})`));
+              fail(new SsrfError(`Response exceeded maxBytes (${options.maxBytes})`));
               return;
             }
             chunks.push(chunk);
           });
-          res.on("end", () => {
+          source.on("end", () => {
             if (destroyed) return;
             resolvePromise({
               kind: "final",
@@ -365,10 +398,11 @@ export async function fetchUrlSafely(
               },
             });
           });
-          res.on("error", (err) => {
-            if (destroyed) return;
-            rejectPromise(err);
-          });
+          source.on("error", fail);
+          // .pipe() does not forward 'error' events from its source by default --
+          // this must be attached regardless of whether decompression is in play,
+          // or a raw network error on `res` would go unhandled when source !== res.
+          res.on("error", fail);
         });
 
         req.on("error", (err) => {

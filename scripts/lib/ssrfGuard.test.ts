@@ -1,5 +1,6 @@
 import * as http from "http";
 import type { AddressInfo } from "net";
+import * as zlib from "zlib";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   SsrfError,
@@ -360,6 +361,91 @@ describe("fetchUrlSafely — end-to-end mechanics against a real server (loopbac
       ).rejects.toThrow(SsrfError);
     } finally {
       __setDnsLookupForTests(null);
+      await closeAll([server]);
+    }
+  });
+
+  it("sends the Referer header when options.referer is provided", async () => {
+    let receivedReferer: string | undefined;
+    const server = http.createServer((req, res) => {
+      receivedReferer = req.headers.referer;
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end("<html></html>");
+    });
+    const port = await listen(server);
+    try {
+      await fetchUrlSafely(`http://127.0.0.1:${port}/`, {
+        timeoutMs: 2000,
+        maxBytes: 10_000,
+        referer: "https://seller-pasted-site.example/listing/123",
+      });
+      expect(receivedReferer).toBe("https://seller-pasted-site.example/listing/123");
+    } finally {
+      await closeAll([server]);
+    }
+  });
+
+  it("sends no Referer header when options.referer is omitted", async () => {
+    let receivedReferer: string | undefined;
+    const server = http.createServer((req, res) => {
+      receivedReferer = req.headers.referer;
+      res.end("ok");
+    });
+    const port = await listen(server);
+    try {
+      await fetchUrlSafely(`http://127.0.0.1:${port}/`, { timeoutMs: 2000, maxBytes: 10_000 });
+      expect(receivedReferer).toBeUndefined();
+    } finally {
+      await closeAll([server]);
+    }
+  });
+
+  it("transparently decompresses a gzip response", async () => {
+    const server = http.createServer((_req, res) => {
+      const body = zlib.gzipSync(Buffer.from("hello from gzip"));
+      res.writeHead(200, { "Content-Encoding": "gzip" });
+      res.end(body);
+    });
+    const port = await listen(server);
+    try {
+      const result = await fetchUrlSafely(`http://127.0.0.1:${port}/`, { timeoutMs: 2000, maxBytes: 10_000 });
+      expect(result.bytes.toString("utf-8")).toBe("hello from gzip");
+    } finally {
+      await closeAll([server]);
+    }
+  });
+
+  it("caps DECOMPRESSED size, not compressed size — rejects a small payload that expands past maxBytes", async () => {
+    // 200KB of a single repeated byte compresses to well under 2KB, but
+    // decompresses back to 200KB -- bigger than the tiny maxBytes below. If
+    // the cap were (wrongly) applied to wire bytes, this would pass.
+    const huge = Buffer.alloc(200_000, "a");
+    const compressed = zlib.gzipSync(huge);
+    expect(compressed.length).toBeLessThan(2_000); // sanity: tiny on the wire
+
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { "Content-Encoding": "gzip" });
+      res.end(compressed);
+    });
+    const port = await listen(server);
+    try {
+      await expect(
+        fetchUrlSafely(`http://127.0.0.1:${port}/`, { timeoutMs: 2000, maxBytes: 10_000 }),
+      ).rejects.toThrow(/exceeded maxBytes/);
+    } finally {
+      await closeAll([server]);
+    }
+  });
+
+  it("passes an uncompressed response through unchanged (no content-encoding header)", async () => {
+    const server = http.createServer((_req, res) => {
+      res.end("plain text, no encoding");
+    });
+    const port = await listen(server);
+    try {
+      const result = await fetchUrlSafely(`http://127.0.0.1:${port}/`, { timeoutMs: 2000, maxBytes: 10_000 });
+      expect(result.bytes.toString("utf-8")).toBe("plain text, no encoding");
+    } finally {
       await closeAll([server]);
     }
   });
