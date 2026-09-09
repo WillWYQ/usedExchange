@@ -64,7 +64,7 @@ Tier 1: fetchUrlSafely(url)  ──────────────► extra
                                         when Tier 1 found nothing)
                                                     │
                                     available? ──no──► return Tier-1's (empty) result
-                                        │                + headlessUnavailable: true
+                                        │                + headlessFailureReason: "not-installed"
                                        yes
                                         ▼
                           extractImportCandidates(renderedHtml, renderedFinalUrl)
@@ -157,11 +157,13 @@ If Chromium isn't installed, `launchChromiumOrError()` returns `{ error }` today
 Two independent, additive changes to `fetchUrlSafely`:
 
 - **`SafeFetchOptions` gains `referer?: string`.** When present, sent as the `Referer` header. Threaded through for image downloads specifically (see §11.2) — hotlink protection commonly checks that the `Referer` matches the site the image was linked from, and today's download path sends none at all.
-- **Default headers gain `Accept`, `Accept-Language`, and `Accept-Encoding: gzip, deflate, br`.** These are honest, complete-HTTP-request headers, not identity spoofing (the `User-Agent` stays the existing self-identifying `UsedExchangeStudio/1.0 (+local seller tool)` for this plain-fetch tier — misrepresenting a non-JS HTTP client as a full browser has limited ROI against real bot detection and a real honesty cost; the *headless* tier is where a genuine browser UA is truthful, because a real browser engine is genuinely doing the rendering there). Advertising `Accept-Encoding` means responses may now arrive compressed — `fetchUrlSafely` decompresses based on the actual `Content-Encoding` response header (gzip/deflate/br via Node's built-in `zlib`; absent/identity is a no-op) before returning bytes.
+- **Default headers gain `Accept`, `Accept-Language`, and `Accept-Encoding: gzip, deflate, br`.** These are honest, complete-HTTP-request headers, not identity spoofing (the `User-Agent` stays the existing self-identifying `UsedExchangeStudio/1.0 (+local seller tool)` for this plain-fetch tier — misrepresenting a non-JS HTTP client as a full browser has limited ROI against real bot detection and a real honesty cost; the *headless* tier is where a genuine browser UA is truthful, because a real browser engine is genuinely doing the rendering there). Advertising `Accept-Encoding` means responses may now arrive compressed.
+
+  **Decompression must not become a decompression-bomb hole (found by a third review pass, §21).** Today's byte cap (`options.maxBytes`, `IMPORT_PAGE_MAX_BYTES` / `IMPORT_IMAGE_MAX_BYTES`) is enforced on raw wire bytes as `res.on("data")` chunks arrive — exactly the right place to enforce it *when there's no decompression*, because wire bytes and content bytes are the same thing. Once responses can be compressed, decompressing an already-capped buffer *after* collection (the natural minimal-diff reading of "decompress before returning bytes") caps only the *compressed* size — a small adversarial gzip/brotli payload well under either cap could expand to gigabytes in memory, a real DoS against the seller's own machine and squarely inside the threat model this guard exists for. The fix: when `Content-Encoding` is present, pipe the response through the matching Node `zlib` transform stream (`createGunzip`/`createInflate`/`createBrotliDecompress`) and move the existing cap-and-abort logic (`total > options.maxBytes` → destroy and reject) to count bytes coming *out* of that transform, not bytes arriving over the wire. Absent/identity encoding keeps today's behavior exactly (cap on the one and only byte stream there is). This is a bigger change than "add three headers and call `zlib.gunzipSync` on the result" — it has to be streaming to actually bound peak memory, not just the returned buffer's final size.
 
 ## 9. Manual "paste a photo URL" escape hatch (new, `NewItemDialog.tsx`)
 
-A small textarea in the URL-import picker, always available, for pasting one or more direct image URLs by hand (newline- or comma-separated). This is the guaranteed fallback for sites no amount of automated extraction will ever reliably beat — Amazon and Costco specifically, per the seller's own examples (§10). Pasted URLs are validated client-side (`new URL()`, must be `http`/`https`), deduped against existing candidates, and merged into `candidateImages` + `selectedImages` (auto-selected, same reasoning as extracted candidates: a seller who deliberately pastes a URL wants it imported). No new server endpoint — downloads go through the existing `importImagesFromUrls` → `handleImageImport` pipeline unchanged, so they get the same sniff/sanitize/write treatment and the same `Referer` treatment as extracted candidates (§11.2).
+A small textarea in URL-import mode, for pasting one or more direct image URLs by hand (newline- or comma-separated). **Placement correction (found by a third review pass, §21):** the candidate-picker block in today's `NewItemDialog.tsx` is gated behind `previewFetched && createdIdPendingWarning === null` — the first draft's "always available" claim didn't hold if the textarea were placed inside that same block, since a seller who hasn't clicked "Fetch page" yet (or whose fetch is still pending) would never see it. This textarea renders as its own block, outside that gate — visible in URL-import mode from the start, independent of whether a fetch has been attempted, so a seller who already knows a site won't auto-extract (an Amazon link, say) never has to run a doomed fetch first just to unlock the escape hatch. This is the guaranteed fallback for sites no amount of automated extraction will ever reliably beat — Amazon and Costco specifically, per the seller's own examples (§10). Pasted URLs are validated client-side (`new URL()`, must be `http`/`https`), deduped against existing candidates, and merged into `candidateImages` + `selectedImages` (auto-selected, same reasoning as extracted candidates: a seller who deliberately pastes a URL wants it imported). No new server endpoint — downloads go through the existing `importImagesFromUrls` → `handleImageImport` pipeline unchanged, so they get the same sniff/sanitize/write treatment and the same `Referer` treatment as extracted candidates (§11.2).
 
 ## 10. Known limitations (setting expectations up front)
 
@@ -179,14 +181,24 @@ Response gains two fields:
 type ImportUrlPreview = {
   name: string | null;
   images: string[];
-  usedHeadlessFallback: boolean;   // Tier 2 ran
-  headlessUnavailable: boolean;    // Tier 2 wanted to run but Chromium isn't installed
+  usedHeadlessFallback: boolean;              // Tier 2 ran (successfully or not)
+  headlessFailureReason: "not-installed" | "navigation-failed" | null;
+  // null in three cases: Tier 1 already succeeded (Tier 2 never ran); Tier 2
+  // ran, rendered fine, and found candidates; or Tier 2 ran, rendered fine,
+  // and STILL found zero candidates (HeadlessRenderResult's `available: true`
+  // branch carries no reason at all — a site that renders but genuinely has
+  // no photos isn't a failure of the fallback itself). §12's table treats
+  // this third null case the same as "navigation-failed": both mean Chromium
+  // ran with nothing actionable to blame it on, so the seller gets the same
+  // "couldn't find photos automatically" message rather than install advice.
 };
 ```
 
+**Corrected per a third review pass, §21:** the first draft collapsed this into one `headlessUnavailable: boolean`, discarding the distinction `HeadlessRenderResult` (§6.1) already makes between `"not-installed"` and `"navigation-failed"`. That distinction matters to the seller, not just internally: a boolean routes both cases to the same "run `npx playwright install chromium`" advice (§12) — actively wrong when Chromium is installed and working fine but a *particular* navigation failed (e.g. an SSRF-blocked redirect mid-page-load). Carrying the real reason through lets §12 give advice that matches what actually happened.
+
 ### 11.2 `POST /api/items/<category>/<item>/images/import`
 
-Request body gains an optional field, applying to the whole batch (every URL in one call comes from the same preview/page in the current UI flow):
+Request body gains an optional field, applying to the whole batch:
 
 ```ts
 const importImagesBodySchema = z.object({
@@ -195,11 +207,15 @@ const importImagesBodySchema = z.object({
 });
 ```
 
-`handleImageImport` passes `referer: sourceUrl` to each `fetchUrlSafely` call.
+`handleImageImport` passes `referer: <origin of sourceUrl>` (scheme + host + port only — not the full path/query, matching the `strict-origin-when-cross-origin` referrer policy browsers already default to, so a pasted URL that happens to embed something sensitive in its path/query never leaks further than a real cross-origin image request would) to each `fetchUrlSafely` call.
+
+**One-`sourceUrl`-per-batch is a known simplification, not an oversight (§9 interaction found by a third review pass, §21).** The original justification — "every URL in one call comes from the same page" — held for a pure scraped-candidates import, but no longer holds once §9's manual paste-URL escape hatch exists: a seller can merge pasted URLs from an *arbitrary* site into the same `selectedImages` set as scraped candidates and submit them together. Accepted as-is rather than redesigned into a per-URL `{url, sourceUrl}[]` shape: a mismatched or missing referer here is not a security issue (`ssrfGuard.ts`'s protections are unaffected either way), only a missed opportunity to dodge hotlink protection on a *manually pasted* URL — and manually-pasted URLs are already the fallback for exactly the sites (Amazon/Costco-class defenses) where referer-matching alone was never going to be the deciding factor. Tracking origin per-URL would add real client/server complexity for a marginal, non-functional benefit on the case that matters least.
 
 ### 11.3 `POST /api/import-url/thumbnail` (new)
 
-Request: `{ url: string; sourceUrl?: string }`. Response: the raw image bytes with the sniffed `Content-Type` (a binary passthrough, not JSON) — or a JSON `{ error }` on failure, mirroring the other routes' error shape.
+Request: `{ url: string; sourceUrl?: string }`. On failure: a JSON `{ error }`, mirroring the other routes' error shape.
+
+**On success, this cannot literally be "raw bytes, not JSON" as the first draft of this section said (found by a third review pass, §21).** `StudioResponse` is deliberately only `JsonResponse | FileResponse | SseResponse` (`scripts/lib/studioApi.ts`) — by design, per that type's own comment, specifically so route handlers never touch an HTTP object and stay drivable from Vitest with no server running. There is no in-memory-buffer variant to add bytes to; `FileResponse` requires an actual path on disk (`vite.config.ts`'s dispatcher pipes it straight into `createReadStream`). This codebase already has the right-shaped precedent for "bytes obtained at request time, served once, then discarded": the catalog PDF download path (`registerPdfExport`/`handleExportPdfDownload`) writes to a temp file and returns a `FileResponse` with `onSent` releasing it after the stream finishes. This route follows the same primitive, simplified for a single round trip (the PDF path's token/TTL registry exists because *its* generate and download are two separate requests; this route's fetch-then-serve is one): fetch the image via `fetchUrlSafely`, sniff its type, write it to a fresh file under `os.tmpdir()`, and return a `FileResponse` for that path with `onSent: () => fs.unlink(path)` — no token needed, no new `StudioResponse` variant, no change to `vite.config.ts`'s dispatcher.
 
 **Why POST, not a `GET .../thumbnail?url=...`:** `checkStudioCsrf` (`studio/csrfGuard.ts`) deliberately exempts `GET`/`HEAD`, reasoning that Vite's own CORS/`allowedHosts` checks "already cover reads." That reasoning holds for routes that only read the seller's own local content — it does **not** hold for a route whose side effect is an *outbound network fetch of an attacker-influenced URL*. A bare `<img src="http://127.0.0.1:<port>/api/import-url/thumbnail?url=...">` embedded on any unrelated page the seller happens to have open in another tab would fire with no preflight, no CORS check gating whether it fires (CORS only gates whether the response can be *read* by cross-origin JS, and a plain `<img>` tag never reads it) — reintroducing exactly the class of hole `csrfGuard.ts` exists to close, via a different HTTP method. `ssrfGuard.ts` would still block internal targets, but the seller's machine could be made to originate blind requests to arbitrary *external* attacker-chosen URLs. Keeping this endpoint as CSRF-protected POST (matching every other networked route in this file) closes that off entirely. The client fetches each thumbnail via `fetch()` (POST) → `res.blob()` → `URL.createObjectURL()`, revoked on unmount/replacement.
 
@@ -215,8 +231,8 @@ When the preview returns `images.length === 0`:
 
 | Condition | Message |
 |---|---|
-| `headlessUnavailable === true` | This page may need JavaScript to show photos. Run `npx playwright install chromium` once to enable deeper import (the same one-time step the catalog PDF export uses — already done if you've set that up), then retry — or paste a photo link directly below. |
-| `headlessUnavailable === false` (Tier 2 ran — since the trigger for reaching this branch at all is "Tier 1 found zero images," `false` here always means Tier 2 was attempted and also found nothing) | Couldn't find photos on this page automatically (it may block automated access, or require login). Paste a photo link directly below. |
+| `headlessFailureReason === "not-installed"` | This page may need JavaScript to show photos. Run `npx playwright install chromium` once to enable deeper import (the same one-time step the catalog PDF export uses — already done if you've set that up), then retry — or paste a photo link directly below. |
+| `headlessFailureReason === "navigation-failed"`, or `null` with `usedHeadlessFallback === true` (Tier 2 genuinely ran — installed and working — and still found nothing) | Couldn't find photos on this page automatically (it may block automated access, or require login). Paste a photo link directly below. |
 
 Both states point at the same always-available escape hatch (§9) rather than dead-ending the seller.
 
@@ -230,17 +246,17 @@ New/changed keys in both `studio/src/i18n/strings.en.ts` and `strings.zh.ts` (bi
 
 ## 14. Testing strategy
 
-- **`scripts/lib/ssrfGuard.test.ts`:** cases for the new `checkHostnameAllowed` export, confirming it returns the resolved `address`/`family` alongside `allowed: true` (existing `resolveAndValidate`/`fetchUrlSafely` tests should pass unchanged since it's a refactor, not a behavior change — same one DNS lookup, same pinning), the `referer` header being sent when provided and absent when not, and gzip/deflate/br response decompression against a local test server.
+- **`scripts/lib/ssrfGuard.test.ts`:** cases for the new `checkHostnameAllowed` export, confirming it rejects if *any* address a hostname resolves to is disallowed (not just the first, per §6.3) and returns the resolved `address`/`family` alongside `allowed: true` (existing `resolveAndValidate`/`fetchUrlSafely` tests should pass unchanged since it's a refactor, not a behavior change — same one DNS lookup, same pinning); the `referer` header being sent (as an origin only, per §11.2) when provided and absent when not; gzip/deflate/br response decompression against a local test server; and — the case that matters most, per §8's correction — a local test server that sends a small, deeply-compressed payload past `maxBytes` once decompressed, confirming the streamed decompression aborts before that full size is ever held in memory, not merely that the final returned buffer is checked afterward.
 - **`scripts/lib/chromiumLauncher.test.ts`** (new, extracted alongside the function itself): the direct `launchChromiumOrError()` expectations that today live inline in `scripts/lib/pdfCatalog/generate.test.ts` (its pass-1/pass-2 page-count parity test happens to call it directly, per that file's own comment on why `renderHtmlToPdfBytes` is likewise exported for direct testing). **Correction from a second review pass (§20):** `generate.test.ts` keeps its own tests — its actual subject is PDF pagination, not the launcher — and simply updates its import of `launchChromiumOrError` to the new shared module; only the launcher's *own* dedicated success/missing-package/missing-binary coverage moves into the new file.
 - **`scripts/lib/headlessImport.test.ts`** (new): unit tests against **mocked** Playwright objects (route/request interception decisions — resource-type blocking, hostname allow/deny via a stubbed `checkHostnameAllowed` that enforces the multi-address check per §6.3, and that a registered `routeWebSocket()` handler never calls `connectToServer()`) so the security-critical interception logic is covered deterministically without a real browser. `{ available: false, reason: "not-installed" }` is tested via a stubbed `launchChromiumOrError` returning `{ error }`. **Correction from a second review pass (§20):** real-Chromium smoke tests use the same runtime try/catch soft-skip-with-`console.warn` pattern `generate.test.ts` already uses for its own real-Chromium tests (not a new opt-in-env-var convention as the first draft proposed) — one established way of handling "Chromium may not be installed in this environment" across both modules that now share it, rather than two.
-- **`scripts/lib/studioApi.test.ts`:** two-tier trigger logic using `__setHeadlessRendererForTests` (Tier 2 only invoked when Tier 1 finds zero images; response flags set correctly in each branch), `sourceUrl` → `referer` threading in `handleImageImport`, and the new thumbnail route's CSRF/validation/error-shape behavior.
+- **`scripts/lib/studioApi.test.ts`:** two-tier trigger logic using `__setHeadlessRendererForTests` (Tier 2 only invoked when Tier 1 finds zero images; `headlessFailureReason` set correctly for each of "not-installed," "navigation-failed," and the success case, per §11.1's correction), `sourceUrl` → origin-only `referer` threading in `handleImageImport`, and the new thumbnail route's CSRF/validation/error-shape behavior plus its temp-file lifecycle (§11.3): the file exists on disk while the response streams, `onSent` actually removes it afterward, and a fetch failure never leaves an orphaned temp file behind.
 - **`studio/src/api.test.ts`:** the new thumbnail-fetch client function returns a `Blob` on success and throws the server's `{ error }` message on failure, matching this file's existing per-function test pattern.
 - **`studio/src/panes/NewItemDialog.test.tsx`:** the two new conditional messages render correctly based on preview-response flags, the manual paste-URL textarea's parsing/validation/dedup/merge-into-selection behavior, and thumbnail blob-URL lifecycle (fetched only once `IntersectionObserver` reports a candidate near-viewport, revoked on unmount — no leaked object URLs, no eager fetch of all 40 on mount, and an in-flight thumbnail fetch is actually aborted — not just its blob URL discarded later — when the mode is switched away mid-request, per §11.3).
 
 ## 15. Iron-Rule compliance (CLAUDE.md)
 
 1. **`content/` folder rule:** N/A — no seller-content files touched by this feature.
-2. **Bilingual doc sync:** `docs/CURRENT_FUNCTIONALITY.md`, `docs/DESIGN.md`, and `docs/TECH_REQUIREMENTS.md` all currently describe URL-import — all three **and their `_zh` counterparts** need updates during implementation (new route, new known-limitations note, updated response/body shapes, the shared-launcher relationship with PDF export). Tracked explicitly in §16.
+2. **Bilingual doc sync:** `docs/CURRENT_FUNCTIONALITY.md`, `docs/DESIGN.md`, `docs/TECH_REQUIREMENTS.md`, and `docs/SCRIPTS.md` (the last for its existing Chromium-setup note, which now also covers URL-import) — all four **and their `_zh` counterparts** need updates during implementation (new route, new known-limitations note, updated response/body shapes, the shared-launcher relationship with PDF export). Tracked explicitly in §16.
 3. **App code is live:** this is exactly the kind of explicitly-requested feature change Rule 3 allows.
 4. **`reserved_for` never rendered:** untouched by this feature.
 5. **`image-manifest.json` stays in git:** untouched.
@@ -271,7 +287,7 @@ New/changed keys in both `studio/src/i18n/strings.en.ts` and `strings.zh.ts` (bi
 - `studio/src/i18n/strings.en.ts`, `strings.zh.ts` — new/changed keys (§13).
 - Docs listed in §16.
 
-**Not touched:** `package.json` — no new dependency, no new script (§7).
+**Not touched:** `package.json` — no new dependency, no new script (§7). `studio/vite.config.ts` and the `StudioResponse` type — the new thumbnail route reuses the existing `FileResponse` + temp-file pattern (§11.3), not a new response variant.
 
 ## 18. Out of scope (this change)
 
@@ -312,3 +328,22 @@ A second, separately-spawned subagent reviewed the revised spec — deliberately
 **Fixed as a wording-precision issue, not a real gap:** §6.3's description of the WebSocket block ("never reaches the real server") could be read as the connection visibly failing — Playwright actually mocks it as silently appearing to open. The underlying guarantee (no real socket ever opens) was never wrong, only the phrasing; reworded.
 
 **Independently confirmed accurate — no change:** the `wss://` glob-matching issue (maintainer-confirmed upstream); that Worker-originated WebSockets don't bypass the guard; and that `studioApi.ts`'s flat route-dispatch chain has no shadowing risk for the new thumbnail route.
+
+## 21. Third independent review (fresh subagent, 2026-09-08)
+
+A third, separately-spawned subagent reviewed the spec again — fresh, not a continuation — deliberately pointed at the sections the first two rounds had spent the least time on (§8, §9, §11.1/§11.2, §12, §15) rather than re-litigating §6/§7. Verdict: two of its findings were load-bearing (the design as written could not actually be built), not polish. Both were verified directly against source before fixing, per this project's practice of checking a review's claims rather than accepting either subagent's account at face value.
+
+**Load-bearing fixes:**
+
+- **[security gap]** §8's decompression addition never addressed how it interacts with the existing byte cap. Verified directly: `fetchUrlSafely`'s `res.on("data")` loop enforces `maxBytes` on raw wire chunks as they stream in; decompressing an already-capped buffer afterward (the natural reading of the original wording) would cap only *compressed* size — a small adversarial payload could expand to gigabytes in memory, a real DoS squarely inside this guard's own threat model. Fixed: §8 now specifies streaming decompression through a `zlib` transform with the cap moved to count *decompressed* output bytes, not wire bytes.
+- **[design concern]** §11.3's thumbnail route could not be built as originally specified. Verified directly: `StudioResponse` (`scripts/lib/studioApi.ts`) is deliberately only `JsonResponse | FileResponse | SseResponse` with no in-memory-buffer variant — by the type's own comment, specifically so handlers never touch an HTTP object — and `FileResponse` requires an actual file on disk. Fixed: §11.3 now reuses the exact temp-file + `FileResponse.onSent` pattern this codebase already has for the same shape of problem (the catalog PDF download path), simplified to one request instead of that path's two-step token registry, rather than inventing a new response type.
+
+**Also fixed, smaller precision gaps:**
+
+- **[design concern]** §12's table collapsed `HeadlessRenderResult`'s own `"not-installed"` vs `"navigation-failed"` distinction (§6.1) into one boolean, which would have shown "run `npx playwright install chromium`" advice even when Chromium was installed and working fine but a specific navigation failed for some other reason. Fixed: §11.1's response now carries the real reason through (`headlessFailureReason`), and §12 branches on it.
+- **[design concern]** §11.2 justified one `sourceUrl` per import batch on "every URL comes from the same page" — no longer true once §9's paste-URL escape hatch can merge URLs from any site into one batch. Fixed: §11.2 now states this is an accepted simplification (not a security gap either way) rather than leaving a premise that a later section quietly invalidates.
+- **[nitpick]** The Referer added in §11.2 forwarded the full pasted URL, including path and query — more than a real cross-origin image request would send under browsers' own default `strict-origin-when-cross-origin` policy. Fixed: origin only.
+- **[nitpick]** §15's Rule-2 compliance list dropped `docs/SCRIPTS.md`/`_zh` even though §16 right below it still lists an update there. Fixed: added back for consistency.
+- **[nitpick]** §9 called the paste-URL textarea "always available," but the picker block it would have shared a home with is gated behind `previewFetched` — meaning it wouldn't have been available before a first fetch attempt. Fixed: §9 now places it as its own block outside that gate, which also happens to be the more seller-friendly behavior (skip a doomed fetch entirely on a site already known to need the escape hatch).
+
+**Independently re-verified, not just trusted from §19/§20:** multi-address SSRF validation and first-address pinning; the `checkStudioCsrf` GET/HEAD exemption; and the `generate.test.ts` direct-call coupling. All still accurate.
