@@ -70,6 +70,7 @@ import {
   sniffImageType,
   writeImage,
   type ImageEntry,
+  type ImageKind,
 } from "./studioImages";
 import {
   countCategoryItems,
@@ -78,6 +79,8 @@ import {
   writeCategoryMeta,
   type CategoryMetaInput,
 } from "./studioCategories";
+import { fetchUrlSafely } from "./ssrfGuard";
+import { extractImportCandidates } from "./urlImport";
 import {
   deleteContactImage,
   isValidContactImageFilename,
@@ -613,6 +616,144 @@ async function handleBulkApplyTiers(req: StudioRequest): Promise<StudioResponse>
     }
   }
 
+  return { status: 200, body: result };
+}
+
+// ── Import from URL ───────────────────────────────────────────────────────
+// Two separate server round trips, matching the two-step seller flow: fetch
+// the page and show candidates (no filesystem write, no category/item
+// needed yet), then — once the seller has picked photos and the item exists
+// — download and write only the chosen ones. Both legs go through
+// scripts/lib/ssrfGuard.ts's fetchUrlSafely for every network request this
+// feature makes; nothing here calls fetch/http directly.
+
+// The page fetch only ever needs to read a few KB of <head> metadata in
+// practice, but a generous cap keeps real-world pages (large inline JSON,
+// hydration payloads) working; the image cap matches a typical high-res
+// product photo with headroom.
+const IMPORT_PAGE_FETCH_TIMEOUT_MS = 10_000;
+const IMPORT_PAGE_MAX_BYTES = 8 * 1024 * 1024;
+const IMPORT_IMAGE_FETCH_TIMEOUT_MS = 15_000;
+const IMPORT_IMAGE_MAX_BYTES = 15 * 1024 * 1024;
+// Bounds one request's worth of sequential downloads — this endpoint is a
+// local seller's own tool, not a public API, so a modest cap (rather than a
+// queue/concurrency system) is enough to keep one accidental "select all" on
+// a huge gallery page from taking minutes.
+const IMPORT_MAX_URLS_PER_REQUEST = 24;
+
+function importFetchErrorMessage(err: unknown): string {
+  // SsrfError and Node's own network errors both produce a message that is
+  // safe (and useful) to show the seller as-is: Studio is a local, single-
+  // seller tool, and the "attacker" this guard defends against is the
+  // REMOTE page redirecting the fetch somewhere internal — not the seller
+  // reading their own tool's error output. Naming the disallowed address
+  // back to them is a feature (it explains why an import failed), not a
+  // leak across a trust boundary that doesn't exist here.
+  return err instanceof Error ? err.message : String(err);
+}
+
+const importUrlPreviewBodySchema = z.object({ url: z.string().min(1) });
+
+async function handleImportUrlPreview(req: StudioRequest): Promise<StudioResponse> {
+  const { url } = parseJsonBody(req.body, importUrlPreviewBodySchema);
+
+  let fetched: Awaited<ReturnType<typeof fetchUrlSafely>>;
+  try {
+    fetched = await fetchUrlSafely(url, {
+      timeoutMs: IMPORT_PAGE_FETCH_TIMEOUT_MS,
+      maxBytes: IMPORT_PAGE_MAX_BYTES,
+    });
+  } catch (err: unknown) {
+    throw new StudioError(400, `could not fetch that page: ${importFetchErrorMessage(err)}`);
+  }
+
+  // A content-type that plainly isn't a web page (a direct image/PDF/binary
+  // link) has nothing for extractImportCandidates to parse — report empty
+  // rather than decoding arbitrary bytes as text. A missing content-type is
+  // treated as HTML: many small/misconfigured sites omit it.
+  if (fetched.contentType !== "" && !fetched.contentType.includes("html") && !fetched.contentType.includes("text")) {
+    return { status: 200, body: { name: null, images: [] } };
+  }
+
+  const html = fetched.bytes.toString("utf-8");
+  const { name, images } = extractImportCandidates(html, fetched.finalUrl);
+  return { status: 200, body: { name, images } };
+}
+
+const importImagesBodySchema = z.object({
+  urls: z.array(z.string().min(1)).min(1).max(IMPORT_MAX_URLS_PER_REQUEST),
+});
+
+/**
+ * Forces the written filename's extension to match the SNIFFED image type,
+ * never whatever extension (if any) the URL happened to carry — a page can
+ * serve a real JPEG from a path with no extension, or from one with an
+ * unrelated one (a CMS asset route, a query-string-only image endpoint), and
+ * sniffImageType's verdict is the only one this pipeline trusts anywhere
+ * (see studioImages.ts). This also guarantees isValidImageFilename passes:
+ * `kind` is always one of IMAGE_EXTENSIONS, so the only way this can fail is
+ * an empty usable base name, which the "imported-photo" fallback covers.
+ */
+function deriveImportedFilename(sourceUrl: string, kind: ImageKind): string {
+  let base = "";
+  try {
+    base = path.basename(new URL(sourceUrl).pathname);
+  } catch {
+    base = "";
+  }
+  if (base === "" || base === "/") base = "imported-photo";
+  const withExt = /\.[a-z0-9]+$/i.test(base)
+    ? base.replace(/\.[a-z0-9]+$/i, `.${kind}`)
+    : `${base}.${kind}`;
+  const sanitized = sanitizeUploadFilename(withExt);
+  return isValidImageFilename(sanitized) ? sanitized : `imported-photo.${kind}`;
+}
+
+export type ImportImagesResult = {
+  files: ImageEntry[];
+  imported: number;
+  failed: Array<{ url: string; error: string }>;
+};
+
+async function handleImageImport(
+  req: StudioRequest,
+  category: string,
+  item: string,
+): Promise<StudioResponse> {
+  const { urls } = parseJsonBody(req.body, importImagesBodySchema);
+  const dir = resolveItemDir(req.projectRoot, category, item);
+
+  // Same failure philosophy as handleBulkStatus/handleBulkApplyTiers above:
+  // one bad URL (dead link, a non-image response, a page that blocks
+  // scraping) must not sink photos that DID download fine in the same
+  // batch. Sequential, not concurrent — see IMPORT_MAX_URLS_PER_REQUEST's
+  // comment.
+  const failed: Array<{ url: string; error: string }> = [];
+  let imported = 0;
+  for (const url of urls) {
+    try {
+      const fetched = await fetchUrlSafely(url, {
+        timeoutMs: IMPORT_IMAGE_FETCH_TIMEOUT_MS,
+        maxBytes: IMPORT_IMAGE_MAX_BYTES,
+      });
+      // The extension is whatever the URL happened to carry; the header
+      // bytes are what decide — identical rule to handleImageUpload's own
+      // sniffImageType check, just against a downloaded body instead of an
+      // uploaded one.
+      const kind = sniffImageType(fetched.bytes);
+      if (kind === null) {
+        failed.push({ url, error: "not a JPEG, PNG, WebP or GIF" });
+        continue;
+      }
+      const filename = deriveImportedFilename(fetched.finalUrl, kind);
+      await writeImage(dir, filename, fetched.bytes);
+      imported++;
+    } catch (err: unknown) {
+      failed.push({ url, error: importFetchErrorMessage(err) });
+    }
+  }
+
+  const result: ImportImagesResult = { files: await listImageFiles(dir), imported, failed };
   return { status: 200, body: result };
 }
 
@@ -1592,6 +1733,13 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
       return { status: 405, body: { error: `method not allowed: ${req.method}` } };
     }
 
+    if (pathname === "/api/import-url/preview") {
+      if (req.method !== "POST") {
+        return { status: 405, body: { error: "POST only" } };
+      }
+      return await handleImportUrlPreview(req);
+    }
+
     if (pathname === "/api/readiness") {
       if (req.method === "GET") return await handleReadinessGet(req);
       return { status: 405, body: { error: "GET only" } };
@@ -1637,6 +1785,9 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
       }
       if (req.method === "POST" && filename === "reorder") {
         return await handleImageReorder(req, category, item);
+      }
+      if (req.method === "POST" && filename === "import") {
+        return await handleImageImport(req, category, item);
       }
       if (req.method === "DELETE" && filename !== undefined) {
         return await handleImageDelete(req, category, item, filename);

@@ -574,6 +574,8 @@ Not standalone runnables — imported by the CLIs above. 21 of the 26 modules be
 | `studioGit.ts` | `readChanges`/`publishChanges` restricted to `content` + `lib/generated/image-manifest.json`; `execFile` argument arrays only (no shell); never `git add -A` |
 | `studioImages.ts` | Photo upload/delete/reorder filesystem ops: filename allowlist, magic-byte sniffing, `IMAGE_EXTENSIONS` = jpg\|jpeg\|png\|webp\|gif |
 | `studioSync.ts` | Single-run CDN sync wrapper (mutex on `globalThis`) delivering SSE progress events |
+| `ssrfGuard.ts` | Generic SSRF-safe fetch (`fetchUrlSafely`): scheme allowlist, DNS-resolve-then-pin, per-redirect re-validation, timeout, body-size cap — used by both import-from-URL routes, no Studio-specific knowledge |
+| `urlImport.ts` | Pure HTML text scan (`extractImportCandidates`): name + candidate-photo-URL extraction from already-fetched HTML, no network/filesystem |
 
 ### Build Pipeline Detail
 

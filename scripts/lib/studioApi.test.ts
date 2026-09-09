@@ -20,6 +20,18 @@ import {
 } from "./studioApi";
 import { listImageFiles } from "./studioImages";
 import { getSyncRunner, resetSyncStateForTests, setSyncRunner, streamImageSync } from "./studioSync";
+import { SsrfError, fetchUrlSafely } from "./ssrfGuard";
+
+// The import-from-URL routes are the only ones in this file that make a
+// network request; every other route is pure filesystem I/O. Mocking just
+// fetchUrlSafely (not the whole ssrfGuard module — SsrfError stays real, via
+// importOriginal) keeps those route tests hermetic without re-testing
+// ssrfGuard's own SSRF logic here (see ssrfGuard.test.ts for that).
+vi.mock("./ssrfGuard", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./ssrfGuard")>();
+  return { ...actual, fetchUrlSafely: vi.fn() };
+});
+const fetchUrlSafelyMock = vi.mocked(fetchUrlSafely);
 
 const run = promisify(execFile);
 
@@ -2861,5 +2873,228 @@ describe("GET/DELETE /api/contact/images/:filename", () => {
       }),
     );
     expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /api/import-url/preview", () => {
+  beforeEach(() => {
+    fetchUrlSafelyMock.mockReset();
+  });
+
+  function preview(url: string) {
+    return handleStudioRequest({
+      method: "POST",
+      url: "/api/import-url/preview",
+      body: Buffer.from(JSON.stringify({ url })),
+      projectRoot: PROJECT_ROOT,
+    });
+  }
+
+  it("extracts name and images from the fetched page", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: Buffer.from(
+        `<html><head>
+           <meta property="og:title" content="Vintage Desk Lamp">
+           <meta property="og:image" content="/photos/lamp.jpg">
+         </head><body></body></html>`,
+        "utf-8",
+      ),
+      contentType: "text/html",
+      finalUrl: "https://example.com/listing/123",
+    });
+
+    const res = asJson(await preview("https://example.com/listing/123"));
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      name: "Vintage Desk Lamp",
+      images: ["https://example.com/photos/lamp.jpg"],
+    });
+    // Passed the seller's URL straight through, with SSRF-safe limits — not
+    // some other endpoint's defaults.
+    expect(fetchUrlSafelyMock).toHaveBeenCalledWith(
+      "https://example.com/listing/123",
+      expect.objectContaining({ timeoutMs: expect.any(Number), maxBytes: expect.any(Number) }),
+    );
+  });
+
+  it("reports empty candidates for a non-HTML response instead of parsing binary as text", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: Buffer.from([0xff, 0xd8, 0xff]),
+      contentType: "image/jpeg",
+      finalUrl: "https://example.com/photo.jpg",
+    });
+
+    const res = asJson(await preview("https://example.com/photo.jpg"));
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ name: null, images: [] });
+  });
+
+  it("treats a missing content-type as HTML rather than refusing to parse", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: Buffer.from("<html><head><title>Old Bike</title></head></html>", "utf-8"),
+      contentType: "",
+      finalUrl: "https://example.com/listing",
+    });
+
+    const res = asJson(await preview("https://example.com/listing"));
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ name: "Old Bike" });
+  });
+
+  it("surfaces an SSRF rejection as a 400 with the guard's own message", async () => {
+    fetchUrlSafelyMock.mockRejectedValue(new SsrfError("Disallowed resolved address for internal.example: 10.0.0.5"));
+
+    const res = asJson(await preview("http://internal.example/"));
+
+    expect(res.status).toBe(400);
+    expect((res.body as { error: string }).error).toContain("10.0.0.5");
+  });
+
+  it("400s on a missing url field", async () => {
+    const res = await handleStudioRequest({
+      method: "POST",
+      url: "/api/import-url/preview",
+      body: Buffer.from(JSON.stringify({})),
+      projectRoot: PROJECT_ROOT,
+    });
+    expect(res.status).toBe(400);
+    expect(fetchUrlSafelyMock).not.toHaveBeenCalled();
+  });
+
+  it("405s a GET", async () => {
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/import-url/preview",
+      body: Buffer.alloc(0),
+      projectRoot: PROJECT_ROOT,
+    });
+    expect(res.status).toBe(405);
+  });
+});
+
+describe("POST /api/items/:cat/:item/images/import", () => {
+  beforeEach(async () => {
+    sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "studio-api-import-"));
+    fetchUrlSafelyMock.mockReset();
+    await seedItem("electronics/desk-lamp");
+  });
+
+  afterEach(async () => {
+    await fs.rm(sandbox, { recursive: true, force: true });
+  });
+
+  function importImages(urls: string[]) {
+    return handleStudioRequest({
+      method: "POST",
+      url: "/api/items/electronics/desk-lamp/images/import",
+      body: Buffer.from(JSON.stringify({ urls })),
+      projectRoot: sandbox,
+    });
+  }
+
+  const itemDir = () => path.join(sandbox, "content", "items", "electronics", "desk-lamp");
+
+  it("downloads, sniffs, and writes each selected photo", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: PNG_BYTES,
+      contentType: "image/png",
+      finalUrl: "https://example.com/photos/front.png",
+    });
+
+    const res = asJson(await importImages(["https://example.com/photos/front.png"]));
+
+    expect(res.status).toBe(200);
+    const body = res.body as { imported: number; failed: unknown[]; files: Array<{ name: string }> };
+    expect(body.imported).toBe(1);
+    expect(body.failed).toEqual([]);
+    expect(body.files).toEqual([{ name: "front.png", editable: true }]);
+    const onDisk = await fs.readFile(path.join(itemDir(), "front.png"));
+    expect(onDisk).toEqual(PNG_BYTES);
+  });
+
+  it("forces the written extension to match the sniffed type, not the URL's own extension", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: PNG_BYTES, // a real PNG served from a path claiming .jpg
+      contentType: "image/jpeg",
+      finalUrl: "https://example.com/cdn/asset.jpg",
+    });
+
+    const res = asJson(await importImages(["https://example.com/cdn/asset.jpg"]));
+
+    const body = res.body as { files: Array<{ name: string }> };
+    expect(body.files).toEqual([{ name: "asset.png", editable: true }]);
+  });
+
+  it("falls back to a generic filename when the URL has no usable path", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: PNG_BYTES,
+      contentType: "image/png",
+      finalUrl: "https://example.com/",
+    });
+
+    const res = asJson(await importImages(["https://example.com/"]));
+
+    const body = res.body as { files: Array<{ name: string }> };
+    expect(body.files).toEqual([{ name: "imported-photo.png", editable: true }]);
+  });
+
+  it("reports a non-image response as a per-url failure without writing anything", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: Buffer.from("<!doctype html><title>Not an image</title>"),
+      contentType: "text/html",
+      finalUrl: "https://example.com/not-an-image",
+    });
+
+    const res = asJson(await importImages(["https://example.com/not-an-image"]));
+
+    const body = res.body as { imported: number; failed: Array<{ url: string; error: string }>; files: unknown[] };
+    expect(body.imported).toBe(0);
+    expect(body.failed).toEqual([
+      { url: "https://example.com/not-an-image", error: expect.stringContaining("not a JPEG, PNG, WebP or GIF") },
+    ]);
+    expect(body.files).toEqual([]);
+  });
+
+  it("keeps the photos that succeeded when one URL in the batch fails", async () => {
+    fetchUrlSafelyMock.mockImplementation(async (url: string) => {
+      if (url.includes("bad")) throw new SsrfError("Disallowed resolved address for bad.example: 127.0.0.1");
+      return { bytes: PNG_BYTES, contentType: "image/png", finalUrl: url };
+    });
+
+    const res = asJson(
+      await importImages(["https://good.example/one.png", "https://bad.example/two.png"]),
+    );
+
+    const body = res.body as { imported: number; failed: Array<{ url: string }> };
+    expect(body.imported).toBe(1);
+    expect(body.failed).toEqual([
+      { url: "https://bad.example/two.png", error: expect.stringContaining("127.0.0.1") },
+    ]);
+  });
+
+  it("400s an empty urls array", async () => {
+    const res = await importImages([]);
+    expect(res.status).toBe(400);
+    expect(fetchUrlSafelyMock).not.toHaveBeenCalled();
+  });
+
+  it("400s a batch over the per-request cap", async () => {
+    const urls = Array.from({ length: 25 }, (_, i) => `https://example.com/${i}.jpg`);
+    const res = await importImages(urls);
+    expect(res.status).toBe(400);
+    expect(fetchUrlSafelyMock).not.toHaveBeenCalled();
+  });
+
+  it("400s a GET (routed to handleImageGet, which rejects 'import' as a filename — same as the 'reorder' subpath)", async () => {
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/items/electronics/desk-lamp/images/import",
+      body: Buffer.alloc(0),
+      projectRoot: sandbox,
+    });
+    expect(res.status).toBe(400);
   });
 });

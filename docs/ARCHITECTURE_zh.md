@@ -574,6 +574,8 @@ isTemplateConfigured(): boolean
 | `studioGit.ts` | `readChanges`/`publishChanges` 仅限 `content` + `lib/generated/image-manifest.json`；仅使用 `execFile` 参数数组（无 shell）；绝不使用 `git add -A` |
 | `studioImages.ts` | 照片上传/删除/重排序的文件系统操作：文件名白名单、魔数嗅探、`IMAGE_EXTENSIONS` = jpg\|jpeg\|png\|webp\|gif |
 | `studioSync.ts` | 单次运行的 CDN 同步包装器（互斥锁位于 `globalThis`），以 SSE 进度事件推送状态 |
+| `ssrfGuard.ts` | 通用 SSRF 安全抓取器(`fetchUrlSafely`):协议白名单、先解析 DNS 再绑定连接、每次跳转重新校验、超时、响应体大小上限——供两个"从链接导入"路由共用,不了解 Studio 特有的逻辑 |
+| `urlImport.ts` | 纯 HTML 文本扫描(`extractImportCandidates`):从已抓取的 HTML 中提取名称与候选照片链接,不涉及网络或文件系统 |
 
 ### 构建流程详情
 

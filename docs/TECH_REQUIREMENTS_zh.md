@@ -2578,6 +2578,8 @@ Seller Studio（`pnpm studio`）是一个**仅本地**的浏览器仪表板，�
 | `GET/PUT /api/defaults?scope=site\|<cat>` | 读取 / 写入该作用域的稀疏 `_defaults.json`（`site` → `content/items/_defaults.json`，否则为对应分类自己的）。空 PUT 请求体删除该文件；PUT 会创建缺失的分类文件夹。无效文件以 400 失败并指明文件与字段。 |
 | `GET .../images`、`GET .../images/<filename>` | 列出 / 提供照片（包含性验证；编码的 `%2F` 遍历被阻断）。 |
 | `POST .../images`、`POST .../images/reorder`、`DELETE .../images/<filename>` | 上传（base64，魔数字节嗅探）、重新排序、删除。 |
+| `POST /api/import-url/preview` | 对卖家提供的 `{ url }` 做 SSRF 安全抓取（`scripts/lib/ssrfGuard.ts`），再提取（`scripts/lib/urlImport.ts`）一个猜测的 `name` 和一份经过过滤、去重的候选照片 `images`(绝对 URL 列表)——此时尚未下载或写入任何内容。抓取被拒绝或失败(协议不允许、地址被禁止、超时、响应体过大)时返回 `400` 及 `{ error }`。非 HTML 响应返回 `{ name: null, images: [] }`,而不会把二进制字节当文本解析。 |
+| `POST .../images/import` | 请求体 `{ urls: string[] }`(最多 24 个)——通过同一个 SSRF 安全抓取逐一下载每个 URL,从字节内容嗅探真实图片类型(绝不信任 URL 扩展名或远端 `Content-Type`),再经既有的 `writeImage` 防覆盖写入流程落盘。单个 URL 失败不会拖累整批:响应恒为 `200`,携带 `{ files, imported, failed: [{ url, error }] }`。 |
 | `POST /api/sync-images` | 启动 CDN 同步；返回 **SSE** 进度流（`progress`/`done`/`error`）。 |
 | `GET /api/changes` | 供发布面板使用的 git 状态（未提交更改）。 |
 | `POST /api/publish` | `git add content + manifest`、提交、推送。同步运行时被拒绝（409）。 |
@@ -2592,6 +2594,7 @@ Seller Studio（`pnpm studio`）是一个**仅本地**的浏览器仪表板，�
 - **发布安全**（`scripts/lib/studioGit.ts`）：`git add` 只命名可发布路径（`content/` 和 `lib/generated/image-manifest.json`——与 `pnpm push` 相同），**绝不使用 `git add -A`**，因此 `.env.local`（含 CDN 凭据）绝不会被顺带提交。仅用参数数组的 `execFile`（无 shell）；提交消息通过 stdin；处理 detached HEAD / 未出生分支情况。
 - **`reserved_for` 从不被任何 Studio 路径读取、写入或发送**（铁律 4）。
 - 可编辑字段由 `scripts/lib/itemFields.ts` 强制——一个独立的 Zod 镜像（无 `.catch`/`.default`/`.preprocess`，因此 `safeParse` 失败即硬拒绝）；漂移测试断言与 `itemJsonSchema` 在每个嵌套级别的一致性。
+- **SSRF 防护**(`scripts/lib/ssrfGuard.ts`,在 `scripts/lib/ssrfGuard.test.ts` 中单元测试):唯一会发起出站网络请求的两个路由(`POST /api/import-url/preview` 和 `POST .../images/import`)一律只经由 `fetchUrlSafely`,绝不直接调用裸 `fetch`/`http`。只尝试 `http:`/`https:` 协议。主机名通过 `dns.promises.lookup(..., { all: true })` 解析;只要解析出的**任意**地址属于回环(`127.0.0.0/8`、`::1`)、内网(`10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`、`fc00::/7`)、链路本地(`169.254.0.0/16`——含云平台元数据地址 `169.254.169.254`——`fe80::/10`)、组播或其他保留地址段(IPv4-mapped/IPv4-compatible 的 IPv6 地址会被解包,内嵌的 IPv4 部分同样重新检查),该次请求就会被直接拒绝。随后 TCP/TLS 连接会直接建立到那个**已通过校验**的地址(通过 Node 的 `lookup` 覆写实现,而不是重新解析主机名)——这正是为了堵住"先检查、后请求"式实现会留下的 DNS 重绑定(rebinding)TOCTOU 漏洞;TLS 证书校验始终保持开启。每一次跳转(redirect)都会重新完整执行协议 + DNS 解析校验——页面不能只在最初通过一次校验,之后再跳转到内网地址。页面抓取和每张图片下载都各自设有超时与响应体最大字节数限制,一旦超出上限就立即销毁连接,而不是先缓冲再检查。
 
 ### 30.5 CDN 同步（`scripts/lib/studioSync.ts`）
 
@@ -2599,7 +2602,7 @@ Seller Studio（`pnpm studio`）是一个**仅本地**的浏览器仪表板，�
 
 ### 30.6 测试覆盖
 
-Studio 覆盖**仅后端**：`studioApi`、`studioGit`、`studioImages`、`studioSync`、`itemEdit`、`itemFields`、`csrfGuard` 和 `studioFields` 测试（见 §25.3）。SPA UI 本身不做单元测试。
+Studio 覆盖**仅后端**：`studioApi`、`studioGit`、`studioImages`、`studioSync`、`itemEdit`、`itemFields`、`csrfGuard`、`ssrfGuard`、`urlImport` 和 `studioFields` 测试（见 §25.3）。SPA UI 本身不做单元测试,但 `NewItemDialog.test.tsx` 中"从链接导入"流程有针对性的组件测试(mock `fetch`,并非真实网络请求)。
 
 ---
 

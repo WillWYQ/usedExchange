@@ -2893,6 +2893,8 @@ creation, CDN sync, and git publish. It is a Vite SPA (`studio/`) served togethe
 | `GET/PUT /api/defaults?scope=site\|<cat>` | Read / write the sparse `_defaults.json` for that scope (`site` → `content/items/_defaults.json`, otherwise the category's own). An empty PUT body deletes the file; PUT creates a missing category folder. Invalid files fail with a 400 naming the file and field. |
 | `GET .../images`, `GET .../images/<filename>` | List / serve a photo (containment-verified; encoded-`%2F` traversal blocked). |
 | `POST .../images`, `POST .../images/reorder`, `DELETE .../images/<filename>` | Upload (base64, magic-byte sniff), reorder, delete. |
+| `POST /api/import-url/preview` | SSRF-safe fetch (`scripts/lib/ssrfGuard.ts`) of a seller-supplied `{ url }`, then extracts (`scripts/lib/urlImport.ts`) a best-guess `name` and a filtered, deduped list of candidate photo `images` (absolute URLs) — nothing is downloaded or written yet. `400` with `{ error }` for a rejected/failed fetch (bad scheme, disallowed address, timeout, oversized body). A non-HTML response returns `{ name: null, images: [] }` rather than parsing binary bytes as text. |
+| `POST .../images/import` | Body `{ urls: string[] }` (max 24) — downloads each URL through the same SSRF-safe fetch, sniffs the real image type from bytes (never the URL extension or remote `Content-Type`), and writes it via the existing `writeImage`/collision-avoiding pipeline. Per-URL failures never fail the batch: response is always `200` with `{ files, imported, failed: [{ url, error }] }`. |
 | `POST /api/sync-images` | Start a CDN sync; returns an **SSE** progress stream (`progress`/`done`/`error`). |
 | `GET /api/changes` | Git status (uncommitted changes) for the publish pane. |
 | `POST /api/publish` | `git add content + manifest`, commit, push. Refused (409) while a sync is running. |
@@ -2915,6 +2917,21 @@ Route regexes match the raw percent-encoded path and decode each segment **after
 - Editable fields are enforced by `scripts/lib/itemFields.ts` — an independent Zod mirror (no
   `.catch`/`.default`/`.preprocess`, so a `safeParse` failure is a hard rejection); drift tests assert
   parity with `itemJsonSchema` at every nesting level.
+- **SSRF guard** (`scripts/lib/ssrfGuard.ts`, unit-tested in `scripts/lib/ssrfGuard.test.ts`): the only two
+  routes that make an outbound network request (`POST /api/import-url/preview` and
+  `POST .../images/import`) go exclusively through `fetchUrlSafely`, never a bare `fetch`/`http` call.
+  Only `http:`/`https:` schemes are attempted. The hostname is resolved via `dns.promises.lookup(...,
+  { all: true })`; the request is rejected outright if **any** resolved address is loopback
+  (`127.0.0.0/8`, `::1`), private (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`),
+  link-local (`169.254.0.0/16` — including the `169.254.169.254` cloud metadata address — `fe80::/10`),
+  multicast, or another reserved range (IPv4-mapped/IPv4-compatible IPv6 addresses are unwrapped and the
+  embedded IPv4 re-checked). The TCP/TLS socket then connects directly to the address that was actually
+  validated (via Node's `lookup` override, not by re-resolving the hostname), which is what closes the
+  DNS-rebinding TOCTOU gap a "check then fetch" implementation would leave open; TLS certificate
+  verification stays on. Every redirect hop re-runs the full scheme + DNS-resolve-and-validate check — a
+  page cannot pass validation once and then 302 somewhere internal. Both the page fetch and each image
+  download carry an independent timeout and a maximum response-body size, enforced by destroying the
+  socket the instant the cap would be exceeded rather than buffering past it.
 
 ### 30.5 CDN sync (`scripts/lib/studioSync.ts`)
 
@@ -2926,7 +2943,9 @@ subsequent reads show fresh CDN URLs.
 ### 30.6 Test coverage
 
 Studio coverage is **backend-only**: `studioApi`, `studioGit`, `studioImages`, `studioSync`, `itemEdit`,
-`itemFields`, `csrfGuard`, and `studioFields` tests (see §25.3). The SPA UI itself is not unit-tested.
+`itemFields`, `csrfGuard`, `ssrfGuard`, `urlImport`, and `studioFields` tests (see §25.3). The SPA UI
+itself is not unit-tested, except targeted component tests such as `NewItemDialog.test.tsx`'s
+import-from-URL flow (mocked `fetch`, not a real network request).
 
 ---
 

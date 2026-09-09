@@ -93,6 +93,226 @@ describe("NewItemDialog", () => {
     expect(queryByRole("alert")).toBeNull();
   });
 
+  describe("url mode", () => {
+    function fetchMockFor({
+      preview = { name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg", "https://example.com/b.jpg"] },
+      createStatus = 201,
+      createBody = { id: "electronics/vintage-desk-lamp" },
+      importBody = { files: [], imported: 2, failed: [] },
+    }: {
+      preview?: { name: string | null; images: string[] };
+      createStatus?: number;
+      createBody?: unknown;
+      importBody?: unknown;
+    } = {}) {
+      return vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/import-url/preview") return jsonResponse(preview);
+        if (url === "/api/items") return jsonResponse(createBody, createStatus);
+        if (url.endsWith("/images/import")) return jsonResponse(importBody);
+        throw new Error(`unexpected fetch: ${url}`);
+      });
+    }
+
+    it("fetches a preview, pre-fills the name, and pre-selects every candidate photo", async () => {
+      const fetchMock = fetchMockFor();
+      vi.stubGlobal("fetch", fetchMock);
+      const { getByRole, getByLabelText, getByText, findByDisplayValue } = renderWithStudioI18n(
+        <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+      );
+      fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+      fireEvent.change(getByLabelText(/^Product page URL/), {
+        target: { value: "https://example.com/listing/1" },
+      });
+      fireEvent.click(getByText("Fetch page"));
+
+      await findByDisplayValue("Vintage Desk Lamp");
+      const checkboxes = document.querySelectorAll<HTMLInputElement>(".url-picker-thumb input[type=checkbox]");
+      expect(checkboxes).toHaveLength(2);
+      expect(Array.from(checkboxes).every((cb) => cb.checked)).toBe(true);
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/import-url/preview",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ url: "https://example.com/listing/1" }),
+        }),
+      );
+    });
+
+    it("creates the item then imports only the selected photos", async () => {
+      const fetchMock = fetchMockFor();
+      vi.stubGlobal("fetch", fetchMock);
+      const onCreated = vi.fn();
+      const { getByRole, getByLabelText, getByText, findByDisplayValue } = renderWithStudioI18n(
+        <NewItemDialog categories={[]} onCreated={onCreated} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+      );
+      fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+      fireEvent.change(getByLabelText(/^Category/), { target: { value: "electronics" } });
+      fireEvent.change(getByLabelText(/^Product page URL/), {
+        target: { value: "https://example.com/listing/1" },
+      });
+      fireEvent.click(getByText("Fetch page"));
+      await findByDisplayValue("Vintage Desk Lamp");
+      fireEvent.change(getByLabelText(/^Item name/), { target: { value: "vintage-desk-lamp" } });
+
+      // Un-check one of the two candidates before creating.
+      const checkboxes = document.querySelectorAll<HTMLInputElement>(".url-picker-thumb input[type=checkbox]");
+      fireEvent.click(checkboxes[1]!);
+
+      fireEvent.click(getByText("Create item & import photos"));
+      await waitFor(() => expect(onCreated).toHaveBeenCalledWith("electronics/vintage-desk-lamp"));
+
+      const importCall = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/images/import"));
+      expect(importCall).toBeDefined();
+      const [, init] = importCall as [string, RequestInit];
+      expect(JSON.parse(init.body as string)).toEqual({ urls: ["https://example.com/a.jpg"] });
+    });
+
+    it("creates the item with no import call when the page has no candidate photos", async () => {
+      const fetchMock = fetchMockFor({
+        preview: { name: "Old Chair", images: [] },
+        createBody: { id: "furniture/old-chair" },
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const onCreated = vi.fn();
+      const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+        <NewItemDialog categories={[]} onCreated={onCreated} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+      );
+      fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+      fireEvent.change(getByLabelText(/^Category/), { target: { value: "furniture" } });
+      fireEvent.change(getByLabelText(/^Product page URL/), {
+        target: { value: "https://example.com/listing/2" },
+      });
+      fireEvent.click(getByText("Fetch page"));
+      await findByText(/No photos found/);
+      // The detected name is human-readable, not a slug — the seller edits it
+      // before saving, same as the manual item-mode flow.
+      fireEvent.change(getByLabelText(/^Item name/), { target: { value: "old-chair" } });
+
+      fireEvent.click(getByText("Create item & import photos"));
+      await waitFor(() => expect(onCreated).toHaveBeenCalledWith("furniture/old-chair"));
+
+      expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/images/import"))).toBe(false);
+    });
+
+    it("holds the dialog open with a warning instead of navigating away when a photo import partially fails", async () => {
+      const fetchMock = fetchMockFor({
+        importBody: {
+          files: [{ name: "a.jpg", editable: true }],
+          imported: 1,
+          failed: [{ url: "https://example.com/b.jpg", error: "not a JPEG, PNG, WebP or GIF" }],
+        },
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const onCreated = vi.fn();
+      const { getByRole, getByLabelText, getByText, findByDisplayValue, findByRole } = renderWithStudioI18n(
+        <NewItemDialog categories={[]} onCreated={onCreated} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+      );
+      fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+      fireEvent.change(getByLabelText(/^Category/), { target: { value: "electronics" } });
+      fireEvent.change(getByLabelText(/^Product page URL/), {
+        target: { value: "https://example.com/listing/1" },
+      });
+      fireEvent.click(getByText("Fetch page"));
+      await findByDisplayValue("Vintage Desk Lamp");
+      fireEvent.change(getByLabelText(/^Item name/), { target: { value: "vintage-desk-lamp" } });
+
+      fireEvent.click(getByText("Create item & import photos"));
+      const status = await findByRole("status");
+      expect(status.textContent).toContain("1");
+      expect(onCreated).not.toHaveBeenCalled();
+
+      // The dialog now shows a plain "Create" continue action that finalises
+      // navigation with the already-created item id, rather than re-creating it.
+      fireEvent.click(getByText("Create"));
+      await waitFor(() => expect(onCreated).toHaveBeenCalledWith("electronics/vintage-desk-lamp"));
+      expect(fetchMock.mock.calls.filter(([input]) => String(input) === "/api/items")).toHaveLength(1);
+    });
+
+    it("does not resurrect a stale pending-warning id when the seller switches away and submits a different mode", async () => {
+      // Regression: the submit handler used to key off createdIdPendingWarning
+      // alone, with no mode check. After a partial photo-import warning left
+      // it set, switching to Item mode and clicking its (visually ordinary)
+      // Create button silently re-navigated to the OLD url-mode item instead
+      // of creating the new one the seller actually asked for.
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/import-url/preview") {
+          return jsonResponse({ name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] });
+        }
+        if (url === "/api/items") return jsonResponse({ id: "electronics/vintage-desk-lamp" }, 201);
+        if (url.endsWith("/images/import")) {
+          return jsonResponse({
+            files: [],
+            imported: 0,
+            failed: [{ url: "https://example.com/a.jpg", error: "not a JPEG, PNG, WebP or GIF" }],
+          });
+        }
+        if (url === "/api/categories") return jsonResponse({ slug: "toys" }, 201);
+        throw new Error(`unexpected fetch: ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const onCreated = vi.fn();
+      const onCategoryCreated = vi.fn();
+      const { getByRole, getByLabelText, getByText, findByDisplayValue, findByRole } = renderWithStudioI18n(
+        <NewItemDialog categories={[]} onCreated={onCreated} onCategoryCreated={onCategoryCreated} onCancel={vi.fn()} />,
+      );
+      fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+      fireEvent.change(getByLabelText(/^Category/), { target: { value: "electronics" } });
+      fireEvent.change(getByLabelText(/^Product page URL/), {
+        target: { value: "https://example.com/listing/1" },
+      });
+      fireEvent.click(getByText("Fetch page"));
+      await findByDisplayValue("Vintage Desk Lamp");
+      fireEvent.change(getByLabelText(/^Item name/), { target: { value: "vintage-desk-lamp" } });
+      fireEvent.click(getByText("Create item & import photos"));
+      await findByRole("status"); // the partial-failure warning, leaving createdIdPendingWarning set
+
+      fireEvent.click(getByRole("tab", { name: "Category" }));
+      fireEvent.change(getByLabelText("Category slug", { exact: false }), { target: { value: "toys" } });
+      fireEvent.click(getByText("Create"));
+
+      await waitFor(() => expect(onCategoryCreated).toHaveBeenCalledWith("toys"));
+      expect(onCreated).not.toHaveBeenCalled();
+    });
+
+    it("does not let a preview fetch that resolves after the seller switches away overwrite the other mode's name field", async () => {
+      // Regression: fetchUrlPreview's async resolution read `mode` from the
+      // closure at call time. Switching to Item mode while the fetch was
+      // still in flight, then typing a name there, could be silently
+      // clobbered the instant the stale url-mode fetch resolved.
+      let resolvePreview!: (res: Response) => void;
+      const pendingPreview = new Promise<Response>((resolve) => {
+        resolvePreview = resolve;
+      });
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input) === "/api/import-url/preview") return pendingPreview;
+        throw new Error(`unexpected fetch: ${String(input)}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const { getByRole, getByLabelText, getByText } = renderWithStudioI18n(
+        <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+      );
+      fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+      fireEvent.change(getByLabelText(/^Product page URL/), {
+        target: { value: "https://example.com/listing/1" },
+      });
+      fireEvent.click(getByText("Fetch page"));
+
+      fireEvent.click(getByRole("tab", { name: "Item" }));
+      fireEvent.change(getByLabelText(/^Item name/), { target: { value: "my-own-item" } });
+
+      resolvePreview(jsonResponse({ name: "Some Scraped Name", images: [] }));
+      // Flush the resolved fetch's microtask chain (fetch -> res.json() ->
+      // fetchUrlPreview's own await) without relying on a real timer.
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+      }
+
+      expect((getByLabelText(/^Item name/) as HTMLInputElement).value).toBe("my-own-item");
+    });
+  });
+
   it("does not carry the item-name draft over into the category-slug field", () => {
     // `name` backs both the Item mode "Item name" input and the Category
     // mode "Category slug" input — switching modes must clear it, or a
