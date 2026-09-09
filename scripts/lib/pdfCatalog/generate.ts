@@ -18,6 +18,7 @@ import { resolveAnchorPageNumbers } from "./resolvePageNumbers";
 import type { Platform } from "../../../lib/config/types";
 import { resolveContactActionSeed, resolvePlatform, type ContactActionSeed } from "./contactLinks";
 import { renderQrSvg } from "./qr";
+import { launchChromiumOrError } from "../chromiumLauncher";
 
 export type PdfExportOptions = {
   locale: string;
@@ -287,22 +288,6 @@ export function groupEligibleItems(
 // versus before this feature.
 const RENDER_TIMEOUT_MS = 60_000;
 
-// Dynamic import, not a static one — see the module-level comment further up
-// this file (generate.ts is imported at Studio module-load time; a static
-// import of a devDependency would crash Studio boot on a site that skipped
-// `pnpm install`). Missing *package* and missing Chromium *binary* both land
-// in this same catch and produce the same friendly typed error. Exported so
-// a caller that needs to render multiple documents (e.g. the two-pass
-// catalog render in generateCatalogPdf) can launch once and reuse the
-// browser, instead of every render call launching (and closing) its own.
-export async function launchChromiumOrError(): Promise<{ browser: Browser } | { error: string }> {
-  try {
-    const { chromium } = await import("playwright");
-    return { browser: await chromium.launch() };
-  } catch {
-    return { error: "PDF renderer not installed. Run: npx playwright install chromium" };
-  }
-}
 
 // Both renderHtmlToPdfBytes and renderHtmlToPdf report the same two
 // moments — a downloaded photo during prefetch, and the point right before
