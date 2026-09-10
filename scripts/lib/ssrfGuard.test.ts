@@ -1,3 +1,4 @@
+import * as crypto from "crypto";
 import * as http from "http";
 import type { AddressInfo } from "net";
 import * as zlib from "zlib";
@@ -445,6 +446,153 @@ describe("fetchUrlSafely — end-to-end mechanics against a real server (loopbac
     try {
       const result = await fetchUrlSafely(`http://127.0.0.1:${port}/`, { timeoutMs: 2000, maxBytes: 10_000 });
       expect(result.bytes.toString("utf-8")).toBe("plain text, no encoding");
+    } finally {
+      await closeAll([server]);
+    }
+  });
+
+  // "Content-Encoding: deflate" is ambiguous on the wire: some servers send
+  // zlib-wrapped deflate (RFC 1950), others send raw deflate (RFC 1951),
+  // under the identical header. Both variants must decode.
+  it("transparently decompresses a zlib-wrapped deflate response (RFC 1950)", async () => {
+    const wrapped = zlib.deflateSync(Buffer.from("hello from zlib-wrapped deflate"));
+    expect(wrapped[0]! & 0x0f).toBe(8); // sanity: this is the RFC-1950 variant
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { "Content-Encoding": "deflate" });
+      res.end(wrapped);
+    });
+    const port = await listen(server);
+    try {
+      const result = await fetchUrlSafely(`http://127.0.0.1:${port}/`, {
+        timeoutMs: 2000,
+        maxBytes: 10_000,
+      });
+      expect(result.bytes.toString("utf-8")).toBe("hello from zlib-wrapped deflate");
+    } finally {
+      await closeAll([server]);
+    }
+  });
+
+  it("transparently decompresses a raw deflate response (RFC 1951) under the same Content-Encoding: deflate", async () => {
+    const raw = zlib.deflateRawSync(Buffer.from("hello from raw deflate"));
+    expect(raw[0]! & 0x0f).not.toBe(8); // sanity: this is NOT the RFC-1950 variant
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { "Content-Encoding": "deflate" });
+      res.end(raw);
+    });
+    const port = await listen(server);
+    try {
+      const result = await fetchUrlSafely(`http://127.0.0.1:${port}/`, {
+        timeoutMs: 2000,
+        maxBytes: 10_000,
+      });
+      expect(result.bytes.toString("utf-8")).toBe("hello from raw deflate");
+    } finally {
+      await closeAll([server]);
+    }
+  });
+
+  // Choosing the deflate variant means peeking the first body chunk before a
+  // transform exists. This proves that peeked chunk is still fed in, and that
+  // the remaining chunks arrive in order, on a body far too big for one chunk.
+  it("preserves every byte of a multi-chunk raw-deflate body across the first-chunk peek", async () => {
+    // Random bytes on purpose: compressible filler would shrink to a single
+    // wire chunk and quietly stop testing the multi-chunk handoff.
+    const original = crypto.randomBytes(300_000);
+    const compressed = zlib.deflateRawSync(original);
+    expect(compressed.length).toBeGreaterThan(100_000); // sanity: spans many chunks
+
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { "Content-Encoding": "deflate" });
+      res.end(compressed);
+    });
+    const port = await listen(server);
+    try {
+      const result = await fetchUrlSafely(`http://127.0.0.1:${port}/`, {
+        timeoutMs: 5000,
+        maxBytes: 1_000_000,
+      });
+      expect(result.bytes.length).toBe(original.length);
+      expect(Buffer.compare(result.bytes, original)).toBe(0);
+    } finally {
+      await closeAll([server]);
+    }
+  });
+
+  it("still caps DECOMPRESSED size on the raw-deflate path (sniffing must not bypass the cap)", async () => {
+    const huge = Buffer.alloc(200_000, "a");
+    const compressed = zlib.deflateRawSync(huge);
+    expect(compressed.length).toBeLessThan(2_000); // sanity: tiny on the wire
+
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { "Content-Encoding": "deflate" });
+      res.end(compressed);
+    });
+    const port = await listen(server);
+    try {
+      await expect(
+        fetchUrlSafely(`http://127.0.0.1:${port}/`, { timeoutMs: 2000, maxBytes: 10_000 }),
+      ).rejects.toThrow(/exceeded maxBytes/);
+    } finally {
+      await closeAll([server]);
+    }
+  });
+
+  // Real servers routinely cut a compressed body short. Browsers keep what
+  // decoded; erroring the whole fetch loses content that was already readable.
+  it("recovers content from a truncated gzip body instead of failing the whole fetch", async () => {
+    const text = "content that survived a truncated gzip stream";
+    const compressed = zlib.gzipSync(Buffer.from(text));
+    const truncated = compressed.subarray(0, compressed.length - 5);
+
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/html", "Content-Encoding": "gzip" });
+      res.end(truncated);
+    });
+    const port = await listen(server);
+    try {
+      const result = await fetchUrlSafely(`http://127.0.0.1:${port}/`, {
+        timeoutMs: 2000,
+        maxBytes: 10_000,
+      });
+      expect(result.bytes.toString("utf-8")).toBe(text);
+    } finally {
+      await closeAll([server]);
+    }
+  });
+
+  // Guards the tolerant finishFlush added to the br path: a COMPLETE brotli
+  // stream must still round-trip exactly.
+  it("transparently decompresses a complete br response", async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { "Content-Encoding": "br" });
+      res.end(zlib.brotliCompressSync(Buffer.from("hello from brotli")));
+    });
+    const port = await listen(server);
+    try {
+      const result = await fetchUrlSafely(`http://127.0.0.1:${port}/`, {
+        timeoutMs: 2000,
+        maxBytes: 10_000,
+      });
+      expect(result.bytes.toString("utf-8")).toBe("hello from brotli");
+    } finally {
+      await closeAll([server]);
+    }
+  });
+
+  it("resolves to zero bytes for an empty body sent under Content-Encoding: gzip", async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/html", "Content-Encoding": "gzip" });
+      res.end();
+    });
+    const port = await listen(server);
+    try {
+      const result = await fetchUrlSafely(`http://127.0.0.1:${port}/`, {
+        timeoutMs: 2000,
+        maxBytes: 10_000,
+      });
+      expect(result.bytes.length).toBe(0);
+      expect(result.contentType).toBe("text/html");
     } finally {
       await closeAll([server]);
     }

@@ -257,18 +257,45 @@ function stripContentType(header: string | undefined): string {
   return value.trim().toLowerCase();
 }
 
-function pickDecompressor(contentEncoding: string | string[] | undefined): (NodeJS.ReadWriteStream & { destroy(): void }) | null {
-  const value = Array.isArray(contentEncoding) ? contentEncoding[0] : contentEncoding;
+type Decompressor = zlib.Gunzip | zlib.Inflate | zlib.InflateRaw | zlib.BrotliDecompress;
+
+// By default zlib/brotli demand a properly terminated stream at end of input
+// and throw "unexpected end of file" otherwise. Real servers routinely cut a
+// compressed body short (or send an empty body under a compression header),
+// and browsers keep whatever already decoded rather than discarding the whole
+// response — these flush modes buy that same tolerance. They do NOT weaken the
+// maxBytes cap: it still counts every byte the transform emits, identically.
+const ZLIB_TOLERANT_FINISH = { finishFlush: zlib.constants.Z_SYNC_FLUSH } as const;
+const BROTLI_TOLERANT_FINISH = { finishFlush: zlib.constants.BROTLI_OPERATION_FLUSH } as const;
+
+type ContentEncoding = "gzip" | "deflate" | "br" | "identity";
+
+function normalizeContentEncoding(header: string | string[] | undefined): ContentEncoding {
+  const value = Array.isArray(header) ? header[0] : header;
   switch ((value ?? "").trim().toLowerCase()) {
     case "gzip":
-      return zlib.createGunzip() as NodeJS.ReadWriteStream & { destroy(): void };
+      return "gzip";
     case "deflate":
-      return zlib.createInflate() as NodeJS.ReadWriteStream & { destroy(): void };
+      return "deflate";
     case "br":
-      return zlib.createBrotliDecompress() as NodeJS.ReadWriteStream & { destroy(): void };
+      return "br";
     default:
-      return null;
+      return "identity";
   }
+}
+
+/**
+ * `Content-Encoding: deflate` is ambiguous on the wire: the spec means
+ * zlib-wrapped deflate (RFC 1950), but a meaningful slice of servers send raw
+ * deflate (RFC 1951) under the identical header. The header alone therefore
+ * cannot pick the transform — every major HTTP client instead sniffs the first
+ * body byte, whose low nibble is the zlib CMF compression method (8 = deflate)
+ * when the stream is wrapped. Anything else is treated as raw.
+ */
+function createDeflateDecompressor(firstByte: number): Decompressor {
+  return (firstByte & 0x0f) === 8
+    ? zlib.createInflate(ZLIB_TOLERANT_FINISH)
+    : zlib.createInflateRaw(ZLIB_TOLERANT_FINISH);
 }
 
 export async function fetchUrlSafely(
@@ -359,36 +386,24 @@ export async function fetchUrlSafely(
           }
 
           const contentType = stripContentType(res.headers["content-type"]);
-          const decompressor = pickDecompressor(res.headers["content-encoding"]);
-          // The cap runs on whatever stream produces the FINAL content bytes -- the
-          // decompressor's output when one exists, never on compressed wire bytes.
-          // Capping compressed size only would let a small adversarial payload
-          // expand to gigabytes in memory before any check ever saw the real size.
-          const source: NodeJS.ReadableStream = decompressor ? res.pipe(decompressor) : res;
+          const encoding = normalizeContentEncoding(res.headers["content-encoding"]);
 
           const chunks: Buffer[] = [];
           let total = 0;
-          let destroyed = false;
+          let settled = false;
+          let decompressor: Decompressor | null = null;
 
           const fail = (err: Error) => {
-            if (destroyed) return;
-            destroyed = true;
+            if (settled) return;
+            settled = true;
             res.destroy();
             decompressor?.destroy();
             rejectPromise(err);
           };
 
-          source.on("data", (chunk: Buffer) => {
-            if (destroyed) return;
-            total += chunk.length;
-            if (total > options.maxBytes) {
-              fail(new SsrfError(`Response exceeded maxBytes (${options.maxBytes})`));
-              return;
-            }
-            chunks.push(chunk);
-          });
-          source.on("end", () => {
-            if (destroyed) return;
+          const succeed = () => {
+            if (settled) return;
+            settled = true;
             resolvePromise({
               kind: "final",
               result: {
@@ -397,11 +412,65 @@ export async function fetchUrlSafely(
                 finalUrl: currentUrl.toString(),
               },
             });
-          });
-          source.on("error", fail);
+          };
+
+          // The cap runs on whatever stream produces the FINAL content bytes -- the
+          // decompressor's output when one exists, never on compressed wire bytes.
+          // Capping compressed size only would let a small adversarial payload
+          // expand to gigabytes in memory before any check ever saw the real size.
+          const collect = (chunk: Buffer) => {
+            if (settled) return;
+            total += chunk.length;
+            if (total > options.maxBytes) {
+              fail(new SsrfError(`Response exceeded maxBytes (${options.maxBytes})`));
+              return;
+            }
+            chunks.push(chunk);
+          };
+
+          // Every decompressed byte is counted by `collect` here, so the cap
+          // applies identically on every encoding path.
+          const capOutputOf = (transform: Decompressor): Decompressor => {
+            decompressor = transform;
+            transform.on("data", collect);
+            transform.on("end", succeed);
+            transform.on("error", fail);
+            return transform;
+          };
+
+          if (encoding === "gzip" || encoding === "br") {
+            res.pipe(
+              capOutputOf(
+                encoding === "gzip"
+                  ? zlib.createGunzip(ZLIB_TOLERANT_FINISH)
+                  : zlib.createBrotliDecompress(BROTLI_TOLERANT_FINISH),
+              ),
+            );
+          } else if (encoding === "deflate") {
+            // Which deflate variant this is can only be known from the body, so
+            // the first chunk is peeked before the transform is chosen -- then
+            // written into that transform rather than dropped, with the rest
+            // piped in normally so pipe()'s backpressure still applies.
+            const endBeforeSniff = () => succeed(); // empty body: nothing to inflate
+            const sniff = (chunk: Buffer) => {
+              if (settled || chunk.length === 0) return;
+              res.pause();
+              res.removeListener("data", sniff);
+              res.removeListener("end", endBeforeSniff);
+              const transform = capOutputOf(createDeflateDecompressor(chunk[0]!));
+              transform.write(chunk); // the peeked chunk is fed in, never dropped
+              res.pipe(transform); // resumes the paused response
+            };
+            res.on("data", sniff);
+            res.on("end", endBeforeSniff);
+          } else {
+            res.on("data", collect);
+            res.on("end", succeed);
+          }
           // .pipe() does not forward 'error' events from its source by default --
           // this must be attached regardless of whether decompression is in play,
-          // or a raw network error on `res` would go unhandled when source !== res.
+          // or a raw network error on `res` would go unhandled when the collected
+          // stream is the decompressor rather than `res` itself.
           res.on("error", fail);
         });
 
