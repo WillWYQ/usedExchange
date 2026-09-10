@@ -13,6 +13,7 @@ import {
   listStudioItems,
   isFileResponse,
   isSseResponse,
+  IMPORT_THUMBNAIL_TEMP_FILE_TTL_MS,
   PDF_EXPORT_TTL_MS,
   registerPdfExportForTests,
   type JsonResponse,
@@ -3292,6 +3293,75 @@ describe("POST /api/import-url/thumbnail", () => {
     await new Promise((resolve) => setTimeout(resolve, 10)); // onSent's cleanup is fire-and-forget
 
     await expect(fs.access(tempPath)).rejects.toThrow();
+  });
+
+  it("deletes the temp file via the TTL backstop when onSent never fires", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: PNG_BYTES,
+      contentType: "image/png",
+      finalUrl: "https://cdn.example/photo.png",
+    });
+
+    // Fake timers must be installed before the request runs: the backstop's
+    // setTimeout is scheduled inside handleImportThumbnail itself, while the
+    // temp file is being written, so it has to be captured by the fake
+    // clock from the start to be advanceable below.
+    vi.useFakeTimers();
+    try {
+      const res = await thumbnail("https://cdn.example/photo.png");
+      if (!isFileResponse(res)) throw new Error("expected a FileResponse");
+      const tempPath = res.file;
+
+      // onSent is deliberately never called here -- simulating the seller's
+      // browser dropping the request (dialog closed, navigated away, a
+      // newer thumbnail fetch superseding this one) before
+      // studio/vite.config.ts's file-response branch ever reaches "finish".
+      // Only the TTL backstop should be able to clean this up.
+      await vi.advanceTimersByTimeAsync(IMPORT_THUMBNAIL_TEMP_FILE_TTL_MS + 1);
+
+      // The timer callback kicks off a real (non-fake-timer) fs.unlink --
+      // switch back to real timers before polling for it so vi.waitFor's
+      // own retry interval can actually fire (same reasoning as the
+      // PDF-export TTL test elsewhere in this file).
+      vi.useRealTimers();
+      await vi.waitFor(async () => {
+        await expect(fs.access(tempPath)).rejects.toThrow();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not throw when the TTL backstop fires after onSent already removed the file", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: PNG_BYTES,
+      contentType: "image/png",
+      finalUrl: "https://cdn.example/photo.png",
+    });
+
+    vi.useFakeTimers();
+    try {
+      const res = await thumbnail("https://cdn.example/photo.png");
+      if (!isFileResponse(res)) throw new Error("expected a FileResponse");
+      const tempPath = res.file;
+
+      // Run the fast path first, exactly like "removes the temp file once
+      // onSent fires" above, then await the same unlink ourselves so the
+      // file is confirmed gone before the backstop gets a turn below --
+      // this doesn't touch any timer API, so it behaves the same whether
+      // fake timers are active or not.
+      res.onSent?.();
+      await fs.unlink(tempPath).catch(() => {});
+      await expect(fs.access(tempPath)).rejects.toThrow();
+
+      // Both cleanup paths firing for the same file must be safe: the
+      // backstop finding nothing left to unlink is a harmless no-op
+      // (wrapped in .catch(() => {}), same as onSent's), never an
+      // unhandled rejection.
+      await vi.advanceTimersByTimeAsync(IMPORT_THUMBNAIL_TEMP_FILE_TTL_MS + 1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("returns a JSON error when the fetch fails", async () => {

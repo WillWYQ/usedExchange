@@ -759,6 +759,21 @@ const importThumbnailBodySchema = z.object({
   sourceUrl: z.string().min(1).optional(),
 });
 
+// Backstop for a thumbnail request whose response never finishes sending --
+// the seller's browser can drop the connection before studio/vite.config.ts's
+// file-response branch reaches "finish" (the new-item dialog gets closed,
+// the seller navigates away, or a newer thumbnail fetch supersedes this one
+// while it's still in flight), in which case the FileResponse's onSent below
+// never runs and the temp file would otherwise sit in os.tmpdir() forever.
+// Same concept and order of magnitude as registerPdfExport's own TTL timer
+// (PDF_EXPORT_TTL_MS, further down this file): long enough that a normal
+// sub-second fetch-and-serve never comes close to it, short enough to bound
+// worst-case accumulation across a long-running Studio session. Unlike that
+// PDF-export path, there's no token registry here -- this route is a single
+// fetch-then-serve request, not a generate/redeem pair, so the timer only
+// ever needs to unlink one already-known file.
+export const IMPORT_THUMBNAIL_TEMP_FILE_TTL_MS = 5 * 60 * 1000;
+
 /**
  * Fetches one candidate image server-side (through the same SSRF-guarded,
  * sniffed pipeline a real import uses) and serves it back as a FileResponse
@@ -790,6 +805,15 @@ async function handleImportThumbnail(req: StudioRequest): Promise<StudioResponse
 
   const tempPath = path.join(os.tmpdir(), `usedexchange-thumb-${crypto.randomUUID()}.${kind}`);
   await fsPromises.writeFile(tempPath, fetched.bytes);
+
+  // .unref() so this timer alone can never keep the Node process alive --
+  // it's a pure backstop, not something the process should wait around for.
+  // Racing this against onSent below is intentional and safe: whichever
+  // fires first deletes the file, and the other's unlink just fails quietly
+  // (already gone) thanks to the shared .catch(() => {}) pattern.
+  setTimeout(() => {
+    fsPromises.unlink(tempPath).catch(() => {});
+  }, IMPORT_THUMBNAIL_TEMP_FILE_TTL_MS).unref();
 
   return {
     status: 200,
