@@ -3096,11 +3096,11 @@ describe("POST /api/items/:cat/:item/images/import", () => {
     await fs.rm(sandbox, { recursive: true, force: true });
   });
 
-  function importImages(urls: string[]) {
+  function importImages(urls: string[], sourceUrl?: string) {
     return handleStudioRequest({
       method: "POST",
       url: "/api/items/electronics/desk-lamp/images/import",
-      body: Buffer.from(JSON.stringify({ urls })),
+      body: Buffer.from(JSON.stringify(sourceUrl ? { urls, sourceUrl } : { urls })),
       projectRoot: sandbox,
     });
   }
@@ -3206,5 +3206,36 @@ describe("POST /api/items/:cat/:item/images/import", () => {
       projectRoot: sandbox,
     });
     expect(res.status).toBe(400);
+  });
+
+  it("passes the ORIGIN of sourceUrl as referer, not the full URL", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: PNG_BYTES,
+      contentType: "image/png",
+      finalUrl: "https://example.com/photos/front.png",
+    });
+
+    await importImages(
+      ["https://example.com/photos/front.png"],
+      "https://seller-site.example/listing/123?ref=abc",
+    );
+
+    expect(fetchUrlSafelyMock).toHaveBeenCalledWith(
+      "https://example.com/photos/front.png",
+      expect.objectContaining({ referer: "https://seller-site.example" }),
+    );
+  });
+
+  it("passes no referer when sourceUrl is omitted", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: PNG_BYTES,
+      contentType: "image/png",
+      finalUrl: "https://example.com/photos/front.png",
+    });
+
+    await importImages(["https://example.com/photos/front.png"]);
+
+    const [, options] = fetchUrlSafelyMock.mock.calls[0]!;
+    expect((options as { referer?: string }).referer).toBeUndefined();
   });
 });

@@ -658,6 +658,14 @@ function importFetchErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+function originOnly(url: string): string | undefined {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return undefined;
+  }
+}
+
 const importUrlPreviewBodySchema = z.object({ url: z.string().min(1) });
 
 async function handleImportUrlPreview(req: StudioRequest): Promise<StudioResponse> {
@@ -708,6 +716,7 @@ async function handleImportUrlPreview(req: StudioRequest): Promise<StudioRespons
 
 const importImagesBodySchema = z.object({
   urls: z.array(z.string().min(1)).min(1).max(IMPORT_MAX_URLS_PER_REQUEST),
+  sourceUrl: z.string().min(1).optional(),
 });
 
 /**
@@ -746,7 +755,8 @@ async function handleImageImport(
   category: string,
   item: string,
 ): Promise<StudioResponse> {
-  const { urls } = parseJsonBody(req.body, importImagesBodySchema);
+  const { urls, sourceUrl } = parseJsonBody(req.body, importImagesBodySchema);
+  const referer = sourceUrl ? originOnly(sourceUrl) : undefined;
   const dir = resolveItemDir(req.projectRoot, category, item);
 
   // Same failure philosophy as handleBulkStatus/handleBulkApplyTiers above:
@@ -761,6 +771,7 @@ async function handleImageImport(
       const fetched = await fetchUrlSafely(url, {
         timeoutMs: IMPORT_IMAGE_FETCH_TIMEOUT_MS,
         maxBytes: IMPORT_IMAGE_MAX_BYTES,
+        referer,
       });
       // The extension is whatever the URL happened to carry; the header
       // bytes are what decide — identical rule to handleImageUpload's own
