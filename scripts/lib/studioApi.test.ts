@@ -21,6 +21,7 @@ import {
 import { listImageFiles } from "./studioImages";
 import { getSyncRunner, resetSyncStateForTests, setSyncRunner, streamImageSync } from "./studioSync";
 import { SsrfError, fetchUrlSafely } from "./ssrfGuard";
+import { __setHeadlessRendererForTests } from "./headlessImport";
 
 // The import-from-URL routes are the only ones in this file that make a
 // network request; every other route is pure filesystem I/O. Mocking just
@@ -2881,6 +2882,8 @@ describe("POST /api/import-url/preview", () => {
     fetchUrlSafelyMock.mockReset();
   });
 
+  afterEach(() => __setHeadlessRendererForTests(null));
+
   function preview(url: string) {
     return handleStudioRequest({
       method: "POST",
@@ -2909,6 +2912,8 @@ describe("POST /api/import-url/preview", () => {
     expect(res.body).toEqual({
       name: "Vintage Desk Lamp",
       images: ["https://example.com/photos/lamp.jpg"],
+      usedHeadlessFallback: false,
+      headlessFailureReason: null,
     });
     // Passed the seller's URL straight through, with SSRF-safe limits — not
     // some other endpoint's defaults.
@@ -2928,7 +2933,12 @@ describe("POST /api/import-url/preview", () => {
     const res = asJson(await preview("https://example.com/photo.jpg"));
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ name: null, images: [] });
+    expect(res.body).toEqual({
+      name: null,
+      images: [],
+      usedHeadlessFallback: false,
+      headlessFailureReason: null,
+    });
   });
 
   it("treats a missing content-type as HTML rather than refusing to parse", async () => {
@@ -2937,11 +2947,111 @@ describe("POST /api/import-url/preview", () => {
       contentType: "",
       finalUrl: "https://example.com/listing",
     });
+    // This fixture's Tier 1 extraction finds zero images (title only, no
+    // og:image/img tags), which now falls through to Tier 2. Stub the
+    // renderer as unavailable so Tier 1's already-correct `name` passes
+    // through untouched, rather than letting this test reach the real
+    // renderWithHeadlessBrowser (a real Chromium launch + a real network
+    // request to example.com) — this test is about content-type handling,
+    // not the headless fallback.
+    __setHeadlessRendererForTests(async () => ({ available: false, reason: "navigation-failed" }));
 
     const res = asJson(await preview("https://example.com/listing"));
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ name: "Old Bike" });
+  });
+
+  it("does not invoke the headless fallback when Tier 1 already finds images", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: Buffer.from(
+        `<html><head><meta property="og:image" content="/photo.jpg"></head></html>`,
+        "utf-8",
+      ),
+      contentType: "text/html",
+      finalUrl: "https://example.com/listing",
+    });
+    let headlessCalled = false;
+    __setHeadlessRendererForTests(async () => {
+      headlessCalled = true;
+      return { available: true, html: "<html></html>", finalUrl: "https://example.com" };
+    });
+
+    const res = asJson(await preview("https://example.com/listing"));
+
+    expect(headlessCalled).toBe(false);
+    const body = res.body as { usedHeadlessFallback: boolean; headlessFailureReason: unknown };
+    expect(body.usedHeadlessFallback).toBe(false);
+    expect(body.headlessFailureReason).toBeNull();
+  });
+
+  it("invokes the headless fallback and returns its candidates when Tier 1 finds zero images", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: Buffer.from("<html><body><div id=\"app\"></div></body></html>", "utf-8"), // SPA shell, nothing to extract
+      contentType: "text/html",
+      finalUrl: "https://example.com/listing",
+    });
+    __setHeadlessRendererForTests(async () => ({
+      available: true,
+      html: '<html><head><meta property="og:image" content="https://example.com/photo.jpg"></head></html>',
+      finalUrl: "https://example.com/rendered",
+    }));
+
+    const res = asJson(await preview("https://example.com/listing"));
+
+    const body = res.body as { images: string[]; usedHeadlessFallback: boolean; headlessFailureReason: unknown };
+    expect(body.usedHeadlessFallback).toBe(true);
+    expect(body.images).toContain("https://example.com/photo.jpg");
+    expect(body.headlessFailureReason).toBeNull();
+  });
+
+  it("sets headlessFailureReason to not-installed when the fallback is unavailable", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: Buffer.from("<html><body></body></html>", "utf-8"),
+      contentType: "text/html",
+      finalUrl: "https://example.com/listing",
+    });
+    __setHeadlessRendererForTests(async () => ({ available: false, reason: "not-installed" }));
+
+    const res = asJson(await preview("https://example.com/listing"));
+
+    const body = res.body as { usedHeadlessFallback: boolean; headlessFailureReason: unknown };
+    expect(body.usedHeadlessFallback).toBe(true);
+    expect(body.headlessFailureReason).toBe("not-installed");
+  });
+
+  it("sets headlessFailureReason to null when the fallback runs fine but still finds zero images", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: Buffer.from("<html><body></body></html>", "utf-8"),
+      contentType: "text/html",
+      finalUrl: "https://example.com/listing",
+    });
+    __setHeadlessRendererForTests(async () => ({
+      available: true,
+      html: "<html><body>nothing here</body></html>",
+      finalUrl: "https://example.com/rendered",
+    }));
+
+    const res = asJson(await preview("https://example.com/listing"));
+
+    const body = res.body as { images: string[]; usedHeadlessFallback: boolean; headlessFailureReason: unknown };
+    expect(body.images).toEqual([]);
+    expect(body.usedHeadlessFallback).toBe(true);
+    expect(body.headlessFailureReason).toBeNull();
+  });
+
+  it("sets headlessFailureReason to navigation-failed when the fallback errors after launching", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: Buffer.from("<html><body></body></html>", "utf-8"),
+      contentType: "text/html",
+      finalUrl: "https://example.com/listing",
+    });
+    __setHeadlessRendererForTests(async () => ({ available: false, reason: "navigation-failed" }));
+
+    const res = asJson(await preview("https://example.com/listing"));
+
+    const body = res.body as { headlessFailureReason: unknown };
+    expect(body.headlessFailureReason).toBe("navigation-failed");
   });
 
   it("surfaces an SSRF rejection as a 400 with the guard's own message", async () => {

@@ -81,6 +81,7 @@ import {
 } from "./studioCategories";
 import { fetchUrlSafely } from "./ssrfGuard";
 import { extractImportCandidates } from "./urlImport";
+import { renderWithHeadlessBrowser } from "./headlessImport";
 import {
   deleteContactImage,
   isValidContactImageFilename,
@@ -633,6 +634,11 @@ async function handleBulkApplyTiers(req: StudioRequest): Promise<StudioResponse>
 // product photo with headroom.
 const IMPORT_PAGE_FETCH_TIMEOUT_MS = 10_000;
 const IMPORT_PAGE_MAX_BYTES = 8 * 1024 * 1024;
+// Headless rendering is inherently slower than a plain fetch (cold
+// navigation + JS execution + a settle wait) -- more generous than the
+// plain-fetch timeout, but still bounded so a pathological page can't
+// hang a preview request indefinitely.
+const IMPORT_HEADLESS_TIMEOUT_MS = 20_000;
 const IMPORT_IMAGE_FETCH_TIMEOUT_MS = 15_000;
 const IMPORT_IMAGE_MAX_BYTES = 15 * 1024 * 1024;
 // Bounds one request's worth of sequential downloads — this endpoint is a
@@ -672,12 +678,32 @@ async function handleImportUrlPreview(req: StudioRequest): Promise<StudioRespons
   // rather than decoding arbitrary bytes as text. A missing content-type is
   // treated as HTML: many small/misconfigured sites omit it.
   if (fetched.contentType !== "" && !fetched.contentType.includes("html") && !fetched.contentType.includes("text")) {
-    return { status: 200, body: { name: null, images: [] } };
+    return { status: 200, body: { name: null, images: [], usedHeadlessFallback: false, headlessFailureReason: null } };
   }
 
   const html = fetched.bytes.toString("utf-8");
-  const { name, images } = extractImportCandidates(html, fetched.finalUrl);
-  return { status: 200, body: { name, images } };
+  const tier1 = extractImportCandidates(html, fetched.finalUrl);
+
+  if (tier1.images.length > 0) {
+    return {
+      status: 200,
+      body: { ...tier1, usedHeadlessFallback: false, headlessFailureReason: null },
+    };
+  }
+
+  const rendered = await renderWithHeadlessBrowser(fetched.finalUrl, { timeoutMs: IMPORT_HEADLESS_TIMEOUT_MS });
+  if (!rendered.available) {
+    return {
+      status: 200,
+      body: { ...tier1, usedHeadlessFallback: true, headlessFailureReason: rendered.reason },
+    };
+  }
+
+  const tier2 = extractImportCandidates(rendered.html, rendered.finalUrl);
+  return {
+    status: 200,
+    body: { ...tier2, usedHeadlessFallback: true, headlessFailureReason: null },
+  };
 }
 
 const importImagesBodySchema = z.object({
