@@ -1,10 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createCategory,
   createItem,
   importImagesFromUrls,
   previewImportUrl,
   type CategoryMetaInput,
+  type ImportUrlPreview,
 } from "../api";
 import { Button } from "../components/Button";
 import {
@@ -23,6 +24,24 @@ import { useStudioT } from "../i18n/StudioI18n";
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 type Mode = "item" | "category" | "url";
+
+// Combines a fresh batch of candidate image URLs with whatever's already
+// there instead of replacing it outright -- used by both a resolved
+// `fetchUrlPreview` and the manual paste escape hatch, so whichever one
+// runs second adds to the other's picks rather than wiping them out.
+function mergeCandidates(
+  existingImages: string[],
+  existingSelected: Set<string>,
+  newImages: string[],
+): { images: string[]; selected: Set<string> } {
+  const images = [...existingImages];
+  const selected = new Set(existingSelected);
+  for (const src of newImages) {
+    if (!images.includes(src)) images.push(src);
+    selected.add(src); // auto-select new candidates, same rule as extraction/paste
+  }
+  return { images, selected };
+}
 
 export function NewItemDialog({
   categories,
@@ -52,6 +71,9 @@ export function NewItemDialog({
   const [candidateImages, setCandidateImages] = useState<string[]>([]);
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
   const [brokenImages, setBrokenImages] = useState<Set<string>>(new Set());
+  const [headlessFailureReason, setHeadlessFailureReason] = useState<ImportUrlPreview["headlessFailureReason"]>(null);
+  const [pasteUrlsText, setPasteUrlsText] = useState("");
+  const [pasteError, setPasteError] = useState<string | null>(null);
   const [importStage, setImportStage] = useState<"idle" | "creating" | "importing">("idle");
   const [warning, setWarning] = useState<string | null>(null);
   // Set once the item itself is safely created but a photo import failed
@@ -69,6 +91,14 @@ export function NewItemDialog({
   // the shared `name` field in another mode.
   const modeRef = useRef(mode);
   modeRef.current = mode;
+
+  // Read inside fetchUrlPreview's setCandidateImages updater so the merge
+  // sees the latest selection without making that updater (and therefore
+  // this effect) a stale closure over `selectedImages` at call time.
+  const selectedImagesRef = useRef(selectedImages);
+  useEffect(() => {
+    selectedImagesRef.current = selectedImages;
+  }, [selectedImages]);
 
   const dialogRef = useDialogBehavior(onCancel);
 
@@ -126,17 +156,28 @@ export function NewItemDialog({
       // silently clobber whatever they've typed into that other mode's
       // (shared) name field.
       if (modeRef.current !== "url") return;
-      // Detected name pre-fills the same `name` field item mode uses — the
-      // seller edits it right there, exactly like the manual flow.
-      setName(preview.name ?? "");
-      setCandidateImages(preview.images);
-      // Pre-selected: the extraction heuristic (scripts/lib/urlImport.ts)
+      // Detected name pre-fills the same `name` field item mode uses — but
+      // only while it's still empty. The paste escape hatch can already have
+      // set `previewFetched` (and let the seller start typing a name) before
+      // this fetch ever resolves, so unconditionally overwriting `name` here
+      // would silently discard what they'd already typed.
+      setName((prev) => (prev.trim() === "" ? (preview.name ?? "") : prev));
+      // Merge, don't replace: a paste can already have populated
+      // candidateImages/selectedImages before this resolves (or a second
+      // fetch can run after a first one) — mergeCandidates adds the newly
+      // found images alongside whatever's already selected instead of
+      // wiping it out. New candidates are still auto-selected, same rule as
+      // the original extraction/paste behavior (scripts/lib/urlImport.ts
       // already filters out obvious icons/tracking pixels, so what's left is
-      // worth defaulting to "import all" — the seller un-checks the odd one
-      // rather than having to hunt through a page of unchecked boxes first.
-      setSelectedImages(new Set(preview.images));
+      // worth defaulting to "import all").
+      setCandidateImages((prevImages) => {
+        const { images, selected } = mergeCandidates(prevImages, selectedImagesRef.current, preview.images);
+        setSelectedImages(selected);
+        return images;
+      });
       setBrokenImages(new Set());
       setPreviewFetched(true);
+      setHeadlessFailureReason(preview.headlessFailureReason);
     } catch (err: unknown) {
       if (modeRef.current === "url") {
         setError(err instanceof Error ? err.message : String(err));
@@ -153,6 +194,44 @@ export function NewItemDialog({
       else next.delete(src);
       return next;
     });
+  }
+
+  // The guaranteed escape hatch: sites that block automated fetching (or
+  // need a login the server-side fetch can't provide) can never reliably be
+  // beaten by extraction. Pasting known-good photo URLs directly sets
+  // `previewFetched` -- the same flag a successful fetch sets -- so the rest
+  // of the form unlocks without ever needing a fetch to succeed.
+  function addPastedUrls() {
+    const candidates = pasteUrlsText
+      .split(/[\n,]+/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    const valid: string[] = [];
+    for (const candidate of candidates) {
+      try {
+        const parsed = new URL(candidate);
+        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+          valid.push(parsed.toString());
+        }
+      } catch {
+        // not a URL at all -- ignored, same as a non-http(s) scheme
+      }
+    }
+
+    if (valid.length === 0) {
+      setPasteError(t("newItem.url.pasteUrls.invalid"));
+      return;
+    }
+
+    setPasteError(null);
+    setPasteUrlsText("");
+    setCandidateImages((prevImages) => {
+      const { images, selected } = mergeCandidates(prevImages, selectedImagesRef.current, valid);
+      setSelectedImages(selected);
+      return images;
+    });
+    setPreviewFetched(true); // same flag a successful fetch sets -- one unlock condition, two ways to reach it
   }
 
   /**
@@ -192,7 +271,7 @@ export function NewItemDialog({
 
     setImportStage("importing");
     try {
-      const result = await importImagesFromUrls(id, urls);
+      const result = await importImagesFromUrls(id, urls, sourceUrl.trim() === "" ? undefined : sourceUrl.trim());
       if (result.failed.length > 0) {
         setWarning(
           t("newItem.url.partialFailure", {
@@ -412,6 +491,34 @@ export function NewItemDialog({
                 <span className="field-hint">{t("newItem.url.sourceUrlHint")}</span>
               </label>
 
+              {/* Deliberately outside the previewFetched gate below -- this is
+                  the escape hatch for sites no automated fetch will ever
+                  reliably beat, so it must be usable before (or without) a
+                  fetch ever running. createdIdPendingWarning is the one guard
+                  it still needs: once an item is already created and waiting
+                  on a photo-import warning, adding more candidates to import
+                  makes no sense. */}
+              {createdIdPendingWarning === null && (
+                <label className="field">
+                  <span className="field-label">{t("newItem.url.pasteUrls.label")}</span>
+                  <textarea
+                    value={pasteUrlsText}
+                    onChange={(e) => setPasteUrlsText(e.target.value)}
+                    placeholder={t("newItem.url.pasteUrls.placeholder")}
+                    rows={2}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={pasteUrlsText.trim() === ""}
+                    onClick={addPastedUrls}
+                  >
+                    {t("newItem.url.pasteUrls.add")}
+                  </Button>
+                  {pasteError && <span className="field-hint field-error">{pasteError}</span>}
+                </label>
+              )}
+
               {previewFetched && createdIdPendingWarning === null && (
                 <>
                   <label className="field">
@@ -426,7 +533,11 @@ export function NewItemDialog({
                   </label>
 
                   {candidateImages.length === 0 ? (
-                    <p className="field-hint">{t("newItem.url.noImages")}</p>
+                    <p className="field-hint">
+                      {headlessFailureReason === "not-installed"
+                        ? t("newItem.url.deepImportUnavailable")
+                        : t("newItem.url.stillNoImages")}
+                    </p>
                   ) : (
                     <div className="field">
                       <span className="field-label">{t("newItem.url.selectPhotos")}</span>

@@ -100,7 +100,12 @@ describe("NewItemDialog", () => {
       createBody = { id: "electronics/vintage-desk-lamp" },
       importBody = { files: [], imported: 2, failed: [] },
     }: {
-      preview?: { name: string | null; images: string[] };
+      preview?: {
+        name: string | null;
+        images: string[];
+        usedHeadlessFallback?: boolean;
+        headlessFailureReason?: "not-installed" | "navigation-failed" | null;
+      };
       createStatus?: number;
       createBody?: unknown;
       importBody?: unknown;
@@ -165,7 +170,40 @@ describe("NewItemDialog", () => {
       const importCall = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/images/import"));
       expect(importCall).toBeDefined();
       const [, init] = importCall as [string, RequestInit];
-      expect(JSON.parse(init.body as string)).toEqual({ urls: ["https://example.com/a.jpg"] });
+      // Includes sourceUrl -- a fetched page's URL is now threaded through as
+      // the import call's referer (see the sourceUrl-wiring test below); this
+      // assertion predates that wiring and would otherwise miss the new field.
+      expect(JSON.parse(init.body as string)).toEqual({
+        urls: ["https://example.com/a.jpg"],
+        sourceUrl: "https://example.com/listing/1",
+      });
+    });
+
+    it("sends the fetched page's URL as sourceUrl when creating the item", async () => {
+      const fetchMock = fetchMockFor();
+      vi.stubGlobal("fetch", fetchMock);
+      const { getByRole, getByLabelText, getByText, findByDisplayValue } = renderWithStudioI18n(
+        <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+      );
+      fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+      fireEvent.change(getByLabelText(/^Category/), { target: { value: "electronics" } });
+      fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+      fireEvent.click(getByText("Fetch page"));
+      await findByDisplayValue("Vintage Desk Lamp");
+      fireEvent.change(getByLabelText(/^Item name/), { target: { value: "vintage-desk-lamp" } });
+
+      fireEvent.click(getByText("Create item & import photos"));
+      await waitFor(() => {
+        const importCall = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/images/import"));
+        expect(importCall).toBeDefined();
+      });
+
+      const importCall = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/images/import"))!;
+      const [, init] = importCall as [string, RequestInit];
+      expect(JSON.parse(init.body as string)).toEqual({
+        urls: ["https://example.com/a.jpg", "https://example.com/b.jpg"],
+        sourceUrl: "https://example.com/listing/1",
+      });
     });
 
     it("creates the item with no import call when the page has no candidate photos", async () => {
@@ -184,7 +222,7 @@ describe("NewItemDialog", () => {
         target: { value: "https://example.com/listing/2" },
       });
       fireEvent.click(getByText("Fetch page"));
-      await findByText(/No photos found/);
+      await findByText(/couldn't find photos on this page automatically/i);
       // The detected name is human-readable, not a slug — the seller edits it
       // before saving, same as the manual item-mode flow.
       fireEvent.change(getByLabelText(/^Item name/), { target: { value: "old-chair" } });
@@ -310,6 +348,148 @@ describe("NewItemDialog", () => {
       }
 
       expect((getByLabelText(/^Item name/) as HTMLInputElement).value).toBe("my-own-item");
+    });
+
+    describe("URL-import messaging", () => {
+      it("shows the setup hint when the fallback is unavailable", async () => {
+        const fetchMock = fetchMockFor({
+          preview: { name: null, images: [], usedHeadlessFallback: true, headlessFailureReason: "not-installed" },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+
+        expect(await findByText(/npx playwright install chromium/)).toBeTruthy();
+      });
+
+      it("shows the generic blocked/login-wall hint when the fallback ran but still found nothing", async () => {
+        const fetchMock = fetchMockFor({
+          preview: { name: null, images: [], usedHeadlessFallback: true, headlessFailureReason: null },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+
+        expect(await findByText(/block automated access|require login/i)).toBeTruthy();
+      });
+
+      it("shows the same generic hint, not the setup hint, for navigation-failed", async () => {
+        const fetchMock = fetchMockFor({
+          preview: { name: null, images: [], usedHeadlessFallback: true, headlessFailureReason: "navigation-failed" },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByText, queryByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+
+        expect(await findByText(/block automated access|require login/i)).toBeTruthy();
+        expect(queryByText(/npx playwright install chromium/)).toBeNull();
+      });
+    });
+
+    describe("URL-import paste escape hatch", () => {
+      it("unlocks the name field and Create button when a valid URL is pasted, without ever fetching", async () => {
+        vi.stubGlobal("fetch", vi.fn(() => { throw new Error("no fetch should happen in this test"); }));
+        const { getByRole, getByLabelText, getByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: "https://cdn.example/photo.jpg" } });
+        fireEvent.click(getByText("Add"));
+
+        expect((getByLabelText(/^Item name/) as HTMLInputElement).disabled).toBe(false);
+        expect((getByText("Create item & import photos") as HTMLButtonElement).disabled).toBe(false);
+      });
+
+      it("shows a validation message and leaves the form locked when the pasted value isn't a URL", async () => {
+        vi.stubGlobal("fetch", vi.fn(() => { throw new Error("no fetch should happen in this test"); }));
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: "not a url" } });
+        fireEvent.click(getByText("Add"));
+
+        expect(await findByText(/enter a valid/i)).toBeTruthy();
+        // The name field only exists once previewFetched is true -- an invalid
+        // paste must not have flipped it.
+        expect(() => getByLabelText(/^Item name/)).toThrow();
+      });
+
+      it("dedupes a pasted URL that's already a candidate", async () => {
+        const fetchMock = fetchMockFor({ preview: { name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] } });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByDisplayValue } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        await findByDisplayValue("Vintage Desk Lamp");
+
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: "https://example.com/a.jpg" } });
+        fireEvent.click(getByText("Add"));
+
+        const checkboxes = document.querySelectorAll<HTMLInputElement>(".url-picker-thumb input[type=checkbox]");
+        expect(checkboxes).toHaveLength(1);
+        expect(checkboxes[0]!.checked).toBe(true);
+      });
+    });
+
+    describe("URL-import fetch-after-paste merge", () => {
+      it("does not discard a pasted selection when a fetch resolves afterward", async () => {
+        const fetchMock = fetchMockFor({
+          preview: { name: null, images: ["https://example.com/fetched.jpg"] },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+
+        // Paste first -- unlocks the form with zero fetches, per the escape-hatch test above.
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: "https://example.com/pasted.jpg" } });
+        fireEvent.click(getByText("Add"));
+        expect(document.querySelectorAll(".url-picker-thumb")).toHaveLength(1);
+
+        // Now also fetch -- must ADD the fetched candidate, not replace the pasted one.
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        await findByText("2 selected");
+
+        const checkboxes = document.querySelectorAll<HTMLInputElement>(".url-picker-thumb input[type=checkbox]");
+        expect(checkboxes).toHaveLength(2);
+        expect(Array.from(checkboxes).every((cb) => cb.checked)).toBe(true);
+      });
+
+      it("does not blank an already-typed name when the fetch's own guess is null", async () => {
+        const fetchMock = fetchMockFor({ preview: { name: null, images: [] } });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: "https://example.com/pasted.jpg" } });
+        fireEvent.click(getByText("Add"));
+        fireEvent.change(getByLabelText(/^Item name/), { target: { value: "My Hand-Typed Name" } });
+
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        for (let i = 0; i < 10; i++) await Promise.resolve(); // flush fetchUrlPreview's microtask chain
+
+        expect((getByLabelText(/^Item name/) as HTMLInputElement).value).toBe("My Hand-Typed Name");
+      });
     });
   });
 
