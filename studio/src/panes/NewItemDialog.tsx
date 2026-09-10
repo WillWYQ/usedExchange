@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   createCategory,
   createItem,
+  fetchImportThumbnail,
   importImagesFromUrls,
   previewImportUrl,
   type CategoryMetaInput,
@@ -43,6 +44,68 @@ function mergeCandidates(
   return { images, selected };
 }
 
+// Per spec §11.3: a bare <img src={candidateUrl}> loads directly in the
+// seller's browser, so any site with hotlink protection 403s it -- a broken-
+// image icon even though the same URL downloads fine server-side. This
+// fetches each thumbnail through the CSRF-safe /api/import-url/thumbnail
+// proxy (Task 7) and renders it as a blob URL instead. Lazy via
+// IntersectionObserver -- a fetch()-based image has no native loading="lazy"
+// equivalent -- and cancellable via AbortController, matching this file's
+// modeRef discipline for the same "seller left mid-request" class of
+// problem, so switching modes or re-fetching mid-load doesn't leave dozens
+// of real upstream requests running for nothing.
+function ThumbnailImage({ src, sourceUrl }: { src: string; sourceUrl: string }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [broken, setBroken] = useState(false);
+  const elementRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const element = elementRef.current;
+    if (!element) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        observer.disconnect();
+        fetchImportThumbnail(src, sourceUrl, controller.signal)
+          .then((blob) => {
+            if (cancelled) return;
+            setBlobUrl(URL.createObjectURL(blob));
+          })
+          .catch(() => {
+            if (!cancelled) setBroken(true);
+          });
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(element);
+
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+      controller.abort();
+    };
+  }, [src, sourceUrl]);
+
+  // Separate effect, keyed on blobUrl itself: revokes exactly the URL that
+  // was actually created, whether that happens on unmount or because this
+  // thumbnail's own src/sourceUrl changed and a new blob URL replaced it.
+  useEffect(() => {
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [blobUrl]);
+
+  return (
+    <div ref={elementRef} className={broken ? "url-picker-thumb-broken" : undefined}>
+      {blobUrl && <img src={blobUrl} alt="" />}
+    </div>
+  );
+}
+
 export function NewItemDialog({
   categories,
   onCreated,
@@ -70,7 +133,6 @@ export function NewItemDialog({
   const [previewFetched, setPreviewFetched] = useState(false);
   const [candidateImages, setCandidateImages] = useState<string[]>([]);
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
-  const [brokenImages, setBrokenImages] = useState<Set<string>>(new Set());
   const [headlessFailureReason, setHeadlessFailureReason] = useState<ImportUrlPreview["headlessFailureReason"]>(null);
   const [pasteUrlsText, setPasteUrlsText] = useState("");
   const [pasteError, setPasteError] = useState<string | null>(null);
@@ -175,7 +237,6 @@ export function NewItemDialog({
         setSelectedImages(selected);
         return images;
       });
-      setBrokenImages(new Set());
       setPreviewFetched(true);
       setHeadlessFailureReason(preview.headlessFailureReason);
     } catch (err: unknown) {
@@ -565,15 +626,7 @@ export function NewItemDialog({
                                 checked={selectedImages.has(src)}
                                 onChange={(e) => toggleImage(src, e.target.checked)}
                               />
-                              <img
-                                src={src}
-                                alt=""
-                                loading="lazy"
-                                className={brokenImages.has(src) ? "url-picker-thumb-broken" : undefined}
-                                onError={() =>
-                                  setBrokenImages((prev) => new Set(prev).add(src))
-                                }
-                              />
+                              <ThumbnailImage src={src} sourceUrl={sourceUrl} />
                             </label>
                           </li>
                         ))}

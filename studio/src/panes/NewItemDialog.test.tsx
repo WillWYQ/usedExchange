@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { renderWithStudioI18n } from "../i18n/StudioI18n";
 import { NewItemDialog } from "./NewItemDialog";
@@ -11,6 +11,35 @@ afterEach(() => {
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
+
+// jsdom (this file's test environment) doesn't implement IntersectionObserver
+// at all. NewItemDialog's ThumbnailImage (studio/src/panes/NewItemDialog.tsx)
+// unconditionally constructs one for every rendered candidate thumbnail --
+// not only in the dedicated "URL-import thumbnail proxy" tests below, but in
+// every other url-mode test that renders at least one candidate photo -- so
+// this stub has to cover the whole file, not just one describe block. Real
+// jsdom callers get their observe() calls silently ignored (never reported
+// as intersecting), which is a no-op for tests that don't care about
+// lazy-loading; the "thumbnail proxy" tests invoke `observedCallback`
+// directly to simulate a thumbnail scrolling into view.
+let observedCallback: IntersectionObserverCallback | null = null;
+const OriginalIntersectionObserver = globalThis.IntersectionObserver;
+
+beforeEach(() => {
+  observedCallback = null;
+  // @ts-expect-error -- minimal test stub, not a full IntersectionObserver
+  globalThis.IntersectionObserver = class {
+    constructor(cb: IntersectionObserverCallback) {
+      observedCallback = cb;
+    }
+    observe() {}
+    disconnect() {}
+  };
+});
+
+afterEach(() => {
+  globalThis.IntersectionObserver = OriginalIntersectionObserver;
+});
 
 describe("NewItemDialog", () => {
   it("creates an item in item mode (default)", async () => {
@@ -99,6 +128,7 @@ describe("NewItemDialog", () => {
       createStatus = 201,
       createBody = { id: "electronics/vintage-desk-lamp" },
       importBody = { files: [], imported: 2, failed: [] },
+      thumbnailBytes = new Blob(["fake-thumbnail-bytes"], { type: "image/jpeg" }),
     }: {
       preview?: {
         name: string | null;
@@ -109,12 +139,14 @@ describe("NewItemDialog", () => {
       createStatus?: number;
       createBody?: unknown;
       importBody?: unknown;
+      thumbnailBytes?: Blob;
     } = {}) {
       return vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
         const url = String(input);
         if (url === "/api/import-url/preview") return jsonResponse(preview);
         if (url === "/api/items") return jsonResponse(createBody, createStatus);
         if (url.endsWith("/images/import")) return jsonResponse(importBody);
+        if (url === "/api/import-url/thumbnail") return new Response(thumbnailBytes, { status: 200 });
         throw new Error(`unexpected fetch: ${url}`);
       });
     }
@@ -489,6 +521,134 @@ describe("NewItemDialog", () => {
         for (let i = 0; i < 10; i++) await Promise.resolve(); // flush fetchUrlPreview's microtask chain
 
         expect((getByLabelText(/^Item name/) as HTMLInputElement).value).toBe("My Hand-Typed Name");
+      });
+    });
+
+    describe("URL-import thumbnail proxy", () => {
+      // jsdom (this file's test environment) doesn't implement Blob URLs at
+      // all -- URL.createObjectURL/revokeObjectURL are simply absent, not
+      // present-but-throwing -- so vi.spyOn (which requires the property to
+      // already exist as a function before it can wrap it) has nothing to
+      // wrap. A bare stub is installed here first. (observedCallback and the
+      // IntersectionObserver stub itself are file-level, above -- every
+      // url-mode test that renders a candidate thumbnail needs them, not
+      // just this describe block.)
+      //
+      // Restored in afterAll, not afterEach: this file's own top-level
+      // `afterEach(() => cleanup())` is registered OUTSIDE every describe
+      // block, and outer afterEach hooks run AFTER inner ones. An inner
+      // afterEach here would restore URL.revokeObjectURL to undefined
+      // BEFORE that outer cleanup() unmounts a still-live ThumbnailImage,
+      // whose own cleanup effect then calls URL.revokeObjectURL -- throwing
+      // "URL.revokeObjectURL is not a function". afterAll runs once, after
+      // every test in this describe (and each test's own cleanup) has
+      // already finished, which sidesteps that ordering hazard entirely.
+      const OriginalCreateObjectURL = URL.createObjectURL;
+      const OriginalRevokeObjectURL = URL.revokeObjectURL;
+
+      beforeEach(() => {
+        URL.createObjectURL = () => "";
+        URL.revokeObjectURL = () => {};
+      });
+
+      afterAll(() => {
+        URL.createObjectURL = OriginalCreateObjectURL;
+        URL.revokeObjectURL = OriginalRevokeObjectURL;
+      });
+
+      async function renderWithOneCandidate() {
+        const fetchMock = fetchMockFor({ preview: { name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] } });
+        vi.stubGlobal("fetch", fetchMock);
+        const result = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(result.getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(result.getByLabelText(/^Product page URL/), {
+          target: { value: "https://example.com/listing/1" },
+        });
+        fireEvent.click(result.getByText("Fetch page"));
+        await result.findByDisplayValue("Vintage Desk Lamp");
+        return { ...result, fetchMock };
+      }
+
+      it("does not fetch a thumbnail until it is reported as near the viewport", async () => {
+        const { fetchMock } = await renderWithOneCandidate();
+
+        expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/import-url/thumbnail")).toBe(false);
+
+        observedCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], null as never);
+        await waitFor(() => {
+          expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/import-url/thumbnail")).toBe(true);
+        });
+      });
+
+      it("renders the fetched blob as the thumbnail's image source", async () => {
+        const createObjectURLSpy = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fake-url");
+        await renderWithOneCandidate();
+
+        observedCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], null as never);
+
+        // Not getByRole("img")/toHaveAttribute: this <img> intentionally
+        // keeps alt="" (a decorative photo candidate sitting inside its own
+        // checkbox label, same as the bare <img> it replaces), which maps to
+        // the ARIA "presentation" role rather than "img", so a role query
+        // would never find it -- and this project has no
+        // @testing-library/jest-dom (toHaveAttribute isn't available
+        // anywhere else in the codebase), so a plain attribute read is used
+        // instead, matching this file's existing convention of querying
+        // .url-picker-thumb's contents directly via `document`.
+        await waitFor(() => {
+          expect(document.querySelector(".url-picker-thumb img")?.getAttribute("src")).toBe("blob:fake-url");
+        });
+        expect(createObjectURLSpy).toHaveBeenCalled();
+      });
+
+      it("revokes the blob URL on unmount", async () => {
+        vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fake-url");
+        const revokeSpy = vi.spyOn(URL, "revokeObjectURL");
+        const { unmount } = await renderWithOneCandidate();
+        observedCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], null as never);
+        await waitFor(() =>
+          expect(document.querySelector(".url-picker-thumb img")?.getAttribute("src")).toBe("blob:fake-url"),
+        );
+
+        unmount();
+
+        expect(revokeSpy).toHaveBeenCalledWith("blob:fake-url");
+      });
+
+      it("aborts the in-flight thumbnail fetch when the mode is switched away mid-request", async () => {
+        let capturedSignal: AbortSignal | undefined;
+        const fetchMock = fetchMockFor({ preview: { name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] } });
+        fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          if (url === "/api/import-url/preview") {
+            return jsonResponse({ name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] });
+          }
+          if (url === "/api/import-url/thumbnail") {
+            capturedSignal = init?.signal ?? undefined;
+            return new Promise<Response>(() => {
+              /* never resolves -- this test only cares whether it's aborted */
+            });
+          }
+          throw new Error(`unexpected fetch: ${url}`);
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByDisplayValue } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        await findByDisplayValue("Vintage Desk Lamp");
+        observedCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], null as never);
+        await waitFor(() => expect(capturedSignal).toBeDefined());
+
+        // Matches this file's existing mode-switch-during-fetch regression test's
+        // approach: switch away mid-request via the "Item" tab.
+        fireEvent.click(getByRole("tab", { name: "Item" }));
+
+        expect(capturedSignal?.aborted).toBe(true);
       });
     });
   });
