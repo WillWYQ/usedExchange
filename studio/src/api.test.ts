@@ -514,6 +514,45 @@ describe("previewImportUrl", () => {
     expect(result.headlessFailureReason).toBe("not-installed");
     vi.unstubAllGlobals();
   });
+
+  it("defaults headlessFailureReason to null for an unrecognized value", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        name: null,
+        images: [],
+        usedHeadlessFallback: false,
+        headlessFailureReason: "some-other-reason",
+      }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await previewImportUrl("https://example.com");
+
+    expect(result.headlessFailureReason).toBe(null);
+    vi.unstubAllGlobals();
+  });
+
+  it("defaults usedHeadlessFallback to false when the response omits it", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        name: null,
+        images: [],
+      }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await previewImportUrl("https://example.com");
+
+    expect(result.usedHeadlessFallback).toBe(false);
+    expect(result.headlessFailureReason).toBe(null);
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("importImagesFromUrls — sourceUrl", () => {
