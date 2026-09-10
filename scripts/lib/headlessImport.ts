@@ -7,6 +7,7 @@
 import type { Browser, BrowserContext } from "playwright";
 import { launchChromiumOrError } from "./chromiumLauncher";
 import { checkHostnameAllowed } from "./ssrfGuard";
+import { getSsrfSafeProxy } from "./ssrfSafeProxy";
 
 export type HeadlessRenderResult =
   | { available: true; html: string; finalUrl: string }
@@ -23,24 +24,42 @@ export type HeadlessRenderResult =
 // itself is a stateless per-call factory (shared with PDF export), so
 // this caching is this module's own responsibility, not that function's.
 let cachedBrowser: Browser | null = null;
+// The in-flight LAUNCH is cached too, not just the launched browser. Without
+// this, two renders that both miss a cold cache each call
+// launchChromiumOrError(); the second assignment to cachedBrowser silently
+// orphans the first Chromium, which nothing ever closes and which therefore
+// leaks for the life of the Studio process.
+let launchInFlight: Promise<{ browser: Browser } | { error: string }> | null = null;
 
 async function getBrowser(): Promise<{ browser: Browser } | { error: string }> {
   if (cachedBrowser && cachedBrowser.isConnected()) {
     return { browser: cachedBrowser };
   }
-  const launch = await launchChromiumOrError();
-  if ("error" in launch) return launch;
-  cachedBrowser = launch.browser;
-  const launched = launch.browser;
-  // Proactive self-healing: a browser that dies between requests (crash,
-  // OOM-kill) is detected the moment it happens, not just discovered the
-  // next time something tries to use it. isConnected() above is the
-  // belt-and-braces synchronous check for the gap between "it disconnected"
-  // and "this listener fired".
-  launched.on("disconnected", () => {
-    if (cachedBrowser === launched) cachedBrowser = null;
-  });
-  return { browser: launched };
+  if (!launchInFlight) {
+    launchInFlight = launchChromiumOrError()
+      .then((launch) => {
+        if ("error" in launch) return launch;
+        const launched = launch.browser;
+        cachedBrowser = launched;
+        // Proactive self-healing: a browser that dies between requests (crash,
+        // OOM-kill) is detected the moment it happens, not just discovered the
+        // next time something tries to use it. isConnected() above is the
+        // belt-and-braces synchronous check for the gap between "it
+        // disconnected" and "this listener fired".
+        launched.on("disconnected", () => {
+          if (cachedBrowser === launched) cachedBrowser = null;
+        });
+        return { browser: launched };
+      })
+      // launchChromiumOrError is documented never to throw, but this function's
+      // callers convert only its typed { error } case -- a rejection here would
+      // otherwise escape renderWithHeadlessBrowser's Promise contract.
+      .catch(() => ({ error: "Headless browser launch failed." }))
+      .finally(() => {
+        launchInFlight = null;
+      });
+  }
+  return launchInFlight;
 }
 
 const BLOCKED_RESOURCE_TYPES = new Set([
@@ -89,7 +108,16 @@ async function guardRequests(context: BrowserContext): Promise<void> {
 async function renderOnce(browser: Browser, url: string, timeoutMs: number): Promise<HeadlessRenderResult> {
   let context: BrowserContext | null = null;
   try {
-    context = await browser.newContext();
+    // The authoritative SSRF boundary. Obtained BEFORE the context exists and
+    // deliberately not caught here: if the proxy cannot start, this throws, the
+    // catch below returns navigation-failed, and no context is ever created --
+    // rendering with an unproxied context would be the one unacceptable
+    // degradation. See ssrfSafeProxy.ts for what route() alone cannot cover
+    // (redirect hops, address pinning, WebSocket CONNECTs).
+    const proxy = await getSsrfSafeProxy();
+    context = await browser.newContext({
+      proxy: { server: `http://127.0.0.1:${proxy.port}` },
+    });
     await guardRequests(context);
     const page = await context.newPage();
 
@@ -107,7 +135,11 @@ async function renderOnce(browser: Browser, url: string, timeoutMs: number): Pro
   } catch {
     return { available: false, reason: "navigation-failed" };
   } finally {
-    await context?.close();
+    // finally runs AFTER the catch above, so an unguarded rejection here would
+    // escape uncaught and break the Promise<HeadlessRenderResult> contract --
+    // and close() is most likely to reject precisely when the browser has died
+    // mid-render, the exact case the catch exists to absorb.
+    await context?.close().catch(() => {});
   }
 }
 
@@ -136,4 +168,15 @@ export function __setHeadlessRendererForTests(
   fn: typeof renderWithHeadlessBrowserImpl | null,
 ): void {
   rendererImpl = fn ?? renderWithHeadlessBrowserImpl;
+}
+
+/** Test-only teardown for the warm-instance cache. Production deliberately
+ *  never closes it (see above), but a real-Chromium test that left one running
+ *  would keep the test runner's process alive. */
+export async function __closeHeadlessBrowserForTests(): Promise<void> {
+  const browser = cachedBrowser;
+  cachedBrowser = null;
+  launchInFlight = null;
+  if (!browser) return;
+  await browser.close().catch(() => {});
 }
