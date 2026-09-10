@@ -3239,3 +3239,90 @@ describe("POST /api/items/:cat/:item/images/import", () => {
     expect((options as { referer?: string }).referer).toBeUndefined();
   });
 });
+
+describe("POST /api/import-url/thumbnail", () => {
+  beforeEach(() => {
+    fetchUrlSafelyMock.mockReset();
+  });
+
+  function thumbnail(url: string, sourceUrl?: string) {
+    return handleStudioRequest({
+      method: "POST",
+      url: "/api/import-url/thumbnail",
+      body: Buffer.from(JSON.stringify(sourceUrl ? { url, sourceUrl } : { url })),
+      projectRoot: PROJECT_ROOT,
+    });
+  }
+
+  it("returns a FileResponse pointing at a temp file containing the fetched image bytes", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: PNG_BYTES,
+      contentType: "image/png",
+      finalUrl: "https://cdn.example/photo.png",
+    });
+
+    const res = await thumbnail("https://cdn.example/photo.png", "https://seller-site.example/listing");
+
+    expect(isFileResponse(res)).toBe(true);
+    if (isFileResponse(res)) {
+      expect(res.status).toBe(200);
+      expect(res.contentType).toBe("image/png");
+      const bytesOnDisk = await fs.readFile(res.file);
+      expect(bytesOnDisk).toEqual(PNG_BYTES);
+    }
+    expect(fetchUrlSafelyMock).toHaveBeenCalledWith(
+      "https://cdn.example/photo.png",
+      expect.objectContaining({ referer: "https://seller-site.example" }),
+    );
+  });
+
+  it("removes the temp file once onSent fires", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: PNG_BYTES,
+      contentType: "image/png",
+      finalUrl: "https://cdn.example/photo.png",
+    });
+
+    const res = await thumbnail("https://cdn.example/photo.png");
+    if (!isFileResponse(res)) throw new Error("expected a FileResponse");
+
+    const tempPath = res.file;
+    await fs.access(tempPath); // exists before onSent
+    res.onSent?.();
+    await new Promise((resolve) => setTimeout(resolve, 10)); // onSent's cleanup is fire-and-forget
+
+    await expect(fs.access(tempPath)).rejects.toThrow();
+  });
+
+  it("returns a JSON error when the fetch fails", async () => {
+    fetchUrlSafelyMock.mockRejectedValue(new SsrfError("Disallowed resolved address for bad.example: 127.0.0.1"));
+
+    const res = await thumbnail("http://bad.example/photo.png");
+
+    expect(isFileResponse(res)).toBe(false);
+    expect(asJson(res).body).toMatchObject({ error: expect.stringContaining("127.0.0.1") });
+  });
+
+  it("returns a JSON error when the fetched bytes aren't a real image", async () => {
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: Buffer.from("<!doctype html><title>Not an image</title>"),
+      contentType: "text/html",
+      finalUrl: "https://cdn.example/not-an-image",
+    });
+
+    const res = await thumbnail("https://cdn.example/not-an-image");
+
+    expect(isFileResponse(res)).toBe(false);
+    expect(asJson(res).body).toMatchObject({ error: expect.stringContaining("not a JPEG, PNG, WebP or GIF") });
+  });
+
+  it("405s a GET on the thumbnail route", async () => {
+    const res = await handleStudioRequest({
+      method: "GET",
+      url: "/api/import-url/thumbnail",
+      body: Buffer.alloc(0),
+      projectRoot: PROJECT_ROOT,
+    });
+    expect(res.status).toBe(405);
+  });
+});

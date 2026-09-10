@@ -11,6 +11,7 @@
 import { execFile } from "child_process";
 import crypto from "crypto";
 import fsPromises from "fs/promises";
+import os from "os";
 import path from "path";
 import { promisify } from "util";
 import { z } from "zod";
@@ -742,6 +743,66 @@ function deriveImportedFilename(sourceUrl: string, kind: ImageKind): string {
     : `${base}.${kind}`;
   const sanitized = sanitizeUploadFilename(withExt);
   return isValidImageFilename(sanitized) ? sanitized : `imported-photo.${kind}`;
+}
+
+// Keyed by ImageKind (studioImages.ts), which spells the JPEG variant "jpg" —
+// matching sniffImageType's own return value, not the "jpeg" MIME subtype.
+const IMAGE_MIME_TYPES: Record<ImageKind, string> = {
+  jpg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+};
+
+const importThumbnailBodySchema = z.object({
+  url: z.string().min(1),
+  sourceUrl: z.string().min(1).optional(),
+});
+
+/**
+ * Fetches one candidate image server-side (through the same SSRF-guarded,
+ * sniffed pipeline a real import uses) and serves it back as a FileResponse
+ * so the picker UI can show a real preview instead of a broken-image icon on
+ * hotlink-protected sites. StudioResponse has no in-memory-buffer variant
+ * (see its own comment above) -- this reuses the temp-file + onSent-cleanup
+ * pattern the catalog PDF download path established, simplified to one
+ * round trip since there is no separate generate/download step here.
+ */
+async function handleImportThumbnail(req: StudioRequest): Promise<StudioResponse> {
+  const { url, sourceUrl } = parseJsonBody(req.body, importThumbnailBodySchema);
+  const referer = sourceUrl ? originOnly(sourceUrl) : undefined;
+
+  let fetched: Awaited<ReturnType<typeof fetchUrlSafely>>;
+  try {
+    fetched = await fetchUrlSafely(url, {
+      timeoutMs: IMPORT_IMAGE_FETCH_TIMEOUT_MS,
+      maxBytes: IMPORT_IMAGE_MAX_BYTES,
+      referer,
+    });
+  } catch (err: unknown) {
+    throw new StudioError(400, importFetchErrorMessage(err));
+  }
+
+  const kind = sniffImageType(fetched.bytes);
+  if (kind === null) {
+    throw new StudioError(400, "not a JPEG, PNG, WebP or GIF");
+  }
+
+  const tempPath = path.join(os.tmpdir(), `usedexchange-thumb-${crypto.randomUUID()}.${kind}`);
+  await fsPromises.writeFile(tempPath, fetched.bytes);
+
+  return {
+    status: 200,
+    file: tempPath,
+    contentType: IMAGE_MIME_TYPES[kind],
+    onSent: () => {
+      fsPromises.unlink(tempPath).catch(() => {
+        // Best-effort cleanup -- a failed unlink here (already gone,
+        // permissions) must not affect a response that's already been
+        // fully sent to the seller's own browser.
+      });
+    },
+  };
 }
 
 export type ImportImagesResult = {
@@ -1775,6 +1836,21 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
         return { status: 405, body: { error: "POST only" } };
       }
       return await handleImportUrlPreview(req);
+    }
+
+    // POST only, deliberately -- never a GET .../thumbnail?url=... . This
+    // route's side effect is an outbound fetch of an attacker-influenced URL,
+    // and checkStudioCsrf exempts GET/HEAD (reasoning that Vite's own
+    // CORS/allowedHosts checks already cover reads, which is true for routes
+    // that only read local content). A bare <img src="http://127.0.0.1:<port>
+    // /api/import-url/thumbnail?url=..."> on any unrelated page the seller has
+    // open in another tab would fire with no preflight and no CORS gate on
+    // whether it fires at all -- reintroducing exactly the class of hole
+    // csrfGuard.ts exists to close, via a different method. POST gets the
+    // existing CSRF middleware for free, with no per-route code needed.
+    if (pathname === "/api/import-url/thumbnail") {
+      if (req.method !== "POST") return { status: 405, body: { error: "method not allowed" } };
+      return await handleImportThumbnail(req);
     }
 
     if (pathname === "/api/readiness") {
