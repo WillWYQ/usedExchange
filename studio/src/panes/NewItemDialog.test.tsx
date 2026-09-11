@@ -556,8 +556,12 @@ describe("NewItemDialog", () => {
         URL.revokeObjectURL = OriginalRevokeObjectURL;
       });
 
-      async function renderWithOneCandidate() {
-        const fetchMock = fetchMockFor({ preview: { name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] } });
+      // The fetch mock is a parameter (defaulted) so a test that needs the
+      // thumbnail route to behave differently -- failing, say -- can reuse
+      // this whole render flow instead of copying it.
+      async function renderWithOneCandidate(
+        fetchMock = fetchMockFor({ preview: { name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] } }),
+      ) {
         vi.stubGlobal("fetch", fetchMock);
         const result = renderWithStudioI18n(
           <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
@@ -649,6 +653,90 @@ describe("NewItemDialog", () => {
         fireEvent.click(getByRole("tab", { name: "Item" }));
 
         expect(capturedSignal?.aborted).toBe(true);
+      });
+
+      // ThumbnailImage renders no <img> at all until its blob arrives, so the
+      // sizing that used to live on the <img> (.url-picker-thumb img) has to
+      // live on the wrapper instead -- otherwise a pending card collapses to
+      // zero height, which both hides the broken-thumbnail indicator and (far
+      // worse) collapses the whole grid on first paint, so the observer's
+      // 200px rootMargin calls every candidate "near the viewport" at once and
+      // the lazy loading stops being lazy. These two assert the class placement
+      // the stylesheet's .url-picker-thumb-image rules depend on.
+      it("wraps a pending thumbnail in the sized element that holds its grid cell", async () => {
+        await renderWithOneCandidate();
+
+        const wrapper = document.querySelector(".url-picker-thumb .url-picker-thumb-image");
+        expect(wrapper).not.toBeNull();
+        // Nothing has reported this thumbnail as near the viewport yet, so no
+        // image exists to hold the cell open -- only the wrapper can.
+        expect(wrapper?.querySelector("img")).toBeNull();
+      });
+
+      it("marks the sized wrapper broken when the thumbnail fetch fails", async () => {
+        const fetchMock = fetchMockFor({ preview: { name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] } });
+        fetchMock.mockImplementation(async (input: RequestInfo | URL, _init?: RequestInit) => {
+          const url = String(input);
+          if (url === "/api/import-url/preview") {
+            return jsonResponse({ name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] });
+          }
+          if (url === "/api/import-url/thumbnail") return jsonResponse({ error: "hotlink blocked" }, 502);
+          throw new Error(`unexpected fetch: ${url}`);
+        });
+        await renderWithOneCandidate(fetchMock);
+
+        observedCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], null as never);
+
+        await waitFor(() => {
+          const wrapper = document.querySelector(".url-picker-thumb-image");
+          expect(wrapper?.classList.contains("url-picker-thumb-broken")).toBe(true);
+        });
+        // The marker must sit on the wrapper, not an <img>: a failed thumbnail
+        // puts no <img> in the DOM, so an <img>-scoped rule would style nothing.
+        expect(document.querySelector(".url-picker-thumb img")).toBeNull();
+      });
+
+      it("does not re-fetch an already-loaded thumbnail when the seller keeps typing in the URL field", async () => {
+        // A real IntersectionObserver reports an already-visible element as
+        // intersecting the moment it is observed; the file-level stub never
+        // does (its observe() is a no-op), which is exactly what would hide
+        // this regression -- an effect re-run has to actually re-trigger the
+        // fetch for the redundant request to be observable. So this one test
+        // installs an auto-intersecting stub; the file-level afterEach still
+        // restores the global afterwards.
+        // @ts-expect-error -- minimal test stub, not a full IntersectionObserver
+        globalThis.IntersectionObserver = class {
+          constructor(private readonly cb: IntersectionObserverCallback) {}
+          observe(element: Element) {
+            this.cb([{ isIntersecting: true, target: element } as IntersectionObserverEntry], this as never);
+          }
+          disconnect() {}
+        };
+        vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fake-url");
+        const { fetchMock, getByLabelText } = await renderWithOneCandidate();
+        await waitFor(() =>
+          expect(document.querySelector(".url-picker-thumb img")?.getAttribute("src")).toBe("blob:fake-url"),
+        );
+
+        const thumbnailCalls = () =>
+          fetchMock.mock.calls.filter(([input]) => String(input) === "/api/import-url/thumbnail");
+        expect(thumbnailCalls()).toHaveLength(1);
+        // The referer hint is the page this candidate was discovered on.
+        expect(JSON.parse((thumbnailCalls()[0]![1] as RequestInit).body as string)).toEqual({
+          url: "https://example.com/a.jpg",
+          sourceUrl: "https://example.com/listing/1",
+        });
+
+        // The seller now types a second URL into the still-mounted, still-
+        // editable "Product page URL" field. Each keystroke re-renders the
+        // grid with a new sourceUrl prop -- which must NOT re-run the fetch
+        // effect: re-fetching an already-loaded candidate with whatever is in
+        // the box right now uses the wrong referer and can flip a working
+        // thumbnail to broken.
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/2" } });
+        for (let i = 0; i < 10; i++) await Promise.resolve(); // flush any effect-scheduled fetch
+
+        expect(thumbnailCalls()).toHaveLength(1);
       });
     });
   });

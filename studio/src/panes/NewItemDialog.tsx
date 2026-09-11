@@ -58,6 +58,16 @@ function ThumbnailImage({ src, sourceUrl }: { src: string; sourceUrl: string }) 
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [broken, setBroken] = useState(false);
   const elementRef = useRef<HTMLDivElement | null>(null);
+  // Frozen on purpose -- no effect keeps it in sync, and none should. sourceUrl
+  // is this candidate's provenance (the page it was discovered on, sent as the
+  // proxy fetch's referer hint so hotlink checks pass), not live UI state: the
+  // "Product page URL" input stays mounted and editable next to the grid, so
+  // reading the prop directly would rebuild every mounted thumbnail's observer
+  // on every keystroke -- re-fetching each already-loaded thumbnail with
+  // whatever is in the box right now, which is both wasteful (~40 redundant
+  // proxy requests per typed URL) and wrong: the new referer can fail the
+  // image's hotlink check and flip a working thumbnail to broken.
+  const sourceUrlRef = useRef(sourceUrl);
 
   useEffect(() => {
     const element = elementRef.current;
@@ -65,12 +75,16 @@ function ThumbnailImage({ src, sourceUrl }: { src: string; sourceUrl: string }) 
 
     let cancelled = false;
     const controller = new AbortController();
+    // A re-run is a fresh attempt at a different candidate (src changed, e.g.
+    // the parent deduped or reordered its list), so clear any previous
+    // failure -- otherwise a successful load still renders as broken.
+    setBroken(false);
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries[0]?.isIntersecting) return;
         observer.disconnect();
-        fetchImportThumbnail(src, sourceUrl, controller.signal)
+        fetchImportThumbnail(src, sourceUrlRef.current, controller.signal)
           .then((blob) => {
             if (cancelled) return;
             setBlobUrl(URL.createObjectURL(blob));
@@ -88,19 +102,28 @@ function ThumbnailImage({ src, sourceUrl }: { src: string; sourceUrl: string }) 
       observer.disconnect();
       controller.abort();
     };
-  }, [src, sourceUrl]);
+    // src only: a different candidate is the one thing that should re-fetch.
+    // sourceUrl is read through the ref above precisely so typing can't.
+  }, [src]);
 
   // Separate effect, keyed on blobUrl itself: revokes exactly the URL that
   // was actually created, whether that happens on unmount or because this
-  // thumbnail's own src/sourceUrl changed and a new blob URL replaced it.
+  // thumbnail's own src changed and a new blob URL replaced it.
   useEffect(() => {
     return () => {
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
   }, [blobUrl]);
 
+  // The wrapper, not the <img>, carries the thumbnail's box (see
+  // .url-picker-thumb-image in tokens.css): there is no <img> in the DOM at
+  // all until the proxied blob arrives, so the wrapper is the only element
+  // that can hold the grid cell open while a thumbnail is pending or broken.
   return (
-    <div ref={elementRef} className={broken ? "url-picker-thumb-broken" : undefined}>
+    <div
+      ref={elementRef}
+      className={broken ? "url-picker-thumb-image url-picker-thumb-broken" : "url-picker-thumb-image"}
+    >
       {blobUrl && <img src={blobUrl} alt="" />}
     </div>
   );

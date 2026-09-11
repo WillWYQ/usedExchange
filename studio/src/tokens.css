@@ -693,20 +693,36 @@ tr.failed td {
   cursor: pointer;
 }
 
-.url-picker-thumb img {
+/* The box lives on ThumbnailImage's wrapper, not on the <img>: a candidate's
+   photo is fetched through the local proxy and only mounted once its blob
+   arrives, so there is no <img> to size while a thumbnail is pending (or if it
+   fails outright). Sizing the image alone would collapse those cards to zero
+   height — which thrashes the grid as thumbnails load in and, worse, makes the
+   whole grid near-zero-height on first paint, so the IntersectionObserver's
+   200px rootMargin calls every candidate "near the viewport" at once and the
+   lazy loading stops being lazy. */
+.url-picker-thumb-image {
+  display: block;
   width: 100%;
   aspect-ratio: 1;
-  object-fit: cover;
   background: var(--surface-2);
   border-radius: var(--radius-sm);
+  overflow: hidden;
 }
 
-/* A candidate image that failed to load in the seller's own browser (a dead
-   link, a site that blocks hotlinking) still needs a selectable card — an
-   <img> with no usable src collapses to zero height otherwise, taking the
-   checkbox with it. */
-.url-picker-thumb img.url-picker-thumb-broken {
-  aspect-ratio: 1;
+.url-picker-thumb-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* A candidate image that failed to load (a dead link, or a site that blocks
+   even the local proxy) still needs a selectable card — the wrapper keeps its
+   square footprint, so hiding the failed thumbnail never collapses the card or
+   takes the checkbox with it. Scoped to the wrapper rather than an <img>: a
+   failed thumbnail puts no <img> in the DOM for an image rule to match. */
+.url-picker-thumb-image.url-picker-thumb-broken {
   visibility: hidden;
 }
 
