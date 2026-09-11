@@ -2084,6 +2084,7 @@ shipping?: {
 > 本规范早于这些功能编写；此处不重写规范，而是指向权威细节。完整架构与数据流见
 > [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)，当前功能清单见
 > [`docs/CURRENT_FUNCTIONALITY.md`](CURRENT_FUNCTIONALITY.md)。三者均已在生产交付。
+> URL 导入的无头 Chromium 兜底方案及其 CSRF 安全缩略图代理，详见 `docs/TECH_REQUIREMENTS.md` §30 与 `docs/CURRENT_FUNCTIONALITY.md`；共享模块 `scripts/lib/chromiumLauncher.ts`（本功能与目录 PDF 导出共用）是加载 `playwright` 依赖的唯一入口。
 
 ### Seller Studio（`pnpm studio`，第 18 阶段）
 一个**仅本地**的浏览器 GUI，无需编辑 JSON 即可管理 `content/`。运行 `pnpm studio`
