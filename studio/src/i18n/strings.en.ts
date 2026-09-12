@@ -176,6 +176,9 @@ export const EN = {
   "newItem.url.pasteUrls.placeholder": "One or more image URLs, one per line",
   "newItem.url.pasteUrls.add": "Add",
   "newItem.url.pasteUrls.invalid": "Enter a valid http(s) image URL.",
+  "newItem.url.pasteUrls.tooMany":
+    "Too many photo links — at most {max} photos can be imported at once, and {selected} are already selected. Remove some links and add the rest after this item is created.",
+  "newItem.url.selectionCapped": "Up to {max} photos per import — untick one to choose a different photo.",
   "newItem.url.selectPhotos": "Choose photos to import",
   "newItem.url.selectAll": "Select all",
   "newItem.url.selectNone": "Select none",

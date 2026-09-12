@@ -232,16 +232,35 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         upstreamRes.destroy();
         return;
       }
-      const responseHeaders = stripHopByHop({ ...upstreamRes.headers });
-      // 3xx responses are handed straight back to Chromium rather than followed
-      // here: Chromium then issues the next hop as its own proxied request, so
-      // every hop gets its own checkHostnameAllowed call. That is the whole fix.
-      res.writeHead(upstreamRes.statusCode ?? 502, responseHeaders);
-      upstreamRes.pipe(res);
+      // Attached before anything below can throw: an 'error' event with no
+      // listener is itself an uncaught exception, and this stream is fed by
+      // whatever the upstream host chooses to send.
       upstreamRes.on("error", () => {
         upstreamRes.destroy();
         res.destroy();
       });
+      const responseHeaders = stripHopByHop({ ...upstreamRes.headers });
+      // 3xx responses are handed straight back to Chromium rather than followed
+      // here: Chromium then issues the next hop as its own proxied request, so
+      // every hop gets its own checkHostnameAllowed call. That is the whole fix.
+      //
+      // Wrapped because writeHead re-validates values the UPSTREAM chose, and
+      // the client parser is more permissive than the server writer: a status
+      // line of "HTTP/1.1 099" parses to 99, which ServerResponse rejects with
+      // ERR_HTTP_INVALID_STATUS_CODE. That throw is SYNCHRONOUS, raised from
+      // inside http.request's own 'response' emit -- an uncaught exception no
+      // .catch() on handleRequest's promise can ever see, and an uncaught
+      // exception is fatal to the whole Studio process by default.
+      try {
+        res.writeHead(upstreamRes.statusCode ?? 502, responseHeaders);
+        upstreamRes.pipe(res);
+      } catch {
+        // The response is unrepresentable (or its head is already half
+        // written), so there is nothing safe left to send. Fail closed rather
+        // than leave Chromium waiting on a response that will never arrive.
+        upstreamRes.destroy();
+        res.destroy();
+      }
     },
   );
   upstream.on("error", () => {
@@ -265,11 +284,25 @@ let startInFlight: Promise<SsrfSafeProxy> | null = null;
 
 async function startProxy(): Promise<SsrfSafeProxy> {
   const server = http.createServer();
+  // Both handlers own their own failures internally (every await is wrapped,
+  // every stream gets an 'error' listener), so these .catch()es should never
+  // fire. They exist because the cost of being wrong is not one failed
+  // thumbnail: Node terminates the process on an unhandled rejection, and the
+  // inputs reaching these handlers -- destination host, request headers,
+  // upstream response bytes -- all come from a rendered page and whatever it
+  // chooses to talk to. Fail closed instead: no answer, no hanging peer, and
+  // above all a Studio session that is still running. Swallowed rather than
+  // logged, matching this module's other last-resort handlers below; anything
+  // the seller needs to see is already surfaced by the import route itself.
   server.on("request", (req, res) => {
-    void handleRequest(req, res);
+    void handleRequest(req, res).catch(() => {
+      res.destroy();
+    });
   });
   server.on("connect", (req, socket: net.Socket, head: Buffer) => {
-    void handleConnect(req, socket, head);
+    void handleConnect(req, socket, head).catch(() => {
+      socket.destroy();
+    });
   });
   // Chromium tunnels ws:// and wss:// with CONNECT (verified against Chromium
   // 1.63), so an Upgrade sent to the proxy itself is unexpected. Forwarding one

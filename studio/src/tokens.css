@@ -849,6 +849,16 @@ tr.failed td {
   color: var(--ink-soft);
 }
 
+/* A validation failure shown inline under its own field (e.g. the URL-import
+   paste box), applied alongside .field-hint. Same quiet size and position —
+   it belongs to one field, so it gets the danger colour rather than
+   .alert-error's filled banner, matching .config-danger. Must stay AFTER
+   .field-hint: equal specificity, so source order is what lets it win the
+   colour back from the muted default. */
+.field-error {
+  color: var(--danger);
+}
+
 .checkbox-group {
   display: flex;
   flex-wrap: wrap;

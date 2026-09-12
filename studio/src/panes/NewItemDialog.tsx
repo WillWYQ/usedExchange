@@ -26,6 +26,16 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 type Mode = "item" | "category" | "url";
 
+// MUST equal IMPORT_MAX_URLS_PER_REQUEST in scripts/lib/studioApi.ts, which is
+// the real gate: importImagesBodySchema rejects a larger batch outright. That
+// rejection lands AFTER POST /api/items has already succeeded, so without this
+// mirror the seller ends up with a real, empty item and a raw Zod string
+// ("Array must contain at most 24 element(s)") as the explanation. Mirrored
+// rather than imported because studioApi.ts is Node-side (fs, child_process)
+// and cannot be pulled into the browser bundle; a drift test in
+// scripts/lib/studioApi.test.ts fails the build if the two numbers diverge.
+const MAX_IMPORT_PHOTOS_PER_BATCH = 24;
+
 // Combines a fresh batch of candidate image URLs with whatever's already
 // there instead of replacing it outright -- used by both a resolved
 // `fetchUrlPreview` and the manual paste escape hatch, so whichever one
@@ -39,7 +49,12 @@ function mergeCandidates(
   const selected = new Set(existingSelected);
   for (const src of newImages) {
     if (!images.includes(src)) images.push(src);
-    selected.add(src); // auto-select new candidates, same rule as extraction/paste
+    // Auto-select new candidates, same rule as extraction/paste -- but never
+    // past what the server will accept in one batch. urlImport.ts returns up
+    // to MAX_IMPORT_IMAGE_CANDIDATES (40), so a gallery-heavy page overshoots
+    // the cap with no seller input at all. The extra candidates stay on
+    // screen and stay choosable; only the pre-ticking stops.
+    if (selected.size < MAX_IMPORT_PHOTOS_PER_BATCH) selected.add(src);
   }
   return { images, selected };
 }
@@ -273,6 +288,13 @@ export function NewItemDialog({
 
   function toggleImage(src: string, checked: boolean) {
     setSelectedImages((prev) => {
+      // Belt-and-braces alongside the `disabled` attribute on the checkbox
+      // itself: the cap is a correctness constraint (the server rejects a
+      // larger batch outright), not just a UI affordance, so it holds even if
+      // a change event reaches a disabled input some other way. Checked
+      // against `prev` rather than the render's `selectedImages` so it reads
+      // the real current size, never a value one batched update behind.
+      if (checked && !prev.has(src) && prev.size >= MAX_IMPORT_PHOTOS_PER_BATCH) return prev;
       const next = new Set(prev);
       if (checked) next.add(src);
       else next.delete(src);
@@ -305,6 +327,23 @@ export function NewItemDialog({
 
     if (valid.length === 0) {
       setPasteError(t("newItem.url.pasteUrls.invalid"));
+      return;
+    }
+
+    // All-or-nothing when the paste would overshoot the server's batch cap,
+    // matching the invalid-URL message right above: partially accepting a
+    // paste would silently drop links the seller believes they just added.
+    // Only URLs that aren't already selected can grow the batch, so a
+    // re-paste of existing picks always fits.
+    const alreadySelected = selectedImagesRef.current;
+    const additions = valid.filter((src) => !alreadySelected.has(src));
+    if (alreadySelected.size + additions.length > MAX_IMPORT_PHOTOS_PER_BATCH) {
+      setPasteError(
+        t("newItem.url.pasteUrls.tooMany", {
+          max: MAX_IMPORT_PHOTOS_PER_BATCH,
+          selected: alreadySelected.size,
+        }),
+      );
       return;
     }
 
@@ -629,7 +668,13 @@ export function NewItemDialog({
                         <Button
                           type="button"
                           variant="ghost"
-                          onClick={() => setSelectedImages(new Set(candidateImages))}
+                          // First N, not all of them: the server rejects a
+                          // batch larger than MAX_IMPORT_PHOTOS_PER_BATCH, and
+                          // candidateImages is ordered most-likely-relevant
+                          // first by urlImport.ts.
+                          onClick={() =>
+                            setSelectedImages(new Set(candidateImages.slice(0, MAX_IMPORT_PHOTOS_PER_BATCH)))
+                          }
                         >
                           {t("newItem.url.selectAll")}
                         </Button>
@@ -640,6 +685,13 @@ export function NewItemDialog({
                           {t("newItem.url.selectedCount", { count: selectedImages.size })}
                         </span>
                       </div>
+                      {/* Only once the cap actually bites -- explaining the
+                          limit to a seller importing three photos is noise. */}
+                      {selectedImages.size >= MAX_IMPORT_PHOTOS_PER_BATCH && (
+                        <span className="field-hint">
+                          {t("newItem.url.selectionCapped", { max: MAX_IMPORT_PHOTOS_PER_BATCH })}
+                        </span>
+                      )}
                       <ol className="thumb-grid">
                         {candidateImages.map((src) => (
                           <li key={src}>
@@ -647,9 +699,23 @@ export function NewItemDialog({
                               <input
                                 type="checkbox"
                                 checked={selectedImages.has(src)}
+                                // An already-ticked box stays clickable so the
+                                // seller can always swap one pick for another;
+                                // only unticked ones lock at the cap.
+                                disabled={
+                                  !selectedImages.has(src) &&
+                                  selectedImages.size >= MAX_IMPORT_PHOTOS_PER_BATCH
+                                }
                                 onChange={(e) => toggleImage(src, e.target.checked)}
                               />
-                              <ThumbnailImage src={src} sourceUrl={sourceUrl} />
+                              {/* Trimmed to match createUrlItem's own
+                                  sourceUrl.trim() below. Untrimmed, a trailing
+                                  space makes the proxy's referer computation
+                                  fail its empty-after-trim origin check, so a
+                                  thumbnail renders broken on a hotlink-
+                                  protected host whose real import would have
+                                  succeeded. */}
+                              <ThumbnailImage src={src} sourceUrl={sourceUrl.trim()} />
                             </label>
                           </li>
                         ))}

@@ -80,8 +80,8 @@ import {
   writeCategoryMeta,
   type CategoryMetaInput,
 } from "./studioCategories";
-import { fetchUrlSafely } from "./ssrfGuard";
-import { extractImportCandidates } from "./urlImport";
+import { SsrfError, fetchUrlSafely } from "./ssrfGuard";
+import { extractImportCandidates, type ImportCandidate } from "./urlImport";
 import { renderWithHeadlessBrowser } from "./headlessImport";
 import {
   deleteContactImage,
@@ -646,7 +646,13 @@ const IMPORT_IMAGE_MAX_BYTES = 15 * 1024 * 1024;
 // local seller's own tool, not a public API, so a modest cap (rather than a
 // queue/concurrency system) is enough to keep one accidental "select all" on
 // a huge gallery page from taking minutes.
-const IMPORT_MAX_URLS_PER_REQUEST = 24;
+//
+// Exported because the Studio SPA has to refuse an over-cap selection BEFORE
+// it creates the item: this endpoint is the second of two round trips, so a
+// rejection here leaves a real, empty item behind. NewItemDialog.tsx cannot
+// import from this module (it is Node-side), so it mirrors the number as
+// MAX_IMPORT_PHOTOS_PER_BATCH and studioApi.test.ts fails if the two drift.
+export const IMPORT_MAX_URLS_PER_REQUEST = 24;
 
 function importFetchErrorMessage(err: unknown): string {
   // SsrfError and Node's own network errors both produce a message that is
@@ -672,35 +678,71 @@ const importUrlPreviewBodySchema = z.object({ url: z.string().min(1) });
 async function handleImportUrlPreview(req: StudioRequest): Promise<StudioResponse> {
   const { url } = parseJsonBody(req.body, importUrlPreviewBodySchema);
 
-  let fetched: Awaited<ReturnType<typeof fetchUrlSafely>>;
+  let fetched: Awaited<ReturnType<typeof fetchUrlSafely>> | null = null;
   try {
     fetched = await fetchUrlSafely(url, {
       timeoutMs: IMPORT_PAGE_FETCH_TIMEOUT_MS,
       maxBytes: IMPORT_PAGE_MAX_BYTES,
     });
   } catch (err: unknown) {
-    throw new StudioError(400, `could not fetch that page: ${importFetchErrorMessage(err)}`);
+    // Two very different failures arrive here, and they must not share an
+    // outcome.
+    //
+    // An SsrfError is a VERDICT: the guard resolved the address and refused
+    // it (a private/link-local/loopback target, a malformed URL, a
+    // non-http(s) scheme, too many redirects, an oversized body). Falling
+    // through to Tier 2 would hand an address the guard has already rejected
+    // a second, differently-implemented chance at being fetched. It stays a
+    // hard 400 — see the regression guards in studioApi.test.ts.
+    if (err instanceof SsrfError) {
+      throw new StudioError(400, `could not fetch that page: ${importFetchErrorMessage(err)}`);
+    }
+    // Anything else is TRANSPORT-class — a timeout, a reset socket, a TLS
+    // handshake failure. Tier 2 carries a longer timeout budget and a real
+    // browser stack, and a plain-fetch timeout on a heavy JS-rendered
+    // marketplace is precisely the case this fallback exists for, so this is
+    // treated exactly like "Tier 1 succeeded but found zero images": keep
+    // `fetched` null and let the Tier 2 attempt below run.
+    //
+    // Note that a typo'd domain does NOT land here: checkHostnameAllowed
+    // turns a DNS failure into `allowed: false`, so it is already an
+    // SsrfError and still hard-fails above with a readable message.
+    fetched = null;
   }
 
-  // A content-type that plainly isn't a web page (a direct image/PDF/binary
-  // link) has nothing for extractImportCandidates to parse — report empty
-  // rather than decoding arbitrary bytes as text. A missing content-type is
-  // treated as HTML: many small/misconfigured sites omit it.
-  if (fetched.contentType !== "" && !fetched.contentType.includes("html") && !fetched.contentType.includes("text")) {
-    return { status: 200, body: { name: null, images: [], usedHeadlessFallback: false, headlessFailureReason: null } };
+  // Empty rather than absent when Tier 1 never produced anything, so the
+  // shape below is identical on both paths.
+  let tier1: ImportCandidate = { name: null, images: [] };
+  // The page Tier 2 renders. With no successful fetch there is no finalUrl to
+  // prefer, so the seller's own URL stands in; the headless path re-validates
+  // whatever it is given from scratch (ssrfSafeProxy.ts pins and checks every
+  // hop it makes), so this is never a way around the guard.
+  let renderUrl = url;
+
+  if (fetched !== null) {
+    // A content-type that plainly isn't a web page (a direct image/PDF/binary
+    // link) has nothing for extractImportCandidates to parse — report empty
+    // rather than decoding arbitrary bytes as text. A missing content-type is
+    // treated as HTML: many small/misconfigured sites omit it. This is a
+    // confident "not a webpage" answer, not a failure, so it returns
+    // immediately and never reaches Tier 2.
+    if (fetched.contentType !== "" && !fetched.contentType.includes("html") && !fetched.contentType.includes("text")) {
+      return { status: 200, body: { name: null, images: [], usedHeadlessFallback: false, headlessFailureReason: null } };
+    }
+
+    const html = fetched.bytes.toString("utf-8");
+    tier1 = extractImportCandidates(html, fetched.finalUrl);
+
+    if (tier1.images.length > 0) {
+      return {
+        status: 200,
+        body: { ...tier1, usedHeadlessFallback: false, headlessFailureReason: null },
+      };
+    }
+    renderUrl = fetched.finalUrl;
   }
 
-  const html = fetched.bytes.toString("utf-8");
-  const tier1 = extractImportCandidates(html, fetched.finalUrl);
-
-  if (tier1.images.length > 0) {
-    return {
-      status: 200,
-      body: { ...tier1, usedHeadlessFallback: false, headlessFailureReason: null },
-    };
-  }
-
-  const rendered = await renderWithHeadlessBrowser(fetched.finalUrl, { timeoutMs: IMPORT_HEADLESS_TIMEOUT_MS });
+  const rendered = await renderWithHeadlessBrowser(renderUrl, { timeoutMs: IMPORT_HEADLESS_TIMEOUT_MS });
   if (!rendered.available) {
     return {
       status: 200,

@@ -13,6 +13,7 @@ import {
   listStudioItems,
   isFileResponse,
   isSseResponse,
+  IMPORT_MAX_URLS_PER_REQUEST,
   IMPORT_THUMBNAIL_TEMP_FILE_TTL_MS,
   PDF_EXPORT_TTL_MS,
   registerPdfExportForTests,
@@ -2878,6 +2879,27 @@ describe("GET/DELETE /api/contact/images/:filename", () => {
   });
 });
 
+describe("URL-import batch cap", () => {
+  it("is mirrored by the Studio SPA's own client-side cap", async () => {
+    // studio/src/panes/NewItemDialog.tsx cannot import this module (fs,
+    // child_process — it would never survive the browser bundle), so it
+    // repeats the number. It has to be right: the cap is enforced on the
+    // SECOND of two round trips, after POST /api/items has already created
+    // the item, so a client that lets the seller select more than this leaves
+    // behind a real, empty item and surfaces a raw Zod validation string as
+    // the explanation. Read from source rather than imported, which is the
+    // only way to check a constant that lives on the other side of that
+    // bundling boundary.
+    const source = await fs.readFile(
+      path.join(PROJECT_ROOT, "studio", "src", "panes", "NewItemDialog.tsx"),
+      "utf-8",
+    );
+    const match = /const MAX_IMPORT_PHOTOS_PER_BATCH = (\d+);/.exec(source);
+    expect(match, "NewItemDialog.tsx must declare MAX_IMPORT_PHOTOS_PER_BATCH").not.toBeNull();
+    expect(Number(match![1])).toBe(IMPORT_MAX_URLS_PER_REQUEST);
+  });
+});
+
 describe("POST /api/import-url/preview", () => {
   beforeEach(() => {
     fetchUrlSafelyMock.mockReset();
@@ -3062,6 +3084,120 @@ describe("POST /api/import-url/preview", () => {
 
     expect(res.status).toBe(400);
     expect((res.body as { error: string }).error).toContain("10.0.0.5");
+  });
+
+  it("falls back to the headless renderer when the plain fetch times out", async () => {
+    // The exact case this whole feature exists for: a heavy JS-rendered
+    // marketplace that outruns Tier 1's 10s budget. Tier 2 has a longer one,
+    // so a Tier 1 timeout must not end the request.
+    fetchUrlSafelyMock.mockRejectedValue(new Error("Request timed out"));
+    let renderedUrl: string | null = null;
+    __setHeadlessRendererForTests(async (url) => {
+      renderedUrl = url;
+      return {
+        available: true,
+        html: '<html><head><title>Rendered Bike</title><meta property="og:image" content="https://example.com/photo.jpg"></head></html>',
+        finalUrl: "https://example.com/listing",
+      };
+    });
+
+    const res = asJson(await preview("https://example.com/listing"));
+
+    expect(res.status).toBe(200);
+    // Rendered from the seller's own URL: a fetch that never completed has no
+    // finalUrl to prefer instead.
+    expect(renderedUrl).toBe("https://example.com/listing");
+    const body = res.body as { name: string | null; images: string[]; usedHeadlessFallback: boolean };
+    expect(body.usedHeadlessFallback).toBe(true);
+    expect(body.images).toEqual(["https://example.com/photo.jpg"]);
+    expect(body.name).toBe("Rendered Bike");
+  });
+
+  it("falls back to the headless renderer when the plain fetch fails at the transport level", async () => {
+    fetchUrlSafelyMock.mockRejectedValue(
+      Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }),
+    );
+    __setHeadlessRendererForTests(async () => ({
+      available: true,
+      html: '<html><head><meta property="og:image" content="https://example.com/rendered.jpg"></head></html>',
+      finalUrl: "https://example.com/listing",
+    }));
+
+    const res = asJson(await preview("https://example.com/listing"));
+
+    expect(res.status).toBe(200);
+    expect((res.body as { images: string[] }).images).toEqual(["https://example.com/rendered.jpg"]);
+  });
+
+  it("reports the headless failure reason when BOTH tiers fail", async () => {
+    fetchUrlSafelyMock.mockRejectedValue(new Error("Request timed out"));
+    __setHeadlessRendererForTests(async () => ({ available: false, reason: "not-installed" }));
+
+    const res = asJson(await preview("https://example.com/listing"));
+
+    // A 200 with an actionable reason, not a 500: neither tier could read the
+    // page, and the seller's next move (install Chromium, or use the paste
+    // escape hatch) is the same one a zero-image Tier 1 would have offered.
+    expect(res.status).toBe(200);
+    const body = res.body as { name: string | null; images: string[]; headlessFailureReason: unknown };
+    expect(body.images).toEqual([]);
+    expect(body.name).toBeNull();
+    expect(body.headlessFailureReason).toBe("not-installed");
+  });
+
+  // SECURITY REGRESSION GUARD — must never be relaxed. The headless path does
+  // re-validate independently (ssrfSafeProxy.ts), but an address the guard has
+  // already refused must never get a second, differently-implemented chance at
+  // being fetched. An SsrfError is a verdict, not a transport failure.
+  it("does NOT attempt the headless fallback when the guard rejects the address", async () => {
+    fetchUrlSafelyMock.mockRejectedValue(new SsrfError("Disallowed resolved address for internal.example: 10.0.0.5"));
+    let headlessCalled = false;
+    __setHeadlessRendererForTests(async () => {
+      headlessCalled = true;
+      return { available: true, html: "<html></html>", finalUrl: "http://internal.example/" };
+    });
+
+    const res = asJson(await preview("http://internal.example/"));
+
+    expect(headlessCalled).toBe(false);
+    expect(res.status).toBe(400);
+    expect((res.body as { error: string }).error).toContain("10.0.0.5");
+  });
+
+  it("does NOT attempt the headless fallback when the guard rejects a non-http(s) scheme", async () => {
+    fetchUrlSafelyMock.mockRejectedValue(new SsrfError("Disallowed URL scheme: file:"));
+    let headlessCalled = false;
+    __setHeadlessRendererForTests(async () => {
+      headlessCalled = true;
+      return { available: true, html: "<html></html>", finalUrl: "file:///etc/passwd" };
+    });
+
+    const res = asJson(await preview("file:///etc/passwd"));
+
+    expect(headlessCalled).toBe(false);
+    expect(res.status).toBe(400);
+  });
+
+  it("does NOT attempt the headless fallback for a non-HTML content type", async () => {
+    // Unchanged by the network-failure fallback: a confident "this isn't a
+    // webpage" verdict is not a failure, and rendering a JPEG in Chromium
+    // would find nothing a second time, slowly.
+    fetchUrlSafelyMock.mockResolvedValue({
+      bytes: Buffer.from([0xff, 0xd8, 0xff]),
+      contentType: "image/jpeg",
+      finalUrl: "https://example.com/photo.jpg",
+    });
+    let headlessCalled = false;
+    __setHeadlessRendererForTests(async () => {
+      headlessCalled = true;
+      return { available: true, html: "<html></html>", finalUrl: "https://example.com/photo.jpg" };
+    });
+
+    const res = asJson(await preview("https://example.com/photo.jpg"));
+
+    expect(headlessCalled).toBe(false);
+    expect(res.status).toBe(200);
+    expect((res.body as { usedHeadlessFallback: boolean }).usedHeadlessFallback).toBe(false);
   });
 
   it("400s on a missing url field", async () => {

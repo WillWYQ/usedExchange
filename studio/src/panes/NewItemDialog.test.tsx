@@ -459,6 +459,86 @@ describe("NewItemDialog", () => {
         expect(() => getByLabelText(/^Item name/)).toThrow();
       });
 
+      it("rejects a paste that would push the selection past the server's batch cap", async () => {
+        // Live-reproduced before this cap existed: 25 pasted URLs were all
+        // accepted and auto-selected, createItem succeeded, and only THEN did
+        // the import call come back with a raw Zod string ("Array must contain
+        // at most 24 element(s)") — leaving the seller a created-but-empty
+        // item and an error meant for a developer.
+        vi.stubGlobal("fetch", vi.fn(() => { throw new Error("no fetch should happen in this test"); }));
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        const twentyFive = Array.from({ length: 25 }, (_, i) => `https://cdn.example/p${i}.jpg`).join("\n");
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: twentyFive } });
+        fireEvent.click(getByText("Add"));
+
+        expect(await findByText(/at most 24/i)).toBeTruthy();
+        // All-or-nothing, matching the invalid-URL message above it: nothing
+        // was added, so the form stays locked and no item can be created.
+        expect(document.querySelectorAll(".url-picker-thumb")).toHaveLength(0);
+        expect(() => getByLabelText(/^Item name/)).toThrow();
+      });
+
+      it("accepts a paste that lands exactly on the cap", async () => {
+        vi.stubGlobal("fetch", vi.fn(() => { throw new Error("no fetch should happen in this test"); }));
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        const twentyFour = Array.from({ length: 24 }, (_, i) => `https://cdn.example/p${i}.jpg`).join("\n");
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: twentyFour } });
+        fireEvent.click(getByText("Add"));
+
+        expect(await findByText("24 selected")).toBeTruthy();
+        expect(document.querySelectorAll(".url-picker-thumb")).toHaveLength(24);
+      });
+
+      it("counts what is already selected when deciding whether a paste fits", async () => {
+        const fetchMock = fetchMockFor({
+          preview: {
+            name: "Big Gallery",
+            images: Array.from({ length: 20 }, (_, i) => `https://example.com/f${i}.jpg`),
+          },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        await findByText("20 selected");
+
+        // 20 already selected + 5 pasted = 25, one over.
+        const five = Array.from({ length: 5 }, (_, i) => `https://cdn.example/p${i}.jpg`).join("\n");
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: five } });
+        fireEvent.click(getByText("Add"));
+
+        expect(await findByText(/at most 24/i)).toBeTruthy();
+        expect(document.querySelectorAll(".url-picker-thumb")).toHaveLength(20);
+      });
+
+      it("does not count an already-selected duplicate against the cap", async () => {
+        vi.stubGlobal("fetch", vi.fn(() => { throw new Error("no fetch should happen in this test"); }));
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        const twentyFour = Array.from({ length: 24 }, (_, i) => `https://cdn.example/p${i}.jpg`).join("\n");
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: twentyFour } });
+        fireEvent.click(getByText("Add"));
+        await findByText("24 selected");
+
+        // Re-pasting one that is already selected adds nothing, so it fits.
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: "https://cdn.example/p0.jpg" } });
+        fireEvent.click(getByText("Add"));
+
+        expect(getByText("24 selected")).toBeTruthy();
+        expect(document.querySelectorAll(".url-picker-thumb")).toHaveLength(24);
+      });
+
       it("dedupes a pasted URL that's already a candidate", async () => {
         const fetchMock = fetchMockFor({ preview: { name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] } });
         vi.stubGlobal("fetch", fetchMock);
@@ -476,6 +556,103 @@ describe("NewItemDialog", () => {
         const checkboxes = document.querySelectorAll<HTMLInputElement>(".url-picker-thumb input[type=checkbox]");
         expect(checkboxes).toHaveLength(1);
         expect(checkboxes[0]!.checked).toBe(true);
+      });
+    });
+
+    // urlImport.ts hands back up to MAX_IMPORT_IMAGE_CANDIDATES (40) real
+    // candidates, so a gallery-heavy page hits the same server cap the paste
+    // path did — the fetch path just reached it without the seller typing
+    // anything. Candidates stay browsable; it is the SELECTION that is capped.
+    describe("URL-import selection cap on fetched candidates", () => {
+      function fetchWithCandidates(count: number) {
+        return fetchMockFor({
+          preview: {
+            name: "Big Gallery",
+            images: Array.from({ length: count }, (_, i) => `https://example.com/f${i}.jpg`),
+          },
+        });
+      }
+
+      it("auto-selects only up to the cap when a page yields more candidates than the server accepts", async () => {
+        vi.stubGlobal("fetch", fetchWithCandidates(30));
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+
+        expect(await findByText("24 selected")).toBeTruthy();
+        // All 30 stay on screen to choose between — only the pre-ticking stops.
+        const checkboxes = document.querySelectorAll<HTMLInputElement>(".url-picker-thumb input[type=checkbox]");
+        expect(checkboxes).toHaveLength(30);
+        expect(Array.from(checkboxes).filter((cb) => cb.checked)).toHaveLength(24);
+      });
+
+      it("caps Select all at the server's batch limit", async () => {
+        vi.stubGlobal("fetch", fetchWithCandidates(30));
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        await findByText("24 selected");
+
+        fireEvent.click(getByText("Select none"));
+        await findByText("0 selected");
+        fireEvent.click(getByText("Select all"));
+
+        expect(await findByText("24 selected")).toBeTruthy();
+      });
+
+      it("disables the unticked checkboxes once the cap is reached", async () => {
+        vi.stubGlobal("fetch", fetchWithCandidates(30));
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        await findByText("24 selected");
+
+        const checkboxes = Array.from(
+          document.querySelectorAll<HTMLInputElement>(".url-picker-thumb input[type=checkbox]"),
+        );
+        // A ticked box must stay clickable (the seller has to be able to swap
+        // one choice for another); an unticked one at the cap must not.
+        expect(checkboxes.filter((cb) => cb.checked).every((cb) => !cb.disabled)).toBe(true);
+        expect(checkboxes.filter((cb) => !cb.checked).every((cb) => cb.disabled)).toBe(true);
+
+        // Untick one and the whole grid opens back up.
+        fireEvent.click(checkboxes[0]!);
+        await findByText("23 selected");
+        const reread = Array.from(
+          document.querySelectorAll<HTMLInputElement>(".url-picker-thumb input[type=checkbox]"),
+        );
+        expect(reread.some((cb) => cb.disabled)).toBe(false);
+      });
+
+      it("never sends the server more URLs than it accepts", async () => {
+        const fetchMock = fetchWithCandidates(30);
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={["electronics"]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        await findByText("24 selected");
+        fireEvent.change(getByLabelText(/^Category/), { target: { value: "electronics" } });
+        fireEvent.change(getByLabelText(/^Item name/), { target: { value: "big-gallery" } });
+        fireEvent.click(getByText("Create item & import photos"));
+
+        await waitFor(() => {
+          const importCall = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/images/import"));
+          expect(importCall).toBeTruthy();
+          const body = JSON.parse(String((importCall![1] as RequestInit).body)) as { urls: string[] };
+          expect(body.urls).toHaveLength(24);
+        });
       });
     });
 

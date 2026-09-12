@@ -156,6 +156,9 @@ export const ZH: Partial<StudioStrings> = {
   "newItem.url.pasteUrls.placeholder": "一个或多个图片链接，每行一个",
   "newItem.url.pasteUrls.add": "添加",
   "newItem.url.pasteUrls.invalid": "请输入有效的 http(s) 图片链接。",
+  "newItem.url.pasteUrls.tooMany":
+    "图片链接过多 —— 单次最多导入 {max} 张照片,目前已选择 {selected} 张。请减少链接数量,其余照片可在商品创建后再添加。",
+  "newItem.url.selectionCapped": "单次最多导入 {max} 张照片 —— 如需更换,请先取消勾选其中一张。",
   "newItem.url.selectPhotos": "选择要导入的照片",
   "newItem.url.selectAll": "全选",
   "newItem.url.selectNone": "全不选",

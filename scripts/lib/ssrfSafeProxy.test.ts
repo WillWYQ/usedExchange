@@ -56,6 +56,22 @@ async function startEchoServer(host = "127.0.0.1"): Promise<TestServer> {
   return entry;
 }
 
+/** A raw TCP server that writes one fixed, byte-exact HTTP response to every
+ *  connection -- for responses a real http.Server would never let a test
+ *  produce (here: a status line outside the range ServerResponse accepts). */
+async function startRawServer(response: string, host = "127.0.0.1"): Promise<TestServer> {
+  const server = net.createServer((socket) => {
+    socket.once("data", () => {
+      socket.write(response);
+      socket.end();
+    });
+  }) as unknown as http.Server;
+  const entry = track(server);
+  await new Promise<void>((resolve) => server.listen(0, host, resolve));
+  entry.port = (server.address() as net.AddressInfo).port;
+  return entry;
+}
+
 function openSocket(port: number): Promise<net.Socket> {
   return new Promise((resolve, reject) => {
     const socket = net.connect(port, "127.0.0.1");
@@ -389,5 +405,116 @@ describe("SSRF-safe proxy — plain HTTP requests", () => {
     const res = await proxyRequest(proxy.port, "http://1.2.3.4/x", "1.2.3.4");
 
     expect(res.status).toBe(502);
+  });
+});
+
+// Every input this proxy handles is attacker-influenced: the destination
+// host comes from a rendered page's own JavaScript, and the response bytes
+// come from whatever that host chooses to send. A throw that escapes a
+// handler here is not one failed thumbnail -- Node's default for an uncaught
+// exception (and, since Node 15, for an unhandled rejection) is to kill the
+// process, which would take down the seller's whole Studio session.
+describe("SSRF-safe proxy — fault containment", () => {
+  it("survives an upstream status code that ServerResponse.writeHead refuses", async () => {
+    // "099" parses as statusCode 99, and res.writeHead(99) throws
+    // ERR_HTTP_INVALID_STATUS_CODE -- a SYNCHRONOUS throw from inside
+    // http.request's own 'response' callback, so it is an uncaught
+    // exception, not a rejection an outer .catch() could ever see.
+    const upstream = await startRawServer("HTTP/1.1 099 Weird\r\nContent-Length: 2\r\n\r\nhi");
+    __setDnsLookupForTests(async () => [{ address: "127.0.0.1", family: 4 }]);
+    __setAddressValidatorForTests(() => false);
+    const proxy = await getSsrfSafeProxy();
+
+    const outcome = await Promise.race([
+      proxyRequest(proxy.port, `http://pinned.test:${upstream.port}/x`, `pinned.test:${upstream.port}`).then(
+        (res) => `status:${res.status}`,
+        () => "socket-closed",
+      ),
+      new Promise<string>((resolve) => setTimeout(() => resolve("hung"), 3000)),
+    ]);
+
+    // Either answer is acceptable (the response is unrepresentable, so the
+    // client gets nothing useful either way) -- what must never happen is a
+    // client left hanging on a half-written response, or a dead proxy.
+    expect(outcome).not.toBe("hung");
+    expect(proxy.server.listening).toBe(true);
+  });
+
+  it("destroys the response instead of crashing when the request handler rejects", async () => {
+    const proxy = await getSsrfSafeProxy();
+    // A request object whose very first property access throws stands in for
+    // any unanticipated failure inside handleRequest: without a .catch() on
+    // the call site, the rejected promise it produces is an unhandled
+    // rejection, which is fatal by default.
+    const req = {
+      get url(): string {
+        throw new Error("synthetic request-object failure");
+      },
+      headers: {},
+      method: "GET",
+      on() {
+        return this;
+      },
+      resume() {},
+      pipe() {},
+    };
+    let destroyed = false;
+    const res = {
+      headersSent: false,
+      writableEnded: false,
+      destroy() {
+        destroyed = true;
+      },
+      on() {
+        return this;
+      },
+      writeHead() {
+        return this;
+      },
+      end() {},
+    };
+
+    proxy.server.emit(
+      "request",
+      req as unknown as http.IncomingMessage,
+      res as unknown as http.ServerResponse,
+    );
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(destroyed).toBe(true);
+    expect(proxy.server.listening).toBe(true);
+  });
+
+  it("destroys the client socket instead of crashing when the CONNECT handler rejects", async () => {
+    const proxy = await getSsrfSafeProxy();
+    const req = {
+      get url(): string {
+        throw new Error("synthetic connect-request failure");
+      },
+      headers: {},
+      method: "CONNECT",
+    };
+    const socket = {
+      destroyed: false,
+      writableEnded: false,
+      on() {
+        return this;
+      },
+      destroy() {
+        this.destroyed = true;
+      },
+      end() {},
+    };
+
+    proxy.server.emit(
+      "connect",
+      req as unknown as http.IncomingMessage,
+      socket as unknown as net.Socket,
+      Buffer.alloc(0),
+    );
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(socket.destroyed).toBe(true);
+    expect(proxy.server.listening).toBe(true);
   });
 });
