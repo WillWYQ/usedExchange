@@ -168,7 +168,17 @@ export const EN = {
   "newItem.url.sourceUrlHint": "Studio fetches the page on your machine and looks for a name and photos. Nothing is saved until you create the item below.",
   "newItem.url.fetch": "Fetch page",
   "newItem.url.fetching": "Fetching…",
-  "newItem.url.noImages": "No photos found on that page. You can still create the item and add photos yourself.",
+  "newItem.url.deepImportUnavailable":
+    "This page may need JavaScript to show photos. Run `npx playwright install chromium` once to enable deeper import (the same one-time step the catalog PDF export uses — already done if you've set that up), then retry — or paste a photo link directly below.",
+  "newItem.url.stillNoImages":
+    "Couldn't find photos on this page automatically (it may block automated access, or require login). Paste a photo link directly below.",
+  "newItem.url.pasteUrls.label": "Or paste photo links directly",
+  "newItem.url.pasteUrls.placeholder": "One or more image URLs, one per line",
+  "newItem.url.pasteUrls.add": "Add",
+  "newItem.url.pasteUrls.invalid": "Enter a valid http(s) image URL.",
+  "newItem.url.pasteUrls.tooMany":
+    "Too many photo links — at most {max} photos can be imported at once, and {selected} are already selected. Remove some links and add the rest after this item is created.",
+  "newItem.url.selectionCapped": "Up to {max} photos per import — untick one to choose a different photo.",
   "newItem.url.selectPhotos": "Choose photos to import",
   "newItem.url.selectAll": "Select all",
   "newItem.url.selectNone": "Select none",

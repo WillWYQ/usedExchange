@@ -1,10 +1,12 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createCategory,
   createItem,
+  fetchImportThumbnail,
   importImagesFromUrls,
   previewImportUrl,
   type CategoryMetaInput,
+  type ImportUrlPreview,
 } from "../api";
 import { Button } from "../components/Button";
 import {
@@ -23,6 +25,124 @@ import { useStudioT } from "../i18n/StudioI18n";
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 type Mode = "item" | "category" | "url";
+
+// MUST equal IMPORT_MAX_URLS_PER_REQUEST in scripts/lib/studioApi.ts, which is
+// the real gate: importImagesBodySchema rejects a larger batch outright. That
+// rejection lands AFTER POST /api/items has already succeeded, so without this
+// mirror the seller ends up with a real, empty item and a raw Zod string
+// ("Array must contain at most 24 element(s)") as the explanation. Mirrored
+// rather than imported because studioApi.ts is Node-side (fs, child_process)
+// and cannot be pulled into the browser bundle; a drift test in
+// scripts/lib/studioApi.test.ts fails the build if the two numbers diverge.
+const MAX_IMPORT_PHOTOS_PER_BATCH = 24;
+
+// Combines a fresh batch of candidate image URLs with whatever's already
+// there instead of replacing it outright -- used by both a resolved
+// `fetchUrlPreview` and the manual paste escape hatch, so whichever one
+// runs second adds to the other's picks rather than wiping them out.
+function mergeCandidates(
+  existingImages: string[],
+  existingSelected: Set<string>,
+  newImages: string[],
+): { images: string[]; selected: Set<string> } {
+  const images = [...existingImages];
+  const selected = new Set(existingSelected);
+  for (const src of newImages) {
+    if (!images.includes(src)) images.push(src);
+    // Auto-select new candidates, same rule as extraction/paste -- but never
+    // past what the server will accept in one batch. urlImport.ts returns up
+    // to MAX_IMPORT_IMAGE_CANDIDATES (40), so a gallery-heavy page overshoots
+    // the cap with no seller input at all. The extra candidates stay on
+    // screen and stay choosable; only the pre-ticking stops.
+    if (selected.size < MAX_IMPORT_PHOTOS_PER_BATCH) selected.add(src);
+  }
+  return { images, selected };
+}
+
+// Per spec §11.3: a bare <img src={candidateUrl}> loads directly in the
+// seller's browser, so any site with hotlink protection 403s it -- a broken-
+// image icon even though the same URL downloads fine server-side. This
+// fetches each thumbnail through the CSRF-safe /api/import-url/thumbnail
+// proxy (Task 7) and renders it as a blob URL instead. Lazy via
+// IntersectionObserver -- a fetch()-based image has no native loading="lazy"
+// equivalent -- and cancellable via AbortController, matching this file's
+// modeRef discipline for the same "seller left mid-request" class of
+// problem, so switching modes or re-fetching mid-load doesn't leave dozens
+// of real upstream requests running for nothing.
+function ThumbnailImage({ src, sourceUrl }: { src: string; sourceUrl: string }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [broken, setBroken] = useState(false);
+  const elementRef = useRef<HTMLDivElement | null>(null);
+  // Frozen on purpose -- no effect keeps it in sync, and none should. sourceUrl
+  // is this candidate's provenance (the page it was discovered on, sent as the
+  // proxy fetch's referer hint so hotlink checks pass), not live UI state: the
+  // "Product page URL" input stays mounted and editable next to the grid, so
+  // reading the prop directly would rebuild every mounted thumbnail's observer
+  // on every keystroke -- re-fetching each already-loaded thumbnail with
+  // whatever is in the box right now, which is both wasteful (~40 redundant
+  // proxy requests per typed URL) and wrong: the new referer can fail the
+  // image's hotlink check and flip a working thumbnail to broken.
+  const sourceUrlRef = useRef(sourceUrl);
+
+  useEffect(() => {
+    const element = elementRef.current;
+    if (!element) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+    // A re-run is a fresh attempt at a different candidate (src changed, e.g.
+    // the parent deduped or reordered its list), so clear any previous
+    // failure -- otherwise a successful load still renders as broken.
+    setBroken(false);
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        observer.disconnect();
+        fetchImportThumbnail(src, sourceUrlRef.current, controller.signal)
+          .then((blob) => {
+            if (cancelled) return;
+            setBlobUrl(URL.createObjectURL(blob));
+          })
+          .catch(() => {
+            if (!cancelled) setBroken(true);
+          });
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(element);
+
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+      controller.abort();
+    };
+    // src only: a different candidate is the one thing that should re-fetch.
+    // sourceUrl is read through the ref above precisely so typing can't.
+  }, [src]);
+
+  // Separate effect, keyed on blobUrl itself: revokes exactly the URL that
+  // was actually created, whether that happens on unmount or because this
+  // thumbnail's own src changed and a new blob URL replaced it.
+  useEffect(() => {
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [blobUrl]);
+
+  // The wrapper, not the <img>, carries the thumbnail's box (see
+  // .url-picker-thumb-image in tokens.css): there is no <img> in the DOM at
+  // all until the proxied blob arrives, so the wrapper is the only element
+  // that can hold the grid cell open while a thumbnail is pending or broken.
+  return (
+    <div
+      ref={elementRef}
+      className={broken ? "url-picker-thumb-image url-picker-thumb-broken" : "url-picker-thumb-image"}
+    >
+      {blobUrl && <img src={blobUrl} alt="" />}
+    </div>
+  );
+}
 
 export function NewItemDialog({
   categories,
@@ -51,7 +171,9 @@ export function NewItemDialog({
   const [previewFetched, setPreviewFetched] = useState(false);
   const [candidateImages, setCandidateImages] = useState<string[]>([]);
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
-  const [brokenImages, setBrokenImages] = useState<Set<string>>(new Set());
+  const [headlessFailureReason, setHeadlessFailureReason] = useState<ImportUrlPreview["headlessFailureReason"]>(null);
+  const [pasteUrlsText, setPasteUrlsText] = useState("");
+  const [pasteError, setPasteError] = useState<string | null>(null);
   const [importStage, setImportStage] = useState<"idle" | "creating" | "importing">("idle");
   const [warning, setWarning] = useState<string | null>(null);
   // Set once the item itself is safely created but a photo import failed
@@ -69,6 +191,14 @@ export function NewItemDialog({
   // the shared `name` field in another mode.
   const modeRef = useRef(mode);
   modeRef.current = mode;
+
+  // Read inside fetchUrlPreview's setCandidateImages updater so the merge
+  // sees the latest selection without making that updater (and therefore
+  // this effect) a stale closure over `selectedImages` at call time.
+  const selectedImagesRef = useRef(selectedImages);
+  useEffect(() => {
+    selectedImagesRef.current = selectedImages;
+  }, [selectedImages]);
 
   const dialogRef = useDialogBehavior(onCancel);
 
@@ -126,17 +256,27 @@ export function NewItemDialog({
       // silently clobber whatever they've typed into that other mode's
       // (shared) name field.
       if (modeRef.current !== "url") return;
-      // Detected name pre-fills the same `name` field item mode uses — the
-      // seller edits it right there, exactly like the manual flow.
-      setName(preview.name ?? "");
-      setCandidateImages(preview.images);
-      // Pre-selected: the extraction heuristic (scripts/lib/urlImport.ts)
+      // Detected name pre-fills the same `name` field item mode uses — but
+      // only while it's still empty. The paste escape hatch can already have
+      // set `previewFetched` (and let the seller start typing a name) before
+      // this fetch ever resolves, so unconditionally overwriting `name` here
+      // would silently discard what they'd already typed.
+      setName((prev) => (prev.trim() === "" ? (preview.name ?? "") : prev));
+      // Merge, don't replace: a paste can already have populated
+      // candidateImages/selectedImages before this resolves (or a second
+      // fetch can run after a first one) — mergeCandidates adds the newly
+      // found images alongside whatever's already selected instead of
+      // wiping it out. New candidates are still auto-selected, same rule as
+      // the original extraction/paste behavior (scripts/lib/urlImport.ts
       // already filters out obvious icons/tracking pixels, so what's left is
-      // worth defaulting to "import all" — the seller un-checks the odd one
-      // rather than having to hunt through a page of unchecked boxes first.
-      setSelectedImages(new Set(preview.images));
-      setBrokenImages(new Set());
+      // worth defaulting to "import all").
+      setCandidateImages((prevImages) => {
+        const { images, selected } = mergeCandidates(prevImages, selectedImagesRef.current, preview.images);
+        setSelectedImages(selected);
+        return images;
+      });
       setPreviewFetched(true);
+      setHeadlessFailureReason(preview.headlessFailureReason);
     } catch (err: unknown) {
       if (modeRef.current === "url") {
         setError(err instanceof Error ? err.message : String(err));
@@ -148,11 +288,73 @@ export function NewItemDialog({
 
   function toggleImage(src: string, checked: boolean) {
     setSelectedImages((prev) => {
+      // Belt-and-braces alongside the `disabled` attribute on the checkbox
+      // itself: the cap is a correctness constraint (the server rejects a
+      // larger batch outright), not just a UI affordance, so it holds even if
+      // a change event reaches a disabled input some other way. Checked
+      // against `prev` rather than the render's `selectedImages` so it reads
+      // the real current size, never a value one batched update behind.
+      if (checked && !prev.has(src) && prev.size >= MAX_IMPORT_PHOTOS_PER_BATCH) return prev;
       const next = new Set(prev);
       if (checked) next.add(src);
       else next.delete(src);
       return next;
     });
+  }
+
+  // The guaranteed escape hatch: sites that block automated fetching (or
+  // need a login the server-side fetch can't provide) can never reliably be
+  // beaten by extraction. Pasting known-good photo URLs directly sets
+  // `previewFetched` -- the same flag a successful fetch sets -- so the rest
+  // of the form unlocks without ever needing a fetch to succeed.
+  function addPastedUrls() {
+    const candidates = pasteUrlsText
+      .split(/[\n,]+/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    const valid: string[] = [];
+    for (const candidate of candidates) {
+      try {
+        const parsed = new URL(candidate);
+        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+          valid.push(parsed.toString());
+        }
+      } catch {
+        // not a URL at all -- ignored, same as a non-http(s) scheme
+      }
+    }
+
+    if (valid.length === 0) {
+      setPasteError(t("newItem.url.pasteUrls.invalid"));
+      return;
+    }
+
+    // All-or-nothing when the paste would overshoot the server's batch cap,
+    // matching the invalid-URL message right above: partially accepting a
+    // paste would silently drop links the seller believes they just added.
+    // Only URLs that aren't already selected can grow the batch, so a
+    // re-paste of existing picks always fits.
+    const alreadySelected = selectedImagesRef.current;
+    const additions = valid.filter((src) => !alreadySelected.has(src));
+    if (alreadySelected.size + additions.length > MAX_IMPORT_PHOTOS_PER_BATCH) {
+      setPasteError(
+        t("newItem.url.pasteUrls.tooMany", {
+          max: MAX_IMPORT_PHOTOS_PER_BATCH,
+          selected: alreadySelected.size,
+        }),
+      );
+      return;
+    }
+
+    setPasteError(null);
+    setPasteUrlsText("");
+    setCandidateImages((prevImages) => {
+      const { images, selected } = mergeCandidates(prevImages, selectedImagesRef.current, valid);
+      setSelectedImages(selected);
+      return images;
+    });
+    setPreviewFetched(true); // same flag a successful fetch sets -- one unlock condition, two ways to reach it
   }
 
   /**
@@ -192,7 +394,7 @@ export function NewItemDialog({
 
     setImportStage("importing");
     try {
-      const result = await importImagesFromUrls(id, urls);
+      const result = await importImagesFromUrls(id, urls, sourceUrl.trim() === "" ? undefined : sourceUrl.trim());
       if (result.failed.length > 0) {
         setWarning(
           t("newItem.url.partialFailure", {
@@ -412,6 +614,34 @@ export function NewItemDialog({
                 <span className="field-hint">{t("newItem.url.sourceUrlHint")}</span>
               </label>
 
+              {/* Deliberately outside the previewFetched gate below -- this is
+                  the escape hatch for sites no automated fetch will ever
+                  reliably beat, so it must be usable before (or without) a
+                  fetch ever running. createdIdPendingWarning is the one guard
+                  it still needs: once an item is already created and waiting
+                  on a photo-import warning, adding more candidates to import
+                  makes no sense. */}
+              {createdIdPendingWarning === null && (
+                <label className="field">
+                  <span className="field-label">{t("newItem.url.pasteUrls.label")}</span>
+                  <textarea
+                    value={pasteUrlsText}
+                    onChange={(e) => setPasteUrlsText(e.target.value)}
+                    placeholder={t("newItem.url.pasteUrls.placeholder")}
+                    rows={2}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={pasteUrlsText.trim() === ""}
+                    onClick={addPastedUrls}
+                  >
+                    {t("newItem.url.pasteUrls.add")}
+                  </Button>
+                  {pasteError && <span className="field-hint field-error">{pasteError}</span>}
+                </label>
+              )}
+
               {previewFetched && createdIdPendingWarning === null && (
                 <>
                   <label className="field">
@@ -426,7 +656,11 @@ export function NewItemDialog({
                   </label>
 
                   {candidateImages.length === 0 ? (
-                    <p className="field-hint">{t("newItem.url.noImages")}</p>
+                    <p className="field-hint">
+                      {headlessFailureReason === "not-installed"
+                        ? t("newItem.url.deepImportUnavailable")
+                        : t("newItem.url.stillNoImages")}
+                    </p>
                   ) : (
                     <div className="field">
                       <span className="field-label">{t("newItem.url.selectPhotos")}</span>
@@ -434,7 +668,13 @@ export function NewItemDialog({
                         <Button
                           type="button"
                           variant="ghost"
-                          onClick={() => setSelectedImages(new Set(candidateImages))}
+                          // First N, not all of them: the server rejects a
+                          // batch larger than MAX_IMPORT_PHOTOS_PER_BATCH, and
+                          // candidateImages is ordered most-likely-relevant
+                          // first by urlImport.ts.
+                          onClick={() =>
+                            setSelectedImages(new Set(candidateImages.slice(0, MAX_IMPORT_PHOTOS_PER_BATCH)))
+                          }
                         >
                           {t("newItem.url.selectAll")}
                         </Button>
@@ -445,6 +685,13 @@ export function NewItemDialog({
                           {t("newItem.url.selectedCount", { count: selectedImages.size })}
                         </span>
                       </div>
+                      {/* Only once the cap actually bites -- explaining the
+                          limit to a seller importing three photos is noise. */}
+                      {selectedImages.size >= MAX_IMPORT_PHOTOS_PER_BATCH && (
+                        <span className="field-hint">
+                          {t("newItem.url.selectionCapped", { max: MAX_IMPORT_PHOTOS_PER_BATCH })}
+                        </span>
+                      )}
                       <ol className="thumb-grid">
                         {candidateImages.map((src) => (
                           <li key={src}>
@@ -452,17 +699,23 @@ export function NewItemDialog({
                               <input
                                 type="checkbox"
                                 checked={selectedImages.has(src)}
+                                // An already-ticked box stays clickable so the
+                                // seller can always swap one pick for another;
+                                // only unticked ones lock at the cap.
+                                disabled={
+                                  !selectedImages.has(src) &&
+                                  selectedImages.size >= MAX_IMPORT_PHOTOS_PER_BATCH
+                                }
                                 onChange={(e) => toggleImage(src, e.target.checked)}
                               />
-                              <img
-                                src={src}
-                                alt=""
-                                loading="lazy"
-                                className={brokenImages.has(src) ? "url-picker-thumb-broken" : undefined}
-                                onError={() =>
-                                  setBrokenImages((prev) => new Set(prev).add(src))
-                                }
-                              />
+                              {/* Trimmed to match createUrlItem's own
+                                  sourceUrl.trim() below. Untrimmed, a trailing
+                                  space makes the proxy's referer computation
+                                  fail its empty-after-trim origin check, so a
+                                  thumbnail renders broken on a hotlink-
+                                  protected host whose real import would have
+                                  succeeded. */}
+                              <ThumbnailImage src={src} sourceUrl={sourceUrl.trim()} />
                             </label>
                           </li>
                         ))}

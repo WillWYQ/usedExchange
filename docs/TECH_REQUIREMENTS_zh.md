@@ -2578,8 +2578,9 @@ Seller Studio（`pnpm studio`）是一个**仅本地**的浏览器仪表板，�
 | `GET/PUT /api/defaults?scope=site\|<cat>` | 读取 / 写入该作用域的稀疏 `_defaults.json`（`site` → `content/items/_defaults.json`，否则为对应分类自己的）。空 PUT 请求体删除该文件；PUT 会创建缺失的分类文件夹。无效文件以 400 失败并指明文件与字段。 |
 | `GET .../images`、`GET .../images/<filename>` | 列出 / 提供照片（包含性验证；编码的 `%2F` 遍历被阻断）。 |
 | `POST .../images`、`POST .../images/reorder`、`DELETE .../images/<filename>` | 上传（base64，魔数字节嗅探）、重新排序、删除。 |
-| `POST /api/import-url/preview` | 对卖家提供的 `{ url }` 做 SSRF 安全抓取（`scripts/lib/ssrfGuard.ts`），再提取（`scripts/lib/urlImport.ts`）一个猜测的 `name` 和一份经过过滤、去重的候选照片 `images`(绝对 URL 列表)——此时尚未下载或写入任何内容。抓取被拒绝或失败(协议不允许、地址被禁止、超时、响应体过大)时返回 `400` 及 `{ error }`。非 HTML 响应返回 `{ name: null, images: [] }`,而不会把二进制字节当文本解析。 |
-| `POST .../images/import` | 请求体 `{ urls: string[] }`(最多 24 个)——通过同一个 SSRF 安全抓取逐一下载每个 URL,从字节内容嗅探真实图片类型(绝不信任 URL 扩展名或远端 `Content-Type`),再经既有的 `writeImage` 防覆盖写入流程落盘。单个 URL 失败不会拖累整批:响应恒为 `200`,携带 `{ files, imported, failed: [{ url, error }] }`。 |
+| `POST /api/import-url/preview` | 对卖家提供的 `{ url }` 做 SSRF 安全抓取（`scripts/lib/ssrfGuard.ts`），再用 `scripts/lib/urlImport.ts` 提取出最佳猜测的 `name` 和经过过滤去重的候选照片 `images`（绝对 URL）——此时还不会下载或写入任何文件。如果快速抓取一张照片都没找到，会先通过 SSRF 加固的无头 Chromium 渲染（`scripts/lib/headlessImport.ts`）重试一次，再放弃。响应新增 `usedHeadlessFallback: boolean` 和 `headlessFailureReason: "not-installed" \| "navigation-failed" \| null`。抓取被拒绝或失败时返回 `400` 和 `{ error }`（协议不允许、地址被禁止、超时、响应体过大）。非 HTML 响应会返回 `{ name: null, images: [], usedHeadlessFallback: false, headlessFailureReason: null }`，而不会把二进制字节当文本解析。 |
+| `POST .../images/import` | 请求体 `{ urls: string[], sourceUrl?: string }`(最多 24 个 URL)——通过同一个 SSRF 安全抓取逐一下载每个 URL,从字节内容嗅探真实图片类型(绝不信任 URL 扩展名或远端 `Content-Type`),再经既有的 `writeImage` 防覆盖写入流程落盘。若提供了 `sourceUrl` 则附带仅含 origin 的 Referer。单个 URL 失败不会拖累整批:响应恒为 `200`,携带 `{ files, imported, failed: [{ url, error }] }`。 |
+| `POST /api/import-url/thumbnail` | 在服务端抓取单张候选图片（完全相同的 SSRF 加固路径，若提供了 `sourceUrl` 则附带仅含 origin 的 Referer），再通过临时文件（`FileResponse` + `onSent` 清理）返回——这是一个 CSRF 安全的代理，让选图网格里的缩略图不再触发防盗链，也避免使用"裸 GET + 查询参数"路由（这种路由可能被外部页面用一个普通的 `<img>` 标签盲发请求触发）。抓取失败或返回的不是图片字节时返回 `400` 和 `{ error }`。 |
 | `POST /api/sync-images` | 启动 CDN 同步；返回 **SSE** 进度流（`progress`/`done`/`error`）。 |
 | `GET /api/changes` | 供发布面板使用的 git 状态（未提交更改）。 |
 | `POST /api/publish` | `git add content + manifest`、提交、推送。同步运行时被拒绝（409）。 |

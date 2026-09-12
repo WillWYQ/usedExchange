@@ -15,10 +15,10 @@ import {
   generateCatalogPdf,
   generateFlyerPdf,
   prefetchImages,
-  launchChromiumOrError,
   renderHtmlToPdfBytes,
   type PdfExportOptions,
 } from "./generate";
+import { launchChromiumOrError } from "../chromiumLauncher";
 import { buildFullCatalogHtml } from "./template";
 import * as resolvePageNumbersModule from "./resolvePageNumbers";
 import { resolveAnchorPageNumbers } from "./resolvePageNumbers";

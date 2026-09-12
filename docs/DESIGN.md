@@ -2297,6 +2297,7 @@ Six new `UIStrings` keys (added to `currency`/pricing-table group):
 > authoritative detail. Full architecture and data-flow live in
 > [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) and the current feature list in
 > [`docs/CURRENT_FUNCTIONALITY.md`](CURRENT_FUNCTIONALITY.md). All three are production-shipped.
+> URL-import's headless-Chromium fallback and its CSRF-safe thumbnail proxy are detailed in `docs/TECH_REQUIREMENTS.md` §30 and `docs/CURRENT_FUNCTIONALITY.md`; the shared `scripts/lib/chromiumLauncher.ts` module (used by both this feature and the catalog PDF export) is the single point where the `playwright` dependency is loaded.
 
 ### Seller Studio (`pnpm studio`, Phase 18)
 A **local-only** browser GUI for managing `content/` without editing JSON. Run `pnpm studio`

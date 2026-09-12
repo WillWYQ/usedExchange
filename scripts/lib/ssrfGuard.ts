@@ -2,6 +2,7 @@ import * as dns from "dns/promises";
 import * as http from "http";
 import * as https from "https";
 import * as net from "net";
+import * as zlib from "zlib";
 import type { LookupAddress } from "dns";
 
 export class SsrfError extends Error {}
@@ -11,6 +12,7 @@ export type SafeFetchOptions = {
   maxBytes: number;
   maxRedirects?: number;
   userAgent?: string;
+  referer?: string;
 };
 
 export type SafeFetchResult = {
@@ -198,35 +200,46 @@ export function isDisallowedAddress(ip: string): boolean {
 
 type PinnedAddress = { address: string; family: 4 | 6 };
 
-async function resolveAndValidate(hostname: string): Promise<PinnedAddress> {
+export async function checkHostnameAllowed(
+  hostname: string,
+): Promise<{ allowed: true; address: string; family: 4 | 6 } | { allowed: false; reason: string }> {
   if (net.isIP(hostname)) {
     if (addressValidatorImpl(hostname)) {
-      throw new SsrfError(`Disallowed address: ${hostname}`);
+      return { allowed: false, reason: `Disallowed address: ${hostname}` };
     }
-    return { address: hostname, family: net.isIPv6(hostname) ? 6 : 4 };
+    return { allowed: true, address: hostname, family: net.isIPv6(hostname) ? 6 : 4 };
   }
 
   let addresses: Array<{ address: string; family: number }>;
   try {
     addresses = await dnsLookupImpl(hostname);
   } catch (err) {
-    throw new SsrfError(
-      `DNS resolution failed for ${hostname}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    return {
+      allowed: false,
+      reason: `DNS resolution failed for ${hostname}: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
   if (addresses.length === 0) {
-    throw new SsrfError(`DNS resolution returned no addresses for ${hostname}`);
+    return { allowed: false, reason: `DNS resolution returned no addresses for ${hostname}` };
   }
   // A domain that resolves to a mix of public and private addresses is
-  // treated as fully untrustworthy — reject on ANY disallowed hit, before
-  // ever attempting a connection.
+  // treated as fully untrustworthy -- reject on ANY disallowed hit, even
+  // though only the first address below is ever actually used to connect.
   for (const { address } of addresses) {
     if (addressValidatorImpl(address)) {
-      throw new SsrfError(`Disallowed resolved address for ${hostname}: ${address}`);
+      return { allowed: false, reason: `Disallowed resolved address for ${hostname}: ${address}` };
     }
   }
   const first = addresses[0]!;
-  return { address: first.address, family: first.family === 6 ? 6 : 4 };
+  return { allowed: true, address: first.address, family: first.family === 6 ? 6 : 4 };
+}
+
+async function resolveAndValidate(hostname: string): Promise<PinnedAddress> {
+  const check = await checkHostnameAllowed(hostname);
+  if (!check.allowed) {
+    throw new SsrfError(check.reason);
+  }
+  return { address: check.address, family: check.family };
 }
 
 function resolveRedirectUrl(location: string, base: URL): URL {
@@ -242,6 +255,47 @@ function stripContentType(header: string | undefined): string {
   const semi = header.indexOf(";");
   const value = semi === -1 ? header : header.slice(0, semi);
   return value.trim().toLowerCase();
+}
+
+type Decompressor = zlib.Gunzip | zlib.Inflate | zlib.InflateRaw | zlib.BrotliDecompress;
+
+// By default zlib/brotli demand a properly terminated stream at end of input
+// and throw "unexpected end of file" otherwise. Real servers routinely cut a
+// compressed body short (or send an empty body under a compression header),
+// and browsers keep whatever already decoded rather than discarding the whole
+// response — these flush modes buy that same tolerance. They do NOT weaken the
+// maxBytes cap: it still counts every byte the transform emits, identically.
+const ZLIB_TOLERANT_FINISH = { finishFlush: zlib.constants.Z_SYNC_FLUSH } as const;
+const BROTLI_TOLERANT_FINISH = { finishFlush: zlib.constants.BROTLI_OPERATION_FLUSH } as const;
+
+type ContentEncoding = "gzip" | "deflate" | "br" | "identity";
+
+function normalizeContentEncoding(header: string | string[] | undefined): ContentEncoding {
+  const value = Array.isArray(header) ? header[0] : header;
+  switch ((value ?? "").trim().toLowerCase()) {
+    case "gzip":
+      return "gzip";
+    case "deflate":
+      return "deflate";
+    case "br":
+      return "br";
+    default:
+      return "identity";
+  }
+}
+
+/**
+ * `Content-Encoding: deflate` is ambiguous on the wire: the spec means
+ * zlib-wrapped deflate (RFC 1950), but a meaningful slice of servers send raw
+ * deflate (RFC 1951) under the identical header. The header alone therefore
+ * cannot pick the transform — every major HTTP client instead sniffs the first
+ * body byte, whose low nibble is the zlib CMF compression method (8 = deflate)
+ * when the stream is wrapped. Anything else is treated as raw.
+ */
+function createDeflateDecompressor(firstByte: number): Decompressor {
+  return (firstByte & 0x0f) === 8
+    ? zlib.createInflate(ZLIB_TOLERANT_FINISH)
+    : zlib.createInflateRaw(ZLIB_TOLERANT_FINISH);
 }
 
 export async function fetchUrlSafely(
@@ -304,6 +358,10 @@ export async function fetchUrlSafely(
           headers: {
             Host: currentUrl.host,
             "User-Agent": userAgent,
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            ...(options.referer ? { Referer: options.referer } : {}),
           },
           // Pinning to the already-validated address means Node must not
           // redo its own DNS lookup — that would reopen the TOCTOU /
@@ -328,23 +386,24 @@ export async function fetchUrlSafely(
           }
 
           const contentType = stripContentType(res.headers["content-type"]);
+          const encoding = normalizeContentEncoding(res.headers["content-encoding"]);
+
           const chunks: Buffer[] = [];
           let total = 0;
-          let destroyed = false;
+          let settled = false;
+          let decompressor: Decompressor | null = null;
 
-          res.on("data", (chunk: Buffer) => {
-            if (destroyed) return;
-            total += chunk.length;
-            if (total > options.maxBytes) {
-              destroyed = true;
-              res.destroy();
-              rejectPromise(new SsrfError(`Response exceeded maxBytes (${options.maxBytes})`));
-              return;
-            }
-            chunks.push(chunk);
-          });
-          res.on("end", () => {
-            if (destroyed) return;
+          const fail = (err: Error) => {
+            if (settled) return;
+            settled = true;
+            res.destroy();
+            decompressor?.destroy();
+            rejectPromise(err);
+          };
+
+          const succeed = () => {
+            if (settled) return;
+            settled = true;
             resolvePromise({
               kind: "final",
               result: {
@@ -353,11 +412,66 @@ export async function fetchUrlSafely(
                 finalUrl: currentUrl.toString(),
               },
             });
-          });
-          res.on("error", (err) => {
-            if (destroyed) return;
-            rejectPromise(err);
-          });
+          };
+
+          // The cap runs on whatever stream produces the FINAL content bytes -- the
+          // decompressor's output when one exists, never on compressed wire bytes.
+          // Capping compressed size only would let a small adversarial payload
+          // expand to gigabytes in memory before any check ever saw the real size.
+          const collect = (chunk: Buffer) => {
+            if (settled) return;
+            total += chunk.length;
+            if (total > options.maxBytes) {
+              fail(new SsrfError(`Response exceeded maxBytes (${options.maxBytes})`));
+              return;
+            }
+            chunks.push(chunk);
+          };
+
+          // Every decompressed byte is counted by `collect` here, so the cap
+          // applies identically on every encoding path.
+          const capOutputOf = (transform: Decompressor): Decompressor => {
+            decompressor = transform;
+            transform.on("data", collect);
+            transform.on("end", succeed);
+            transform.on("error", fail);
+            return transform;
+          };
+
+          if (encoding === "gzip" || encoding === "br") {
+            res.pipe(
+              capOutputOf(
+                encoding === "gzip"
+                  ? zlib.createGunzip(ZLIB_TOLERANT_FINISH)
+                  : zlib.createBrotliDecompress(BROTLI_TOLERANT_FINISH),
+              ),
+            );
+          } else if (encoding === "deflate") {
+            // Which deflate variant this is can only be known from the body, so
+            // the first chunk is peeked before the transform is chosen -- then
+            // written into that transform rather than dropped, with the rest
+            // piped in normally so pipe()'s backpressure still applies.
+            const endBeforeSniff = () => succeed(); // empty body: nothing to inflate
+            const sniff = (chunk: Buffer) => {
+              if (settled || chunk.length === 0) return;
+              res.pause();
+              res.removeListener("data", sniff);
+              res.removeListener("end", endBeforeSniff);
+              const transform = capOutputOf(createDeflateDecompressor(chunk[0]!));
+              transform.write(chunk); // the peeked chunk is fed in, never dropped
+              res.pipe(transform); // resumes the paused response
+            };
+            res.on("data", sniff);
+            res.on("end", endBeforeSniff);
+          } else {
+            res.on("data", collect);
+            res.on("end", succeed);
+          }
+          // .pipe() does not forward 'error' events from its source by default --
+          // this must be attached regardless of whether decompression is in play,
+          // or a raw network error on `res` would go unhandled when the collected
+          // stream is the decompressor rather than `res` itself.
+          res.on("error", fail);
         });
 
         req.on("error", (err) => {

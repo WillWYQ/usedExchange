@@ -87,7 +87,7 @@
 - **API 面**（由 `scripts/lib/studioApi.ts` 路由）：`GET /api/items`、`POST /api/items`、`POST /api/items/bulk-status`、`GET|PATCH /api/items/<cat>/<item>`、`GET /api/items/<cat>/<item>/images`、`GET …/images/<filename>`（文件服务，`no-store`）、`POST …/images`（base64 上传）、`POST …/images/reorder`、`POST …/images/import`（从卖家选中的链接下载，SSRF 安全——见下文）、`DELETE …/images/<filename>`、`POST /api/import-url/preview`（SSRF 安全抓取 + 名称/候选照片提取，不写入任何文件）、`POST /api/sync-images`（SSE progress/done/error 事件）、`GET /api/changes`、`POST /api/publish`（同步进行中返回 409）。非 GET/HEAD 请求须通过 `studio/csrfGuard.ts` 校验（要求 `Content-Type: application/json` → 否则 415；`Origin` 必须与服务器自身源一致 → 否则 403）。
 - **从链接导入**（`scripts/lib/ssrfGuard.ts` + `scripts/lib/urlImport.ts`）：卖家粘贴商品页面链接后，服务器通过 `fetchUrlSafely` 抓取该页面及之后选中的每张照片——该函数会先解析并校验每一个 DNS 解析结果,确认不属于回环/内网/链路本地/组播地址段(包括云平台元数据地址 `169.254.169.254`),再把实际连接绑定到已校验的地址,并在每一次跳转时重新校验。下载的照片会先从字节内容嗅探真实类型(绝不信任链接的扩展名或远端 `Content-Type`),再进入常规 `writeImage` 流程。
 
-> **目录 PDF 导出**（Seller Studio 中的"导出 PDF"按钮）通过 headless Chromium 渲染。首次使用需要执行一次：`npx playwright install chromium`。
+> **目录 PDF 导出**（Seller Studio 中的"导出 PDF"按钮）与 **URL 导入的深度导入兜底**（用于快速抓取读不到内容的 JavaScript 渲染商品页）都通过 headless Chromium 渲染，共用同一个一次性安装步骤：`npx playwright install chromium`。不执行这一步不会导致任何一个功能崩溃——PDF 导出会显示明确的错误提示，URL 导入则会静默回退到仅使用快速抓取路径的行为，并给出指向同一条命令的提示。
 
 ### `sync-images.ts` —— 统一图片流水线
 

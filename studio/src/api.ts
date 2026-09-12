@@ -164,11 +164,15 @@ export async function reorderImages(id: string, order: string[]): Promise<ImageE
  * so the seller sees exactly which photos didn't make it rather than losing
  * the whole batch to one bad URL.
  */
-export async function importImagesFromUrls(id: string, urls: string[]): Promise<ImportImagesResult> {
+export async function importImagesFromUrls(
+  id: string,
+  urls: string[],
+  sourceUrl?: string,
+): Promise<ImportImagesResult> {
   const res = await fetch(`/api/items/${id}/images/import`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ urls }),
+    body: JSON.stringify(sourceUrl ? { urls, sourceUrl } : { urls }),
   });
   const body = await readJsonBody(res);
   if (!res.ok) {
@@ -245,7 +249,12 @@ export async function createItem(
   return (body?.id as string | undefined) ?? `${category}/${name}`;
 }
 
-export type ImportUrlPreview = { name: string | null; images: string[] };
+export type ImportUrlPreview = {
+  name: string | null;
+  images: string[];
+  usedHeadlessFallback: boolean;
+  headlessFailureReason: "not-installed" | "navigation-failed" | null;
+};
 
 /**
  * Fetches a seller-supplied product page server-side (scripts/lib/ssrfGuard.ts
@@ -268,7 +277,26 @@ export async function previewImportUrl(url: string): Promise<ImportUrlPreview> {
   return {
     name: typeof body?.name === "string" ? body.name : null,
     images: Array.isArray(body?.images) ? (body.images as string[]) : [],
+    usedHeadlessFallback: body?.usedHeadlessFallback === true,
+    headlessFailureReason:
+      body?.headlessFailureReason === "not-installed" || body?.headlessFailureReason === "navigation-failed"
+        ? body.headlessFailureReason
+        : null,
   };
+}
+
+export async function fetchImportThumbnail(url: string, sourceUrl?: string, signal?: AbortSignal): Promise<Blob> {
+  const res = await fetch("/api/import-url/thumbnail", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(sourceUrl ? { url, sourceUrl } : { url }),
+    signal,
+  });
+  if (!res.ok) {
+    const body = await readJsonBody(res);
+    throw new Error(errorMessage(body, `fetching that thumbnail failed with ${res.status} ${res.statusText}`));
+  }
+  return res.blob();
 }
 
 export async function fetchCategories(): Promise<CategorySummary[]> {

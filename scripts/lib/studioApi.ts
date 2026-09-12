@@ -11,6 +11,7 @@
 import { execFile } from "child_process";
 import crypto from "crypto";
 import fsPromises from "fs/promises";
+import os from "os";
 import path from "path";
 import { promisify } from "util";
 import { z } from "zod";
@@ -79,8 +80,9 @@ import {
   writeCategoryMeta,
   type CategoryMetaInput,
 } from "./studioCategories";
-import { fetchUrlSafely } from "./ssrfGuard";
-import { extractImportCandidates } from "./urlImport";
+import { SsrfError, fetchUrlSafely } from "./ssrfGuard";
+import { extractImportCandidates, type ImportCandidate } from "./urlImport";
+import { renderWithHeadlessBrowser } from "./headlessImport";
 import {
   deleteContactImage,
   isValidContactImageFilename,
@@ -633,13 +635,24 @@ async function handleBulkApplyTiers(req: StudioRequest): Promise<StudioResponse>
 // product photo with headroom.
 const IMPORT_PAGE_FETCH_TIMEOUT_MS = 10_000;
 const IMPORT_PAGE_MAX_BYTES = 8 * 1024 * 1024;
+// Headless rendering is inherently slower than a plain fetch (cold
+// navigation + JS execution + a settle wait) -- more generous than the
+// plain-fetch timeout, but still bounded so a pathological page can't
+// hang a preview request indefinitely.
+const IMPORT_HEADLESS_TIMEOUT_MS = 20_000;
 const IMPORT_IMAGE_FETCH_TIMEOUT_MS = 15_000;
 const IMPORT_IMAGE_MAX_BYTES = 15 * 1024 * 1024;
 // Bounds one request's worth of sequential downloads — this endpoint is a
 // local seller's own tool, not a public API, so a modest cap (rather than a
 // queue/concurrency system) is enough to keep one accidental "select all" on
 // a huge gallery page from taking minutes.
-const IMPORT_MAX_URLS_PER_REQUEST = 24;
+//
+// Exported because the Studio SPA has to refuse an over-cap selection BEFORE
+// it creates the item: this endpoint is the second of two round trips, so a
+// rejection here leaves a real, empty item behind. NewItemDialog.tsx cannot
+// import from this module (it is Node-side), so it mirrors the number as
+// MAX_IMPORT_PHOTOS_PER_BATCH and studioApi.test.ts fails if the two drift.
+export const IMPORT_MAX_URLS_PER_REQUEST = 24;
 
 function importFetchErrorMessage(err: unknown): string {
   // SsrfError and Node's own network errors both produce a message that is
@@ -652,36 +665,101 @@ function importFetchErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+function originOnly(url: string): string | undefined {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return undefined;
+  }
+}
+
 const importUrlPreviewBodySchema = z.object({ url: z.string().min(1) });
 
 async function handleImportUrlPreview(req: StudioRequest): Promise<StudioResponse> {
   const { url } = parseJsonBody(req.body, importUrlPreviewBodySchema);
 
-  let fetched: Awaited<ReturnType<typeof fetchUrlSafely>>;
+  let fetched: Awaited<ReturnType<typeof fetchUrlSafely>> | null = null;
   try {
     fetched = await fetchUrlSafely(url, {
       timeoutMs: IMPORT_PAGE_FETCH_TIMEOUT_MS,
       maxBytes: IMPORT_PAGE_MAX_BYTES,
     });
   } catch (err: unknown) {
-    throw new StudioError(400, `could not fetch that page: ${importFetchErrorMessage(err)}`);
+    // Two very different failures arrive here, and they must not share an
+    // outcome.
+    //
+    // An SsrfError is a VERDICT: the guard resolved the address and refused
+    // it (a private/link-local/loopback target, a malformed URL, a
+    // non-http(s) scheme, too many redirects, an oversized body). Falling
+    // through to Tier 2 would hand an address the guard has already rejected
+    // a second, differently-implemented chance at being fetched. It stays a
+    // hard 400 — see the regression guards in studioApi.test.ts.
+    if (err instanceof SsrfError) {
+      throw new StudioError(400, `could not fetch that page: ${importFetchErrorMessage(err)}`);
+    }
+    // Anything else is TRANSPORT-class — a timeout, a reset socket, a TLS
+    // handshake failure. Tier 2 carries a longer timeout budget and a real
+    // browser stack, and a plain-fetch timeout on a heavy JS-rendered
+    // marketplace is precisely the case this fallback exists for, so this is
+    // treated exactly like "Tier 1 succeeded but found zero images": keep
+    // `fetched` null and let the Tier 2 attempt below run.
+    //
+    // Note that a typo'd domain does NOT land here: checkHostnameAllowed
+    // turns a DNS failure into `allowed: false`, so it is already an
+    // SsrfError and still hard-fails above with a readable message.
+    fetched = null;
   }
 
-  // A content-type that plainly isn't a web page (a direct image/PDF/binary
-  // link) has nothing for extractImportCandidates to parse — report empty
-  // rather than decoding arbitrary bytes as text. A missing content-type is
-  // treated as HTML: many small/misconfigured sites omit it.
-  if (fetched.contentType !== "" && !fetched.contentType.includes("html") && !fetched.contentType.includes("text")) {
-    return { status: 200, body: { name: null, images: [] } };
+  // Empty rather than absent when Tier 1 never produced anything, so the
+  // shape below is identical on both paths.
+  let tier1: ImportCandidate = { name: null, images: [] };
+  // The page Tier 2 renders. With no successful fetch there is no finalUrl to
+  // prefer, so the seller's own URL stands in; the headless path re-validates
+  // whatever it is given from scratch (ssrfSafeProxy.ts pins and checks every
+  // hop it makes), so this is never a way around the guard.
+  let renderUrl = url;
+
+  if (fetched !== null) {
+    // A content-type that plainly isn't a web page (a direct image/PDF/binary
+    // link) has nothing for extractImportCandidates to parse — report empty
+    // rather than decoding arbitrary bytes as text. A missing content-type is
+    // treated as HTML: many small/misconfigured sites omit it. This is a
+    // confident "not a webpage" answer, not a failure, so it returns
+    // immediately and never reaches Tier 2.
+    if (fetched.contentType !== "" && !fetched.contentType.includes("html") && !fetched.contentType.includes("text")) {
+      return { status: 200, body: { name: null, images: [], usedHeadlessFallback: false, headlessFailureReason: null } };
+    }
+
+    const html = fetched.bytes.toString("utf-8");
+    tier1 = extractImportCandidates(html, fetched.finalUrl);
+
+    if (tier1.images.length > 0) {
+      return {
+        status: 200,
+        body: { ...tier1, usedHeadlessFallback: false, headlessFailureReason: null },
+      };
+    }
+    renderUrl = fetched.finalUrl;
   }
 
-  const html = fetched.bytes.toString("utf-8");
-  const { name, images } = extractImportCandidates(html, fetched.finalUrl);
-  return { status: 200, body: { name, images } };
+  const rendered = await renderWithHeadlessBrowser(renderUrl, { timeoutMs: IMPORT_HEADLESS_TIMEOUT_MS });
+  if (!rendered.available) {
+    return {
+      status: 200,
+      body: { ...tier1, usedHeadlessFallback: true, headlessFailureReason: rendered.reason },
+    };
+  }
+
+  const tier2 = extractImportCandidates(rendered.html, rendered.finalUrl);
+  return {
+    status: 200,
+    body: { ...tier2, usedHeadlessFallback: true, headlessFailureReason: null },
+  };
 }
 
 const importImagesBodySchema = z.object({
   urls: z.array(z.string().min(1)).min(1).max(IMPORT_MAX_URLS_PER_REQUEST),
+  sourceUrl: z.string().min(1).optional(),
 });
 
 /**
@@ -709,6 +787,90 @@ function deriveImportedFilename(sourceUrl: string, kind: ImageKind): string {
   return isValidImageFilename(sanitized) ? sanitized : `imported-photo.${kind}`;
 }
 
+// Keyed by ImageKind (studioImages.ts), which spells the JPEG variant "jpg" —
+// matching sniffImageType's own return value, not the "jpeg" MIME subtype.
+const IMAGE_MIME_TYPES: Record<ImageKind, string> = {
+  jpg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+};
+
+const importThumbnailBodySchema = z.object({
+  url: z.string().min(1),
+  sourceUrl: z.string().min(1).optional(),
+});
+
+// Backstop for a thumbnail request whose response never finishes sending --
+// the seller's browser can drop the connection before studio/vite.config.ts's
+// file-response branch reaches "finish" (the new-item dialog gets closed,
+// the seller navigates away, or a newer thumbnail fetch supersedes this one
+// while it's still in flight), in which case the FileResponse's onSent below
+// never runs and the temp file would otherwise sit in os.tmpdir() forever.
+// Same concept and order of magnitude as registerPdfExport's own TTL timer
+// (PDF_EXPORT_TTL_MS, further down this file): long enough that a normal
+// sub-second fetch-and-serve never comes close to it, short enough to bound
+// worst-case accumulation across a long-running Studio session. Unlike that
+// PDF-export path, there's no token registry here -- this route is a single
+// fetch-then-serve request, not a generate/redeem pair, so the timer only
+// ever needs to unlink one already-known file.
+export const IMPORT_THUMBNAIL_TEMP_FILE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Fetches one candidate image server-side (through the same SSRF-guarded,
+ * sniffed pipeline a real import uses) and serves it back as a FileResponse
+ * so the picker UI can show a real preview instead of a broken-image icon on
+ * hotlink-protected sites. StudioResponse has no in-memory-buffer variant
+ * (see its own comment above) -- this reuses the temp-file + onSent-cleanup
+ * pattern the catalog PDF download path established, simplified to one
+ * round trip since there is no separate generate/download step here.
+ */
+async function handleImportThumbnail(req: StudioRequest): Promise<StudioResponse> {
+  const { url, sourceUrl } = parseJsonBody(req.body, importThumbnailBodySchema);
+  const referer = sourceUrl ? originOnly(sourceUrl) : undefined;
+
+  let fetched: Awaited<ReturnType<typeof fetchUrlSafely>>;
+  try {
+    fetched = await fetchUrlSafely(url, {
+      timeoutMs: IMPORT_IMAGE_FETCH_TIMEOUT_MS,
+      maxBytes: IMPORT_IMAGE_MAX_BYTES,
+      referer,
+    });
+  } catch (err: unknown) {
+    throw new StudioError(400, importFetchErrorMessage(err));
+  }
+
+  const kind = sniffImageType(fetched.bytes);
+  if (kind === null) {
+    throw new StudioError(400, "not a JPEG, PNG, WebP or GIF");
+  }
+
+  const tempPath = path.join(os.tmpdir(), `usedexchange-thumb-${crypto.randomUUID()}.${kind}`);
+  await fsPromises.writeFile(tempPath, fetched.bytes);
+
+  // .unref() so this timer alone can never keep the Node process alive --
+  // it's a pure backstop, not something the process should wait around for.
+  // Racing this against onSent below is intentional and safe: whichever
+  // fires first deletes the file, and the other's unlink just fails quietly
+  // (already gone) thanks to the shared .catch(() => {}) pattern.
+  setTimeout(() => {
+    fsPromises.unlink(tempPath).catch(() => {});
+  }, IMPORT_THUMBNAIL_TEMP_FILE_TTL_MS).unref();
+
+  return {
+    status: 200,
+    file: tempPath,
+    contentType: IMAGE_MIME_TYPES[kind],
+    onSent: () => {
+      fsPromises.unlink(tempPath).catch(() => {
+        // Best-effort cleanup -- a failed unlink here (already gone,
+        // permissions) must not affect a response that's already been
+        // fully sent to the seller's own browser.
+      });
+    },
+  };
+}
+
 export type ImportImagesResult = {
   files: ImageEntry[];
   imported: number;
@@ -720,7 +882,8 @@ async function handleImageImport(
   category: string,
   item: string,
 ): Promise<StudioResponse> {
-  const { urls } = parseJsonBody(req.body, importImagesBodySchema);
+  const { urls, sourceUrl } = parseJsonBody(req.body, importImagesBodySchema);
+  const referer = sourceUrl ? originOnly(sourceUrl) : undefined;
   const dir = resolveItemDir(req.projectRoot, category, item);
 
   // Same failure philosophy as handleBulkStatus/handleBulkApplyTiers above:
@@ -735,6 +898,7 @@ async function handleImageImport(
       const fetched = await fetchUrlSafely(url, {
         timeoutMs: IMPORT_IMAGE_FETCH_TIMEOUT_MS,
         maxBytes: IMPORT_IMAGE_MAX_BYTES,
+        referer,
       });
       // The extension is whatever the URL happened to carry; the header
       // bytes are what decide — identical rule to handleImageUpload's own
@@ -1738,6 +1902,21 @@ export async function handleStudioRequest(req: StudioRequest): Promise<StudioRes
         return { status: 405, body: { error: "POST only" } };
       }
       return await handleImportUrlPreview(req);
+    }
+
+    // POST only, deliberately -- never a GET .../thumbnail?url=... . This
+    // route's side effect is an outbound fetch of an attacker-influenced URL,
+    // and checkStudioCsrf exempts GET/HEAD (reasoning that Vite's own
+    // CORS/allowedHosts checks already cover reads, which is true for routes
+    // that only read local content). A bare <img src="http://127.0.0.1:<port>
+    // /api/import-url/thumbnail?url=..."> on any unrelated page the seller has
+    // open in another tab would fire with no preflight and no CORS gate on
+    // whether it fires at all -- reintroducing exactly the class of hole
+    // csrfGuard.ts exists to close, via a different method. POST gets the
+    // existing CSRF middleware for free, with no per-route code needed.
+    if (pathname === "/api/import-url/thumbnail") {
+      if (req.method !== "POST") return { status: 405, body: { error: "method not allowed" } };
+      return await handleImportThumbnail(req);
     }
 
     if (pathname === "/api/readiness") {

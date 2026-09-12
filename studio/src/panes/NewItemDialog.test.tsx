@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { renderWithStudioI18n } from "../i18n/StudioI18n";
 import { NewItemDialog } from "./NewItemDialog";
@@ -11,6 +11,35 @@ afterEach(() => {
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
+
+// jsdom (this file's test environment) doesn't implement IntersectionObserver
+// at all. NewItemDialog's ThumbnailImage (studio/src/panes/NewItemDialog.tsx)
+// unconditionally constructs one for every rendered candidate thumbnail --
+// not only in the dedicated "URL-import thumbnail proxy" tests below, but in
+// every other url-mode test that renders at least one candidate photo -- so
+// this stub has to cover the whole file, not just one describe block. Real
+// jsdom callers get their observe() calls silently ignored (never reported
+// as intersecting), which is a no-op for tests that don't care about
+// lazy-loading; the "thumbnail proxy" tests invoke `observedCallback`
+// directly to simulate a thumbnail scrolling into view.
+let observedCallback: IntersectionObserverCallback | null = null;
+const OriginalIntersectionObserver = globalThis.IntersectionObserver;
+
+beforeEach(() => {
+  observedCallback = null;
+  // @ts-expect-error -- minimal test stub, not a full IntersectionObserver
+  globalThis.IntersectionObserver = class {
+    constructor(cb: IntersectionObserverCallback) {
+      observedCallback = cb;
+    }
+    observe() {}
+    disconnect() {}
+  };
+});
+
+afterEach(() => {
+  globalThis.IntersectionObserver = OriginalIntersectionObserver;
+});
 
 describe("NewItemDialog", () => {
   it("creates an item in item mode (default)", async () => {
@@ -99,17 +128,25 @@ describe("NewItemDialog", () => {
       createStatus = 201,
       createBody = { id: "electronics/vintage-desk-lamp" },
       importBody = { files: [], imported: 2, failed: [] },
+      thumbnailBytes = new Blob(["fake-thumbnail-bytes"], { type: "image/jpeg" }),
     }: {
-      preview?: { name: string | null; images: string[] };
+      preview?: {
+        name: string | null;
+        images: string[];
+        usedHeadlessFallback?: boolean;
+        headlessFailureReason?: "not-installed" | "navigation-failed" | null;
+      };
       createStatus?: number;
       createBody?: unknown;
       importBody?: unknown;
+      thumbnailBytes?: Blob;
     } = {}) {
       return vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
         const url = String(input);
         if (url === "/api/import-url/preview") return jsonResponse(preview);
         if (url === "/api/items") return jsonResponse(createBody, createStatus);
         if (url.endsWith("/images/import")) return jsonResponse(importBody);
+        if (url === "/api/import-url/thumbnail") return new Response(thumbnailBytes, { status: 200 });
         throw new Error(`unexpected fetch: ${url}`);
       });
     }
@@ -165,7 +202,40 @@ describe("NewItemDialog", () => {
       const importCall = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/images/import"));
       expect(importCall).toBeDefined();
       const [, init] = importCall as [string, RequestInit];
-      expect(JSON.parse(init.body as string)).toEqual({ urls: ["https://example.com/a.jpg"] });
+      // Includes sourceUrl -- a fetched page's URL is now threaded through as
+      // the import call's referer (see the sourceUrl-wiring test below); this
+      // assertion predates that wiring and would otherwise miss the new field.
+      expect(JSON.parse(init.body as string)).toEqual({
+        urls: ["https://example.com/a.jpg"],
+        sourceUrl: "https://example.com/listing/1",
+      });
+    });
+
+    it("sends the fetched page's URL as sourceUrl when creating the item", async () => {
+      const fetchMock = fetchMockFor();
+      vi.stubGlobal("fetch", fetchMock);
+      const { getByRole, getByLabelText, getByText, findByDisplayValue } = renderWithStudioI18n(
+        <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+      );
+      fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+      fireEvent.change(getByLabelText(/^Category/), { target: { value: "electronics" } });
+      fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+      fireEvent.click(getByText("Fetch page"));
+      await findByDisplayValue("Vintage Desk Lamp");
+      fireEvent.change(getByLabelText(/^Item name/), { target: { value: "vintage-desk-lamp" } });
+
+      fireEvent.click(getByText("Create item & import photos"));
+      await waitFor(() => {
+        const importCall = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/images/import"));
+        expect(importCall).toBeDefined();
+      });
+
+      const importCall = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/images/import"))!;
+      const [, init] = importCall as [string, RequestInit];
+      expect(JSON.parse(init.body as string)).toEqual({
+        urls: ["https://example.com/a.jpg", "https://example.com/b.jpg"],
+        sourceUrl: "https://example.com/listing/1",
+      });
     });
 
     it("creates the item with no import call when the page has no candidate photos", async () => {
@@ -184,7 +254,7 @@ describe("NewItemDialog", () => {
         target: { value: "https://example.com/listing/2" },
       });
       fireEvent.click(getByText("Fetch page"));
-      await findByText(/No photos found/);
+      await findByText(/couldn't find photos on this page automatically/i);
       // The detected name is human-readable, not a slug — the seller edits it
       // before saving, same as the manual item-mode flow.
       fireEvent.change(getByLabelText(/^Item name/), { target: { value: "old-chair" } });
@@ -310,6 +380,541 @@ describe("NewItemDialog", () => {
       }
 
       expect((getByLabelText(/^Item name/) as HTMLInputElement).value).toBe("my-own-item");
+    });
+
+    describe("URL-import messaging", () => {
+      it("shows the setup hint when the fallback is unavailable", async () => {
+        const fetchMock = fetchMockFor({
+          preview: { name: null, images: [], usedHeadlessFallback: true, headlessFailureReason: "not-installed" },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+
+        expect(await findByText(/npx playwright install chromium/)).toBeTruthy();
+      });
+
+      it("shows the generic blocked/login-wall hint when the fallback ran but still found nothing", async () => {
+        const fetchMock = fetchMockFor({
+          preview: { name: null, images: [], usedHeadlessFallback: true, headlessFailureReason: null },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+
+        expect(await findByText(/block automated access|require login/i)).toBeTruthy();
+      });
+
+      it("shows the same generic hint, not the setup hint, for navigation-failed", async () => {
+        const fetchMock = fetchMockFor({
+          preview: { name: null, images: [], usedHeadlessFallback: true, headlessFailureReason: "navigation-failed" },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByText, queryByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+
+        expect(await findByText(/block automated access|require login/i)).toBeTruthy();
+        expect(queryByText(/npx playwright install chromium/)).toBeNull();
+      });
+    });
+
+    describe("URL-import paste escape hatch", () => {
+      it("unlocks the name field and Create button when a valid URL is pasted, without ever fetching", async () => {
+        vi.stubGlobal("fetch", vi.fn(() => { throw new Error("no fetch should happen in this test"); }));
+        const { getByRole, getByLabelText, getByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: "https://cdn.example/photo.jpg" } });
+        fireEvent.click(getByText("Add"));
+
+        expect((getByLabelText(/^Item name/) as HTMLInputElement).disabled).toBe(false);
+        expect((getByText("Create item & import photos") as HTMLButtonElement).disabled).toBe(false);
+      });
+
+      it("shows a validation message and leaves the form locked when the pasted value isn't a URL", async () => {
+        vi.stubGlobal("fetch", vi.fn(() => { throw new Error("no fetch should happen in this test"); }));
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: "not a url" } });
+        fireEvent.click(getByText("Add"));
+
+        expect(await findByText(/enter a valid/i)).toBeTruthy();
+        // The name field only exists once previewFetched is true -- an invalid
+        // paste must not have flipped it.
+        expect(() => getByLabelText(/^Item name/)).toThrow();
+      });
+
+      it("rejects a paste that would push the selection past the server's batch cap", async () => {
+        // Live-reproduced before this cap existed: 25 pasted URLs were all
+        // accepted and auto-selected, createItem succeeded, and only THEN did
+        // the import call come back with a raw Zod string ("Array must contain
+        // at most 24 element(s)") — leaving the seller a created-but-empty
+        // item and an error meant for a developer.
+        vi.stubGlobal("fetch", vi.fn(() => { throw new Error("no fetch should happen in this test"); }));
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        const twentyFive = Array.from({ length: 25 }, (_, i) => `https://cdn.example/p${i}.jpg`).join("\n");
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: twentyFive } });
+        fireEvent.click(getByText("Add"));
+
+        expect(await findByText(/at most 24/i)).toBeTruthy();
+        // All-or-nothing, matching the invalid-URL message above it: nothing
+        // was added, so the form stays locked and no item can be created.
+        expect(document.querySelectorAll(".url-picker-thumb")).toHaveLength(0);
+        expect(() => getByLabelText(/^Item name/)).toThrow();
+      });
+
+      it("accepts a paste that lands exactly on the cap", async () => {
+        vi.stubGlobal("fetch", vi.fn(() => { throw new Error("no fetch should happen in this test"); }));
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        const twentyFour = Array.from({ length: 24 }, (_, i) => `https://cdn.example/p${i}.jpg`).join("\n");
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: twentyFour } });
+        fireEvent.click(getByText("Add"));
+
+        expect(await findByText("24 selected")).toBeTruthy();
+        expect(document.querySelectorAll(".url-picker-thumb")).toHaveLength(24);
+      });
+
+      it("counts what is already selected when deciding whether a paste fits", async () => {
+        const fetchMock = fetchMockFor({
+          preview: {
+            name: "Big Gallery",
+            images: Array.from({ length: 20 }, (_, i) => `https://example.com/f${i}.jpg`),
+          },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        await findByText("20 selected");
+
+        // 20 already selected + 5 pasted = 25, one over.
+        const five = Array.from({ length: 5 }, (_, i) => `https://cdn.example/p${i}.jpg`).join("\n");
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: five } });
+        fireEvent.click(getByText("Add"));
+
+        expect(await findByText(/at most 24/i)).toBeTruthy();
+        expect(document.querySelectorAll(".url-picker-thumb")).toHaveLength(20);
+      });
+
+      it("does not count an already-selected duplicate against the cap", async () => {
+        vi.stubGlobal("fetch", vi.fn(() => { throw new Error("no fetch should happen in this test"); }));
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        const twentyFour = Array.from({ length: 24 }, (_, i) => `https://cdn.example/p${i}.jpg`).join("\n");
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: twentyFour } });
+        fireEvent.click(getByText("Add"));
+        await findByText("24 selected");
+
+        // Re-pasting one that is already selected adds nothing, so it fits.
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: "https://cdn.example/p0.jpg" } });
+        fireEvent.click(getByText("Add"));
+
+        expect(getByText("24 selected")).toBeTruthy();
+        expect(document.querySelectorAll(".url-picker-thumb")).toHaveLength(24);
+      });
+
+      it("dedupes a pasted URL that's already a candidate", async () => {
+        const fetchMock = fetchMockFor({ preview: { name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] } });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByDisplayValue } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        await findByDisplayValue("Vintage Desk Lamp");
+
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: "https://example.com/a.jpg" } });
+        fireEvent.click(getByText("Add"));
+
+        const checkboxes = document.querySelectorAll<HTMLInputElement>(".url-picker-thumb input[type=checkbox]");
+        expect(checkboxes).toHaveLength(1);
+        expect(checkboxes[0]!.checked).toBe(true);
+      });
+    });
+
+    // urlImport.ts hands back up to MAX_IMPORT_IMAGE_CANDIDATES (40) real
+    // candidates, so a gallery-heavy page hits the same server cap the paste
+    // path did — the fetch path just reached it without the seller typing
+    // anything. Candidates stay browsable; it is the SELECTION that is capped.
+    describe("URL-import selection cap on fetched candidates", () => {
+      function fetchWithCandidates(count: number) {
+        return fetchMockFor({
+          preview: {
+            name: "Big Gallery",
+            images: Array.from({ length: count }, (_, i) => `https://example.com/f${i}.jpg`),
+          },
+        });
+      }
+
+      it("auto-selects only up to the cap when a page yields more candidates than the server accepts", async () => {
+        vi.stubGlobal("fetch", fetchWithCandidates(30));
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+
+        expect(await findByText("24 selected")).toBeTruthy();
+        // All 30 stay on screen to choose between — only the pre-ticking stops.
+        const checkboxes = document.querySelectorAll<HTMLInputElement>(".url-picker-thumb input[type=checkbox]");
+        expect(checkboxes).toHaveLength(30);
+        expect(Array.from(checkboxes).filter((cb) => cb.checked)).toHaveLength(24);
+      });
+
+      it("caps Select all at the server's batch limit", async () => {
+        vi.stubGlobal("fetch", fetchWithCandidates(30));
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        await findByText("24 selected");
+
+        fireEvent.click(getByText("Select none"));
+        await findByText("0 selected");
+        fireEvent.click(getByText("Select all"));
+
+        expect(await findByText("24 selected")).toBeTruthy();
+      });
+
+      it("disables the unticked checkboxes once the cap is reached", async () => {
+        vi.stubGlobal("fetch", fetchWithCandidates(30));
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        await findByText("24 selected");
+
+        const checkboxes = Array.from(
+          document.querySelectorAll<HTMLInputElement>(".url-picker-thumb input[type=checkbox]"),
+        );
+        // A ticked box must stay clickable (the seller has to be able to swap
+        // one choice for another); an unticked one at the cap must not.
+        expect(checkboxes.filter((cb) => cb.checked).every((cb) => !cb.disabled)).toBe(true);
+        expect(checkboxes.filter((cb) => !cb.checked).every((cb) => cb.disabled)).toBe(true);
+
+        // Untick one and the whole grid opens back up.
+        fireEvent.click(checkboxes[0]!);
+        await findByText("23 selected");
+        const reread = Array.from(
+          document.querySelectorAll<HTMLInputElement>(".url-picker-thumb input[type=checkbox]"),
+        );
+        expect(reread.some((cb) => cb.disabled)).toBe(false);
+      });
+
+      it("never sends the server more URLs than it accepts", async () => {
+        const fetchMock = fetchWithCandidates(30);
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={["electronics"]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        await findByText("24 selected");
+        fireEvent.change(getByLabelText(/^Category/), { target: { value: "electronics" } });
+        fireEvent.change(getByLabelText(/^Item name/), { target: { value: "big-gallery" } });
+        fireEvent.click(getByText("Create item & import photos"));
+
+        await waitFor(() => {
+          const importCall = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/images/import"));
+          expect(importCall).toBeTruthy();
+          const body = JSON.parse(String((importCall![1] as RequestInit).body)) as { urls: string[] };
+          expect(body.urls).toHaveLength(24);
+        });
+      });
+    });
+
+    describe("URL-import fetch-after-paste merge", () => {
+      it("does not discard a pasted selection when a fetch resolves afterward", async () => {
+        const fetchMock = fetchMockFor({
+          preview: { name: null, images: ["https://example.com/fetched.jpg"] },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+
+        // Paste first -- unlocks the form with zero fetches, per the escape-hatch test above.
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: "https://example.com/pasted.jpg" } });
+        fireEvent.click(getByText("Add"));
+        expect(document.querySelectorAll(".url-picker-thumb")).toHaveLength(1);
+
+        // Now also fetch -- must ADD the fetched candidate, not replace the pasted one.
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        await findByText("2 selected");
+
+        const checkboxes = document.querySelectorAll<HTMLInputElement>(".url-picker-thumb input[type=checkbox]");
+        expect(checkboxes).toHaveLength(2);
+        expect(Array.from(checkboxes).every((cb) => cb.checked)).toBe(true);
+      });
+
+      it("does not blank an already-typed name when the fetch's own guess is null", async () => {
+        const fetchMock = fetchMockFor({ preview: { name: null, images: [] } });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/paste photo links/i), { target: { value: "https://example.com/pasted.jpg" } });
+        fireEvent.click(getByText("Add"));
+        fireEvent.change(getByLabelText(/^Item name/), { target: { value: "My Hand-Typed Name" } });
+
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        for (let i = 0; i < 10; i++) await Promise.resolve(); // flush fetchUrlPreview's microtask chain
+
+        expect((getByLabelText(/^Item name/) as HTMLInputElement).value).toBe("My Hand-Typed Name");
+      });
+    });
+
+    describe("URL-import thumbnail proxy", () => {
+      // jsdom (this file's test environment) doesn't implement Blob URLs at
+      // all -- URL.createObjectURL/revokeObjectURL are simply absent, not
+      // present-but-throwing -- so vi.spyOn (which requires the property to
+      // already exist as a function before it can wrap it) has nothing to
+      // wrap. A bare stub is installed here first. (observedCallback and the
+      // IntersectionObserver stub itself are file-level, above -- every
+      // url-mode test that renders a candidate thumbnail needs them, not
+      // just this describe block.)
+      //
+      // Restored in afterAll, not afterEach: this file's own top-level
+      // `afterEach(() => cleanup())` is registered OUTSIDE every describe
+      // block, and outer afterEach hooks run AFTER inner ones. An inner
+      // afterEach here would restore URL.revokeObjectURL to undefined
+      // BEFORE that outer cleanup() unmounts a still-live ThumbnailImage,
+      // whose own cleanup effect then calls URL.revokeObjectURL -- throwing
+      // "URL.revokeObjectURL is not a function". afterAll runs once, after
+      // every test in this describe (and each test's own cleanup) has
+      // already finished, which sidesteps that ordering hazard entirely.
+      const OriginalCreateObjectURL = URL.createObjectURL;
+      const OriginalRevokeObjectURL = URL.revokeObjectURL;
+
+      beforeEach(() => {
+        URL.createObjectURL = () => "";
+        URL.revokeObjectURL = () => {};
+      });
+
+      afterAll(() => {
+        URL.createObjectURL = OriginalCreateObjectURL;
+        URL.revokeObjectURL = OriginalRevokeObjectURL;
+      });
+
+      // The fetch mock is a parameter (defaulted) so a test that needs the
+      // thumbnail route to behave differently -- failing, say -- can reuse
+      // this whole render flow instead of copying it.
+      async function renderWithOneCandidate(
+        fetchMock = fetchMockFor({ preview: { name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] } }),
+      ) {
+        vi.stubGlobal("fetch", fetchMock);
+        const result = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(result.getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(result.getByLabelText(/^Product page URL/), {
+          target: { value: "https://example.com/listing/1" },
+        });
+        fireEvent.click(result.getByText("Fetch page"));
+        await result.findByDisplayValue("Vintage Desk Lamp");
+        return { ...result, fetchMock };
+      }
+
+      it("does not fetch a thumbnail until it is reported as near the viewport", async () => {
+        const { fetchMock } = await renderWithOneCandidate();
+
+        expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/import-url/thumbnail")).toBe(false);
+
+        observedCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], null as never);
+        await waitFor(() => {
+          expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/import-url/thumbnail")).toBe(true);
+        });
+      });
+
+      it("renders the fetched blob as the thumbnail's image source", async () => {
+        const createObjectURLSpy = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fake-url");
+        await renderWithOneCandidate();
+
+        observedCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], null as never);
+
+        // Not getByRole("img")/toHaveAttribute: this <img> intentionally
+        // keeps alt="" (a decorative photo candidate sitting inside its own
+        // checkbox label, same as the bare <img> it replaces), which maps to
+        // the ARIA "presentation" role rather than "img", so a role query
+        // would never find it -- and this project has no
+        // @testing-library/jest-dom (toHaveAttribute isn't available
+        // anywhere else in the codebase), so a plain attribute read is used
+        // instead, matching this file's existing convention of querying
+        // .url-picker-thumb's contents directly via `document`.
+        await waitFor(() => {
+          expect(document.querySelector(".url-picker-thumb img")?.getAttribute("src")).toBe("blob:fake-url");
+        });
+        expect(createObjectURLSpy).toHaveBeenCalled();
+      });
+
+      it("revokes the blob URL on unmount", async () => {
+        vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fake-url");
+        const revokeSpy = vi.spyOn(URL, "revokeObjectURL");
+        const { unmount } = await renderWithOneCandidate();
+        observedCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], null as never);
+        await waitFor(() =>
+          expect(document.querySelector(".url-picker-thumb img")?.getAttribute("src")).toBe("blob:fake-url"),
+        );
+
+        unmount();
+
+        expect(revokeSpy).toHaveBeenCalledWith("blob:fake-url");
+      });
+
+      it("aborts the in-flight thumbnail fetch when the mode is switched away mid-request", async () => {
+        let capturedSignal: AbortSignal | undefined;
+        const fetchMock = fetchMockFor({ preview: { name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] } });
+        fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          if (url === "/api/import-url/preview") {
+            return jsonResponse({ name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] });
+          }
+          if (url === "/api/import-url/thumbnail") {
+            capturedSignal = init?.signal ?? undefined;
+            return new Promise<Response>(() => {
+              /* never resolves -- this test only cares whether it's aborted */
+            });
+          }
+          throw new Error(`unexpected fetch: ${url}`);
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const { getByRole, getByLabelText, getByText, findByDisplayValue } = renderWithStudioI18n(
+          <NewItemDialog categories={[]} onCreated={vi.fn()} onCategoryCreated={vi.fn()} onCancel={vi.fn()} />,
+        );
+        fireEvent.click(getByRole("tab", { name: "Import from URL" }));
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/1" } });
+        fireEvent.click(getByText("Fetch page"));
+        await findByDisplayValue("Vintage Desk Lamp");
+        observedCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], null as never);
+        await waitFor(() => expect(capturedSignal).toBeDefined());
+
+        // Matches this file's existing mode-switch-during-fetch regression test's
+        // approach: switch away mid-request via the "Item" tab.
+        fireEvent.click(getByRole("tab", { name: "Item" }));
+
+        expect(capturedSignal?.aborted).toBe(true);
+      });
+
+      // ThumbnailImage renders no <img> at all until its blob arrives, so the
+      // sizing that used to live on the <img> (.url-picker-thumb img) has to
+      // live on the wrapper instead -- otherwise a pending card collapses to
+      // zero height, which both hides the broken-thumbnail indicator and (far
+      // worse) collapses the whole grid on first paint, so the observer's
+      // 200px rootMargin calls every candidate "near the viewport" at once and
+      // the lazy loading stops being lazy. These two assert the class placement
+      // the stylesheet's .url-picker-thumb-image rules depend on.
+      it("wraps a pending thumbnail in the sized element that holds its grid cell", async () => {
+        await renderWithOneCandidate();
+
+        const wrapper = document.querySelector(".url-picker-thumb .url-picker-thumb-image");
+        expect(wrapper).not.toBeNull();
+        // Nothing has reported this thumbnail as near the viewport yet, so no
+        // image exists to hold the cell open -- only the wrapper can.
+        expect(wrapper?.querySelector("img")).toBeNull();
+      });
+
+      it("marks the sized wrapper broken when the thumbnail fetch fails", async () => {
+        const fetchMock = fetchMockFor({ preview: { name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] } });
+        fetchMock.mockImplementation(async (input: RequestInfo | URL, _init?: RequestInit) => {
+          const url = String(input);
+          if (url === "/api/import-url/preview") {
+            return jsonResponse({ name: "Vintage Desk Lamp", images: ["https://example.com/a.jpg"] });
+          }
+          if (url === "/api/import-url/thumbnail") return jsonResponse({ error: "hotlink blocked" }, 502);
+          throw new Error(`unexpected fetch: ${url}`);
+        });
+        await renderWithOneCandidate(fetchMock);
+
+        observedCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], null as never);
+
+        await waitFor(() => {
+          const wrapper = document.querySelector(".url-picker-thumb-image");
+          expect(wrapper?.classList.contains("url-picker-thumb-broken")).toBe(true);
+        });
+        // The marker must sit on the wrapper, not an <img>: a failed thumbnail
+        // puts no <img> in the DOM, so an <img>-scoped rule would style nothing.
+        expect(document.querySelector(".url-picker-thumb img")).toBeNull();
+      });
+
+      it("does not re-fetch an already-loaded thumbnail when the seller keeps typing in the URL field", async () => {
+        // A real IntersectionObserver reports an already-visible element as
+        // intersecting the moment it is observed; the file-level stub never
+        // does (its observe() is a no-op), which is exactly what would hide
+        // this regression -- an effect re-run has to actually re-trigger the
+        // fetch for the redundant request to be observable. So this one test
+        // installs an auto-intersecting stub; the file-level afterEach still
+        // restores the global afterwards.
+        // @ts-expect-error -- minimal test stub, not a full IntersectionObserver
+        globalThis.IntersectionObserver = class {
+          constructor(private readonly cb: IntersectionObserverCallback) {}
+          observe(element: Element) {
+            this.cb([{ isIntersecting: true, target: element } as IntersectionObserverEntry], this as never);
+          }
+          disconnect() {}
+        };
+        vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fake-url");
+        const { fetchMock, getByLabelText } = await renderWithOneCandidate();
+        await waitFor(() =>
+          expect(document.querySelector(".url-picker-thumb img")?.getAttribute("src")).toBe("blob:fake-url"),
+        );
+
+        const thumbnailCalls = () =>
+          fetchMock.mock.calls.filter(([input]) => String(input) === "/api/import-url/thumbnail");
+        expect(thumbnailCalls()).toHaveLength(1);
+        // The referer hint is the page this candidate was discovered on.
+        expect(JSON.parse((thumbnailCalls()[0]![1] as RequestInit).body as string)).toEqual({
+          url: "https://example.com/a.jpg",
+          sourceUrl: "https://example.com/listing/1",
+        });
+
+        // The seller now types a second URL into the still-mounted, still-
+        // editable "Product page URL" field. Each keystroke re-renders the
+        // grid with a new sourceUrl prop -- which must NOT re-run the fetch
+        // effect: re-fetching an already-loaded candidate with whatever is in
+        // the box right now uses the wrong referer and can flip a working
+        // thumbnail to broken.
+        fireEvent.change(getByLabelText(/^Product page URL/), { target: { value: "https://example.com/listing/2" } });
+        for (let i = 0; i < 10; i++) await Promise.resolve(); // flush any effect-scheduled fetch
+
+        expect(thumbnailCalls()).toHaveLength(1);
+      });
     });
   });
 

@@ -149,7 +149,16 @@ export const ZH: Partial<StudioStrings> = {
   "newItem.url.sourceUrlHint": "Studio 会在你的电脑上抓取该页面,查找名称和照片。在你创建商品之前不会保存任何内容。",
   "newItem.url.fetch": "抓取页面",
   "newItem.url.fetching": "正在抓取…",
-  "newItem.url.noImages": "该页面未找到照片。你仍可以创建商品,之后自行添加照片。",
+  "newItem.url.deepImportUnavailable":
+    "此页面的照片可能需要 JavaScript 才能显示。运行一次 `npx playwright install chromium` 即可启用深度导入（与目录 PDF 导出使用的一次性安装步骤相同 —— 如果你已经设置过，这里就已经可用），然后重试；或直接在下方粘贴图片链接。",
+  "newItem.url.stillNoImages": "未能在此页面自动找到照片（该网站可能屏蔽了自动访问，或需要登录才能查看）。请在下方直接粘贴图片链接。",
+  "newItem.url.pasteUrls.label": "或直接粘贴图片链接",
+  "newItem.url.pasteUrls.placeholder": "一个或多个图片链接，每行一个",
+  "newItem.url.pasteUrls.add": "添加",
+  "newItem.url.pasteUrls.invalid": "请输入有效的 http(s) 图片链接。",
+  "newItem.url.pasteUrls.tooMany":
+    "图片链接过多 —— 单次最多导入 {max} 张照片,目前已选择 {selected} 张。请减少链接数量,其余照片可在商品创建后再添加。",
+  "newItem.url.selectionCapped": "单次最多导入 {max} 张照片 —— 如需更换,请先取消勾选其中一张。",
   "newItem.url.selectPhotos": "选择要导入的照片",
   "newItem.url.selectAll": "全选",
   "newItem.url.selectNone": "全不选",

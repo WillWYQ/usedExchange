@@ -13,6 +13,9 @@ import {
   fetchConfig,
   saveContactPlatformQrImage,
   saveConfigValue,
+  previewImportUrl,
+  importImagesFromUrls,
+  fetchImportThumbnail,
 } from "./api";
 
 /** Builds a Response whose body streams the given SSE frames, one chunk each. */
@@ -486,6 +489,148 @@ describe("saveContactPlatformQrImage", () => {
     expect(url).toBe("/api/contact-platforms/2");
     expect(init.method).toBe("PUT");
     expect(JSON.parse(init.body as string)).toEqual({ qr_image: "/contact/zelle-qr-2.png" });
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("previewImportUrl", () => {
+  it("includes usedHeadlessFallback and headlessFailureReason from the response", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        name: null,
+        images: [],
+        usedHeadlessFallback: true,
+        headlessFailureReason: "not-installed",
+      }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await previewImportUrl("https://example.com");
+
+    expect(result.usedHeadlessFallback).toBe(true);
+    expect(result.headlessFailureReason).toBe("not-installed");
+    vi.unstubAllGlobals();
+  });
+
+  it("defaults headlessFailureReason to null for an unrecognized value", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        name: null,
+        images: [],
+        usedHeadlessFallback: false,
+        headlessFailureReason: "some-other-reason",
+      }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await previewImportUrl("https://example.com");
+
+    expect(result.headlessFailureReason).toBe(null);
+    vi.unstubAllGlobals();
+  });
+
+  it("defaults usedHeadlessFallback to false when the response omits it", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        name: null,
+        images: [],
+      }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await previewImportUrl("https://example.com");
+
+    expect(result.usedHeadlessFallback).toBe(false);
+    expect(result.headlessFailureReason).toBe(null);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("importImagesFromUrls — sourceUrl", () => {
+  it("includes sourceUrl in the request body when provided", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ files: [], imported: 1, failed: [] }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+
+    await importImagesFromUrls("some-item-id", ["https://cdn.example/a.jpg"], "https://seller-site.example/listing");
+
+    const [, init] = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      urls: ["https://cdn.example/a.jpg"],
+      sourceUrl: "https://seller-site.example/listing",
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it("omits sourceUrl from the request body when not provided", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ files: [], imported: 1, failed: [] }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+
+    await importImagesFromUrls("some-item-id", ["https://cdn.example/a.jpg"]);
+
+    const [, init] = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ urls: ["https://cdn.example/a.jpg"] });
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("fetchImportThumbnail", () => {
+  it("returns a Blob on success", async () => {
+    const fakeBlob = new Blob(["fake image bytes"]);
+    const fetchMock = vi.fn(async () => ({ ok: true, blob: async () => fakeBlob })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchImportThumbnail("https://cdn.example/a.jpg", "https://seller-site.example/listing");
+
+    expect(result).toBe(fakeBlob);
+    vi.unstubAllGlobals();
+  });
+
+  it("throws the server's error message on failure", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 400,
+      statusText: "Bad Request",
+      json: async () => ({ error: "not a JPEG, PNG, WebP or GIF" }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchImportThumbnail("https://cdn.example/a.jpg")).rejects.toThrow(
+      "not a JPEG, PNG, WebP or GIF",
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it("forwards an AbortSignal to fetch when provided", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      blob: async () => new Blob([]),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+
+    await fetchImportThumbnail("https://cdn.example/a.jpg", undefined, controller.signal);
+
+    const [, init] = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(init.signal).toBe(controller.signal);
     vi.unstubAllGlobals();
   });
 });
